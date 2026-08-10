@@ -1,15 +1,16 @@
 """
-Afterglow Core: AAVSO International Variable Star indeX (VSX) interface
+Kepler: AAVSO International Variable Star indeX (VSX) interface
 """
 
 from typing import List as TList, Union
 
-# EXTRACTED: was `from astropy.table import Table`; retained only as a type hint
-# on the preserved ``table_to_sources`` override.
 from astropy.table import Table
 
-from ..schemas import CatalogSource
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog` (VizieR backend).
+from .schemas import CatalogSource
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 
@@ -48,7 +49,7 @@ class VSXCatalog(Catalog):
         # STEREO mission filter (essentially 600-800nm)
         'H1A': '', 'H1B': '',
     }
-    _mag_mapping = {  # n_max to Skynet filter names
+    _mag_mapping = {  # VSX n_max band code -> Kepler band name
         'u': 'Su', 'v': 'Sv', 'b': 'Sb', 'y': 'Sy',
         "u'": 'uprime', "g'": 'gprime', "r'": 'rprime', "i'": 'iprime',
         "z'": 'zprime',
@@ -57,11 +58,12 @@ class VSXCatalog(Catalog):
         'OID', 'Name', 'V', 'Type', 'max', 'n_max', 'f_min', 'min', 'Period',
     ]
 
-    # PRESERVED verbatim.  This override does not call super(), so it stays
-    # fully functional once a caller hands it VizieR-shaped rows.  Field
-    # calibration uses VSX only for positional variable-star rejection
-    # (``field_cal._filter_variable_stars``), and the inline notes below record
-    # bugs whose regressions would silently disable that rejection.
+    # Preserved verbatim. Unlike the Landolt and USNO overrides this one does
+    # not call ``super()``, so it works on any VizieR-shaped rows without a
+    # bound backend. Field calibration uses VSX only for positional
+    # variable-star rejection (``fieldcal.field_cal._filter_variable_stars``);
+    # the inline notes below record two defects whose regression would silently
+    # disable that rejection rather than raise.
     def table_to_sources(self, table: Union[list, Table]) \
             -> TList[CatalogSource]:
         """

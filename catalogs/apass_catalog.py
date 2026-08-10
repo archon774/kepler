@@ -1,10 +1,11 @@
 """
-Afterglow Core: APASS catalog accessed via VizieR
+Kepler: APASS catalog accessed via VizieR
 """
 
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`.  The VizieR
-# astroquery backend is catalog plumbing (see EXTRACTION.md); only the
-# photometric metadata below is used by field calibration.
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 

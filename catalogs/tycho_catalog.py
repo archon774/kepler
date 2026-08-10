@@ -1,10 +1,13 @@
 """
-Afterglow Core: Tycho-2 catalog accessed via VizieR
+Kepler: Tycho-2 catalog accessed via VizieR
 """
 
 from __future__ import absolute_import, division, print_function
 
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog` (VizieR backend).
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 

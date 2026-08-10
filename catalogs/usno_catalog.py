@@ -1,15 +1,16 @@
 """
-Afterglow Core: USNO-B1.0 catalog accessed via VizieR
+Kepler: USNO-B1.0 catalog accessed via VizieR
 """
 
 from typing import List as TList, Union
 
-# EXTRACTED: was `from astropy.table import Table`; retained only as a type hint
-# on the preserved ``table_to_sources`` override.
 from astropy.table import Table
 
-from ..schemas import CatalogSource, Mag
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog` (VizieR backend).
+from .schemas import CatalogSource, Mag
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 
@@ -35,11 +36,10 @@ class USNOB1Catalog(Catalog):
     }
     sort = ['+B1mag']
 
-    # PRESERVED photometric transform.  The ``super().table_to_sources(table)``
-    # call below reaches ``Catalog.table_to_sources``, whose VizieR-row-mapping
-    # implementation is a severed backend seam (see catalog.py / EXTRACTION.md);
-    # the B/R synthesis itself is calibration-relevant magnitude math and is
-    # kept verbatim.
+    # Photometric transform, preserved verbatim. ``super().table_to_sources``
+    # resolves to the bound VizieR row mapper in ``query/vizier.py``; this
+    # method then synthesizes standard B and R by averaging the two survey
+    # epochs, falling back to whichever single epoch is present.
     def table_to_sources(self, table: Union[list, Table]) \
             -> TList[CatalogSource]:
         """

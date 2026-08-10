@@ -29,6 +29,7 @@ __all__ = [
     "FieldCalDependencyError",
     "build_wcs_for_processing_run",
     "get_source_radec",
+    "query_catalogs",
     "run_photometry",
     "run_source_extraction",
     "solve_wcs",
@@ -95,3 +96,34 @@ build_wcs_for_processing_run = _missing(
 # Signature: solve_wcs(processing_run, header, data, tmpdir, extraction_settings=None)
 #            -> (WCS | None, solution)
 solve_wcs = _missing("solve_wcs", "from .wcs import solve_wcs", "wcs")
+
+
+def _default_query_catalogs(*args: Any, **kwargs: Any):
+    """Query catalogs through Kepler's ``query/`` package.
+
+    Unlike the stubs above this has a working default, because ``query/`` is
+    in-repo: field calibration can fetch its own reference sources with nothing
+    wired up. The import is deferred to first call so that importing
+    ``fieldcal`` does not pull in astroquery — a caller who supplies
+    ``catalog_sources`` never pays for it, and the whole zero-point solve runs
+    without a network stack.
+
+    Replace it to route catalog queries elsewhere — a local catalog service, a
+    cache, a test double::
+
+        fieldcal.deps.query_catalogs = my_query_function
+
+    Signature: query_catalogs(catalogs, *, wcs=None, ra_hours=None,
+                              dec_degs=None, radius_arcmins=None,
+                              width_arcmins=None, height_arcmins=None,
+                              constraints=None, source_ids=None,
+                              skip_failed=False, stop_on_success=False,
+                              image_filter=None, custom_filter_lookup=None)
+               -> list[CatalogSource]
+    """
+    from query.runner import query_catalogs as _impl
+
+    return _impl(*args, **kwargs)
+
+
+query_catalogs = _default_query_catalogs
