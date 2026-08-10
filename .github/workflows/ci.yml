@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python-syntax:
+    name: python syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Compile Python files
+        run: python -m py_compile database_tools.py
+
+  repository-shape:
+    name: repository shape
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check required project files
+        run: |
+          test -f README.md
+          test -f requirements.txt
+          test -f database_tools.py
+          test -f docs/architecture-brainstorm.md
+
+  required:
+    name: "required: ci"
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [python-syntax, repository-shape]
+    steps:
+      - name: Fail unless every required CI job succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          if echo "$RESULTS" | jq -e 'any(.[]; .result != "success")' >/dev/null; then
+            echo "::error::a required CI job failed, was cancelled, or was skipped"
+            exit 1
+          fi
+          echo "all required CI jobs succeeded"
