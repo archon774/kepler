@@ -1,15 +1,20 @@
-# Kepler Tool Architecture — Simple Migration
+# Kepler Tool Architecture — Initial Migration
 
 Date: 2026-08-10
 Status: proposed, simplified
 
-This is the direct path from the current extracted folders to a basic Python
-tool package. The goal is not to build infrastructure. The goal is to make the
-existing Kepler algorithms callable through small, useful Python functions.
+This migration is only the first architecture pass. Its job is to make the
+existing Python algorithms importable as a `kepler` package and expose a first
+small set of plain Python tools. It should not fix algorithm bugs, reorganize
+helper trees, or build serving infrastructure.
+
+After this lands, the next planning pass is the algorithm remediation plan: turn
+the bug backlog into focused fix PRs, each with the smallest targeted test that
+proves the fix.
 
 ---
 
-## 1. Target Shape
+## 1. Target Shape For This Pass
 
 ```text
 kepler/
@@ -17,10 +22,8 @@ kepler/
   tools/
     __init__.py
     astrometry.py
-    photometry.py
     calibration.py
     catalogs.py
-    query.py
     workspace.py
   models.py
   config.py
@@ -32,102 +35,91 @@ kepler/
   catalogs/
   query/
 
-database_tools.py       # temporary compatibility wrapper
-lightcurve/             # unchanged until a Python wrapper is needed
-periodogram/            # unchanged until a Python wrapper is needed
-hrdiagram/              # unchanged until a Python wrapper is needed
+database_tools.py       # unchanged compatibility entry point
+lightcurve/             # unchanged
+periodogram/            # unchanged
+hrdiagram/              # unchanged
 ```
 
-The `tools/` modules are the public API. The moved algorithm folders keep the
-detailed implementation.
+Only the first local tools are in scope here. Heavier image/catalog tools,
+database-tool absorption, and TypeScript wrappers wait until after the first
+architecture slice and the remediation plan are clearer.
 
 ---
 
-## 2. Step Order
+## 2. Step 1 — Create The Package Shell
 
-### Step 1 — Create the package shell
+Add the minimum package structure:
 
-- Add `kepler/__init__.py`.
-- Add `kepler/tools/__init__.py`.
-- Add small shared modules:
-  - `kepler/models.py`
-  - `kepler/config.py`
-  - `kepler/artifacts.py`
+- `kepler/__init__.py`
+- `kepler/tools/__init__.py`
+- `kepler/models.py`
+- `kepler/config.py`
+- `kepler/artifacts.py`
+- empty tool modules for the first slice:
+  - `kepler/tools/astrometry.py`
+  - `kepler/tools/calibration.py`
+  - `kepler/tools/catalogs.py`
+  - `kepler/tools/workspace.py`
 
-Keep these files small. They should support the first tools, not anticipate every
-future tool.
+Keep the shared files intentionally small:
 
-### Step 2 — Move the Python algorithm folders
+- `models.py`: small result, warning/error, table summary, WCS summary, and file
+  metadata models as needed by the first tools.
+- `config.py`: simple environment-backed settings helpers only where a first
+  tool needs them.
+- `artifacts.py`: local output-directory and file-description helpers. An
+  artifact is just a local file path plus basic metadata.
 
-Move these folders under `kepler/`:
-
-- `wcs/` → `kepler/wcs/`
-- `photometry/` → `kepler/photometry/`
-- `fieldcal/` → `kepler/fieldcal/`
-- `catalogs/` → `kepler/catalogs/`
-- `query/` → `kepler/query/`
-
-Update imports and package metadata for the new `kepler.` prefix. Do not reshape
-the algorithm internals while moving them.
-
-### Step 3 — Add the first simple tools
-
-Implement the local, low-dependency tools first:
-
-- `tools.catalogs.list_photometric_catalogs`
-- `tools.catalogs.resolve_reference_band`
-- `tools.calibration.solve_zeropoint_from_measurements`
-- `tools.astrometry.describe_image_wcs`
-- `tools.workspace.list_artifacts`
-- `tools.workspace.describe_artifact`
-
-These prove the package shape without needing remote services, solver data, or a
-TypeScript runtime.
-
-### Step 4 — Replace global field-calibration wiring
-
-`fieldcal.deps` is useful as an extraction seam, but tool calls should not mutate
-process globals.
-
-- Add a small `FieldCalDeps` object.
-- Let field calibration accept explicit dependencies.
-- Keep `fieldcal.deps` as a compatibility default.
-- Have `tools.calibration` pass explicit dependencies.
-
-This is a wiring cleanup only. Do not change calibration math in this step.
-
-### Step 5 — Add image and catalog tools
-
-Add the heavier Python tools once the local tools are in place:
-
-- `tools.astrometry.solve_astrometry`
-- `tools.photometry.extract_sources`
-- `tools.photometry.measure_photometry`
-- `tools.calibration.calibrate_zeropoint`
-- `tools.query.resolve_target`
-- `tools.query.search_catalog`
-- `tools.query.search_catalogs_for_image`
-
-Each tool should return a compact summary and write large results to local
-artifact files.
-
-### Step 6 — Keep `database_tools.py` as a wrapper
-
-Move useful database-query behavior into `kepler/tools/query.py` or later
-`kepler/tools/literature.py`, but keep `database_tools.py` at the repository root
-as a compatibility entry point while callers are updated.
-
-### Step 7 — Defer TypeScript tools
-
-Leave `lightcurve/`, `periodogram/`, and `hrdiagram/` where they are until there
-is a concrete Python tool to expose. When that happens, start with the simplest
-wrapper that can run the existing implementation and return JSON.
+Do not add a registry, server, plugin layer, or large model tree.
 
 ---
 
-## 3. Tool Implementation Pattern
+## 3. Step 2 — Move The Python Algorithm Folders
 
-Each tool should follow the same simple shape:
+Move the Python algorithm folders under `kepler/`:
+
+- `wcs/` -> `kepler/wcs/`
+- `photometry/` -> `kepler/photometry/`
+- `fieldcal/` -> `kepler/fieldcal/`
+- `catalogs/` -> `kepler/catalogs/`
+- `query/` -> `kepler/query/`
+
+Update imports for the new package paths. Keep the algorithm internals intact:
+
+- no numerical edits;
+- no helper-tree consolidation;
+- no broad cleanup while files are moving;
+- no changes to TypeScript folders.
+
+Update packaging and docs for the new import paths:
+
+- `pyproject.toml` should discover `kepler*`.
+- package data currently under `wcs.*` should move to the corresponding
+  `kepler.wcs.*` package path.
+- README examples should prefer `kepler.tools.*` for users and document direct
+  `kepler.<algorithm_package>` imports for advanced use.
+
+`database_tools.py` stays at the repository root in this pass.
+
+---
+
+## 4. Step 3 — Add The First Simple Tools
+
+Implement only local, low-dependency tools first:
+
+- `kepler.tools.astrometry.describe_image_wcs(path)`
+- `kepler.tools.catalogs.list_photometric_catalogs()`
+- `kepler.tools.catalogs.resolve_reference_band(catalog, image_filter)`
+- `kepler.tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `kepler.tools.workspace.list_artifacts(directory=None)`
+- `kepler.tools.workspace.describe_artifact(path)`
+
+These tools prove the package shape without requiring remote catalog calls,
+astrometry.net index files, local UCAC catalogs, Node, or end-to-end FITS
+pipeline data.
+
+Use the same simple pattern for each tool:
 
 ```python
 def tool_name(...):
@@ -136,41 +128,54 @@ def tool_name(...):
     return summarize_result(result)
 ```
 
-Use a helper inside the same module when that keeps the tool readable. Move code
-elsewhere only after more than one tool actually needs it.
+Use private helpers inside the same tool module before adding another package.
+If a helper starts doing astronomy math, move that logic into the relevant
+algorithm package instead.
 
 ---
 
-## 4. What Changes For Users
+## 5. Checks For This Pass
 
-Python imports move from top-level folders to the `kepler` package:
+Keep validation lightweight and tied to the changed surface:
 
-```python
-from kepler.tools.astrometry import describe_image_wcs
-from kepler.tools.photometry import extract_sources
-from kepler.tools.calibration import solve_zeropoint_from_measurements
-```
+- `python3 -m py_compile database_tools.py`
+- `python3 -m compileall kepler`
+- a smoke import of `kepler` and the first `kepler.tools.*` modules
+- `git diff --check`
 
-Existing direct algorithm imports become:
-
-```python
-from kepler.wcs.wcs import solve_wcs
-from kepler.photometry.pipeline.photometry import run_photometry
-from kepler.fieldcal import perform_field_calibration
-from kepler.query.runner import query_catalogs
-```
-
-The preferred public API is `kepler.tools.*`. Direct algorithm imports remain
-available for development and advanced use.
+Do not add broad numerical regression work here. Numerical tests belong with the
+algorithm remediation PRs that actually change behavior.
 
 ---
 
-## 5. Keep Out Of Scope
+## 6. Handoff To Algorithm Remediation
 
-- Reorganizing extracted helper directories.
-- Consolidating shared implementation internals.
-- Building a serving framework.
-- Adding serving-specific logic.
-- Creating migration audit machinery.
-- Porting TypeScript algorithms to Python.
+Once Steps 1-3 are done, update `algorithm-remediation-plan.md` before fixing
+algorithm bugs. That refactor should:
+
+- remove references to old architecture phases and heavy verification machinery;
+- keep the finding register and blocker list;
+- replace broad harness language with a rule that each fix PR adds the smallest
+  targeted test for the affected behavior;
+- define the first few remediation PRs, starting with blocker or tool-exposure
+  risks;
+- note duplicated bugs explicitly: until helper trees are intentionally
+  consolidated, a fix must be applied everywhere the duplicated code exists.
+
+The practical sequencing is:
+
+1. Finish this architecture migration.
+2. Refactor the remediation plan into targeted fix work.
+3. Start bug-fix PRs with tests.
+
+---
+
+## 7. Out Of Scope
+
 - Fixing numerical behavior while moving files.
+- Reorganizing extracted helper directories.
+- Consolidating duplicated implementation internals.
+- Replacing `fieldcal.deps` unless a first-slice tool requires it.
+- Moving `database_tools.py` logic.
+- Adding heavier image, catalog-query, or TypeScript-backed tools.
+- Building a serving framework.
