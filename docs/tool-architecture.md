@@ -12,8 +12,9 @@ notebook. This document covers how the code is laid out and how a service-shaped
 call becomes a tool-shaped call.
 
 **Out of scope — deliberately.** Algorithmic correctness, astronomical accuracy,
-and the bug-fix rollout are a separate track with their own document, driven by
-the algorithm review. Nothing here asserts that any algorithm is correct. Where
+and the bug-fix rollout are a separate track, owned by
+[`algorithm-remediation-plan.md`](algorithm-remediation-plan.md) and driven by the
+algorithm review. Nothing here asserts that any algorithm is correct. Where
 the two tracks touch — the error taxonomy, the layering that makes numeric
 changes reviewable — this document says only what structure is required, never
 what should be fixed.
@@ -21,6 +22,10 @@ what should be fixed.
 Companion documents:
 - [`tool-architecture-migration.md`](tool-architecture-migration.md) — the
   file-by-file move plan and phasing.
+- [`algorithm-remediation-plan.md`](algorithm-remediation-plan.md) — the algorithm
+  review's 109 findings and the fix rollout. Note its §7: eleven of those findings
+  are closed structurally by the architecture below rather than by editing an
+  algorithm.
 - [`architecture-brainstorm.md`](architecture-brainstorm.md) — the greenfield
   tool families Kepler should grow later (retrieval, literature, plotting).
 
@@ -576,7 +581,8 @@ The rules in §3 are only real if something checks them:
   document asserts an algorithm is right. The structures above exist partly to
   make numeric fixes reviewable — one call site per domain entry point, a manifest
   that flags algorithm changes — but the fixes themselves belong to the
-  remediation track.
+  remediation track, where §7 records which findings this layering closes on its
+  own.
 - **Orchestration, planning, or a chat runtime.** Kepler exposes tools; deciding
   when to call them is the caller's job.
 - **End-to-end validation.** Still requires reference FITS, solver binaries and
