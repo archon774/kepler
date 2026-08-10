@@ -43,8 +43,10 @@ from .schemas import (
 # functions now live in fieldcal/solution.py and fieldcal/ref_mag.py).
 from .solution import calc_solution
 from .ref_mag import resolve_ref_mag_for_filter
-from .catalogs import CATALOGS
-from .catalog_query import query_catalogs_for_processing_run
+# Catalog metadata (band tables and colour transforms) is read directly from
+# Kepler's catalogs package: it is pure data and pulls in no network stack.
+# The queries themselves go through deps.query_catalogs -- see deps.py.
+from catalogs import CATALOGS
 # EXTRACTED: was `from .photometry import run_photometry`,
 # `from .source_extraction import get_source_radec, run_source_extraction` and
 # `from .wcs import build_wcs_for_processing_run` — sibling optical-processing
@@ -174,12 +176,9 @@ def _filter_variable_stars(
         return sources
 
     try:
-        var_stars = query_catalogs_for_processing_run(
-            processing_run,
+        var_stars = deps.query_catalogs(
             ["VSX"],
             wcs=wcs,
-            header=header,
-            data=data,
             skip_failed=True,
         )
     except Exception:
@@ -540,12 +539,9 @@ def perform_field_calibration(
             ", ".join(catalogs),
             image_filter,
         )
-        sources = query_catalogs_for_processing_run(
-            processing_run,
+        sources = deps.query_catalogs(
             catalogs,
             wcs=wcs,
-            header=header,
-            data=data,
             skip_failed=True,
             stop_on_success=True,
             image_filter=image_filter,

@@ -1,8 +1,11 @@
 """
-Afterglow Core: SkyMapper catalog accessed via VizieR
+Kepler: SkyMapper catalog accessed via VizieR
 """
 
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog` (VizieR backend).
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 
@@ -34,15 +37,8 @@ class SkyMapperCatalog(Catalog):
         'iprime': 'i + 0.001', 'zprime': 'z - 0.005',
     }
 
-    # EXTRACTED / DROPPED: the original also overrode ``query_region`` purely to
-    # default the VizieR ``flags=0`` column constraint (drop sources with
-    # non-zero SExtractor flags) before delegating to
-    # ``VizierCatalog.query_region``.  That is query-backend behaviour, not
-    # calibration math; it must be re-applied by whatever backend Kepler/catalogs/
-    # provides.  Original body:
-    #
-    #     if constraints is None:
-    #         constraints = {}
-    #     constraints.setdefault('flags', '0')
-    #     return super().query_region(
-    #         ra_hours, dec_degs, constraints, limit, **region)
+    # SkyMapper is the only catalog that applies a default column constraint:
+    # unless the caller says otherwise its queries add ``flags=0``, dropping
+    # sources with non-zero SExtractor flags. That is enforced by a
+    # ``query_region`` override in ``query/skymapper.py``, since it acts on the
+    # request rather than on the photometry.

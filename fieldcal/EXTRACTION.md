@@ -44,39 +44,29 @@ unless noted. `OPD/` abbreviates
 | Kepler file | Lines | Source | Source lines | Fidelity |
 |---|---|---|---|---|
 | `field_cal.py` | 735 | `OPD/field_cal.py` | 701 (all) | Verbatim. Diff vs original is imports + 4 `deps.` call seams + 2 type annotations + the added parity annotation at the `apcorr_tol` line. No logic touched. |
-| `catalog_query.py` | 451 | `OPD/catalog_query.py` | 436 (all) | Verbatim. Diff vs original is imports + 1 type annotation. |
 | `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
 | `ref_mag.py` | 217 | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Verbatim (one blank line lost trailing whitespace). |
-| `schemas.py` | 367 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (see §4.1). |
+| `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `catalogs/` (§4.4). |
 | `batch_wcs_photometry_zeropoint_export.py` | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Verbatim except the repo-root discovery seam (§4.6). |
-| `deps.py` | 97 | — | — | **New file.** Seam module only; contains no math. |
-| `__init__.py` | 64 | — | — | **New file.** Public API surface. |
+| `deps.py` | 130 | — | — | **New file.** Seam module only; contains no math. |
+| `__init__.py` | 58 | — | — | **New file.** Public API surface. |
 
-### Catalog metadata (`catalogs/`)
+### Catalog metadata — MOVED OUT
 
-Metadata only — band tables and filter/colour transforms. Query backends
-severed; see §6.
+`fieldcal` no longer owns catalogs. What was `fieldcal/catalogs/` (13 files) and
+`fieldcal/catalog_plugins.py` now lives in Kepler's top-level `catalogs/`
+package, and what was `fieldcal/catalog_query.py` is `query/selection.py`,
+`query/geometry.py` and `query/runner.py`. Provenance for all of it moved to
+`catalogs/EXTRACTION.md` and `query/EXTRACTION.md`.
 
-| Kepler file | Lines | Source (`OPD/catalogs/`) | Source lines |
-|---|---|---|---|
-| `catalogs/__init__.py` | 104 | `__init__.py` | 87 |
-| `catalogs/catalog.py` | 69 | `catalog.py` | 45 |
-| `catalogs/apass_catalog.py` | 40 | `apass_catalog.py` | 37 |
-| `catalogs/panstarrs_catalog.py` | 44 | `panstarrs_catalog.py` | 43 |
-| `catalogs/twomass_catalog.py` | 41 | `twomass_catalog.py` | 40 |
-| `catalogs/tycho_catalog.py` | 28 | `tycho_catalog.py` | 27 |
-| `catalogs/ucac_catalog.py` | 31 | `ucac_catalog.py` | 30 |
-| `catalogs/stetson_globs_catalog.py` | 37 | `stetson_globs_catalog.py` | 36 |
-| `catalogs/skymapper_catalog.py` | 48 | `skymapper_catalog.py` | 58 |
-| `catalogs/sdss_catalog.py` | 55 | `sdss_catalog.py` | 213 |
-| `catalogs/usno_catalog.py` | 71 | `usno_catalog.py` | 63 |
-| `catalogs/landolt_catalog.py` | 91 | `landolt_catalog.py` | 83 |
-| `catalogs/vsx_catalog.py` | 113 | `vsx_catalog.py` | 105 |
-| `catalog_plugins.py` | 194 | `common/catalog_plugins/{__init__,catalog,apass_catalog,panstarrs_catalog}.py` | 49+45+37+43 |
+The catalog *backends* severed by this extraction — the VizieR engine, SDSS's
+SkyServer SQL, the SkyMapper constraint override, the astroquery cache layer —
+have since been extracted into `query/`, so the network path described in §4.4
+is no longer inert.
 
-A diff against every original confirms **zero changes** to any `mags`,
-`filter_lookup`, `col_mapping`, `sort` or `row_limit` value. The only removed
-lines are the severed backend methods and the rewritten imports.
+Field calibration now reads catalog metadata by importing `catalogs` directly
+(pure data, no network stack) and reaches the network through
+`deps.query_catalogs`.
 
 ### Vendored skylib subset (`skylib/`)
 
@@ -110,10 +100,10 @@ repo-level decision, deliberately not made here.
 | `skynet_db.models.ObservationAssetProcessingRun` | SQLAlchemy ORM row. Field calibration reads exactly two attributes off it. |
 | `skynet_db.models.File`, S3 asset download (`_download_to_path`), `write_image_product_fits`, `get_worker_tmp_file_path` (`utils.py`) | Object storage / temp-file plumbing. Never reached from field calibration. |
 | `skynet_sdk.schemas.SkynetBaseModel` registry (`model_registry`, `register_union`, `rebuild_all_models`) | FastAPI/SDK schema-generation infrastructure. |
-| The other ~700 lines of `utils.py` (header parsing, pixel-scale estimation, RA/Dec guessing, trig helpers, VizieR cache pruning, `query_catalogs_for_image`, WCS box helpers, DB session use) | Not field calibration. Only `calc_solution` and `resolve_ref_mag_for_filter` are reached. |
+| The other ~700 lines of `utils.py` (header parsing, pixel-scale estimation, RA/Dec guessing, trig helpers, DB session use) | Not field calibration. Only `calc_solution` and `resolve_ref_mag_for_filter` are reached. Its VizieR cache pruning, `query_catalogs_for_image` and WCS box helpers went to `query/` — see `query/EXTRACTION.md`. |
 | `OPD/photometry.py`, `OPD/source_extraction.py` | Photometry / SEP extraction — `Kepler/photometry/`. Reached via `deps`. |
 | `OPD/wcs.py` (astrometry.net / ATLAS plate solving, 36 KB) | Plate solving — `Kepler/wcs/`. Reached via `deps`. |
-| `OPD/catalogs/vizier_catalogs.py` (352 lines), `OPD/catalogs/config.py`, the SDSS SQL backend, `catalogs/local/` | Catalog query backends — see §6. |
+| `OPD/catalogs/*`, the SDSS SQL backend | Catalogs and their query backends — now `Kepler/catalogs/` and `Kepler/query/`. See §6. |
 | `common/schemas.py`: `WcsCalibrationSettings`, `Photometry`, `ImageProperties` | Not field-cal settings or results. |
 | `skylib` beyond `util/{stats,angle,fits}.py` | Not reached from field calibration. |
 
@@ -140,13 +130,13 @@ behaviourally load-bearing:**
 
 ### 4.2 `ObservationAssetProcessingRun` → duck-typed `Any`
 
-Three sites: `field_cal.perform_field_calibration`,
-`field_cal._filter_variable_stars`, `catalog_query.query_catalogs_for_processing_run`.
+Two sites: `field_cal.perform_field_calibration` and
+`field_cal._filter_variable_stars`.
 
 Only `.id` (source-ID prefix + logging) and `.observation_asset_id` (used as
-`file_id`) are read. In `catalog_query` the parameter is never read at all — it
-is retained purely for call-signature parity. `schemas.ProcessingRunRef` is a
-concrete stand-in for standalone callers.
+`file_id`) are read. `schemas.ProcessingRunRef` is a concrete stand-in for
+standalone callers. The third upstream site was the catalog query entry point,
+which never read the parameter at all; `query/runner.py` drops it (§4.4).
 
 ### 4.3 Cross-domain callables → `fieldcal/deps.py`
 
@@ -168,26 +158,44 @@ The second branch reconstructs a WCS from persisted DB rows and is ORM
 persistence — it is not reproduced. A header-only implementation gives the
 behaviour field calibration actually depends on.
 
-### 4.4 Catalog query backends → `NotImplementedError`
+### 4.4 Catalog ownership → `catalogs/` and `query/`
 
-`catalogs/*.py` classes no longer subclass `VizierCatalog`; they subclass the
-local metadata-only `Catalog`, whose `query_box` / `query_circ` /
-`query_objects` / `table_to_sources` raise. Consequence: the
-`query_catalogs_for_processing_run` *network* path is inert until Kepler
-supplies backends. **Everything else works**, including filter-aware catalog
-selection, reference-magnitude resolution, matching and the full zero-point
-solve, provided sources arrive via `catalog_sources` / `detected_sources`.
+Originally this extraction copied catalog metadata into `fieldcal/catalogs/` and
+severed the query backends, so `query_box` / `query_circ` / `query_objects` /
+`table_to_sources` raised. That is no longer the case: catalogs are their own
+package and the backends are extracted.
 
-Two backend overrides that contain real magnitude math were **kept rather than
-dropped**, and now call a raising `super()`:
+What changed in `fieldcal`:
 
-- `LandoltCatalog.table_to_sources` — colour-index → UBVRI conversion with
-  error propagation.
-- `USNOB1Catalog.table_to_sources` — B/R synthesis from B1/B2, R1/R2.
+| Was | Now |
+|---|---|
+| `from .catalogs import CATALOGS` | `from catalogs import CATALOGS` |
+| `from .catalog_plugins import CATALOG_OPTIONS` | `from catalogs import CATALOG_OPTIONS` |
+| `from .catalog_query import query_catalogs_for_processing_run` | `deps.query_catalogs(...)` |
+| `fieldcal.schemas` defined `CatalogSource`, `Mag`, ... | re-exported from `catalogs.schemas` |
 
-They become live the moment a `table_to_sources` backend is supplied.
-`VSXCatalog.table_to_sources` does not call `super()` and is fully functional
-as-is.
+`deps.query_catalogs` is the one new seam, and unlike the other entries in
+`deps.py` it has a **working default** — it lazily imports
+`query.runner.query_catalogs` on first call. So catalog fetching needs no wiring,
+and `import fieldcal` still pulls in no astroquery. Override it to route queries
+elsewhere.
+
+Two consequences worth noting:
+
+* `CatalogSource` is now a single shared class. Previously `fieldcal` defined its
+  own; a source produced by a query backend and a source `fieldcal` matched
+  against were structurally identical but distinct types.
+* `fieldcal.__init__` no longer exports `catalog_supports_filter`,
+  `select_catalogs_for_filter` or `query_catalogs_for_processing_run`. The first
+  two are `query.selection.catalog_supports_filter` and
+  `query.selection.select_catalogs_for_filter`; the third is
+  `query.runner.query_catalogs`, which drops the unused leading `processing_run`
+  argument and the unused `header` / `data` arguments.
+
+The three magnitude-math overrides — `LandoltCatalog.table_to_sources`,
+`USNOB1Catalog.table_to_sources`, `VSXCatalog.table_to_sources` — were kept
+throughout and are now live: the first two reach the real VizieR row mapper
+through `super()` via the MRO that `query/binding.py` constructs.
 
 ### 4.5 `skylib` absolute imports → vendored relative imports
 
@@ -232,8 +240,9 @@ logic and every calibration setting literal are untouched.
    `(None, None)` without trying the `"*"` wildcard. Looks like a missed
    fallback; it is the legacy ordering. Preserved.
 
-5. **Two divergent catalog registries** — `catalogs/CATALOGS` (11 catalogs) and
-   `catalog_plugins/CATALOG_OPTIONS` (APASS + PanSTARRS). They are *not*
+5. **Two divergent catalog registries** — `catalogs.CATALOGS` (11 catalogs) and
+   `catalogs.CATALOG_OPTIONS` (APASS + PanSTARRS). Both now live in
+   `Kepler/catalogs/`; see `catalogs/EXTRACTION.md` §4. They are *not*
    duplicates and merging them would change numbers. `CATALOG_OPTIONS` carries
    `H_alpha` / `H_beta` aliases that `CATALOGS['APASS']` lacks; `CATALOGS`
    carries `Open`/`Clear`/`Lum` → `V` and the curriculum filter names that
@@ -245,13 +254,8 @@ logic and every calibration setting literal are untouched.
    Preserved verbatim; flagged here as a genuine latent oddity someone should
    decide about deliberately.
 
-6. **Two divergent `Catalog.__init__` merge semantics** —
-   `catalogs/catalog.py` rebinds an instance-level copy
-   (`self.filter_lookup = {**class_level, **arg}`); `catalog_plugins.Catalog`
-   mutates the class-level dict in place (`self.filter_lookup.update(arg)`), so
-   constructing that plugin permanently rewrites its class attribute. Effective
-   merged content is the same. Both are preserved as written rather than
-   normalised.
+6. **Two divergent `Catalog.__init__` merge semantics** — preserved, and now
+   documented in `catalogs/EXTRACTION.md` §5.4.
 
 7. **`background` / `background_rms` computed then discarded** —
    `perform_field_calibration` captures them from `run_source_extraction` and
@@ -271,29 +275,33 @@ logic and every calibration setting literal are untouched.
 
 ---
 
-## 6. Catalog-backend code for `Kepler/catalogs/` — NOT copied here
+## 6. Catalog-backend code — now extracted
 
-Per scope, none of this was moved into `Kepler/catalogs/`. Flagging only.
+This section previously listed catalog-backend code deliberately left behind.
+All of it has since been extracted:
 
-| Skynet source | Size | What it is |
-|---|---|---|
-| `OPD/catalogs/vizier_catalogs.py` | 352 lines | `VizierCatalog` base: astroquery `Vizier` box/circle/object queries, `table_to_sources` row mapper (evaluates `col_mapping` expressions, builds `Mag` objects), `_columns` derivation from `col_mapping`+`mags`+`sort`, cache-granularity rounding of RA/Dec/size, and a module-import-time monkey-patch of `astroquery.query.to_cache` / `AstroQuery` to swallow cache errors. |
-| `OPD/catalogs/config.py` | 5 lines | `VIZIER_SERVER`, `VIZIER_CACHE_ENABLED`, `VIZIER_CACHE_AGE_DAYS`. |
-| `OPD/catalogs/sdss_catalog.py` | ~110 of 213 lines | `AfterglowSDSS(SDSSClass)` — bespoke SDSS SQL generation for rect/circular regions incl. pole and RA-wrap handling — plus the `query_objects` / `query_box` / `query_circ` overrides driving it. |
-| `OPD/catalogs/skymapper_catalog.py` | ~20 of 58 lines | `query_region` override that defaults the `flags=0` column constraint. The full original body is reproduced in a comment in `fieldcal/catalogs/skymapper_catalog.py` so the behaviour is not lost. |
-| `OPD/catalogs/local/` | untracked | A local catalog backend present **only as `__pycache__`** (`backend`, `config`, `engine`, `errors`, `health`, `normalize`, `routing`). No `.py` sources on disk and nothing in git. Not imported by `catalogs/__init__.py`. Someone should establish whether the sources still exist anywhere. |
-| `utils.py::prune_vizier_cache` | ~27 lines | VizieR cache maintenance. |
-| `utils.py::query_catalogs_for_image` + `_infer_image_shape`, `_wcs_boxes_from_image_wcs` | ~105 lines | A second, image-oriented catalog query entry point parallel to `catalog_query.query_catalogs_for_processing_run`. Not reached by field calibration. |
-| `common/catalog_plugins/vizier_catalogs.py` etc. | ~13 KB | Near-duplicate of the above under the second plugin package. |
+| Skynet source | Now in |
+|---|---|
+| `OPD/catalogs/vizier_catalogs.py` (352) | `query/vizier.py` |
+| `OPD/catalogs/config.py` (5) | `query/config.py` |
+| `OPD/catalogs/sdss_catalog.py` backend (~110) | `query/sdss.py` |
+| `OPD/catalogs/skymapper_catalog.py` override (~20) | `query/skymapper.py` |
+| `utils.py::prune_vizier_cache` (~27) | `query/cache.py` |
+| `utils.py::query_catalogs_for_image` (~105) | `query/runner.py` |
+| `common/catalog_plugins/*` | `catalogs/catalog_options.py` |
 
-**Recommended contract** when `Kepler/catalogs/` lands: provide
-`table_to_sources(table)`, `query_box(ra_hours, dec_degs, width_arcmins, height_arcmins, constraints, limit=None)`,
-`query_circ(ra_hours, dec_degs, radius_arcmins, constraints, limit=None)` and
-`query_objects(names)`. `fieldcal/catalogs/` can then be reduced to metadata
-mixins over those backends. Until then `fieldcal` is fully usable by passing
-catalog sources in directly.
+One item from the original list is still outstanding. `OPD/catalogs/local/` — a
+local catalog backend (`backend`, `config`, `engine`, `errors`, `health`,
+`normalize`, `routing`) — is present in Skynet's working tree only as
+`__pycache__`, with no `.py` sources. This extraction previously noted that
+someone should establish whether the sources still exist.
 
----
+**They do.** They are in Skynet's git history, deleted from the working tree but
+recoverable from commits `a8241c83e` ("local-first PostGIS catalog backend for
+the optical pipeline"), `9a6a5a6ad` and `fb643309f`. That backend routes queries
+to a local PostGIS catalog instead of a remote provider, and it is the natural
+second backend behind `query/binding.py`. It was out of scope here, which covered
+remote access only.
 
 ## 7. External dependencies
 

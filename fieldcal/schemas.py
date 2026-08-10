@@ -18,77 +18,24 @@ from typing import Any, ClassVar, Dict, List, Optional, Type
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from pydantic.alias_generators import to_camel
 
-# EXTRACTED: was `from skynet_sdk.schemas import SkynetBaseModel`.
-# The Skynet base model additionally carries a cross-package model/union
-# registry (``model_registry``, ``register_union``, ``rebuild_all_models``)
-# used by the FastAPI/SDK layer.  That machinery is service infrastructure and
-# is dropped here.  The parts that are *behaviourally* load-bearing for field
-# calibration are preserved verbatim:
-#   * ``model_config`` (camelCase alias generator + ``populate_by_name``, so the
-#     ``model_dump()`` / ``Model(**mapping)`` round-trips used all over
-#     ``field_cal.py`` keep working on field names);
-#   * the ``_clean_nans`` wrap serializer, which turns NaN/inf floats into
-#     ``None`` on every ``model_dump()`` — field calibration relies on this when
-#     re-hydrating matched sources.
+from catalogs.schemas import (
+    CatalogMeta,
+    CatalogSource,
+    IAstrometry,
+    ICatalogSource,
+    IPhotometry,
+    KeplerBaseModel,
+    Mag,
+)
+
+# ``KeplerBaseModel``, ``Mag``, ``IPhotometry``, ``IAstrometry``,
+# ``ICatalogSource`` and ``CatalogSource`` are defined in ``catalogs/schemas.py``
+# and imported above: they are the catalog data contract, and field calibration
+# has to compare against the same classes a ``query/`` backend produces rather
+# than local twins. Everything below is calibration state, which fieldcal owns.
 
 
-def _clean_nans(obj):
-    if isinstance(obj, float):
-        return None if math.isnan(obj) or math.isinf(obj) else obj
-    if isinstance(obj, dict):
-        return {k: _clean_nans(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        t = type(obj)
-        return t(_clean_nans(v) for v in obj)
-    return obj
-
-
-def _strip_schema_titles(schema: Dict[str, Any], _model: Type[BaseModel]) -> None:
-    for prop in schema.get("properties", {}).values():
-        if prop.get("title", None) not in [None, ""]:
-            prop.pop("title", None)
-
-
-class SkynetBaseModel(BaseModel):
-    """EXTRACTED: reduced ``skynet_sdk.schemas.base.SkynetBaseModel``."""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        from_attributes=True,
-        use_enum_values=True,
-        protected_namespaces=("protect_me_", "also_protect_"),
-        json_schema_extra=_strip_schema_titles,
-    )
-
-    @model_serializer(mode="wrap")
-    def _serialize(self, handler):
-        data = handler(self)  # dict ready for JSON
-        return _clean_nans(data)
-
-
-# ============================================================================
-# Photometry & Source Extraction (unchanged parts elided for brevity)
-# ============================================================================
-
-class Mag(SkynetBaseModel):
-    value: Optional[float] = None
-    error: Optional[float] = None
-
-
-class IPhotometry(SkynetBaseModel):
-    # In legacy Marshmallow, flux/flux_err_counts were required;
-    # we keep them Optional here for robustness in pipeline flows.
-    catalog_name: Optional[str] = None
-    ref_mag: Optional[float] = None
-    ref_mag_error: Optional[float] = None
-    flux: Optional[float] = None
-    flux_error: Optional[float] = Field(default=None, alias="flux_err_counts")
-    mag: Optional[float] = None
-    mag_error: Optional[float] = Field(default=None, alias="magnitude_err_mag")
-
-
-class IAperture(SkynetBaseModel):
+class IAperture(KeplerBaseModel):
     aper_a: Optional[float] = None
     aper_b: Optional[float] = None
     aper_theta: Optional[float] = None
@@ -100,7 +47,7 @@ class IAperture(SkynetBaseModel):
     annulus_theta_out: Optional[float] = None
 
 
-class PhotometrySettings(SkynetBaseModel):
+class PhotometrySettings(KeplerBaseModel):
     # Mirrors PhotSettings defaults from legacy
     mode: str = "aperture"
     a: Optional[float] = None
@@ -120,7 +67,7 @@ class PhotometrySettings(SkynetBaseModel):
     reject_bkg_outliers: bool = False
 
 
-class ISourceMeta(SkynetBaseModel):
+class ISourceMeta(KeplerBaseModel):
     file_id: Optional[int] = None
     time: Optional[datetime] = None
     filter: Optional[str] = None
@@ -128,34 +75,16 @@ class ISourceMeta(SkynetBaseModel):
     exp_length: Optional[float] = None
 
 
-class IAstrometry(SkynetBaseModel):
-    ra_hours: Optional[float] = None
-    dec_degs: Optional[float] = None
-    pm_ra: Optional[float] = None
-    pm_dec: Optional[float] = None
-    pm_ra_error: Optional[float] = None
-    pm_dec_error: Optional[float] = None
-    pm_sky: Optional[float] = None
-    pm_pos_angle_sky: Optional[float] = None
-    x: Optional[float] = None
-    y: Optional[float] = None
-    pm_pixel: Optional[float] = None
-    pm_pos_angle_pixel: Optional[float] = None
-    pm_epoch: Optional[datetime] = None
-    flux: Optional[float] = None
-    sat_pixels: Optional[int] = None
-
-
-class IFwhm(SkynetBaseModel):
+class IFwhm(KeplerBaseModel):
     fwhm_x: Optional[float] = None
     fwhm_y: Optional[float] = None
     theta: Optional[float] = None
 
 
-class ISourceId(SkynetBaseModel):
+class ISourceId(KeplerBaseModel):
     id: Optional[str] = None
 
-class SourceExtractionSettings(SkynetBaseModel):
+class SourceExtractionSettings(KeplerBaseModel):
     x: int = Field(1)
     y: int = Field(1)
     width: int = Field(0)
@@ -268,40 +197,21 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
 # Catalogs
 # ============================================================================
 
-class ICatalogSource(SkynetBaseModel):
-    """Generic catalog source definition without astrometry."""
-
-    id: Optional[str] = None
-    file_id: Optional[int] = None
-    label: Optional[str] = None
-    catalog_name: Optional[str] = None
-    mags: Dict[str, Mag] = Field(default_factory=dict)
-
-
-class CatalogSource(ICatalogSource, IAstrometry, IPhotometry):
-    """Catalog source definition for field calibration."""
-
-
-class Catalog(SkynetBaseModel):
-    """Base class for catalog plugin metadata/settings."""
-
-    name: Optional[str] = None
-    display_name: Optional[str] = None
-    num_sources: Optional[int] = None
-    mags: Dict[str, List[str]] = Field(default_factory=dict)
-    filter_lookup: Dict[str, str] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _default_display_name(self) -> "Catalog":
-        if self.display_name is None:
-            self.display_name = self.name
-        return self
+# Catalog schemas are owned by Kepler's ``catalogs`` package, not by field
+# calibration -- a ``CatalogSource`` handed back by a ``query/`` backend has to
+# be the same class this module's matching code compares against, and a
+# structurally identical local copy would not be. Re-exported under the names
+# calibration call sites already use.
+#
+# ``Catalog`` here is the Pydantic metadata record, not the plugin base class of
+# the same name in ``catalogs/catalog.py``; the two were distinct upstream too.
+Catalog = CatalogMeta
 
 # ============================================================================
 # Photometric Calibration (formerly "FieldCal")
 # ============================================================================
 
-class PhotometricCalibrationSettings(SkynetBaseModel):
+class PhotometricCalibrationSettings(KeplerBaseModel):
     """
     Settings used to perform photometric (field) calibration / zero-point solve.
     """
@@ -326,7 +236,7 @@ class PhotometricCalibrationSettings(SkynetBaseModel):
     strict_filter_parity: bool = False
 # (Ports legacy FieldCal fields 1:1.)  # :contentReference[oaicite:4]{index=4}
 
-class FieldCalResult(SkynetBaseModel):
+class FieldCalResult(KeplerBaseModel):
     """
     Result of photometric calibration for a single file.
     """
@@ -344,7 +254,7 @@ class FieldCalResult(SkynetBaseModel):
 # EXTRACTED: stand-in for the Skynet ORM row
 # ============================================================================
 
-class ProcessingRunRef(SkynetBaseModel):
+class ProcessingRunRef(KeplerBaseModel):
     """EXTRACTED: stand-in for ``skynet_db.models.ObservationAssetProcessingRun``.
 
     Field calibration reads exactly two attributes off the processing-run

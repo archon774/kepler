@@ -1,28 +1,31 @@
 """
-Afterglow Core: SDSS catalog
+Kepler: SDSS catalog
 """
 
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog` (VizieR backend).
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 
 __all__ = ['SDSSCatalog']
 
 
-# EXTRACTED / DROPPED: the original module also defined ``AfterglowSDSS``
-# (a subclass of ``astroquery.sdss.SDSSClass`` that builds a bespoke SDSS SQL
-# query for rectangular/circular regions, handling pole and RA-wrap cases) and
-# the ``SDSSCatalog.query_objects`` / ``query_box`` / ``query_circ`` overrides
-# that drive it.  That is ~110 lines of catalog query backend with an
-# ``astroquery.sdss`` dependency — see the EXTRACTION.md section on
-# catalog-backend code destined for Kepler/catalogs/.  Only the photometric
-# metadata below participates in zero-point calibration.
-
-
 class SDSSCatalog(Catalog):
+    """SDSS catalog plugin.
+
+    SDSS is the one catalog Kepler does not reach through VizieR: it is served
+    by SkyServer's SQL endpoint, so its backend hand-writes SQL rather than
+    building a VizieR column list. That backend — a ``astroquery.sdss.SDSSClass``
+    subclass plus the ``query_objects`` / ``query_box`` / ``query_circ``
+    overrides driving it — lives in ``query/sdss.py``. Everything below is the
+    declaration it operates on.
+
+    Note ``col_mapping`` here names SkyServer columns (``ra``, ``dec``,
+    ``objID``), not VizieR ones, and ``vizier_catalog`` is deliberately absent.
     """
-    SDSS catalog plugin
-    """
+
     name = 'SDSS'
     data_release = 17
     display_name = f'Sloan Digital Sky Survey Data Release {data_release}'

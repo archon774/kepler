@@ -8,7 +8,7 @@ Kepler is a **staging area for extracted astronomy algorithms**, not yet a coher
 package. It holds three things:
 
 1. `database_tools.py` — a prototype Anthropic tool runner over `astroquery`/`psrqpy`/`ads`.
-2. Six domain folders (`wcs/`, `photometry/`, `fieldcal/`, `lightcurve/`, `periodogram/`, `hrdiagram/`) containing code lifted verbatim out of two upstream codebases.
+2. Eight domain folders (`wcs/`, `photometry/`, `fieldcal/`, `catalogs/`, `query/`, `lightcurve/`, `periodogram/`, `hrdiagram/`) containing code lifted verbatim out of two upstream codebases.
 3. `docs/architecture-brainstorm.md` — the plan for the package this should become.
 
 The top-level folders are intentionally independent while the extraction work settles.
@@ -65,7 +65,9 @@ them in-repo.
 
 ## Python domain boundaries
 
-The three Python domains deliberately do not import each other. Ownership is strict:
+`wcs/`, `photometry/` and `fieldcal/` deliberately do not import each other.
+`catalogs/` and `query/` are shared layers that `fieldcal/` may import — see
+below. Ownership is strict:
 
 - `wcs/` owns plate solving only — `wcs.wcs.solve_wcs`. Extracts sources, tries the
   astrometry.net `solve-field` subprocess backend, falls back to the in-process ATLAS
@@ -75,7 +77,27 @@ The three Python domains deliberately do not import each other. Ownership is str
   `photometry.pipeline.photometry.{run_photometry, perform_photometry}` and
   `photometry.pipeline.source_extraction.run_source_extraction`.
 - `fieldcal/` owns the photometric zero-point solve — `perform_field_calibration` and
-  `calc_solution`.
+  `calc_solution`. It does **not** own catalogs.
+- `catalogs/` owns photometric catalog declarations — band tables, colour
+  transforms, column mappings, VizieR IDs, and the SIMBAD object-type table for
+  eleven catalogs. Declaration only: nothing here imports `astroquery` or opens a
+  socket.
+- `query/` owns remote catalog access — the VizieR engine, SDSS SkyServer SQL,
+  SIMBAD resolution, the astroquery cache layer, filter-aware catalog selection,
+  WCS-footprint geometry, and the query orchestration entry points.
+
+`query/` imports `catalogs/`; never the reverse. That direction is what keeps
+filter matching and the whole zero-point solve runnable with no network stack
+installed. Backends are attached to declarations by `query/binding.py`, which
+subclasses `(Declaration, Backend)` so that the three plugins overriding
+`table_to_sources` reach the engine implementation through `super()` — the same
+MRO position upstream's single-class arrangement gave them. Do not replace that
+with composition.
+
+Two catalog registries exist and disagree deliberately: `CATALOGS` (11 catalogs)
+and `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
+resolution). Merging them silently changes which reference band a narrowband or
+unfiltered image calibrates against. See `catalogs/EXTRACTION.md` §4.
 
 `fieldcal` needs WCS, source extraction, and photometry but does not own them. The seam is
 `fieldcal/deps.py`: module-level names that default to stubs raising
@@ -88,6 +110,11 @@ deps.run_source_extraction = ...       # from photometry/
 deps.get_source_radec = ...            # from photometry/
 deps.build_wcs_for_processing_run = ...  # from wcs/
 ```
+
+`deps.query_catalogs` is the one entry with a working default — it lazily imports
+`query.runner.query_catalogs`, so catalog fetching needs no wiring and
+`import fieldcal` still costs no astroquery. Override it to route queries
+elsewhere.
 
 Call sites in `field_cal.py` deliberately use `deps.<name>(...)` rather than a
 `from .deps import <name>` binding, so late injection works. Preserve that pattern.
@@ -110,12 +137,12 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   their own config pass any object exposing those four attributes to
   `build_anet_config` / `build_atlas_config`, or reassign `wcs.settings`.
 - `wcs/state.py` — plain dataclasses replacing SQLAlchemy rows; persistence dropped.
-- `fieldcal`'s catalog **query backends are severed**. `fieldcal/catalogs/` holds metadata
-  only (band tables, filter/colour transforms). The top-level `catalogs/` folder is an
-  empty placeholder for the future backend package; `fieldcal/EXTRACTION.md` §6 records the
-  recommended backend contract (`table_to_sources`, `query_box`, `query_circ`,
-  `query_objects`). Until it lands, `fieldcal` is usable by passing catalog sources in
-  directly.
+- `query/config.py` — `QuerySettings` reads `VIZIER_SERVER`, `VIZIER_CACHE_ENABLED`
+  and `VIZIER_CACHE_AGE_DAYS` from the environment, replacing Afterglow's Flask
+  `current_app.config` reads and Skynet's five-line literal module. Callers with
+  their own configuration assign `query.config.settings`. Note that enabling the
+  cache snaps query regions to a fixed grid, which is observable near a field
+  edge (`query/EXTRACTION.md` §5.1).
 
 ### Runtime dependencies that are not optional
 
