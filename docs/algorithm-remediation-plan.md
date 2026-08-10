@@ -2,9 +2,9 @@
 
 Date: 2026-08-10
 Status: proposed
-Scope: correctness of the algorithms in `kepler/wcs/`, `kepler/photometry/`,
-`kepler/fieldcal/`, `kepler/catalogs/`, `kepler/query/`,
-`kepler/lightcurve/`, `kepler/periodogram/`, `kepler/hrdiagram/`.
+Scope: correctness of the algorithms in `algorithms/wcs/`, `algorithms/photometry/`,
+`algorithms/fieldcal/`, `algorithms/catalogs/`, `algorithms/query/`,
+`algorithms/lightcurve/`, `algorithms/periodogram/`, `algorithms/hrdiagram/`.
 
 This document is the output of a four-part algorithm review and the plan for
 rolling out fixes. It is deliberately **separate from**
@@ -20,10 +20,10 @@ domain packages — about 22,400 lines.
 
 | Reviewer | Scope | Upstream available for diffing |
 |---|---|---|
-| WCS | `kepler/wcs/` incl. the extracted astrometry stack | `/home/claude/skynet` |
-| Photometry / field cal | `kepler/photometry/`, `kepler/fieldcal/`, and the extracted `skylib` subset | `/home/claude/skynet` |
-| Catalogs / query | `kepler/catalogs/`, `kepler/query/` | `/home/claude/skynet`, `/home/claude/afterglow-core` |
-| TypeScript | `kepler/periodogram/`, `kepler/lightcurve/`, `kepler/hrdiagram/` | `/home/claude/astromancer` @ `657b709` |
+| WCS | `algorithms/wcs/` incl. the extracted astrometry stack | `/home/claude/skynet` |
+| Photometry / field cal | `algorithms/photometry/`, `algorithms/fieldcal/`, and the extracted `skylib` subset | `/home/claude/skynet` |
+| Catalogs / query | `algorithms/catalogs/`, `algorithms/query/` | `/home/claude/skynet`, `/home/claude/afterglow-core` |
+| TypeScript | `algorithms/periodogram/`, `algorithms/lightcurve/`, `algorithms/hrdiagram/` | `/home/claude/astromancer` @ `657b709` |
 
 Every reviewer diffed against upstream rather than reasoning about provenance,
 and verified numeric claims with throwaway scripts against the real stack
@@ -34,11 +34,11 @@ repository file was modified and no live provider call was made.
 
 ### The headline: the extraction is faithful
 
-`kepler/wcs/`, `kepler/photometry/` and `kepler/fieldcal/` have **zero** extraction-introduced
+`algorithms/wcs/`, `algorithms/photometry/` and `algorithms/fieldcal/` have **zero** extraction-introduced
 defects. Every difference from upstream is confined to import lines and
 `# EXTRACTED:` provenance comments; `header_utils.py` is byte-identical to
 `runners/utils.py:159-441`. The TypeScript is likewise byte-identical to
-Astromancer, including `kepler/periodogram/core/lomb-scargle.ts` against
+Astromancer, including `algorithms/periodogram/core/lomb-scargle.ts` against
 `astromancer/src/app/tools/shared/data/utils.ts`.
 
 **So what follows is not a report on a botched extraction. It is a report on what
@@ -46,7 +46,7 @@ Skynet and Astromancer have been shipping to production.** That reframing matter
 for prioritization: these defects have been live, and the fields they touch have
 been calibrated with them.
 
-The five genuine extraction artifacts are all in `kepler/catalogs/`/`kepler/query/` or are
+The five genuine extraction artifacts are all in `algorithms/catalogs/`/`algorithms/query/` or are
 documentation claims rather than code — see §4, class C.
 
 ---
@@ -54,8 +54,8 @@ documentation claims rather than code — see §4, class C.
 ## 2. The prerequisite: every fix needs a targeted test
 
 This repository still has very little automated coverage. The architecture
-migration will make the Python algorithms importable under `kepler/`, but it will
-not prove that a numeric edit is correct.
+migration makes the Python algorithms importable under `algorithms/`, but it
+does not prove that a numeric edit is correct.
 
 You cannot safely fix a weighted zero-point solver, a triangle matcher, or a
 Lomb-Scargle normalization without a check tied to the behavior being changed.
@@ -146,7 +146,7 @@ Seven findings that make a tool unsafe to expose at all.
 ### Silent — wrong science, no signal
 
 **TS-01 — `equatorial2Galactic` is 180° wrong over half the sky.**
-`kepler/hrdiagram/result/result.utils.ts:63-68` uses `Math.atan(N/D)` where the
+`algorithms/hrdiagram/result/result.utils.ts:63-68` uses `Math.atan(N/D)` where the
 two-argument form is required, then patches the sign with a conditional that only
 recovers the `D < 0` branch. Verified against `astropy`: M67 → *l* = 35.697°
 against a true 215.696°. A random-sky sample is **49.9% wrong by exactly 180°**.
@@ -256,9 +256,9 @@ the relevant exported functions.
 
    | Defect | File | Copies |
    |---|---|---:|
-   | Saturation counts lost when `downsample > 1` (PHOT-06) | `kepler/skylib_lite/extraction/main.py` | 2 |
-   | `a >= b` swap and θ normalization are no-ops (WCS-16 / PHOT A-3) | `kepler/skylib_lite/extraction/main.py` | 2 |
-   | `get_fits_fov` returns dec 0 for southern targets (WCS-27) | `kepler/skylib_lite/util/fits.py` | 3 |
+   | Saturation counts lost when `downsample > 1` (PHOT-06) | `algorithms/skylib_lite/extraction/main.py` | 2 |
+   | `a >= b` swap and θ normalization are no-ops (WCS-16 / PHOT A-3) | `algorithms/skylib_lite/extraction/main.py` | 2 |
+   | `get_fits_fov` returns dec 0 for southern targets (WCS-27) | `algorithms/skylib_lite/util/fits.py` | 3 |
    | `errorMSE` halves every error bar (TS-14) | three TS modules | 3 |
    | `getPeriodStep` returns a step of 0 (TS-12) | three TS modules | 3 |
    | `floatMod` non-terminating (TS-02) | two TS modules | 2 |
@@ -286,10 +286,10 @@ the relevant exported functions.
 
 ## 7. Where this track touches the architecture
 
-The simplified architecture migration should land first: create the `kepler`
-package shell, move the Python algorithm folders under `kepler/`, and add the
-first simple local tools. That gives remediation stable import paths and avoids
-mixing file moves with behavior changes.
+The simplified architecture migration should land first: create root-level
+`tools/` and `algorithms/` packages and add the first simple local tools. That
+gives remediation stable import paths and avoids mixing file moves with behavior
+changes.
 
 After that, algorithm fixes start as focused PRs with targeted tests. A tool can
 still guard its own inputs and keep outputs bounded, but the following findings
@@ -425,7 +425,7 @@ answer with no signal). Locations are given in the source reports.
 | CAT-31 | low | | **(A)** `_MutatingCatalog` mutates the class dict; contained today because both classes are module-private |
 | CAT-32 | low | | APASS dedup keys on VizieR's `recno`, which CDS documents as unstable across re-ingests |
 
-### `kepler/lightcurve/` + `kepler/periodogram/` + `kepler/hrdiagram/` — 31 findings
+### `algorithms/lightcurve/` + `algorithms/periodogram/` + `algorithms/hrdiagram/` — 31 findings
 
 | ID | Sev | S | Summary |
 |---|---|:-:|---|

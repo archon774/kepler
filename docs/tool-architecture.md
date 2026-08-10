@@ -1,11 +1,11 @@
-# Kepler Package Architecture
+# Kepler Tool Collection Architecture
 
 Date: 2026-08-10
 Status: active architecture
 
-Kepler is an astronomy tool package for Python callers, scripts, notebooks,
+Kepler is an astronomy tool collection for Python callers, scripts, notebooks,
 agents, and future CLI/application surfaces. It is not an orchestration
-framework. The public package should expose small, ordinary Python functions
+framework. The public tool layer should expose small, ordinary Python functions
 that prepare inputs, call the extracted algorithms, and return compact typed
 results or local artifact paths.
 
@@ -20,21 +20,21 @@ artifacts with enough metadata to reproduce the operation.
 
 ---
 
-## 1. Current Package Shape
+## 1. Current Repository Shape
 
 ```text
-kepler/
+tools/
   __init__.py
-  tools/
-    __init__.py
-    astrometry.py       # WCS/header summary tools
-    calibration.py      # zero-point tools
-    catalogs.py         # catalog declarations and band helpers
-    workspace.py        # local artifact helpers
-  models.py             # shared result, warning/error, WCS, catalog, artifact models
-  config.py             # small environment-backed settings helpers
-  artifacts.py          # local artifact path and file metadata helpers
+  astrometry.py       # WCS/header summary tools
+  calibration.py      # zero-point tools
+  catalogs.py         # catalog declarations and band helpers
+  workspace.py        # local artifact helpers
+  models.py           # shared result, warning/error, WCS, catalog, artifact models
+  config.py           # small environment-backed settings helpers
+  artifacts.py        # local artifact path and file metadata helpers
 
+algorithms/
+  __init__.py
   wcs/                  # Python WCS algorithms
   photometry/           # Python source extraction and aperture photometry
   fieldcal/             # Python zero-point field calibration
@@ -51,8 +51,9 @@ docs/
 ```
 
 `database_tools.py` remains at the repository root as a compatibility prototype.
-The Python package is discovered with `kepler*`; package data such as
-`ngc2000.dat` belongs to the corresponding `kepler.skylib_lite.*` package path.
+The Python distribution discovers the `tools*` and `algorithms*` packages;
+package data such as
+`ngc2000.dat` belongs to the corresponding `algorithms.skylib_lite.*` package path.
 
 ---
 
@@ -69,12 +70,12 @@ Tools are the public surface. They should stay thin:
 
 The first implemented tools are intentionally local and no-network:
 
-- `kepler.tools.astrometry.describe_image_wcs(path)`
-- `kepler.tools.catalogs.list_photometric_catalogs()`
-- `kepler.tools.catalogs.resolve_reference_band(catalog, image_filter)`
-- `kepler.tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
-- `kepler.tools.workspace.list_artifacts(directory=None)`
-- `kepler.tools.workspace.describe_artifact(path)`
+- `tools.astrometry.describe_image_wcs(path)`
+- `tools.catalogs.list_photometric_catalogs()`
+- `tools.catalogs.resolve_reference_band(catalog, image_filter)`
+- `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `tools.workspace.list_artifacts(directory=None)`
+- `tools.workspace.describe_artifact(path)`
 
 Next Python tools should follow the same pattern before adding new layers:
 
@@ -96,7 +97,7 @@ execution, compact JSON/artifact summary out.
 
 The algorithm packages are the source of truth for scientific behavior. Tool
 and architecture work should not silently change numerical behavior or fix
-algorithm bugs. Structural moves such as `kepler.skylib_lite` must be mechanical
+algorithm bugs. Structural moves such as `algorithms.skylib_lite` must be mechanical
 import/package rewiring. Bug fixes belong in focused remediation PRs with the
 smallest targeted tests that prove the affected behavior.
 
@@ -104,14 +105,14 @@ Current algorithm ownership:
 
 | Package | Owns | Notes |
 | --- | --- | --- |
-| `kepler.wcs` | FITS-header WCS construction, astrometry.net solving, ATLAS solving, WCS validation, FITS header write-back | Requires solver binaries/indexes or local UCAC data for end-to-end solving. |
-| `kepler.photometry` | Source extraction and aperture photometry | Uses `kepler.skylib_lite` extraction, calibration, photometry, and utility code. |
-| `kepler.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `kepler.query`. |
-| `kepler.catalogs` | Catalog declarations, band tables, filter mappings, SIMBAD vocabulary | Declaration only; importing it should not perform network work. |
-| `kepler.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
-| `kepler.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding | No `package.json` or `tsconfig.json` yet. |
-| `kepler.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
-| `kepler.hrdiagram` | Framework-free TypeScript cluster/HR-diagram transforms | No runtime wrapper yet. |
+| `algorithms.wcs` | FITS-header WCS construction, astrometry.net solving, ATLAS solving, WCS validation, FITS header write-back | Requires solver binaries/indexes or local UCAC data for end-to-end solving. |
+| `algorithms.photometry` | Source extraction and aperture photometry | Uses `algorithms.skylib_lite` extraction, calibration, photometry, and utility code. |
+| `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
+| `algorithms.catalogs` | Catalog declarations, band tables, filter mappings, SIMBAD vocabulary | Declaration only; importing it should not perform network work. |
+| `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
+| `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding | No `package.json` or `tsconfig.json` yet. |
+| `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
+| `algorithms.hrdiagram` | Framework-free TypeScript cluster/HR-diagram transforms | No runtime wrapper yet. |
 
 ---
 
@@ -155,22 +156,22 @@ Important modeling rules:
 ## 5. Extracted Skylib Inventory
 
 Several Python algorithms originally vendored overlapping pieces of Skynet's
-`skylib`. They are consolidated into `kepler.skylib_lite` so every extracted
+`skylib`. They are consolidated into `algorithms.skylib_lite` so every extracted
 Skylib call uses one local implementation without depending on an external
 `skylib` installation.
 
-Originally extracted package-local skylib folders:
+Originally extracted package-local skylib subsets:
 
-| Algorithm package | Extracted skylib subset |
+| Algorithm extraction | Extracted skylib subset |
 | --- | --- |
-| `kepler.wcs.skylib` | `astrometry/` including `anet/`, `atlas/`, solver types, and `ngc2000.dat`; `calibration/background.py`; `extraction/main.py`; `extraction/centroiding.py`; `io/fits_compression.py`; `util/angle.py`; `util/fits.py`. |
-| `kepler.photometry.skylib` | `calibration/background.py`; `extraction/main.py`; `extraction/centroiding.py`; `photometry/aperture.py`; `photometry/aperture_numba.py`; `photometry/exposure.py`; `util/angle.py`; `util/fits.py`; `util/overlap.py`; `util/stats.py`. |
-| `kepler.fieldcal.skylib` | `util/angle.py`; `util/fits.py`; `util/stats.py`. |
+| WCS | `astrometry/` including `anet/`, `atlas/`, solver types, and `ngc2000.dat`; `calibration/background.py`; `extraction/main.py`; `extraction/centroiding.py`; `io/fits_compression.py`; `util/angle.py`; `util/fits.py`. |
+| Photometry | `calibration/background.py`; `extraction/main.py`; `extraction/centroiding.py`; `photometry/aperture.py`; `photometry/aperture_numba.py`; `photometry/exposure.py`; `util/angle.py`; `util/fits.py`; `util/overlap.py`; `util/stats.py`. |
+| Field calibration | `util/angle.py`; `util/fits.py`; `util/stats.py`. |
 
 Consolidation target:
 
 ```text
-kepler/skylib_lite/
+algorithms/skylib_lite/
   __init__.py
   astrometry/
   calibration/
@@ -183,7 +184,7 @@ kepler/skylib_lite/
 Consolidation rules:
 
 - Move extracted files mechanically and update imports to
-  `kepler.skylib_lite.*`.
+  `algorithms.skylib_lite.*`.
 - Preserve numerical code, constants, comments, and data files.
 - Remove package-local `skylib` copies only after every import path is updated.
 - Do not combine this with algorithm bug fixes or helper rewrites.
@@ -242,8 +243,8 @@ server.
 Default checks stay lightweight and deterministic:
 
 - `python3 -m py_compile database_tools.py`
-- `python3 -m compileall kepler`
-- smoke imports for `kepler` and `kepler.tools.*`
+- `python3 -m compileall tools algorithms`
+- smoke imports for `tools.*` and `algorithms.*`
 - `git diff --check`
 
 End-to-end WCS, photometry, catalog-query, and field-calibration validation

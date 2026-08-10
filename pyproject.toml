@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kepler"
 version = "0.1.0"
-description = "Early-stage astronomy tooling and extracted algorithm modules."
+description = "Early-stage astronomy tool collection and extracted algorithm modules."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -80,7 +80,7 @@ py-modules = ["database_tools"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["kepler*"]
+include = ["tools*", "algorithms*"]
 
 [tool.setuptools.package-data]
-"kepler.skylib_lite.astrometry.anet" = ["ngc2000.dat"]
+"algorithms.skylib_lite.astrometry.anet" = ["ngc2000.dat"]

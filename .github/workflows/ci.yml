@@ -43,7 +43,7 @@ jobs:
           test -f pyproject.toml
           test -f uv.lock
           test -f database_tools.py
-          test -f docs/architecture-brainstorm.md
+          test -f docs/tool-architecture.md
 
   required:
     name: "required: ci"
