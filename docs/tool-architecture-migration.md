@@ -27,7 +27,7 @@ kepler/
     artifacts.py        # content-addressed store, allowlisted roots
     limits.py           # row/byte/radius/runtime caps
     registry.py         # tool specs, profiles, deferred loading, schema export
-    node_bridge.py      # subprocess transport for the TypeScript kernels
+    node_bridge.py      # subprocess transport for the TypeScript algorithms
     serve_mcp.py        # kepler-mcp entry point
     logging.py          # structured, credential-redacting
   adapters/
@@ -38,9 +38,8 @@ kepler/
     __init__.py
     catalogs.py  query.py  astrometry.py  photometry.py  calibration.py
     timeseries.py  cluster.py  workspace.py
-  kernels/
-    __init__.py
-    wcs/  photometry/  fieldcal/  catalogs/  query/    # moved verbatim in Phase 1
+  wcs/  photometry/  fieldcal/  catalogs/  query/    # moved verbatim in Phase 1
+  _skylib/                                             # deduplicated in Phase 1b
 
 packages/ts/
   package.json  tsconfig.json
@@ -50,7 +49,7 @@ packages/ts/
 
 tests/
   contract/   # envelope + schema snapshots, every tool
-  layering/   # import-direction, marker counts, kernel manifest
+  layering/   # import-direction, marker counts, algorithm manifest
   unit/       # adapter logic on tiny fixtures
   fixtures/
 database_tools.py                                       # stays at root (see §4)
@@ -60,18 +59,18 @@ database_tools.py                                       # stays at root (see §4
 
 ## 2. File mapping
 
-### Python kernels — pure moves, import rewiring only
+### Python domain packages — pure moves, import rewiring only
 
 | Today | Target | Change |
 |---|---|---|
-| `wcs/*.py` (7 modules) | `kepler/kernels/wcs/` | relative-import rewiring only |
-| `wcs/skylib/**` (34 modules) | `kepler/kernels/wcs/skylib/`, then `_skylib/` in 1b | unchanged |
-| `photometry/pipeline/*.py` (4 modules) | `kepler/kernels/photometry/pipeline/` | unchanged |
-| `photometry/skylib/**` (15 modules) | `kepler/kernels/photometry/skylib/`, then `_skylib/` in 1b | unchanged |
-| `fieldcal/*.py` (7 modules) | `kepler/kernels/fieldcal/` | unchanged, **including `deps.py`** |
-| `fieldcal/skylib/**` (5 modules) | `kepler/kernels/fieldcal/skylib/`, then `_skylib/` in 1b | unchanged |
-| `catalogs/*.py` (16 modules) | `kepler/kernels/catalogs/` | unchanged |
-| `query/*.py` (12 modules) | `kepler/kernels/query/` | unchanged |
+| `wcs/*.py` (7 modules) | `kepler/wcs/` | relative-import rewiring only |
+| `wcs/skylib/**` (34 modules) | `kepler/wcs/skylib/`, then `_skylib/` in 1b | unchanged |
+| `photometry/pipeline/*.py` (4 modules) | `kepler/photometry/pipeline/` | unchanged |
+| `photometry/skylib/**` (15 modules) | `kepler/photometry/skylib/`, then `_skylib/` in 1b | unchanged |
+| `fieldcal/*.py` (7 modules) | `kepler/fieldcal/` | unchanged, **including `deps.py`** |
+| `fieldcal/skylib/**` (5 modules) | `kepler/fieldcal/skylib/`, then `_skylib/` in 1b | unchanged |
+| `catalogs/*.py` (16 modules) | `kepler/catalogs/` | unchanged |
+| `query/*.py` (12 modules) | `kepler/query/` | unchanged |
 | every `EXTRACTION.md` | moves with its folder | header note added: new path, provenance unchanged |
 
 `deps.py` moves as-is, and the composition root wraps it (design §6). Replacing
@@ -82,10 +81,10 @@ stops being reviewable. Sequenced immediately after Phase 1.
 `wcs/config.py` and `query/config.py` also move as-is. `kepler/runtime/config.py`
 becomes the single place that *constructs* the objects they expect and assigns
 `query.config.settings` / `wcs.settings` — which is exactly the seam those
-modules were written to accept, so no kernel edit is needed to unify
+modules were written to accept, so no algorithm edit is needed to unify
 configuration.
 
-### TypeScript kernels — pure moves plus a build
+### TypeScript algorithms — pure moves plus a build
 
 | Today | Target |
 |---|---|
@@ -113,29 +112,29 @@ green throughout. The ordering is chosen so that the guardrails exist *before*
 the algorithm code moves, and so that the numeric regression harness exists
 before any algorithm is corrected.
 
-### Phase 0 — Scaffolding and guardrails (no kernel changes)
+### Phase 0 — Scaffolding and guardrails (no algorithm changes)
 
-- Create `kepler/` with `contracts/` and `runtime/` populated; `adapters/`,
-  `tools/`, `kernels/` empty.
+- Create `kepler/` with `contracts/` and `runtime/` populated; `adapters/` and
+  `tools/` empty. The five domain packages do not move yet.
 - Land `ToolResult`, the closed error-code set, `Artifact`/`ImageRef`, the
   artifact store, `limits.py`, and the empty registry.
 - Land the layering tests (import-direction, `EXTRACTED:` marker baseline,
-  kernel SHA-256 manifest — initially covering the folders in their *current*
+  algorithm SHA-256 manifest — initially covering the folders in their *current*
   locations).
 - CI gains: `compileall` over `kepler/`, contract tests, layering tests.
 
 Nothing under the eight domain folders is touched. This phase is pure addition,
 which makes the marker/manifest baselines trustworthy for every later phase.
 
-### Phase 1 — Move the Python kernels
+### Phase 1 — Move the Python domain packages
 
-- `git mv` the five Python folders under `kepler/kernels/`, rewiring imports to
+- `git mv` the five Python folders under `kepler/`, rewiring imports to
   relative form only.
 - Regenerate the SHA-256 manifest; the diff must show **path changes and import
   lines only**. That review step is the whole point of doing the move as its own
   PR.
 - Update `pyproject.toml`: `[tool.setuptools.packages.find] include = ["kepler*"]`,
-  and move the `wcs.skylib.astrometry.anet` → `kepler.kernels.wcs...` package-data
+  and move the `wcs.skylib.astrometry.anet` → `kepler.wcs...` package-data
   entry for `ngc2000.dat`.
 - Update `README.md` entry points and `docs/repository-folders.md`.
 
@@ -147,7 +146,7 @@ Separate commit from Phase 1, because the two diffs answer different questions
 and mixing them makes both unreadable: Phase 1 asks "did anything change?",
 Phase 1b asks "is what I deleted really redundant?".
 
-- Create `kepler/kernels/_skylib/` holding the 40 distinct modules.
+- Create `kepler/_skylib/` holding the 40 distinct modules.
 - Delete the 14 redundant files. The diff is deletions plus import rewrites —
   no surviving file's content changes, and the manifest proves it.
 - Hand-write the merged package `__init__.py`s to cover the union (these are the
@@ -190,7 +189,7 @@ Heaviest phase; splittable at the query/imaging line if review load demands.
 
 ### Phase 4 — TypeScript bridge
 
-- `packages/ts/` with `package.json`, `tsconfig.json`, and the three kernel
+- `packages/ts/` with `package.json`, `tsconfig.json`, and the three algorithm
   folders moved verbatim
 - `bridge/cli.ts` plus `kepler/runtime/node_bridge.py`
 - `compute_periodogram`, `find_periodogram_peaks`, `fold_lightcurve`,
@@ -200,8 +199,8 @@ Heaviest phase; splittable at the query/imaging line if review load demands.
 
 First phase where `tsc` runs against the TypeScript at all. Expect it to surface
 type errors that were invisible at extraction time; fixing *type* errors without
-changing *runtime behaviour* is in scope, and anything that would change
-behaviour stops and becomes a decision.
+changing *runtime behavior* is in scope, and anything that would change
+behavior stops and becomes a decision.
 
 ### Phase 5 — Serving surfaces and prototype absorption
 
@@ -239,10 +238,10 @@ never imported or compiled.
 
 | Phase | Added |
 |---|---|
-| 0 | `compileall kepler/`; contract tests; layering tests; marker baseline; kernel manifest |
+| 0 | `compileall kepler/`; contract tests; layering tests; marker baseline; algorithm manifest |
 | 1 | manifest regenerated and diffed in review; `import kepler` smoke test |
 | 2 | schema snapshots for the offline tools; envelope tests |
-| 3 | `import kepler.kernels.query` guarded (needs astroquery); live tests gated behind `KEPLER_LIVE_TESTS=1` |
+| 3 | `import kepler.query` guarded (needs astroquery); live tests gated behind `KEPLER_LIVE_TESTS=1` |
 | 4 | `tsc --noEmit`; `npm ci` + build; bridge round-trip |
 | 5 | MCP server start/stop smoke test; full schema snapshot |
 
@@ -255,18 +254,18 @@ call runs in a default check — the existing repository convention, unchanged.
 
 | Risk | Mitigation |
 |---|---|
-| A kernel edit slips in during the move | SHA-256 manifest + `EXTRACTED:` marker count in CI from Phase 0, i.e. before any move happens |
-| Adapters accumulate business logic and become a second kernel | Adapters may only translate, wire, classify errors, and surface residual uncertainty. Anything numeric belongs in a kernel, where it gets a ledger entry and a fixture — an adapter is never the place to quietly adjust a number |
+| An algorithm edit slips in during the move | SHA-256 manifest + `EXTRACTED:` marker count in CI from Phase 0, i.e. before any move happens |
+| Adapters accumulate business logic and become a second algorithm layer | Adapters may only translate, wire, classify errors, and surface residual uncertainty. Anything numeric belongs in a domain package, where it gets a ledger entry and a fixture — an adapter is never the place to quietly adjust a number |
 | Tool surface grows past what an agent can select from | Profiles + deferred loading from Phase 5; a hard budget for the `core` profile |
-| `tsc` surfaces errors that need behaviour changes to fix | Type-only fixes are in scope for Phase 4. A type error that is really a *numeric* bug is a remediation finding: log it, keep the phase moving with `// @ts-expect-error` plus a comment naming the finding ID, and fix it on the remediation track where it gets a fixture |
-| Numeric behaviour still unvalidated after all this | Out of scope here by design — the remediation track owns it. The tool layer's contribution is structural: one call site per kernel entry point, a manifest that flags algorithm changes, and `backend_unavailable` making missing deployment data legible |
+| `tsc` surfaces errors that need behavior changes to fix | Type-only fixes are in scope for Phase 4. A type error that is really a *numeric* bug is a remediation finding: log it, keep the phase moving with `// @ts-expect-error` plus a comment naming the finding ID, and fix it on the remediation track where it gets a fixture |
+| Numeric behavior still unvalidated after all this | Out of scope here by design — the remediation track owns it. The tool layer's contribution is structural: one call site per domain entry point, a manifest that flags algorithm changes, and `backend_unavailable` making missing deployment data legible |
 | Six phases stall halfway | Every phase is independently useful. Phases 0–2 alone deliver a working, fully offline tool package with no deployment data required |
 
 ---
 
 ## 7. Definition of done, per phase
 
-A phase is done when: CI is green; the kernel manifest diff shows only intended
+A phase is done when: CI is green; the algorithm manifest diff shows only intended
 changes; every new tool has a schema snapshot and a contract test; every
 documented quirk it touches has a warning code and a test asserting the warning
 fires; and the relevant `EXTRACTION.md` and AgentVault notes record the new

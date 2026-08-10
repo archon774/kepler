@@ -2,7 +2,7 @@
 
 Date: 2026-08-10
 Status: proposed
-Scope: **file organisation and tool wiring** for the eight extracted domain
+Scope: **file organization and tool wiring** for the eight extracted domain
 folders — `wcs/`, `photometry/`, `fieldcal/`, `catalogs/`, `query/` (Python) and
 `lightcurve/`, `periodogram/`, `hrdiagram/` (TypeScript).
 
@@ -55,13 +55,13 @@ gives the pattern, the tool-shaped replacement, and where it actually occurs.
 | **P1** | An ORM row is threaded through the call and **mutated** as the output channel | Adapter builds an **ephemeral run context** per call; the tool reads results from **return values**, never from the mutated object | `solve_wcs(processing_run, …)`, `perform_field_calibration(processing_run, …)`, `perform_source_extraction(processing_run, …)`. Stand-ins already exist in `wcs/state.py` and `fieldcal/schemas.py` |
 | **P2** | A FITS header is **written in place** and the caller is expected to persist it | Write to a **copy**, register it in the artifact store, return the handle. The input file is never modified | `_write_wcs_to_header` (WCS keywords); the `PHOT_M0` / `PHOT_M0E` / `PHOT_CAL` writes in field calibration |
 | **P3** | **Module-global dependency injection** — a host assigns names before use | A **composition root** binds implementations for the duration of one call (§6) | `fieldcal/deps.py`: `run_photometry`, `run_source_extraction`, `get_source_radec`, `build_wcs_for_processing_run` |
-| **P4** | Configuration read from **ambient environment** at call time | Settings resolved **once** into an explicit object at startup; the runtime assigns the seams the kernels already expose | `wcs/config.py::SolverSettings` (`ANET_INDEX_PATH`, `ATLAS_*`), `query/config.py::QuerySettings` (`VIZIER_*`) |
+| **P4** | Configuration read from **ambient environment** at call time | Settings resolved **once** into an explicit object at startup; the runtime assigns the seams the domain packages already expose | `wcs/config.py::SolverSettings` (`ANET_INDEX_PATH`, `ATLAS_*`), `query/config.py::QuerySettings` (`VIZIER_*`) |
 | **P5** | **Exceptions as control flow**, plus degraded returns that conflate distinct causes | A **closed error-code taxonomy**; every distinguishable failure gets its own code (§5) | `raise ValueError('wcs_settings.ra_hours', 'RA not within range', 422)`; both WCS backends "degrade to unavailable rather than failing", so a missing index set and an unsolvable frame return the same thing |
 | **P6** | **Unbounded in-memory returns** — full source lists, whole arrays | **Bounded summary inline + full result as an artifact** (§5) | `run_source_extraction` → `list[SourceExtractionData]`; `query_catalogs` → `list[CatalogSource]`; both can run to thousands of rows |
 | **P7** | **Rich domain objects** as the interface | JSON-safe models at the boundary; domain objects stay below the adapter line | `CatalogSource`, `PhotometryData`, `astropy.wcs.WCS`, `fits.Header`, `np.ndarray` |
 | **P8** | **Framework-owned state** — the Angular component holds the data, Highcharts holds the output | A pure call with explicit inputs and one JSON response per invocation | `lightcurve/`, `hrdiagram/` — the service and component classes retained from Astromancer |
 
-The rest of this document is the machinery that makes those eight applyable
+The rest of this document is the machinery that makes those eight applicable
 uniformly rather than case by case.
 
 ---
@@ -76,17 +76,18 @@ uniformly rather than case by case.
 │ kepler.tools.*        one function per tool.            │
 │                       Validates input, calls exactly    │
 │                       one adapter, returns ToolResult.  │
-│                       Imports NO kernel. No astronomy.  │
+│                       Imports no domain package.        │
 ├─────────────────────────────────────────────────────────┤
 │ kepler.adapters.*     applies P1–P8. Opens FITS, builds │
 │                       run contexts, wires deps,         │
 │                       classifies failures, bounds       │
-│                       output. Knows kernel shapes.      │
+│                       output. Knows the domain shapes.  │
 ├─────────────────────────────────────────────────────────┤
-│ kepler.kernels.*      the algorithms, as shipped.       │
-│   wcs/ photometry/ fieldcal/ catalogs/ query/           │
-│   _skylib/ shared beneath them (§4)                     │
-│   + ts/ reached through the Node bridge                 │
+│ kepler.wcs   kepler.photometry   kepler.fieldcal        │
+│ kepler.catalogs   kepler.query                          │
+│                       the algorithms, moved as-is.      │
+│ kepler._skylib        shared library beneath them (§4)  │
+│ packages/ts           reached through the Node bridge   │
 └─────────────────────────────────────────────────────────┘
        kepler.contracts.*   Pydantic models, error codes, envelope
        kepler.runtime.*     artifact store, config, limits, registry, serving
@@ -94,19 +95,22 @@ uniformly rather than case by case.
 
 ### Four rules
 
-**R1 — Algorithm code lives only in kernels.** Adapters translate; they never
+**R1 — Algorithm code lives only in the domain packages.** Adapters translate; they never
 adjust a number. If a computation has nowhere to live but an adapter, that is a
-signal it belongs in a kernel — not an invitation to put it in the adapter.
+signal it belongs in a domain package — not an invitation to put it in the
+adapter.
 
-**R2 — Tools never import kernels.** A tool module imports `kepler.contracts` and
-exactly one adapter. Mechanically checkable (§10). This keeps the tool layer thin
-and keeps every kernel call site in one reviewable place.
+**R2 — Tools never import a domain package.** A tool module imports
+`kepler.contracts` and exactly one adapter. Mechanically checkable (§10). This
+keeps the tool layer thin and keeps every call into `kepler.wcs`,
+`kepler.photometry`, `kepler.fieldcal`, `kepler.catalogs` and `kepler.query` in
+one reviewable place.
 
 **R3 — No science objects cross the tool boundary.** Pattern P7, enforced.
 `np.ndarray`, `fits.Header`, `astropy.wcs.WCS`, `CatalogSource` and
 `PhotometryData` live below the adapter line and never above it.
 
-**R4 — Failure is data.** Pattern P5, enforced. Kernels raise; adapters catch and
+**R4 — Failure is data.** Pattern P5, enforced. Domain packages raise; adapters catch and
 classify; tools return `status: "error"` with a stable code. An unhandled
 exception escaping a tool is an adapter bug.
 
@@ -123,27 +127,38 @@ tools.
 
 ---
 
-## 4. File organisation
+## 4. File organization
 
 ```text
 kepler/
-  contracts/          envelope.py errors.py refs.py imaging.py timeseries.py cluster.py
-  runtime/            config.py artifacts.py limits.py registry.py
-                      node_bridge.py serve_mcp.py logging.py
+  wcs/                the five domain packages — the algorithms, moved as-is
+  photometry/         from the repository root, keeping their current names,
+  fieldcal/           internal structure and EXTRACTION.md files
+  catalogs/
+  query/
+  _skylib/            shared vendored library the domains sit on (see below)
   adapters/           catalogs.py query.py wcs.py photometry.py fieldcal.py
                       timeseries.py cluster.py
   tools/              catalogs.py query.py astrometry.py photometry.py calibration.py
                       timeseries.py cluster.py workspace.py
-  kernels/            _skylib/ wcs/ photometry/ fieldcal/ catalogs/ query/
+  contracts/          envelope.py errors.py refs.py imaging.py timeseries.py cluster.py
+  runtime/            config.py artifacts.py limits.py registry.py
+                      node_bridge.py serve_mcp.py logging.py
 packages/ts/          package.json tsconfig.json
                       src/{shared,lightcurve,periodogram,hrdiagram,bridge}
 tests/                contract/ layering/ unit/ fixtures/
 ```
 
-Three organising decisions, each with a reason:
+Three organizing decisions, each with a reason:
+
+**The five domain packages keep their names and move intact.** `wcs/`,
+`photometry/`, `fieldcal/`, `catalogs/` and `query/` become `kepler/wcs/` and so
+on — one namespace, no renaming, no extra nesting. Every path in `README.md`,
+`docs/repository-folders.md` and the `EXTRACTION.md` files stays recognizable, and
+the only import change is the `kepler.` prefix.
 
 **One module per domain, at every layer.** `tools/photometry.py` →
-`adapters/photometry.py` → `kernels/photometry/`. A vertical slice is readable in
+`adapters/photometry.py` → `kepler/photometry/`. A vertical slice is readable in
 three files, and the mapping is guessable rather than memorised.
 
 **Existing domain boundaries are preserved, not flattened.** The extraction
@@ -161,7 +176,7 @@ established ownership rules that are load-bearing and survive the move unchanged
 
 Collapsing any of these trades a real capability for a shorter import path.
 
-**Kernels keep their internal structure, except where it is duplicated.** See
+**The domain packages keep their internal structure, except where duplicated.** See
 below — deduplication is a layout question, and this document owns it.
 
 ### Shared code and duplication
@@ -199,7 +214,7 @@ three defects that each live in a duplicated file:
 | Defect | File | Copies | Fix sites |
 |---|---|---|---|
 | Saturation counts lost when `downsample > 1` | `extraction/main.py` | wcs, photometry | 2 |
-| `a >= b` axis swap and θ normalisation are silent no-ops on a masked copy | `extraction/main.py` | wcs, photometry | 2 |
+| `a >= b` axis swap and θ normalization are silent no-ops on a masked copy | `extraction/main.py` | wcs, photometry | 2 |
 | `get_fits_fov` returns dec **0** for every southern target (`1 - True == 0`) | `util/fits.py` | wcs, photometry, fieldcal | 3 |
 
 Nothing in the repository makes the second and third sites visible to whoever
@@ -209,10 +224,10 @@ keeps the bug while the tests, the changelog and the reviewer all say it was
 fixed. Both reviewers independently flagged the triplication as a hazard while
 reporting these.
 
-**Target: one shared kernel-internal package.**
+**Target: one shared package beneath the domains.**
 
 ```text
-kepler/kernels/
+kepler/
   _skylib/            # vendored subset of Skynet's skylib, deduplicated — 40 modules
     astrometry/       #   reached only by wcs
     photometry/       #   reached only by photometry
@@ -220,9 +235,8 @@ kepler/kernels/
   wcs/  photometry/  fieldcal/  catalogs/  query/
 ```
 
-The leading underscore marks it internal to the kernel layer: adapters and tools
-never import it, and the five domain packages remain the kernel surface. This does
-not weaken "one module per domain at every layer" — `_skylib` is a shared library
+The leading underscore marks it private: adapters and tools never import it, and
+the five domain packages remain the public surface. `_skylib` is a shared library
 *beneath* the domains, not a sixth domain.
 
 **Consolidation gate.** A file merges into `_skylib/` only if every copy is
@@ -231,9 +245,9 @@ divergence, until the remediation track rules on which version is correct — th
 is a correctness decision, not a layout one. Today the gate admits every
 executable file; the `__init__.py`s are rewritten by hand to cover the union.
 
-**Forward rule, mechanically enforced.** The kernel manifest in §10 already
-computes a per-file SHA-256. Add one assertion to it: **no two files under
-`kepler/kernels/` may share a hash.** That is a complete, zero-maintenance guard
+**Forward rule, mechanically enforced.** The algorithm manifest in §10 already
+computes a per-file SHA-256. Add one assertion to it: **no two files across the
+domain packages and `_skylib/` may share a hash.** That is a complete, zero-maintenance guard
 against duplication re-accreting, and it reuses machinery the design already
 needs.
 
@@ -344,7 +358,7 @@ kepler.runtime.artifacts.ArtifactStore
 - `list_artifacts` / `describe_artifact` let a caller recover dropped handles.
 
 Chains like solve → extract → measure → calibrate pass handles, not arrays. The
-adapter builds a throwaway run-context object per call, lets the kernel populate
+adapter builds a throwaway run-context object per call, lets the algorithm populate
 it, and reads what it needs — but results come from return values (P1) and header
 writes go to a copy (P2), so no tool result depends on mutated state.
 
@@ -361,10 +375,10 @@ _WIRING_LOCK = threading.Lock()
 def wired_fieldcal():
     with _WIRING_LOCK:
         saved = {n: getattr(deps, n) for n in _WIRED}
-        deps.run_photometry = ...                # from kernels.photometry
+        deps.run_photometry = ...                # from kepler.photometry
         deps.run_source_extraction = ...
         deps.get_source_radec = ...
-        deps.build_wcs_for_processing_run = ...  # from kernels.wcs
+        deps.build_wcs_for_processing_run = ...  # from kepler.wcs
         try:
             yield
         finally:
@@ -376,7 +390,7 @@ def wired_fieldcal():
 astroquery.
 
 **Interim constraint with a known exit.** Module globals make this single-flight
-per process; the tool description says `concurrency: serialised`. The proper fix
+per process; the tool description says `concurrency: serialized`. The proper fix
 is a `Deps` dataclass threaded through `field_cal.py` — ordinary work, sequenced
 after the move only because rewriting call sites in the file being relocated
 makes the move diff unreviewable. Lock first, refactor second, drop the lock
@@ -384,7 +398,7 @@ third.
 
 ---
 
-## 7. Tool catalogue
+## 7. Tool catalog
 
 Verb-first, stable names. Real descriptions must be prescriptive about *when* to
 call the tool — that is what drives correct selection.
@@ -413,11 +427,11 @@ Splitting `calc_solution` out as its own tool is worth it: it is the one piece o
 the chain a caller can invoke on data already in hand — no FITS, no network, no
 wiring.
 
-**Time series** (TypeScript kernels via the bridge)
+**Time series** (TypeScript algorithms via the bridge)
 `compute_periodogram` · `find_periodogram_peaks` · `fold_lightcurve` ·
 `reduce_lightcurve`
 
-**Cluster / HR diagram** (TypeScript kernels via the bridge)
+**Cluster / HR diagram** (TypeScript algorithms via the bridge)
 `build_color_magnitude_diagram` · `remove_field_stars` · `fit_isochrone` ·
 `summarize_cluster`
 
@@ -506,12 +520,12 @@ packages/ts/
   package.json          # first build config in the repo; zero runtime deps
   tsconfig.json
   src/
-    lightcurve/  periodogram/  hrdiagram/     # kernels, moved as-is
+    lightcurve/  periodogram/  hrdiagram/     # algorithms, moved as-is
     bridge/cli.ts                             # the only new TS file
   dist/
 ```
 
-`bridge/cli.ts` reads one JSON request on stdin, dispatches to a named kernel
+`bridge/cli.ts` reads one JSON request on stdin, dispatches to a named algorithm
 function, writes one JSON response on stdout, exits. No file I/O, no sockets — it
 is pattern P8 applied once, centrally, instead of per function.
 `kepler/runtime/node_bridge.py` spawns it with a wall-clock timeout, a
@@ -521,7 +535,8 @@ max-stdout-bytes cap and a clean `backend_unavailable` when `node` is absent, so
 **Rejected: porting to Python.** One runtime and no subprocess would be nicer, but
 a port rewrites numerics that currently have no test coverage and no compiler —
 unverifiable in both directions at once. If a Python implementation is ever
-wanted it should be an *additional* kernel validated against the TypeScript one,
+wanted it should be an *additional* implementation validated against the
+TypeScript one,
 not a replacement.
 
 **Consequence to accept:** the repo gains a Node toolchain and `tsc --noEmit`
@@ -534,16 +549,19 @@ enters CI. That is the first time the TypeScript is checked by anything.
 The rules in §3 are only real if something checks them:
 
 1. **Import direction.** Walk the AST under `kepler/tools/`; fail on any
-   `kepler.kernels` import. Same for kernels importing adapters or tools.
+   import of `kepler.{wcs,photometry,fieldcal,catalogs,query,_skylib}`. Same
+   check in reverse: a domain package may not import `kepler.adapters` or
+   `kepler.tools`.
 2. **Envelope contract.** Every registered tool, given deliberately invalid input,
    returns `status: "error"` with a code from the closed set — and does not raise.
 3. **Schema snapshots.** Committed JSON Schema per tool; a diff becomes a
    reviewable API change rather than a silent one.
-4. **Kernel manifest.** Committed per-file SHA-256 under `kepler/kernels/`. During
+4. **Algorithm manifest.** Committed per-file SHA-256 over the five domain
+   packages and `_skylib/`. During
    the move this proves the move changed nothing. Afterwards it makes any commit
    touching algorithm code visible in review and routes it to the remediation
    track, rather than letting it pass as a structural change.
-5. **No duplicate kernel files.** No two entries in that manifest may share a
+5. **No duplicate algorithm files.** No two entries in that manifest may share a
    hash. One line, and it permanently prevents the `skylib` situation from
    re-forming.
 6. **Compile/import.** `compileall` over `kepler/`, plus `tsc --noEmit` for
@@ -556,7 +574,7 @@ The rules in §3 are only real if something checks them:
 
 - **Algorithmic correctness.** Not addressed here, by design. No claim in this
   document asserts an algorithm is right. The structures above exist partly to
-  make numeric fixes reviewable — one call site per kernel entry point, a manifest
+  make numeric fixes reviewable — one call site per domain entry point, a manifest
   that flags algorithm changes — but the fixes themselves belong to the
   remediation track.
 - **Orchestration, planning, or a chat runtime.** Kepler exposes tools; deciding
