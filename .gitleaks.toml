@@ -1,0 +1,22 @@
+# Gitleaks configuration for Kepler.
+#
+# Keep the default rule set active. Add allowlist entries only for documented,
+# non-secret placeholders that are safe to publish.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented environment variable names, not credential values"
+regexes = [
+  '''ADS_DEV_KEY''',
+  '''ANTHROPIC_API_KEY''',
+  '''NASA_API_KEY''',
+]
+paths = [
+  '''README\.md''',
+  '''CONTRIBUTING\.md''',
+  '''database_tools\.py''',
+  '''docs/.*\.md''',
+  '''\.github/workflows/.*\.yml''',
+]
