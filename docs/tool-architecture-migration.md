@@ -65,11 +65,11 @@ database_tools.py                                       # stays at root (see §4
 | Today | Target | Change |
 |---|---|---|
 | `wcs/*.py` (7 modules) | `kepler/kernels/wcs/` | relative-import rewiring only |
-| `wcs/skylib/**` (34 modules) | `kepler/kernels/wcs/skylib/` | unchanged |
+| `wcs/skylib/**` (34 modules) | `kepler/kernels/wcs/skylib/`, then `_skylib/` in 1b | unchanged |
 | `photometry/pipeline/*.py` (4 modules) | `kepler/kernels/photometry/pipeline/` | unchanged |
-| `photometry/skylib/**` (15 modules) | `kepler/kernels/photometry/skylib/` | unchanged |
+| `photometry/skylib/**` (15 modules) | `kepler/kernels/photometry/skylib/`, then `_skylib/` in 1b | unchanged |
 | `fieldcal/*.py` (7 modules) | `kepler/kernels/fieldcal/` | unchanged, **including `deps.py`** |
-| `fieldcal/skylib/**` (5 modules) | `kepler/kernels/fieldcal/skylib/` | unchanged |
+| `fieldcal/skylib/**` (5 modules) | `kepler/kernels/fieldcal/skylib/`, then `_skylib/` in 1b | unchanged |
 | `catalogs/*.py` (16 modules) | `kepler/kernels/catalogs/` | unchanged |
 | `query/*.py` (12 modules) | `kepler/kernels/query/` | unchanged |
 | every `EXTRACTION.md` | moves with its folder | header note added: new path, provenance unchanged |
@@ -141,6 +141,27 @@ which makes the marker/manifest baselines trustworthy for every later phase.
 
 **This is the breaking commit.** `from wcs.wcs import solve_wcs` stops working.
 
+### Phase 1b — Deduplicate the vendored `skylib`
+
+Separate commit from Phase 1, because the two diffs answer different questions
+and mixing them makes both unreadable: Phase 1 asks "did anything change?",
+Phase 1b asks "is what I deleted really redundant?".
+
+- Create `kepler/kernels/_skylib/` holding the 40 distinct modules.
+- Delete the 14 redundant files. The diff is deletions plus import rewrites —
+  no surviving file's content changes, and the manifest proves it.
+- Hand-write the merged package `__init__.py`s to cover the union (these are the
+  only files that genuinely differ between copies, and only in docstrings).
+- Add the no-duplicate-hash assertion to the manifest check (design §10.5), which
+  is what stops the duplication re-forming.
+
+Gate: a file is only merged if every copy is byte-identical. That holds for all
+executable files as measured on 2026-08-10 and independently confirmed by the
+algorithm review, which also verified the copies against upstream `skylib`.
+If a later re-measure finds divergence, that file stays per-domain and becomes a
+remediation finding — deciding which copy is right is a correctness call, not a
+layout one.
+
 ### Phase 2 — Offline tool slice
 
 Adapters and tools for everything that needs no network, no solver data, no
@@ -190,13 +211,10 @@ behaviour stops and becomes a decision.
   `kepler/tools/literature.py` on the same envelope, per the brainstorm; the root
   module stays as a thin compatibility wrapper
 
-### Phase 6 — Gated: vendored `skylib` consolidation
+### Phase 6 — (retired)
 
-Not part of this refactor. `wcs/skylib/`, `photometry/skylib/`, and
-`fieldcal/skylib/` remain three independent copies. Consolidation is a
-pre-existing open repo-level decision and, if taken, should be its own PR with a
-byte-diff gate proving the merged file is identical to all three inputs — never
-folded into a structural change.
+Vendored `skylib` consolidation moved to Phase 1b, now that the byte-identity
+evidence exists. See design §4.
 
 ---
 

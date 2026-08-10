@@ -85,6 +85,7 @@ uniformly rather than case by case.
 ├─────────────────────────────────────────────────────────┤
 │ kepler.kernels.*      the algorithms, as shipped.       │
 │   wcs/ photometry/ fieldcal/ catalogs/ query/           │
+│   _skylib/ shared beneath them (§4)                     │
 │   + ts/ reached through the Node bridge                 │
 └─────────────────────────────────────────────────────────┘
        kepler.contracts.*   Pydantic models, error codes, envelope
@@ -133,8 +134,9 @@ kepler/
                       timeseries.py cluster.py
   tools/              catalogs.py query.py astrometry.py photometry.py calibration.py
                       timeseries.py cluster.py workspace.py
-  kernels/            wcs/ photometry/ fieldcal/ catalogs/ query/
-packages/ts/          package.json tsconfig.json src/{lightcurve,periodogram,hrdiagram,bridge}
+  kernels/            _skylib/ wcs/ photometry/ fieldcal/ catalogs/ query/
+packages/ts/          package.json tsconfig.json
+                      src/{shared,lightcurve,periodogram,hrdiagram,bridge}
 tests/                contract/ layering/ unit/ fixtures/
 ```
 
@@ -159,10 +161,106 @@ established ownership rules that are load-bearing and survive the move unchanged
 
 Collapsing any of these trades a real capability for a shorter import path.
 
-**Kernels keep their internal structure.** `kepler/kernels/wcs/skylib/…` stays
-laid out as extracted, including the three vendored `skylib` copies. Consolidating
-them is a content change and a known open decision; folding it into a structural
-move makes both unreviewable.
+**Kernels keep their internal structure, except where it is duplicated.** See
+below — deduplication is a layout question, and this document owns it.
+
+### Shared code and duplication
+
+Duplication is the one place where "keep the extracted layout" is the wrong
+answer, so it gets decided here rather than deferred.
+
+Each domain vendored the subset of Skynet's `skylib` it needed, independently, so
+the same modules exist in two or three places. Measured 2026-08-10:
+
+| copy | modules | shared with another copy |
+|---|---:|---:|
+| `wcs/skylib/` | 34 | 9 |
+| `photometry/skylib/` | 15 | 15 |
+| `fieldcal/skylib/` | 5 | 5 |
+| **total files on disk** | **54** | |
+| **distinct modules** | **40** | 14 files are redundant |
+
+Which ones:
+
+- **All three:** `util/angle.py`, `util/fits.py` (plus package `__init__.py`s).
+- **`wcs` + `photometry`:** `extraction/{main,centroiding,__init__}.py`,
+  `calibration/background.py`.
+- **`photometry` + `fieldcal`:** `util/stats.py`.
+
+**Every duplicated file containing executable code is byte-identical across
+copies.** The only differences are in package `__init__.py` docstrings recording
+which subset each domain vendored. The algorithm review verified this
+independently and additionally checked all three against upstream `skylib` — the
+copies have not drifted. Yet.
+
+The cost of leaving them is measured, not theoretical. The algorithm review found
+three defects that each live in a duplicated file:
+
+| Defect | File | Copies | Fix sites |
+|---|---|---|---|
+| Saturation counts lost when `downsample > 1` | `extraction/main.py` | wcs, photometry | 2 |
+| `a >= b` axis swap and θ normalisation are silent no-ops on a masked copy | `extraction/main.py` | wcs, photometry | 2 |
+| `get_fits_fov` returns dec **0** for every southern target (`1 - True == 0`) | `util/fits.py` | wcs, photometry, fieldcal | 3 |
+
+Nothing in the repository makes the second and third sites visible to whoever
+fixes the first. Three copies of a file is three opportunities to fix two of them,
+and the failure is silent in the worst possible way — the domain nobody patched
+keeps the bug while the tests, the changelog and the reviewer all say it was
+fixed. Both reviewers independently flagged the triplication as a hazard while
+reporting these.
+
+**Target: one shared kernel-internal package.**
+
+```text
+kepler/kernels/
+  _skylib/            # vendored subset of Skynet's skylib, deduplicated — 40 modules
+    astrometry/       #   reached only by wcs
+    photometry/       #   reached only by photometry
+    extraction/  calibration/  util/  io/
+  wcs/  photometry/  fieldcal/  catalogs/  query/
+```
+
+The leading underscore marks it internal to the kernel layer: adapters and tools
+never import it, and the five domain packages remain the kernel surface. This does
+not weaken "one module per domain at every layer" — `_skylib` is a shared library
+*beneath* the domains, not a sixth domain.
+
+**Consolidation gate.** A file merges into `_skylib/` only if every copy is
+byte-identical. Anything divergent stays per-domain with a comment naming the
+divergence, until the remediation track rules on which version is correct — that
+is a correctness decision, not a layout one. Today the gate admits every
+executable file; the `__init__.py`s are rewritten by hand to cover the union.
+
+**Forward rule, mechanically enforced.** The kernel manifest in §10 already
+computes a per-file SHA-256. Add one assertion to it: **no two files under
+`kepler/kernels/` may share a hash.** That is a complete, zero-maintenance guard
+against duplication re-accreting, and it reuses machinery the design already
+needs.
+
+### The same shape in TypeScript, at smaller scale
+
+The review verified every duplicated helper by extracting and comparing function
+bodies. **All are byte-identical, and every one carries a defect** — so the
+Python situation repeats here, at smaller scale but with a worse hit rate:
+
+| Helper | Copies | Defect it carries in all copies |
+|---|---|---|
+| `errorMSE` | 3 | differential-photometry error bars are half their correct size |
+| `getPeriodStep` | 3 | returns a slider step of exactly `0` for ordinary pulsar parameters |
+| `floatMod` | 2 | linear-search modulo — unbounded work, and never terminates for `b ≤ 0` |
+| `rad`, `deg`, `d2HMS`, `d2DMS` | 2 | `d2DMS` computes a sign and discards it |
+
+Four helpers, eleven copies, four defects, and **every fix has to be applied two
+or three times**. `floatMod` is the sharpest case: it is a blocker-severity
+non-terminating loop, and it exists twice.
+
+These land in `packages/ts/src/shared/`, under the same byte-identity gate.
+
+Worth noting because it looks like a conflict and is not: `periodogram/core/`
+currently holds copies of helpers that `hrdiagram/` and `lightcurve/` also have.
+Moving them to `shared/` *strengthens* the domain rule rather than breaking it —
+the rule is that nothing in `core/` may import from `pulsar/` or `variable/`, and
+`shared/` sits beneath all three, so the dependency still points one way.
 
 ---
 
@@ -445,7 +543,10 @@ The rules in §3 are only real if something checks them:
    the move this proves the move changed nothing. Afterwards it makes any commit
    touching algorithm code visible in review and routes it to the remediation
    track, rather than letting it pass as a structural change.
-5. **Compile/import.** `compileall` over `kepler/`, plus `tsc --noEmit` for
+5. **No duplicate kernel files.** No two entries in that manifest may share a
+   hash. One line, and it permanently prevents the `skylib` situation from
+   re-forming.
+6. **Compile/import.** `compileall` over `kepler/`, plus `tsc --noEmit` for
    `packages/ts/`. CI today compiles one file and never imports the extracted
    packages at all.
 
@@ -458,8 +559,6 @@ The rules in §3 are only real if something checks them:
   make numeric fixes reviewable — one call site per kernel entry point, a manifest
   that flags algorithm changes — but the fixes themselves belong to the
   remediation track.
-- **Consolidating the three vendored `skylib` copies.** A content change; keep it
-  out of a structural move.
 - **Orchestration, planning, or a chat runtime.** Kepler exposes tools; deciding
   when to call them is the caller's job.
 - **End-to-end validation.** Still requires reference FITS, solver binaries and
