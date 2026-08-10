@@ -1,0 +1,935 @@
+"""Assisted plate solver using UCAC catalog zones."""
+
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Optional, Tuple
+
+import numpy as np
+from astropy.io import fits
+from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
+
+# EXTRACTED: were absolute `skylib.astrometry.atlas.*` imports — made relative.
+from ..catalog import CatalogIndex, get_catalog_spec
+from ..config import AtlasConfig
+from ..extract.sources import ExtractedSources, extract_sources
+from ..match.triangles import TriangleSet, build_kdtree, sample_triangles
+from ..wcs.build import decompose_linear, wcs_from_similarity
+
+try:  # pragma: no cover - optional dependency
+    from scipy.spatial import cKDTree
+except Exception:  # pragma: no cover
+    from ..match.triangles import cKDTree
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
+
+ARCSEC_TO_RAD = np.deg2rad(1.0 / 3600.0)
+LOGGER = logging.getLogger(__name__)
+
+@dataclass
+class SolveResult:
+    success: bool
+    wcs: Optional[WCS]
+    metadata: dict
+
+
+def deadline_passed(start: float, timeout_s: Optional[float]) -> bool:
+    """True once ``timeout_s`` has elapsed since ``start``. None = unbounded."""
+    return timeout_s is not None and (time.perf_counter() - start) > timeout_s
+
+
+def _miss(
+    reason: str,
+    *,
+    start: float,
+    n_extracted: Optional[int] = None,
+    **extra,
+) -> SolveResult:
+    """Build a failed SolveResult with the diagnostics every miss must carry.
+
+    The common fields are stamped here rather than at each return site: they had
+    been written per-branch, so most misses recorded only a reason and callers
+    could not distinguish a fast rejection from a long grind.
+
+    The always-present count lives under ``n_sources_extracted``, deliberately
+    NOT under ``n_sources``. SkyNode's blind-fallback gate reads ``n_sources``
+    and is sensitive to both its value and its absence, so that key keeps its
+    original per-branch meaning and any caller wanting a consistent count reads
+    the new one (or ``SolveSolution.source_count``).
+    """
+    metadata = {
+        "reason": reason,
+        "n_sources_extracted": n_extracted,
+        "elapsed_s": float(time.perf_counter() - start),
+    }
+    metadata.update(extra)
+    return SolveResult(False, None, metadata)
+
+
+def _effective_catalog_in_fov(cat_xy, scale, rotation, translation, width, height, margin_pix=20.0):
+    obs_pred = ((cat_xy - translation) @ rotation) / max(scale, 1e-30)
+
+    x = obs_pred[:, 0]
+    y = obs_pred[:, 1]
+    inside = (
+        (x >= -margin_pix) & (x < width + margin_pix) &
+        (y >= -margin_pix) & (y < height + margin_pix)
+    )
+    return int(np.count_nonzero(inside))
+
+def _verify_candidate(
+    obs_xy: np.ndarray,
+    cat_tree: cKDTree,
+    scale: float,
+    rotation: np.ndarray,
+    translation: np.ndarray,
+    *,
+    tol_arcsec: float,
+) -> tuple[float, int, float]:
+    """Re-score a candidate similarity transform at a given tolerance.
+
+    Returns: (score, inliers, rms_arcsec)
+    """
+    tol_rad = tol_arcsec * ARCSEC_TO_RAD
+    score, inliers, rms_rad = _score_candidate(
+        obs_xy, cat_tree, scale, rotation, translation, tol_rad
+    )
+    rms_arcsec = float(rms_rad / ARCSEC_TO_RAD)
+    return float(score), int(inliers), rms_arcsec
+
+def solve(
+    fits_path: Path,
+    config: AtlasConfig,
+    *,
+    ra0_deg: float,
+    dec0_deg: float,
+    scale_range_arcsec_per_pix: Tuple[float, float],
+    fov_guess_deg: Optional[Tuple[float, float]] = None,
+) -> SolveResult:
+    start = time.perf_counter()
+
+    LOGGER.info("Starting solve for image: %s", fits_path)
+
+    debug_overlay_path: Optional[Path] = None
+    if config.debug:
+        debug_overlay_path = fits_path.with_suffix(".png").with_name(fits_path.stem + "_sources.png")
+
+    sources = extract_sources(
+        fits_path,
+        max_sources=config.max_image_stars,
+        crop_fraction=1.0,
+        downsample=1,
+        edge_margin=8,
+        sn_thresh=2.0,
+        peak_sn_thresh=2.0,
+        min_area=5,
+        max_elong=50.0,   # if you want to tolerate long trails
+        matched_filter_fwhm_pix=(
+            config.extract_matched_filter_fwhm_pix if config.use_matched_extraction else 0.0
+        ),
+        detect_nsig=config.extract_detect_nsig,
+        debug_overlay_path=debug_overlay_path,
+    )
+    obs_xy = sources.xy
+    height, width = sources.shape
+    n_sources = int(obs_xy.shape[0])
+
+
+    if fov_guess_deg is None:
+        fov_guess_deg = _estimate_fov(fits_path, width, height, scale_range_arcsec_per_pix)
+    if fov_guess_deg is None:
+        return _miss("missing_fov", start=start, n_extracted=n_sources)
+
+    LOGGER.info("FOV GUESS: %s", fov_guess_deg)
+
+    # ---- Stage 0: single catalog query with conservative padded footprint ----
+    catalog_pad_frac = config.catalog_pad_frac
+    catalog_max_radius_deg = config.catalog_max_radius_deg
+
+    half_diag_deg = _search_half_diag_deg(
+        width,
+        height,
+        scale_range_arcsec_per_pix,
+        fov_guess_deg,
+        pad_frac=catalog_pad_frac,
+    )
+    if half_diag_deg <= 0:
+        return _miss("bad_fov_or_scale", start=start, n_extracted=n_sources)
+
+    if catalog_max_radius_deg is not None:
+        half_diag_deg = min(float(half_diag_deg), float(catalog_max_radius_deg))
+
+    # Convert "radius" into a RA/Dec box (box is conservative; good for your zone-based catalog query)
+    cos_dec = np.cos(np.deg2rad(dec0_deg))
+    cos_dec = max(0.2, float(abs(cos_dec)))
+
+    dec_half = half_diag_deg
+    ra_half = half_diag_deg / cos_dec
+
+    LOGGER.info(
+        "searching: %s",
+        (ra0_deg, dec0_deg, ra_half*2*60, dec_half*2*60),
+    )
+
+    catalog_name, catalog_root = config.resolve_catalog()
+    catalog_index = _catalog_index(catalog_name, catalog_root)
+    cat = catalog_index.query_box(
+        ra0_deg - ra_half,
+        ra0_deg + ra_half,
+        dec0_deg - dec_half,
+        dec0_deg + dec_half,
+        thin=config.thin,
+    )
+    if cat.ra_deg.size == 0:
+        return _miss("empty_catalog", start=start, n_extracted=n_sources, n_catalog=0)
+
+    cat_xy = _gnomonic_projection(cat.ra_deg, cat.dec_deg, ra0_deg, dec0_deg)
+    cat_xy, cat_radec = _limit_catalog(
+        cat_xy,
+        cat.ra_deg,
+        cat.dec_deg,
+        config.max_catalog_stars,
+    )
+
+    if len(cat_xy) < 3:
+        return _miss(
+            "insufficient_catalog",
+            start=start,
+            n_extracted=n_sources,
+            n_catalog=int(len(cat_xy)),
+        )
+
+
+    # ---- Dense/Sparse-field handling: match/verify only on brightest sources ----
+    max_match_sources = int(getattr(config, "max_match_sources", 180))
+    if obs_xy.shape[0] > max_match_sources and hasattr(sources, "flux") and sources.flux.size == obs_xy.shape[0]:
+        order = np.argsort(sources.flux)[::-1]  # brightest first
+        keep = order[:max_match_sources]
+        obs_xy_match = obs_xy[keep]
+    else:
+        obs_xy_match = obs_xy
+
+    if config.debug:
+        LOGGER.info(
+            "obs sources (raw): n=%s ; using for match/verify: n=%s",
+            len(obs_xy),
+            len(obs_xy_match),
+        )
+
+
+    if obs_xy_match.size == 0:
+        return _miss("no_sources", start=start, n_extracted=n_sources)
+
+
+    rng = np.random.default_rng(0)
+    min_scale, max_scale = scale_range_arcsec_per_pix
+    a_min = np.deg2rad(min_scale / 3600.0)
+    a_max = np.deg2rad(max_scale / 3600.0)
+
+    min_side_pix = max(5.0, 0.02 * min(width, height))
+    max_side_pix = 0.6 * max(width, height)
+    min_side_rad = min_side_pix * a_min
+    max_side_rad = max_side_pix * a_max
+
+    obs_tri = sample_triangles(
+        obs_xy_match,
+        config.n_tri_obs,
+        min_side=min_side_pix,
+        max_side=max_side_pix,
+        rng=rng,
+    )
+    cat_tri = sample_triangles(
+        cat_xy,
+        config.n_tri_cat,
+        min_side=min_side_rad,
+        max_side=max_side_rad,
+        rng=rng,
+    )
+
+    if len(obs_tri.triangles) == 0 or len(cat_tri.triangles) == 0:
+        return _miss(
+            "no_triangles",
+            start=start,
+            n_extracted=n_sources,
+            n_obs_triangles=int(len(obs_tri.triangles)),
+            n_cat_triangles=int(len(cat_tri.triangles)),
+        )
+
+    inv_tree = build_kdtree(cat_tri.invariants)
+    cat_tree = cKDTree(cat_xy)
+    tol_rad = np.deg2rad(config.match_tol_arcsec / 3600.0)
+
+    LOGGER.info(
+        "calling match triangles: (obs_tri=%s, cat_tri=%s)",
+        len(obs_tri.triangles),
+        len(cat_tri.triangles),
+    )
+    LOGGER.info(
+        "obs sources: n=%s  tol_arcsec=%s  invariant_tol=%s",
+        len(obs_xy_match),
+        config.match_tol_arcsec,
+        config.invariant_tol,
+    )
+    LOGGER.info(
+        "scale gate: a_min=%.3e rad/pix  a_max=%.3e rad/pix  (min=%s max=%s arcsec/pix)",
+        a_min,
+        a_max,
+        min_scale,
+        max_scale,
+    )
+    LOGGER.info(
+        "cat stars used: n=%s  (max_catalog_stars=%s)",
+        len(cat_xy),
+        config.max_catalog_stars,
+    )
+
+    best, timed_out = _match_triangles(
+        obs_tri,
+        cat_tri,
+        inv_tree,
+        cat_tree,
+        obs_xy_match,
+        a_min,
+        a_max,
+        tol_rad,
+        timeout_s=config.timeout_s,
+        start=start,
+        invariant_tol=config.invariant_tol,
+        debug=config.debug
+    )
+    if best is None:
+        # A search abandoned at its time budget and one that exhausted the
+        # candidates both arrive here with no transform. They are different
+        # failures — only the first is a tuning problem — so they get different
+        # reasons rather than a shared "no_match".
+        return _miss(
+            "timeout" if timed_out else "no_match",
+            start=start,
+            n_extracted=n_sources,
+            timed_out=timed_out,
+        )
+
+    scale, rotation, translation, _, _ = best
+
+    # --------------------------
+    # COARSE verification (your existing tolerance)
+    # --------------------------
+    coarse_score, coarse_inliers, coarse_rms_arcsec = _verify_candidate(
+        obs_xy_match,
+        cat_tree,
+        scale,
+        rotation,
+        translation,
+        tol_arcsec=float(config.match_tol_arcsec),
+    )
+
+    n_cat_eff = _effective_catalog_in_fov(cat_xy, scale, rotation, translation, width, height, margin_pix=20)
+    denom = max(min(len(obs_xy_match), n_cat_eff), 1)
+    coarse_frac = coarse_inliers / denom
+
+    # Coarse gates (still permissive)
+    COARSE_MIN_INLIERS = 8
+    COARSE_MIN_FRAC = 0.0   # sparse-field friendly
+    COARSE_MAX_RMS_ARCSEC = 2.5
+
+    if config.debug:
+        LOGGER.info(
+            "verify coarse: %s",
+            {
+                "score": coarse_score,
+                "inliers": coarse_inliers,
+                "n_obs": int(len(obs_xy_match)),
+                "frac": float(coarse_frac),
+                "rms_arcsec": float(coarse_rms_arcsec),
+                "tol_arcsec": float(config.match_tol_arcsec),
+            },
+        )
+
+    if (
+        coarse_inliers < COARSE_MIN_INLIERS
+        or coarse_frac < COARSE_MIN_FRAC
+        or coarse_rms_arcsec > COARSE_MAX_RMS_ARCSEC
+        or not np.isfinite(coarse_score)
+    ):
+        if config.debug:
+            LOGGER.info(
+                "Rejecting candidate at coarse verify: inliers=%s rms=%.3f arcsec",
+                coarse_inliers,
+                coarse_rms_arcsec,
+            )
+        return _miss(
+            "no_confident_match_coarse",
+            start=start,
+            n_extracted=n_sources,
+            timed_out=timed_out,
+            inliers=int(coarse_inliers),
+            rms_arcsec=float(coarse_rms_arcsec),
+        )
+
+    # --------------------------
+    # TIGHT verification (strong check)
+    # --------------------------
+    TIGHT_TOL_ARCSEC = 1.0
+    tight_score, tight_inliers, tight_rms_arcsec = _verify_candidate(
+        obs_xy_match,
+        cat_tree,
+        scale,
+        rotation,
+        translation,
+        tol_arcsec=TIGHT_TOL_ARCSEC,
+    )
+    tight_frac = tight_inliers / denom
+
+    TIGHT_MIN_INLIERS = 10
+    TIGHT_MIN_FRAC = 0.15
+    TIGHT_MIN_INLIERS_ABS_OK = 18
+    
+    TIGHT_MAX_RMS_ARCSEC = 1.5
+
+    if config.debug:
+        LOGGER.info(
+            "verify tight: %s",
+            {
+                "score": tight_score,
+                "inliers": tight_inliers,
+                "n_obs": int(len(obs_xy_match)),
+                "frac": float(tight_frac),
+                "rms_arcsec": float(tight_rms_arcsec),
+                "tol_arcsec": float(TIGHT_TOL_ARCSEC),
+            },
+        )
+
+    if (
+        tight_inliers < TIGHT_MIN_INLIERS
+        or (tight_frac < TIGHT_MIN_FRAC and tight_inliers < TIGHT_MIN_INLIERS_ABS_OK)
+        or tight_rms_arcsec > TIGHT_MAX_RMS_ARCSEC
+        or not np.isfinite(tight_score)
+    ):
+        # Optional: a mid-tier fallback can help if centroiding is ~1"
+        MID_TOL_ARCSEC = 1.5
+        mid_score, mid_inliers, mid_rms_arcsec = _verify_candidate(
+            obs_xy_match,
+            cat_tree,
+            scale,
+            rotation,
+            translation,
+            tol_arcsec=MID_TOL_ARCSEC,
+        )
+        mid_frac = mid_inliers / denom
+
+        if config.debug:
+            LOGGER.info(
+                "verify mid: %s",
+                {
+                    "score": mid_score,
+                    "inliers": mid_inliers,
+                    "n_obs": int(len(obs_xy_match)),
+                    "frac": float(mid_frac),
+                    "rms_arcsec": float(mid_rms_arcsec),
+                    "tol_arcsec": float(MID_TOL_ARCSEC),
+                },
+            )
+
+        MID_MIN_INLIERS = 8
+        MID_MIN_FRAC = 0.20
+        MID_MAX_RMS_ARCSEC = 1.7
+
+        if (
+            mid_inliers < MID_MIN_INLIERS
+            or mid_frac < MID_MIN_FRAC
+            or mid_rms_arcsec > MID_MAX_RMS_ARCSEC
+            or not np.isfinite(mid_score)
+        ):
+            if config.debug:
+                LOGGER.info(
+                    "Rejecting candidate at tight verify: inliers=%s rms=%.3f arcsec",
+                    tight_inliers,
+                    tight_rms_arcsec,
+                )
+            return _miss(
+                "verification_failed",
+                start=start,
+                n_extracted=n_sources,
+                timed_out=timed_out,
+                inliers=int(tight_inliers),
+                rms_arcsec=float(tight_rms_arcsec),
+                **{
+                    "coarse": {
+                        "score": coarse_score,
+                        "inliers": coarse_inliers,
+                        "frac": float(coarse_frac),
+                        "rms_arcsec": coarse_rms_arcsec,
+                        "tol_arcsec": float(config.match_tol_arcsec),
+                    },
+                    "tight": {
+                        "score": tight_score,
+                        "inliers": tight_inliers,
+                        "frac": float(tight_frac),
+                        "rms_arcsec": tight_rms_arcsec,
+                        "tol_arcsec": float(TIGHT_TOL_ARCSEC),
+                    },
+                    "mid": {
+                        "score": mid_score,
+                        "inliers": mid_inliers,
+                        "frac": float(mid_frac),
+                        "rms_arcsec": mid_rms_arcsec,
+                        "tol_arcsec": float(MID_TOL_ARCSEC),
+                    },
+                },
+            )
+
+    # If we get here, accept the candidate.
+    # For metadata, use the tight or mid values (prefer tight if it passed).
+    inliers = tight_inliers
+    rms_arcsec = tight_rms_arcsec
+    
+    wcs = wcs_from_similarity(scale, rotation, translation, ra0_deg, dec0_deg)
+
+    # NOTE: DO NOT rebuild the WCS with a different (ra0,dec0) unless you also
+    # reproject the catalog to that new tangent point and re-fit translation.
+    if config.refine_center:
+        # Astropy pixel_to_world_values expects 0-based pixel coords
+        cx0 = (width - 1) / 2.0
+        cy0 = (height - 1) / 2.0
+        center_ra, center_dec = wcs.pixel_to_world_values(cx0, cy0)
+
+        if config.debug:
+            LOGGER.info(
+                "Refined center (from WCS @ image center): RA=%.6f DEC=%.6f",
+                center_ra,
+                center_dec,
+            )
+
+        # Store refined center in metadata only
+        refined_center_ra_deg = float(center_ra) % 360.0
+        refined_center_dec_deg = float(center_dec)
+    else:
+        refined_center_ra_deg = None
+        refined_center_dec_deg = None
+
+    # Orientation in the ORIENTED fast-path convention (parity un-flipped before
+    # the angle is read). `rotation_deg` above is the raw atan2 of `rotation`,
+    # which is meaningless for a reflected (parity -1) solve; these two fields are
+    # the values the oriented solver consumes, and are what the SkyNode bootstrap
+    # writes back to calibrate an imager's reference PA + parity. `scale * rotation`
+    # is exactly the pixel->tangent CD (rad/pix) that wcs_from_similarity uses.
+    _, orientation_rotation_deg, orientation_parity = decompose_linear(scale * rotation)
+
+    elapsed = time.perf_counter() - start
+    metadata = {
+        "ra0_deg": float(ra0_deg),
+        "dec0_deg": float(dec0_deg),
+        "refined_center_ra_deg": refined_center_ra_deg,
+        "refined_center_dec_deg": refined_center_dec_deg,
+        "scale_arcsec_per_pix": float(scale * (180.0 / np.pi) * 3600.0),
+        "rotation_deg": float(np.rad2deg(np.arctan2(rotation[1, 0], rotation[0, 0]))),
+        "orientation_rotation_deg": float(orientation_rotation_deg),
+        "orientation_parity": int(orientation_parity),
+        "rms_arcsec": float(rms_arcsec),
+        "inliers": int(inliers),
+        "n_sources_extracted": n_sources,
+        "n_sources_matched": int(obs_xy_match.shape[0]),
+        "timed_out": timed_out,
+        "catalog": catalog_name,
+        "match_method": "triangles",
+        "elapsed_s": float(elapsed),
+    }
+    
+    return SolveResult(True, wcs, metadata)
+
+def _search_half_diag_deg(
+    width: int,
+    height: int,
+    scale_range_arcsec_per_pix: Tuple[float, float],
+    fov_guess_deg: Optional[Tuple[float, float]],
+    *,
+    pad_frac: float,
+) -> float:
+    """
+    Compute a conservative half-diagonal FOV radius (deg) to use for Stage 0 catalog search.
+
+    - Uses max scale to avoid underestimating sky footprint.
+    - Falls back to fov_guess if provided.
+    - Applies multiplicative padding (1 + pad_frac).
+    """
+    min_scale, max_scale = scale_range_arcsec_per_pix
+
+    # Prefer geometry from scale bounds (more reliable than fov_guess)
+    if max_scale > 0:
+        fov_w = (max_scale * width) / 3600.0  # deg
+        fov_h = (max_scale * height) / 3600.0
+    elif fov_guess_deg is not None:
+        fov_w, fov_h = fov_guess_deg
+    else:
+        return 0.0
+
+    half_diag = 0.5 * float(np.hypot(fov_w, fov_h))
+    return half_diag * (1.0 + float(pad_frac))
+
+def _estimate_fov(
+    fits_path: Path,
+    width: int,
+    height: int,
+    scale_range_arcsec_per_pix: Tuple[float, float],
+) -> Optional[Tuple[float, float]]:
+    try:
+        with fits.open(fits_path) as hdul:
+            header = hdul[0].header
+    except Exception:
+        header = None
+
+    if header is not None:
+        try:
+            wcs = WCS(header)
+            scales = proj_plane_pixel_scales(wcs)
+            if scales is not None and len(scales) >= 2:
+                fov_w = abs(scales[0]) * width
+                fov_h = abs(scales[1]) * height
+                if fov_w > 0 and fov_h > 0:
+                    return (float(fov_w), float(fov_h))
+        except Exception:
+            pass
+
+    min_scale, max_scale = scale_range_arcsec_per_pix
+    scale = 0.5 * (min_scale + max_scale)
+    if scale <= 0:
+        return None
+    fov_w = scale * width / 3600.0
+    fov_h = scale * height / 3600.0
+    return (float(fov_w), float(fov_h))
+
+
+def _gnomonic_projection(
+    ra_deg: np.ndarray,
+    dec_deg: np.ndarray,
+    ra0_deg: float,
+    dec0_deg: float,
+) -> np.ndarray:
+    ra = np.deg2rad(ra_deg)
+    dec = np.deg2rad(dec_deg)
+    ra0 = np.deg2rad(ra0_deg)
+    dec0 = np.deg2rad(dec0_deg)
+
+    cosc = np.sin(dec0) * np.sin(dec) + np.cos(dec0) * np.cos(dec) * np.cos(ra - ra0)
+    xi = np.cos(dec) * np.sin(ra - ra0) / cosc
+    eta = (np.cos(dec0) * np.sin(dec) - np.sin(dec0) * np.cos(dec) * np.cos(ra - ra0)) / cosc
+    return np.stack([xi, eta], axis=1)
+
+
+def _limit_catalog(
+    cat_xy: np.ndarray,
+    ra_deg: np.ndarray,
+    dec_deg: np.ndarray,
+    max_catalog_stars: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if len(cat_xy) <= max_catalog_stars:
+        return cat_xy, np.stack([ra_deg, dec_deg], axis=1)
+    dist = np.hypot(cat_xy[:, 0], cat_xy[:, 1])
+    order = np.argsort(dist)
+    order = order[:max_catalog_stars]
+    return cat_xy[order], np.stack([ra_deg[order], dec_deg[order]], axis=1)
+
+
+def _match_triangles(
+    obs_tri: TriangleSet,
+    cat_tri: TriangleSet,
+    inv_tree: cKDTree,
+    cat_tree: cKDTree,
+    obs_xy: np.ndarray,
+    a_min: float,
+    a_max: float,
+    tol_rad: float,
+    *,
+    timeout_s: Optional[float],
+    start: float,
+    invariant_tol: float,
+    debug: bool = False,
+) -> Tuple[Optional[tuple], bool]:
+    """Search triangle-invariant matches and return the best similarity transform.
+
+    Returns ``(best, timed_out)``. ``timed_out`` was previously a debug-only
+    counter, so a search abandoned at its time budget was indistinguishable from
+    one that genuinely found nothing; the caller needs it to report the two as
+    different failures.
+
+    Debug counters explain where candidates are being lost:
+      - invariant hits (query_ball_point empty vs non-empty)
+      - scale gate rejections
+      - scoring producing -inf (no inliers)
+      - number of best updates
+    """
+    best = None
+    best_score = float("-inf")
+    best_inliers = 0
+    best_rms = np.inf
+
+    # ---- debug counters ----
+    n_obs_inv = 0
+    n_obs_inv_nonempty = 0
+    n_candidate_pairs = 0
+    n_scale_reject = 0
+    n_scale_ok = 0
+    n_scored = 0
+    n_scored_finite = 0
+    n_scored_noninf = 0
+    best_updates = 0
+    timed_out = False
+
+    # Optional: track top few candidates by score for inspection
+    topk = []  # list of (score, inliers, rms, scale)
+
+    for obs_inv, obs_order in zip(obs_tri.invariants, obs_tri.ordered_points):
+        n_obs_inv += 1
+
+        if deadline_passed(start, timeout_s):
+            timed_out = True
+            break
+
+        candidate_idx = inv_tree.query_ball_point(obs_inv, r=invariant_tol)
+        if not candidate_idx:
+            continue
+
+        n_obs_inv_nonempty += 1
+        n_candidate_pairs += len(candidate_idx)
+
+        for idx in candidate_idx:
+            cat_order0 = cat_tri.ordered_points[idx]
+
+            best_local_score = float("-inf")
+            best_local_tuple = None
+
+            # Try all vertex correspondences
+            for perm in ((0,1,2),(0,2,1),(1,0,2),(1,2,0),(2,0,1),(2,1,0)):
+                cat_order = cat_order0[list(perm)]
+                scale, rotation, translation = _fit_similarity(obs_order, cat_order)
+
+                if scale < a_min or scale > a_max:
+                    continue
+
+                score, inliers, rms = _score_candidate(obs_xy, cat_tree, scale, rotation, translation, tol_rad)
+
+                if score > best_local_score:
+                    best_local_score = float(score)
+                    best_local_tuple = (scale, rotation, translation, inliers, rms)
+
+            # Use best permutation for this candidate
+            if best_local_tuple is None:
+                n_scale_reject += 1  # or track separately
+                continue
+
+            scale, rotation, translation, inliers, rms = best_local_tuple
+
+            if scale < a_min or scale > a_max:
+                n_scale_reject += 1
+                continue
+
+            n_scale_ok += 1
+
+            score, inliers, rms = _score_candidate(
+                obs_xy, cat_tree, scale, rotation, translation, tol_rad
+            )
+            n_scored += 1
+
+            if np.isfinite(score):
+                n_scored_finite += 1
+            if score != float("-inf"):
+                n_scored_noninf += 1
+
+            # keep a small top-k list
+            if np.isfinite(score):
+                topk.append((float(score), int(inliers), float(rms), float(scale)))
+                if len(topk) > 50:
+                    # keep only top 10 by score to avoid unbounded growth
+                    topk.sort(key=lambda t: t[0], reverse=True)
+                    topk = topk[:10]
+
+            if (
+                score > best_score
+                or (score == best_score and inliers > best_inliers)
+                or (score == best_score and inliers == best_inliers and rms < best_rms)
+            ):
+                best_score = float(score)
+                best_inliers = int(inliers)
+                best_rms = float(rms)
+                best = (scale, rotation, translation, inliers, rms)
+                best_updates += 1
+                if debug:
+                    # Print enough to identify if this is "real-ish"
+                    LOGGER.info(
+                        "new best: %s",
+                        {
+                            "score": best_score,
+                            "inliers": best_inliers,
+                            "rms_arcsec": best_rms * (180.0 / np.pi) * 3600.0,
+                            "scale_arcsec_per_pix": float(scale * (180.0 / np.pi) * 3600.0),
+                        },
+                    )
+
+    if debug:
+        LOGGER.info(
+            "match_triangles summary: %s",
+            {
+                "obs_triangles": int(len(obs_tri.triangles)),
+                "cat_triangles": int(len(cat_tri.triangles)),
+                "obs_invariants_total": int(n_obs_inv),
+                "obs_invariants_with_hits": int(n_obs_inv_nonempty),
+                "cand_pairs_total": int(n_candidate_pairs),
+                "scale_ok": int(n_scale_ok),
+                "scale_reject": int(n_scale_reject),
+                "scored": int(n_scored),
+                "scored_finite": int(n_scored_finite),
+                "scored_noninf": int(n_scored_noninf),
+                "best_updates": int(best_updates),
+                "timed_out": bool(timed_out),
+                "best": None
+                if best is None
+                else {
+                    "best_score": float(best_score),
+                    "best_inliers": int(best_inliers),
+                    "best_rms_arcsec": float(best_rms * (180.0 / np.pi) * 3600.0),
+                    "best_scale_arcsec_per_pix": float(best[0] * (180.0 / np.pi) * 3600.0),
+                },
+            },
+        )
+        if topk:
+            topk.sort(key=lambda t: t[0], reverse=True)
+            LOGGER.info("top candidates (score, inliers, rms_arcsec, scale_arcsec_per_pix):")
+            for s, inl, rms, sc in topk[:10]:
+                LOGGER.info(
+                    "  %s",
+                    (
+                        s,
+                        inl,
+                        rms * (180.0 / np.pi) * 3600.0,
+                        sc * (180.0 / np.pi) * 3600.0,
+                    ),
+                )
+
+    return best, timed_out
+
+
+def _score_candidate(
+    obs_xy: np.ndarray,
+    cat_tree: cKDTree,
+    scale: float,
+    rotation: np.ndarray,
+    translation: np.ndarray,
+    tol_rad: float,
+) -> Tuple[float, int, float]:
+    """Score a candidate similarity transform.
+
+    B) Enforces a one-to-one assignment between observed sources and catalog sources
+       (greedy by smallest residual) to avoid inflated inlier counts from collisions.
+
+    C) Uses a score that penalizes outliers and collisions, not just RMS-on-inliers.
+       This makes false positives much less likely in dense fields.
+
+    Returns: (score, inliers, rms_rad)
+    """
+    pred = (obs_xy @ rotation.T) * scale + translation
+    dist, idx = cat_tree.query(pred)
+
+    within = dist <= tol_rad
+    if not np.any(within):
+        return float("-inf"), 0, float("inf")
+
+    d = dist[within]
+    j = idx[within]
+
+    # Greedy one-to-one assignment: keep the closest observed point for each catalog id.
+    order = np.argsort(d)
+    keep_mask = np.zeros_like(d, dtype=bool)
+    seen = set()
+    for k in order:
+        cj = int(j[k])
+        if cj in seen:
+            continue
+        seen.add(cj)
+        keep_mask[k] = True
+
+    inlier_dist = d[keep_mask]
+    inliers = int(inlier_dist.size)
+    if inliers == 0:
+        return float("-inf"), 0, float("inf")
+
+    # Collisions = extra obs that were within tol but mapped to an already-used catalog star.
+    collisions = int(d.size - inlier_dist.size)
+    outliers = int(obs_xy.shape[0] - inliers)
+
+    rms = float(np.sqrt(np.mean(inlier_dist ** 2)))
+    rms_norm = rms / max(float(tol_rad), 1e-12)
+
+    # Higher is better. Strongly prefers: many inliers, low RMS, few collisions, few outliers.
+    score = (
+        inliers
+        - 2.0 * collisions
+        - 0.25 * outliers
+        - 0.5 * (rms_norm ** 2) * inliers
+    )
+
+    return float(score), inliers, rms
+
+
+def _fit_similarity(src: np.ndarray, dst: np.ndarray):
+    src = np.asarray(src, dtype=np.float64)
+    dst = np.asarray(dst, dtype=np.float64)
+
+    src_mean = src.mean(axis=0)
+    dst_mean = dst.mean(axis=0)
+    src_c = src - src_mean
+    dst_c = dst - dst_mean
+
+    cov = dst_c.T @ src_c
+    u, s, vt = np.linalg.svd(cov)
+    rotation = u @ vt          # keep as-is, even if det < 0
+    var = np.sum(src_c ** 2)
+    scale = np.sum(s) / var
+    translation = dst_mean - scale * (rotation @ src_mean)
+    return scale, rotation, translation
+
+
+def _refine_center(
+    obs_xy: np.ndarray,
+    cat_radec: np.ndarray,
+    inliers: int,
+    scale: float,
+    rotation: np.ndarray,
+    translation: np.ndarray,
+    ra0_deg: float,
+    dec0_deg: float,
+) -> WCS:
+    pred = (obs_xy @ rotation.T) * scale + translation
+    cat_xy = _gnomonic_projection(cat_radec[:, 0], cat_radec[:, 1], ra0_deg, dec0_deg)
+    cat_tree = cKDTree(cat_xy)
+    dist, idx = cat_tree.query(pred)
+    mask = dist <= np.median(dist) * 1.5
+    if np.sum(mask) < max(6, int(0.5 * inliers)):
+        return wcs_from_similarity(scale, rotation, translation, ra0_deg, dec0_deg)
+
+    matched_obs = obs_xy[mask]
+    matched_cat = cat_xy[idx[mask]]
+    scale, rotation, translation = _fit_similarity(matched_obs, matched_cat)
+    return wcs_from_similarity(scale, rotation, translation, ra0_deg, dec0_deg)
+
+
+_INDEX_CACHE: dict = {}
+
+
+def _catalog_index(catalog: str, root: Path) -> CatalogIndex:
+    # The catalog index is immutable; build it once and reuse. In a long-running
+    # process (SkyNode) every on-the-fly solve then skips the index load — the
+    # dominant cost — and pays only for the (small) per-solve box query.
+    key = (catalog, str(root))
+    idx = _INDEX_CACHE.get(key)
+    if idx is None:
+        idx = get_catalog_spec(catalog).index_factory(root)
+        _INDEX_CACHE[key] = idx
+    return idx
