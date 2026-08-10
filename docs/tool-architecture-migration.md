@@ -40,12 +40,12 @@ kepler/
     timeseries.py  cluster.py  workspace.py
   kernels/
     __init__.py
-    wcs/  photometry/  fieldcal/  catalogs/  query/    # frozen, moved verbatim
+    wcs/  photometry/  fieldcal/  catalogs/  query/    # moved verbatim in Phase 1
 
 packages/ts/
   package.json  tsconfig.json
   src/
-    lightcurve/  periodogram/  hrdiagram/              # frozen, moved verbatim
+    lightcurve/  periodogram/  hrdiagram/              # moved verbatim in Phase 4
     bridge/cli.ts                                       # the only new TS file
 
 tests/
@@ -74,9 +74,10 @@ database_tools.py                                       # stays at root (see §4
 | `query/*.py` (12 modules) | `kepler/kernels/query/` | unchanged |
 | every `EXTRACTION.md` | moves with its folder | header note added: new path, provenance unchanged |
 
-`deps.py` moves as-is. The composition root wraps it (design §5); it is not
-replaced, because replacing it means editing the `deps.<name>(...)` call sites in
-`field_cal.py`, which is frozen.
+`deps.py` moves as-is, and the composition root wraps it (design §5). Replacing
+it outright means rewriting the `deps.<name>(...)` call sites in `field_cal.py` —
+worth doing, but not in the same commit that relocates the file, or the move diff
+stops being reviewable. Sequenced immediately after Phase 1.
 
 `wcs/config.py` and `query/config.py` also move as-is. `kepler/runtime/config.py`
 becomes the single place that *constructs* the objects they expect and assigns
@@ -109,7 +110,8 @@ Everything under `kepler/contracts/`, `kepler/runtime/`, `kepler/adapters/`,
 
 Each phase is one PR targeting `dev`, sized to stay reviewable and to keep CI
 green throughout. The ordering is chosen so that the guardrails exist *before*
-the frozen code moves.
+the algorithm code moves, and so that the numeric regression harness exists
+before any algorithm is corrected.
 
 ### Phase 0 — Scaffolding and guardrails (no kernel changes)
 
@@ -152,7 +154,7 @@ numba, and no Node:
 Chosen deliberately as the first slice: it exercises the whole stack — schema,
 envelope, artifact store, registry, error mapping — and it is fully testable in
 CI with no fixtures beyond a tiny FITS header. It also delivers the alias-
-divergence and dual-registry containment from design §6 immediately, which are
+divergence and dual-registry dispositions from design §6 immediately, which are
 real correctness wins independent of the rest.
 
 ### Phase 3 — Imaging and catalog-query tools
@@ -236,10 +238,10 @@ call runs in a default check — the existing repository convention, unchanged.
 | Risk | Mitigation |
 |---|---|
 | A kernel edit slips in during the move | SHA-256 manifest + `EXTRACTED:` marker count in CI from Phase 0, i.e. before any move happens |
-| Adapters accumulate business logic and become a second kernel | Adapters may only translate, wire, classify errors, and contain documented quirks. Anything numeric belongs in a kernel; if it has nowhere to live, that is a divergence decision, not an adapter feature |
+| Adapters accumulate business logic and become a second kernel | Adapters may only translate, wire, classify errors, and surface residual uncertainty. Anything numeric belongs in a kernel, where it gets a ledger entry and a fixture — an adapter is never the place to quietly adjust a number |
 | Tool surface grows past what an agent can select from | Profiles + deferred loading from Phase 5; a hard budget for the `core` profile |
-| `tsc` surfaces errors that need behaviour changes to fix | Type-only fixes are in scope; behaviour changes stop and become decisions. If a file cannot be typed without changing behaviour, `// @ts-expect-error` with a comment naming the preserved defect is the correct outcome |
-| Parity still unvalidated after all this | Unchanged from today and stated plainly in design §11. The tool layer makes missing deployment data *legible* (`backend_unavailable`) rather than validating parity |
+| `tsc` surfaces errors that need behaviour changes to fix | Type-only fixes are in scope for Phase 4. A type error that is really a *numeric* bug is a remediation finding: log it, keep the phase moving with `// @ts-expect-error` plus a comment naming the finding ID, and fix it on the remediation track where it gets a fixture |
+| Parity still unvalidated after all this | The remediation track's R0 harness is what changes this — the Afterglow reference values give a differential cross-check for the zero-point path. The tool layer separately makes missing deployment data *legible* (`backend_unavailable`) |
 | Six phases stall halfway | Every phase is independently useful. Phases 0–2 alone deliver a working, fully offline tool package with no deployment data required |
 
 ---

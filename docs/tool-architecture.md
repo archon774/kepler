@@ -28,12 +28,33 @@ Angular component owns the state and a Highcharts instance owns the output. An
 LLM tool call is the opposite on every axis: a stateless JSON request against a
 declared schema, returning bounded JSON plus file handles, where failure is a
 value and not a stack trace. The gap between those two shapes is what this
-architecture has to bridge — **without editing the algorithms**, because the
-extraction contract (`CLAUDE.md`, each `EXTRACTION.md`) makes byte-preservation
-and documented parity quirks load-bearing.
+architecture has to bridge.
 
-The resolution is that the algorithms **do not move up** into the tool layer.
-They stay frozen at the bottom, and two thin new layers are built on top.
+### Scope note — the extraction contract has been superseded
+
+The extraction contract (`CLAUDE.md`, each `EXTRACTION.md`) made byte-preservation
+and bug-for-bug parity load-bearing. That was the right rule **for the extraction**:
+its purpose was to make the move auditable, so that any behaviour difference
+observed later was known to come from the extraction rather than an uncontrolled
+rewrite. It was never a claim that the upstream behaviour is correct.
+
+Kepler's scope is now different: take the hard-core algorithms Skynet shipped for
+production and **remake them into tools**. Under that scope, an algorithm that
+returns an astronomically wrong number is a defect to fix, not a quirk to
+preserve — an agent calling `calibrate_zeropoint` has no way to know that
+`Halpha` and `H_alpha` resolve to different reference bands.
+
+Two things follow, and they pull in opposite directions:
+
+- Byte-preservation stops being a **policy**. Kernels are the product; they get
+  fixed.
+- Byte-preservation stays useful as a **migration tool**. During the move
+  (Phase 1) the SHA-256 manifest still proves the move changed nothing; after it,
+  the manifest becomes a signal that a commit touched algorithm code and needs
+  numeric review, not a prohibition.
+
+The remediation plan is [`algorithm-remediation-plan.md`](algorithm-remediation-plan.md).
+The layering below is unchanged by this — it is what makes the fixes reviewable.
 
 ---
 
@@ -50,14 +71,14 @@ They stay frozen at the bottom, and two thin new layers are built on top.
 │                       Imports NO kernel. No astronomy.  │
 ├─────────────────────────────────────────────────────────┤
 │ kepler.adapters.*     the only layer that knows kernel  │
-│                       quirks. Opens FITS, wires deps,   │
+│                       shapes. Opens FITS, wires deps,   │
 │                       builds run-state stand-ins,       │
-│                       contains preserved bugs, maps     │
-│                       exceptions to error codes.        │
+│                       surfaces residual uncertainty,    │
+│                       maps exceptions to error codes.   │
 ├─────────────────────────────────────────────────────────┤
-│ kepler.kernels.*      FROZEN extracted code.            │
-│   wcs/ photometry/ fieldcal/ catalogs/ query/           │
-│   + ts/ reached through the Node bridge                 │
+│ kepler.kernels.*      the algorithms. Skynet/Astromancer│
+│   wcs/ photometry/ fieldcal/ catalogs/ query/    origin,│
+│   + ts/ reached through the Node bridge   fixed forward.│
 └─────────────────────────────────────────────────────────┘
        kepler.contracts.*   Pydantic models, error codes, envelope
        kepler.runtime.*     artifact store, config, limits, registry, serving
@@ -65,14 +86,20 @@ They stay frozen at the bottom, and two thin new layers are built on top.
 
 ### The four rules that make this work
 
-**R1 — Kernels are frozen.** No file under `kepler/kernels/` is edited except for
-import rewiring during the move. Every `# EXTRACTED: was <symbol>` marker
-survives verbatim. Behaviour changes happen in adapters or not at all.
+**R1 — Kernels change only through reviewed, ledgered fixes.** During the move
+(Phase 1) no kernel file is edited except for import rewiring, and the SHA-256
+manifest proves it. Afterwards, a kernel edit is legitimate but never quiet: it
+shows up in the manifest diff, it carries a ledger entry recording what Skynet
+did and what Kepler now does, and it must move a fixture in the regression
+harness in exactly the expected place. `# EXTRACTED: was <symbol>` markers stay —
+they remain the index of what was severed, independent of whether the algorithm
+has since been corrected.
 
 **R2 — Tools never import kernels.** A tool module imports `kepler.contracts` and
-exactly one adapter. This is mechanically checkable (see §10) and it is what
-keeps the frozen layer frozen: there is no path by which a tool author can
-"just tweak" `field_cal.py`.
+exactly one adapter. This is mechanically checkable (see §10). It keeps
+algorithm changes in one place: a numeric fix to `field_cal.py` is a kernel
+change with a ledger entry and a moving fixture, never a quiet tweak reachable
+from the tool layer.
 
 **R3 — No science objects cross the tool boundary.** Tool inputs are scalars,
 strings, and artifact handles. Tool outputs are JSON-safe models plus artifact
@@ -93,8 +120,8 @@ signals "no solution" the same way it signals "you never configured a backend."
 `perform_field_calibration` requires four module-global callables to be assigned
 before it will run at all. Decorating those signatures produces a tool schema an
 agent cannot fill in and a result an agent cannot interpret. The adapter layer is
-where that translation has to happen, and putting it anywhere else means editing
-frozen code.
+where that translation has to happen — and keeping it out of the kernels is what
+lets the algorithms be reviewed as astronomy rather than as plumbing.
 
 ---
 
@@ -214,8 +241,8 @@ def wired_fieldcal():
     """Bind fieldcal's severed seams to Kepler's own kernels for one call.
 
     SEAM: fieldcal.deps holds process-global names by design (see
-    fieldcal/EXTRACTION.md). Serialised rather than refactored, because
-    rewriting the deps.<name>(...) call sites would edit frozen kernel code.
+    fieldcal/EXTRACTION.md). Serialised for now; see the note below on
+    replacing it outright once the move has landed.
     """
     with _WIRING_LOCK:
         saved = {n: getattr(deps, n) for n in _WIRED}
@@ -233,37 +260,55 @@ def wired_fieldcal():
 `deps.query_catalogs` is left at its lazy default so `import fieldcal` still
 costs no astroquery.
 
-**Accepted constraint:** field calibration is single-flight per process. It is
-documented in the tool description (`concurrency: serialised`), and the honest
-scaling answer is a worker process per call, not a refactor of the kernel. If
-that becomes a real bottleneck, the fix is a `Deps` dataclass threaded through
-`field_cal.py` — a deliberate divergence from Skynet, requiring its own decision
-record, not an incidental change.
+**Interim constraint, with a known exit.** As written, field calibration is
+single-flight per process — documented in the tool description
+(`concurrency: serialised`).
+
+Under the current scope this is a *staging* decision, not a permanent one. The
+proper fix is a `Deps` dataclass threaded through `field_cal.py`, replacing the
+module globals entirely; that is now an ordinary refactor rather than a forbidden
+divergence. It is sequenced after Phase 1 for one reason only: it rewrites call
+sites in the same file the move is relocating, and doing both at once makes the
+move diff unreviewable. Lock first, refactor second, drop the lock third.
 
 ---
 
-## 6. Containing preserved bugs at the adapter
+## 6. Defects: fix at the kernel, surface the residual at the adapter
 
-This is the part of the design that is specific to Kepler rather than generic
-tool architecture, and it is the strongest argument for the adapter layer
-existing at all. The extraction deliberately preserved ~20 upstream defects. A
-tool must not fix them — and must not *propagate* them into a result an agent
-will reason over. Containment, not repair.
+The extraction preserved ~20 upstream defects. Under the superseded contract they
+could only be *contained*. Under the current scope they get **fixed** — but not
+all of them are the same kind of thing, and conflating the two kinds is how a
+remediation pass introduces new errors.
 
-| Kernel behaviour (preserved) | Failure it would cause in a tool result | Adapter containment |
+- **A plain bug** has a single right answer. Clearing the wrong attribute names,
+  an off-by-one in an array splice, a function ignoring its own parameter — these
+  get fixed in the kernel, with a ledger entry and a fixture that moves.
+- **A genuine ambiguity** has no single right answer, because the correct
+  behaviour depends on caller intent or on information the frame does not carry.
+  Calibrating a narrowband H-alpha exposure against a broadband R reference is
+  *approximate by nature*; no amount of fixing makes it exact. These get resolved
+  as far as the data allows, and the residual uncertainty is surfaced on the
+  result so the agent can caveat its own conclusions.
+
+The adapter's job shrinks accordingly — from "contain everything" to "surface what
+cannot be resolved". That is still a real job, and it is still why the layer
+exists.
+
+| Defect | Kind | Disposition |
 |---|---|---|
-| `_clear_wcs_solution_fields()` clears `ra`/`dec`/`pixel_scale`/`rotation`, but the solve writes `ra_deg`/`dec_deg`/… — so **stale values survive a failed solve** (`wcs/EXTRACTION.md` §5.2) | Agent reads last run's pointing as this run's answer | Build the result **only** from `solve_wcs`'s return value, never from the mutated state object; allocate a fresh `WcsSolution` per call so there is nothing stale to inherit. Emit warning `stale_solution_fields_not_cleared` when a solve fails on a run that carried a prior solution. |
-| APASS `H_alpha` → `rprime`, `Halpha` → Lupton R: two spellings of one filter give different reference magnitudes | Zero point silently depends on header spelling | `resolve_reference_band` resolves **every** known spelling and returns them all; warns `narrowband_alias_divergence` with both values when they disagree. Never picks one. |
-| `CATALOGS` (11) and `CATALOG_OPTIONS` (2) disagree deliberately (`catalogs/EXTRACTION.md` §4) | Merging changes which band a narrowband/unfiltered image calibrates against | `list_photometric_catalogs` returns them as two named registries with a note on which code path reads which. No tool merges them. |
-| `apcorr_tol=0` set in `field_cal.py` but gating aperture correction in `skylib/aperture.py`; "no centroiding" realised as `centroid_radius=0.0` + `if r_cent > 0` | Caller who sets photometry settings by hand silently breaks Afterglow parity | Adapter exposes `parity_mode: "afterglow" \| "explicit"`. `afterglow` (default) sets the paired values together and refuses to let either be overridden individually. |
-| VizieR cache snaps regions to a fixed grid (`query/EXTRACTION.md` §5.1) | Sources returned for a slightly different footprint than requested, visible at a field edge | `search_catalog` echoes the **effective** region in `provenance.query`, and warns `region_snapped_to_cache_grid` when it differs from the requested one. |
-| Variable-tool two-pass misalignment: `data` and `error` built under different predicates, then indexed in lockstep — one null `errorMSE` misaligns everything after it and the tail throws | Bridge subprocess dies mid-call, or worse, returns silently misaligned science | Bridge validates series lengths and null-density **before** dispatch; returns `invalid_input` / `inconsistent_series_lengths` with the offending index. Kernel untouched. |
-| Isochrone break-splice off-by-one; `getExtinction` ignoring its own `rv` in the leading term | Wrong numbers presented as authoritative | `fit_isochrone` result carries `known_deviations: ["isochrone_splice_offset", "extinction_rv_leading_term"]`, so the agent can caveat its own report. |
+| `_clear_wcs_solution_fields()` clears `ra`/`dec`/`pixel_scale`/`rotation`, but the solve writes `ra_deg`/`dec_deg`/… — **stale pointing survives a failed solve** (`wcs/EXTRACTION.md` §5.2) | Plain bug | **Fix**: clear the names the solve actually writes. Adapter additionally builds results only from `solve_wcs`'s return value and allocates a fresh `WcsSolution` per call, so the class of bug cannot recur. |
+| Isochrone break-splice off-by-one | Plain bug | **Fix** in the kernel; fixture pins the corrected splice index. |
+| `getExtinction` ignores its own `rv` in the leading term | Plain bug | **Fix** in the kernel; fixture checks A(λ)/A(V) against the published CCM law at Rv=3.1 and Rv=5.0. |
+| Variable-tool two-pass misalignment: `data` and `error` built under different predicates then indexed in lockstep — one null `errorMSE` misaligns every later pair and the tail throws | Plain bug, **silently wrong before it crashes** | **Fix** in the kernel: build both arrays in one pass. Bridge also validates series lengths before dispatch, so a regression surfaces as `invalid_input` rather than as misaligned science. |
+| APASS `H_alpha` → `rprime` vs `Halpha` → Lupton R: two spellings of one filter give different reference magnitudes | Bug **and** ambiguity | **Fix** the inconsistency — one spelling table, all aliases normalised. **Surface** the residual: mapping a narrowband exposure to a broadband reference is approximate regardless, so the result carries the assumed reference band and an accuracy caveat. |
+| `CATALOGS` (11) vs `CATALOG_OPTIONS` (2) disagree; only the latter carries narrowband aliases (`catalogs/EXTRACTION.md` §4) | Ambiguity — the split encodes a real semantic difference | **Fix** the accidental part (two registries that must be kept in sync by hand). **Surface** the deliberate part: which reference band was selected, and why. |
+| `apcorr_tol=0` set in `field_cal.py` but gating aperture correction inside `skylib/aperture.py`; "no centroiding" realised as `centroid_radius=0.0` + `if r_cent > 0` | Ambiguity — the coupling is real, the spelling is obscure | **Fix** the naming: an explicit, named settings preset rather than two magic zeros in different files. **Surface** which corrections were actually applied. |
+| VizieR cache snaps query regions to a fixed grid (`query/EXTRACTION.md` §5.1) | Deliberate tradeoff, wrongly defaulted | **Fix** the default (snapping off, or grid smaller than a typical field). **Surface** the effective region in provenance whenever it differs from the requested one. |
 
-The general rule: **the adapter never reads mutated kernel state when a return
-value is available, and every documented deviation ships as a machine-readable
-warning on the result that it affects.** Preserved bugs stop being invisible
-without becoming un-preserved.
+The general rule: **fix what has a right answer; surface what does not.** A tool
+result should never depend on a detail the caller had no way to know — and where
+the astronomy is genuinely approximate, the result should say so rather than
+implying a precision it does not have.
 
 ---
 
@@ -481,9 +526,10 @@ being provably conservative about *content*.
   open repo-level decision (`CLAUDE.md`), and doing it inside a tool refactor
   would mix a large content change into a large structural one. §12 of the
   migration doc proposes it as a separate, gated phase.
-- It does not fix any preserved defect. §6 contains them; it does not repair
-  them. Repairs are deliberate divergences from Skynet/Astromancer and each needs
-  its own decision.
+- It does not itself perform the algorithm fixes. §6 sets the disposition for
+  the known defects; the sequenced rollout, the regression harness that makes
+  fixes auditable, and the ledger of divergences from Skynet live in
+  [`algorithm-remediation-plan.md`](algorithm-remediation-plan.md).
 - It does not add orchestration, planning, or a chat runtime. Kepler exposes
   tools; deciding when to call them is the caller's job.
 - It does not make end-to-end parity claims. Full WCS/photometry/calibration
