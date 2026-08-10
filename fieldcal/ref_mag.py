@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import re
 
-from .catalog_plugins import CATALOG_OPTIONS
+from catalogs import CATALOG_OPTIONS
 from .schemas import Mag  # noqa: F401  (referenced by the type annotation below)
 
 __all__ = ["resolve_ref_mag_for_filter"]
@@ -91,7 +91,7 @@ def _resolve_filter_lookup_candidate(
 def _ref_mag_filter_token_candidates(image_filter: str) -> list[str]:
     """Filter-name variants to try for a *direct* catalog-band match.
 
-    Mirrors ``catalog_query._filter_token_candidates`` so reference-magnitude
+    Mirrors ``query.selection._filter_token_candidates`` so reference-magnitude
     resolution and the filter-aware catalog preselection agree on which filters
     a catalog can satisfy via a direct band (e.g. both treat APASS as able to
     serve a ``B`` image from its ``Bmag`` column). Preserves the original

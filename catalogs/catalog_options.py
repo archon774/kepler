@@ -1,92 +1,60 @@
-"""Afterglow-parity catalog filter-lookup registry (``CATALOG_OPTIONS``).
+"""Kepler: the reference-magnitude catalog subset (``CATALOG_OPTIONS``).
 
-EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/common/catalog_plugins/
-  * ``catalog.py``            (45 lines)  -> ``Catalog`` base, verbatim
-  * ``apass_catalog.py``      (37 lines)  -> ``APASSCatalog`` metadata, verbatim
-  * ``panstarrs_catalog.py``  (43 lines)  -> ``PanSTARRSCatalog`` metadata, verbatim
-  * ``__init__.py``           (49 lines)  -> ``NARROWBAND_FILTER_LOOKUP`` + ``CATALOG_OPTIONS``, verbatim
+Kepler carries *two* catalog registries and field calibration reads both:
 
-WHY THIS EXISTS SEPARATELY FROM ``fieldcal/catalogs/``:
-Skynet carries *two* catalog plugin registries and field calibration reads both:
+* ``catalogs/__init__.py`` exposes ``CATALOGS`` — all 11 catalogs, used for
+  querying and for filter-aware catalog selection;
+* this module exposes ``CATALOG_OPTIONS`` — a two-catalog (APASS, PanSTARRS)
+  subset read only by ``fieldcal.ref_mag.resolve_ref_mag_for_filter``.
 
-  * ``runners/observation_asset_processing/optical_data_processing/catalogs``
-    exposes ``CATALOGS`` — the full 11-catalog registry used for querying and
-    for ``catalog_supports_filter`` / ``_catalog_filter_lookup``;
-  * ``runners/common/catalog_plugins`` exposes ``CATALOG_OPTIONS`` — a
-    2-catalog (APASS, PanSTARRS) Afterglow-parity subset read *only* by
-    ``resolve_ref_mag_for_filter._get_catalog_filter_lookup``.
-
-The two are not identical, and the difference is load-bearing: ``CATALOG_OPTIONS``
-carries the ``NARROWBAND_FILTER_LOOKUP`` aliases ``H_alpha`` / ``H_beta``, which
-``CATALOGS['APASS']`` does not.  ``resolve_ref_mag_for_filter`` starts from the
+They are not the same, and the difference is load-bearing: ``CATALOG_OPTIONS``
+carries the narrowband aliases ``H_alpha`` and ``H_beta``, which
+``CATALOGS['APASS']`` does not. ``resolve_ref_mag_for_filter`` starts from the
 ``CATALOG_OPTIONS`` lookup and overlays the caller-supplied lookup on top, so
 collapsing the two registries would silently change which reference band a
-narrowband image resolves to.  Both are therefore reproduced as-is.
+narrowband image calibrates against. Both are therefore kept as they are.
 
-SEVERED: the per-catalog classes originally subclassed ``VizierCatalog``
-(astroquery/VizieR network backend).  Only the metadata is needed here.
+The classes below are deliberately separate from the ones in
+``apass_catalog.py`` / ``panstarrs_catalog.py``: upstream had two parallel plugin
+packages whose APASS and PanSTARRS definitions had drifted apart, and the drift
+is exactly what this module exists to preserve.
+
+EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/common/catalog_plugins/
+  * ``catalog.py``            (45 lines)  -> ``Catalog`` base
+  * ``apass_catalog.py``      (37 lines)  -> ``APASSCatalog`` metadata, verbatim
+  * ``panstarrs_catalog.py``  (43 lines)  -> ``PanSTARRSCatalog`` metadata, verbatim
+  * ``__init__.py``           (49 lines)  -> ``NARROWBAND_FILTER_LOOKUP`` +
+    ``CATALOG_OPTIONS``, verbatim
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-from .schemas import CatalogSource
+from .catalog import Catalog
 
-__all__ = ["CATALOG_OPTIONS", "Catalog", "NARROWBAND_FILTER_LOOKUP"]
+__all__ = ["CATALOG_OPTIONS", "NARROWBAND_FILTER_LOOKUP"]
 
 
-class Catalog:
+class _MutatingCatalog(Catalog):
+    """``Catalog`` with upstream's in-place ``filter_lookup`` merge.
+
+    PRESERVED DIFFERENCE: this registry's base mutated the *class-level*
+    ``filter_lookup`` dict in place, where ``catalogs.catalog.Catalog`` rebinds an
+    instance-level copy. The merged content ends up the same for the two
+    single-instantiation classes below; the aliasing difference is preserved
+    rather than "fixed", because these classes are private to this module and
+    nothing else observes their class dicts.
     """
-    Base class for catalog plugins.
-    Override query_* methods in subclasses.
-    """
-    # For union-discriminated polymorphism later if desired:
-    name: Optional[str] = None
-    display_name: Optional[str] = None
-    num_sources: Optional[int] = None
-    mags: Dict[str, List[str]]
-    filter_lookup: Dict[str, str]
 
     def __init__(self, filter_lookup: Optional[Dict[str, str]] = None):
-        # NOTE (preserved verbatim): this mutates the *class-level* dict in
-        # place, unlike the sibling registry in ``fieldcal/catalogs/catalog.py``
-        # which rebinds an instance-level copy.  Effective merged content is the
-        # same; the aliasing difference is preserved rather than "fixed".
         if filter_lookup:
             self.filter_lookup.update(filter_lookup)
 
 
-    def query_objects(self, names: List[str]) -> List[CatalogSource]:
-        raise NotImplementedError("query_objects not implemented")
-
-    def query_box(
-        self,
-        ra_hours: float,
-        dec_degs: float,
-        width_arcmins: float,
-        height_arcmins: Optional[float] = None,
-        constraints: Optional[Dict[str, str]] = None,
-        limit: Optional[int] = None,
-    ) -> List[CatalogSource]:
-        # Default implementation may rely on query_circ in concrete subclasses
-        raise NotImplementedError("query_box not implemented")
-
-    def query_circ(
-        self,
-        ra_hours: float,
-        dec_degs: float,
-        radius_arcmins: float,
-        constraints: Optional[Dict[str, str]] = None,
-        limit: Optional[int] = None,
-    ) -> List[CatalogSource]:
-        raise NotImplementedError("query_circ not implemented")
-
-
-# EXTRACTED: was `class APASSCatalog(VizierCatalog)` in
-# runners/common/catalog_plugins/apass_catalog.py.  Base changed to `Catalog`;
-# the VizieR query backend (`vizier_catalog`, `col_mapping`, `row_limit`,
-# `sort`) is retained as inert metadata for provenance.
-class APASSCatalog(Catalog):
+# NOTE: distinct from ``catalogs.apass_catalog.APASSCatalog`` -- see the module
+# docstring. VizieR backend hints are kept as inert metadata; this registry is
+# never queried, only read for its ``filter_lookup``.
+class APASSCatalog(_MutatingCatalog):
     """
     APASS/VizieR catalog plugin
     """
@@ -115,10 +83,9 @@ class APASSCatalog(Catalog):
     }
 
 
-# EXTRACTED: was `class PanSTARRSCatalog(VizierCatalog)` in
-# runners/common/catalog_plugins/panstarrs_catalog.py.  Base changed to
-# `Catalog`; VizieR backend attributes kept as inert metadata.
-class PanSTARRSCatalog(Catalog):
+# NOTE: distinct from ``catalogs.panstarrs_catalog.PanSTARRSCatalog`` -- see the
+# module docstring.
+class PanSTARRSCatalog(_MutatingCatalog):
     """
     PanSTARRS/VizieR catalog plugin
     """

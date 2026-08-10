@@ -1,8 +1,12 @@
 """Field calibration — photometric zero-point solve against a reference catalog.
 
 Extracted from the Skynet optical data-processing pipeline; see EXTRACTION.md
-for exact provenance, every severed dependency, and the catalog-backend code
-that was deliberately left out.
+for exact provenance and every severed dependency.
+
+Field calibration does not own catalogs. Band tables and colour transforms live
+in Kepler's ``catalogs`` package, catalog queries in ``query`` — including the
+filter-aware catalog selection and the query entry point this package used to
+re-export.
 
 Pipeline (``perform_field_calibration``):
 
@@ -21,14 +25,13 @@ that this package does not own::
     deps.run_source_extraction = ...       # Kepler/photometry/
     deps.get_source_radec = ...            # Kepler/photometry/
     deps.build_wcs_for_processing_run = ...  # Kepler/wcs/
+
+``deps.query_catalogs`` already has a working default backed by Kepler's
+``query`` package, so catalog fetching needs no wiring; override it to route
+queries elsewhere.
 """
 
 from . import deps
-from .catalog_query import (
-    catalog_supports_filter,
-    query_catalogs_for_processing_run,
-    select_catalogs_for_filter,
-)
 from .field_cal import perform_field_calibration
 from .ref_mag import resolve_ref_mag_for_filter
 from .schemas import (
@@ -55,10 +58,7 @@ __all__ = [
     "SourceExtractionData",
     "SourceExtractionSettings",
     "calc_solution",
-    "catalog_supports_filter",
     "deps",
     "perform_field_calibration",
-    "query_catalogs_for_processing_run",
     "resolve_ref_mag_for_filter",
-    "select_catalogs_for_filter",
 ]

@@ -1,17 +1,18 @@
 """
-Afterglow Core: Landolt catalog of UBVRI photometric standards accessed
-via VizieR
+Kepler: Landolt catalog of UBVRI photometric standards
+accessed via VizieR
 """
 
 from typing import List as TList, Union
 
 from numpy import hypot, sqrt
-# EXTRACTED: was `from astropy.table import Table`; retained only as a type hint
-# on the preserved ``table_to_sources`` override.
 from astropy.table import Table
 
-from ..schemas import CatalogSource, Mag
-# EXTRACTED: was `from .vizier_catalogs import VizierCatalog` (VizieR backend).
+from .schemas import CatalogSource, Mag
+# EXTRACTED: was `from .vizier_catalogs import VizierCatalog`. In Kepler the
+# VizieR backend lives in ``query/vizier.py`` and is mixed onto this class at
+# import time by ``query/binding.py``, so this module stays declaration-only and
+# carries no network dependency.
 from .catalog import Catalog
 
 
@@ -41,11 +42,14 @@ class LandoltCatalog(Catalog):
         '(1 - 2*(DEJ2000.strip().startswith("-")))',
     }
 
-    # PRESERVED photometric transform.  The ``super().table_to_sources(table)``
-    # call below reaches the severed ``Catalog.table_to_sources`` backend seam
-    # (see catalog.py / EXTRACTION.md); the colour-index -> UBVRI conversion and
-    # its error propagation are calibration math and are kept verbatim,
-    # including the original's `V_R`-vs-`U_B` error term as written.
+    # Photometric transform, preserved verbatim. ``super().table_to_sources``
+    # resolves to the bound VizieR row mapper in ``query/vizier.py`` (see
+    # ``query/binding.py`` for the MRO), which returns the raw colour indices
+    # this method then converts to UBVRI.
+    #
+    # PRESERVED BUG: the error on U is computed from ``V_R`` where the colour
+    # algebra calls for ``U_B``. That is upstream's expression, kept as written
+    # -- U magnitudes are correct, only their reported uncertainty is wrong.
     def table_to_sources(self, table: Union[list, Table]) \
             -> TList[CatalogSource]:
         """

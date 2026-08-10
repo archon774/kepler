@@ -1,27 +1,38 @@
-"""Catalog plugin registry for optical data processing.
+"""Kepler: photometric catalog declarations.
 
-EXTRACTED FROM:
-skynet/packages/py/skynet-db/skynet_db/runners/observation_asset_processing/
-optical_data_processing/catalogs/__init__.py (87 lines).  The ``_OCL_TO_V``
-mapping and every per-catalog ``filter_lookup`` colour transform below are
-verbatim — they are part of the calibration's numeric behaviour.
+This package answers "what does Kepler know about each catalog" — band tables,
+colour transforms, VizieR table IDs, row limits, and the photometric conversions
+some catalogs need on their rows. It answers nothing about *reaching* them: no
+module here imports ``astroquery`` or opens a socket. Fetching is ``query/``'s
+job, and ``query/registry.py`` is what a caller wanting live catalogs imports.
 
-SCOPE NOTE: this package is METADATA ONLY.  Each plugin keeps its band table
-(``mags``) and its filter/colour transforms (``filter_lookup``), which are what
-``catalog_query.catalog_supports_filter`` and
-``ref_mag.resolve_ref_mag_for_filter`` read.  The VizieR/SDSS network query
-backends were severed (see EXTRACTION.md); ``query_box`` / ``query_circ`` /
-``query_objects`` therefore raise ``NotImplementedError`` until Kepler/catalogs/
-supplies real backends.  Filter-aware catalog selection, reference-magnitude
-resolution and the whole zero-point solve work without them, provided catalog
-sources are passed in via ``catalog_sources`` / ``detected_sources``.
+Two registries live here, and the difference between them is load-bearing:
+
+``CATALOGS``
+    All 11 catalogs, keyed by Kepler catalog name. Read by filter-aware catalog
+    selection (``query/selection.py``) and by the query runner.
+``CATALOG_OPTIONS``
+    A two-catalog (APASS, PanSTARRS) subset in ``catalog_options.py``, read only
+    by reference-magnitude resolution. It carries narrowband aliases —
+    ``H_alpha``, ``H_beta`` — that ``CATALOGS['APASS']`` does not. Collapsing the
+    two would silently change which reference band a narrowband image resolves
+    to. See ``catalog_options.py`` for the full reasoning.
+
+EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/
+observation_asset_processing/optical_data_processing/catalogs/__init__.py
+(87 lines). ``_OCL_TO_V`` and every per-catalog ``filter_lookup`` colour
+transform below are verbatim — they are numeric calibration behaviour, not
+style.
 """
 
 from .apass_catalog import APASSCatalog
 from .catalog import Catalog
+from .catalog_options import CATALOG_OPTIONS, NARROWBAND_FILTER_LOOKUP
 from .landolt_catalog import LandoltCatalog
 from .panstarrs_catalog import PanSTARRSCatalog
+from .schemas import CatalogMeta, CatalogSource, ICatalogSource, Mag
 from .sdss_catalog import SDSSCatalog
+from .simbad import SIMBAD_OBJECT_TYPES
 from .skymapper_catalog import SkyMapperCatalog
 from .stetson_globs_catalog import StetsonGlobsCatalog
 from .twomass_catalog import TwoMASSCatalog
@@ -30,7 +41,28 @@ from .ucac_catalog import UCAC5Catalog
 from .usno_catalog import USNOB1Catalog
 from .vsx_catalog import VSXCatalog
 
-__all__ = ["CATALOGS", "Catalog"]
+__all__ = [
+    "CATALOGS",
+    "CATALOG_OPTIONS",
+    "NARROWBAND_FILTER_LOOKUP",
+    "SIMBAD_OBJECT_TYPES",
+    "Catalog",
+    "CatalogMeta",
+    "CatalogSource",
+    "ICatalogSource",
+    "Mag",
+    "APASSCatalog",
+    "LandoltCatalog",
+    "PanSTARRSCatalog",
+    "SDSSCatalog",
+    "SkyMapperCatalog",
+    "StetsonGlobsCatalog",
+    "TwoMASSCatalog",
+    "Tycho2Catalog",
+    "UCAC5Catalog",
+    "USNOB1Catalog",
+    "VSXCatalog",
+]
 
 # Open/Clear/Lum are broadband unfiltered passes; V is the closest standard
 # photometric reference band for all V-capable catalogs.

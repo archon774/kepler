@@ -22,6 +22,36 @@ deliberately small because the extracted science code still needs native
 dependencies, external catalog data, and reference FITS fixtures for full
 end-to-end validation.
 
+## `catalogs/`
+
+Extracted Python catalog declarations from Skynet and Afterglow.
+
+What Kepler knows about each photometric catalog, and nothing about reaching
+them: no module here imports `astroquery` or opens a socket. Eleven catalogs —
+APASS, Landolt, PanSTARRS, SDSS, SkyMapper, Stetson, 2MASS, Tycho-2, UCAC5,
+USNO-B1, VSX.
+
+Each plugin declares its band table (`mags`), its filter/colour transforms
+(`filter_lookup`), its column mapping, and its VizieR table ID. Three plugins
+also carry photometric conversions applied to their rows.
+
+Important files:
+
+- `catalog.py`: the plugin base class — the declaration contract.
+- `<name>_catalog.py`: one module per catalog.
+- `catalog_options.py`: the second, smaller registry (`CATALOG_OPTIONS`) that
+  reference-magnitude resolution reads. It is *not* redundant with `CATALOGS`;
+  see `EXTRACTION.md` §4.
+- `schemas.py`: `CatalogSource` and friends — the data contract between
+  `catalogs/` and `query/`.
+- `simbad.py`: the 206-entry SIMBAD object-type vocabulary.
+- `EXTRACTION.md`: provenance, renames, preserved behaviours, verification.
+
+Current caveats:
+
+- Two registries exist and disagree deliberately. Merging them changes which
+  reference band a narrowband or unfiltered image calibrates against.
+
 ## `docs/`
 
 Project documentation and planning material.
@@ -53,21 +83,19 @@ Important files and subfolders:
   `perform_field_calibration`.
 - `solution.py`: zero-point solver, exposed as `calc_solution`.
 - `ref_mag.py`: reference-magnitude/filter-resolution logic.
-- `catalog_query.py`: catalog-selection/query orchestration.
-- `deps.py`: seam for cross-domain dependencies owned by `wcs/` and
-  `photometry/`.
-- `catalogs/`: metadata-only catalog classes and preserved magnitude/filter
-  transforms.
+- `deps.py`: seam for cross-domain dependencies owned by `wcs/`, `photometry/`,
+  and `query/`.
 - `skylib/`: vendored utility subset used by calibration.
 - `EXTRACTION.md`: provenance, severed Skynet dependencies, known parity
   behavior, dependency notes, and verification.
 
 Current caveats:
 
-- Catalog network backends are intentionally inert until Kepler supplies real
-  backends.
+- Field calibration does not own catalogs. Band tables and colour transforms
+  live in `catalogs/`; catalog selection and querying live in `query/`.
 - `fieldcal.deps` must be wired before `perform_field_calibration` can call WCS,
-  source extraction, or photometry.
+  source extraction, or photometry. `deps.query_catalogs` is the exception: it
+  defaults to `query/` and needs no wiring.
 - `numba` and `scipy` are required for real numeric execution.
 
 ## `hrdiagram/`
@@ -190,6 +218,45 @@ Current caveats:
 - Full parity checks need real FITS fixtures and native science dependencies.
 - This folder intentionally owns photometry, not WCS plate solving or field
   calibration.
+
+## `query/`
+
+Extracted Python remote catalog access from Skynet and Afterglow.
+
+Every network call in the catalog path. Sits above `catalogs/` and imports it;
+never the reverse.
+
+Primary responsibilities:
+
+- Query VizieR-hosted catalogs: derive the column list, issue box/circle/object
+  queries, map rows onto `CatalogSource`.
+- Query SDSS through SkyServer SQL, which VizieR does not serve.
+- Narrow a catalog list to those that can resolve an image's filter.
+- Build query regions from solved WCS, clip results to the detector, deduplicate
+  across overlapping fields.
+- Resolve free-text identifiers against SIMBAD.
+- Keep the astroquery response cache pruned, and keep cache failures from
+  failing queries.
+
+Important files:
+
+- `registry.py`: the live, queryable catalog registry — the usual entry point.
+- `runner.py`: orchestration; `query_catalogs` and `query_catalogs_for_image`.
+- `vizier.py`: the VizieR engine.
+- `sdss.py`, `skymapper.py`: the two catalogs needing their own backend.
+- `binding.py`: joins declarations to backends through the MRO.
+- `selection.py`: filter-aware catalog selection.
+- `geometry.py`: sky and image geometry — pure, no network.
+- `cache.py`, `config.py`: astroquery cache policy and settings seam.
+- `simbad.py`: identifier resolution.
+- `EXTRACTION.md`: provenance, seams cut, preserved behaviours, verification.
+
+Current caveats:
+
+- Verified offline only. No live VizieR, SkyServer, or SIMBAD response has been
+  exercised, so provider response-shape assumptions remain untested.
+- Live remote calls must stay out of default checks; see the repository
+  conventions.
 
 ## `wcs/`
 

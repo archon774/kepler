@@ -15,6 +15,8 @@ folders are intentionally independent while the extraction work settles.
 | `wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry, with vendored `skylib` routines for SEP extraction, centroiding, background estimation, aperture sums, and statistics. |
 | `fieldcal/` | Extracted Python algorithm | Skynet photometric zero-point calibration: catalog-source matching, variable-star filtering, reference-magnitude resolution, and weighted zero-point solving. |
+| `catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations: band tables, filter/colour transforms, column mappings, and the SIMBAD object-type vocabulary for eleven catalogs. Declaration only — no network code. |
+| `query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
 | `lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, and period-folding logic with Angular/RxJS/Highcharts removed. |
 | `periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
 | `hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
@@ -36,6 +38,8 @@ Kepler/
   wcs/                           # Python WCS extraction from Skynet
   photometry/                    # Python photometry extraction from Skynet
   fieldcal/                      # Python zero-point calibration extraction
+  catalogs/                      # Python catalog declarations (no network code)
+  query/                         # Python remote catalog access (VizieR/SDSS/SIMBAD)
   lightcurve/                    # TypeScript light-curve extraction
   periodogram/                   # TypeScript periodogram extraction
   hrdiagram/                     # TypeScript HR-diagram extraction
@@ -83,11 +87,30 @@ from wcs.wcs import solve_wcs
 from photometry.pipeline.photometry import run_photometry, perform_photometry
 from photometry.pipeline.source_extraction import run_source_extraction
 from fieldcal import perform_field_calibration, calc_solution
+from query.runner import query_catalogs
+from query.simbad import resolve_simbad
 ```
 
-`fieldcal` deliberately does not own WCS or photometry. Before using
+`fieldcal` deliberately does not own WCS, photometry, or catalogs. Before using
 `perform_field_calibration`, wire the cross-domain callables in `fieldcal.deps`
-to the implementations from `wcs/` and `photometry/`.
+to the implementations from `wcs/` and `photometry/`. Catalogs are the
+exception: `fieldcal.deps.query_catalogs` already defaults to `query/`.
+
+Catalog metadata and catalog access are separate on purpose. Import `catalogs`
+for band tables and colour transforms — it is pure data and pulls in no network
+stack. Import `query.registry` when you need to actually fetch sources.
+
+## Catalog Query Configuration
+
+The remote catalog backends read settings from environment variables:
+
+- `VIZIER_SERVER`: VizieR mirror hostname, defaulting to `vizier.cds.unistra.fr`.
+- `VIZIER_CACHE_ENABLED`: whether astroquery caches responses on disk (default on).
+- `VIZIER_CACHE_AGE_DAYS`: cache retention, defaulting to 30.
+
+With the cache enabled, query regions are snapped to a fixed grid so that
+near-identical fields share a cache entry. This is observable near a field edge —
+see `query/EXTRACTION.md` §5.1.
 
 ## WCS Configuration
 
