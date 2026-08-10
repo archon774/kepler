@@ -1,0 +1,14 @@
+# Kepler code owners.
+#
+# Paired with the main-branch ruleset's "Require review from Code Owners",
+# this keeps workflow, dependency, source, and planning-document changes under
+# explicit maintainer review while the repository is still small.
+
+*                       @archon774
+
+/.github/               @archon774
+/CONTRIBUTING.md        @archon774
+/.gitleaks.toml         @archon774
+/database_tools.py      @archon774
+/requirements.txt       @archon774
+/docs/                  @archon774
