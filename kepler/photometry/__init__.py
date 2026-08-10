@@ -6,7 +6,8 @@ the infrastructure seams that were cut, and required dependencies.
 Layout:
     pipeline/   the observation-asset processing stage (orchestration, settings,
                 data objects)
-    skylib/     the vendored algorithmic core (aperture photometry, source
-                extraction, centroiding, background, exact pixel/aperture
-                overlap, statistics)
+
+The vendored Skylib algorithmic core now lives in ``kepler.skylib_lite``:
+aperture photometry, source extraction, centroiding, background estimation,
+exact pixel/aperture overlap, and statistics.
 """

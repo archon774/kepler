@@ -8,6 +8,10 @@ with an `# EXTRACTED:` comment.
 
 Source tree: `/home/claude/skynet` (read-only; nothing in it was modified).
 
+Current package note: the copied Skylib files described below now live under
+`kepler/skylib_lite/`; historical paths in this record describe the original
+extraction layout.
+
 ---
 
 ## 1. What the code does

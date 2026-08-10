@@ -11,7 +11,7 @@ import numpy as np
 from numba import prange
 
 from ..util.overlap import circoverlap, ellipoverlap, njitc
-from ..util.stats import chauvenet1
+from kepler.skylib_lite.util.stats import chauvenet1
 
 
 __all__ = ['sum_circle', 'sum_circann', 'sum_ellipse', 'sum_ellipann']

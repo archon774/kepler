@@ -1,9 +1,9 @@
 # Repository Folder Guide
 
 This guide explains the current source folders in Kepler. It documents the
-repository as it exists now: a Python package shell around extracted algorithm
-modules, a prototype database tool, TypeScript extraction folders, and planning
-material for future tool work.
+repository as it exists now: a package shell around extracted Python and
+TypeScript algorithm modules, a prototype database tool, and planning material
+for future tool work.
 
 Generated folders such as `__pycache__/`, Git internals such as `.git/`, and
 workspace support folders are not part of the source layout.
@@ -36,6 +36,10 @@ Important files and subfolders:
 - `artifacts.py`: local artifact description and listing helpers.
 - `kepler/wcs/`, `kepler/photometry/`, `kepler/fieldcal/`,
   `kepler/catalogs/`, `kepler/query/`: extracted Python algorithm packages.
+- `kepler/skylib_lite/`: consolidated local subset of Skynet's `skylib` used by
+  the extracted Python algorithms.
+- `kepler/lightcurve/`, `kepler/periodogram/`, `kepler/hrdiagram/`: extracted
+  TypeScript algorithm packages.
 
 ## `kepler/tools/`
 
@@ -88,9 +92,9 @@ Current caveats:
 
 Project documentation and planning material.
 
-- `architecture-brainstorm.md` describes the intended future package direction:
-  public astronomy tool contracts, application services, Pydantic models,
-  provenance, artifacts, bounded remote calls, and dependency policy.
+- `tool-architecture.md` is the master package architecture document: public
+  tools, algorithm ownership, future services, runtime policy, and
+  `skylib_lite` consolidation.
 - `repository-folders.md` is this current-state folder guide.
 
 Docs in this folder should distinguish clearly between the repository's current
@@ -117,7 +121,7 @@ Important files and subfolders:
 - `ref_mag.py`: reference-magnitude/filter-resolution logic.
 - `deps.py`: seam for cross-domain dependencies owned by `kepler.wcs`,
   `kepler.photometry`, and `kepler.query`.
-- `skylib/`: vendored utility subset used by calibration.
+- `kepler.skylib_lite`: shared vendored utility subset used by calibration.
 - `EXTRACTION.md`: provenance, severed Skynet dependencies, known parity
   behavior, dependency notes, and verification.
 
@@ -131,7 +135,7 @@ Current caveats:
   exception: it defaults to `kepler.query` and needs no wiring.
 - `numba` and `scipy` are required for real numeric execution.
 
-## `hrdiagram/`
+## `kepler/hrdiagram/`
 
 Extracted TypeScript algorithms from Astromancer's cluster/HR-diagram tool.
 
@@ -162,7 +166,7 @@ Current caveats:
 - Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser
   export handlers were removed.
 
-## `lightcurve/`
+## `kepler/lightcurve/`
 
 Extracted TypeScript algorithms from Astromancer's pulsar and variable-star
 light-curve tools.
@@ -191,9 +195,9 @@ Current caveats:
 - There is no TypeScript package manifest or build config in this repository.
 - Browser/UI concerns were removed except where browser APIs carried the
   original ingest algorithm.
-- Periodogram logic lives separately in `periodogram/`.
+- Periodogram logic lives separately in `kepler/periodogram/`.
 
-## `periodogram/`
+## `kepler/periodogram/`
 
 Extracted TypeScript periodogram algorithms from Astromancer.
 
@@ -220,7 +224,29 @@ Current caveats:
 - There is no TypeScript package manifest or build config in this repository.
 - Highcharts rendering fixes and UI storage paths are documented but not
   extracted.
-- Period folding itself is owned by `lightcurve/`.
+- Period folding itself is owned by `kepler/lightcurve/`.
+
+## `kepler/skylib_lite/`
+
+Consolidated local subset of Skynet's `skylib` used by the extracted Python
+algorithm packages.
+
+Important files and subfolders:
+
+- `astrometry/`: astrometry.net subprocess backend, ATLAS triangle solver,
+  solver data, and related types used by `kepler.wcs`.
+- `calibration/`: background estimation and SEP compatibility helpers.
+- `extraction/`: SEP-based source extraction and centroiding.
+- `io/`: FITS compression/HDU selection helper used by the WCS solver stack.
+- `photometry/`: aperture photometry, exact aperture sums, and exposure helpers.
+- `util/`: angle, FITS, overlap, and statistics helpers shared across WCS,
+  photometry, and field calibration.
+
+Current caveats:
+
+- This is vendored legacy science code. Architecture work should move imports
+  and package boundaries only; numerical fixes belong in targeted remediation
+  PRs with tests.
 
 ## `kepler/photometry/`
 
@@ -240,8 +266,8 @@ Important files and subfolders:
   extraction entry points.
 - `pipeline/photometry.py`: `run_photometry` and `perform_photometry`.
 - `pipeline/schemas.py`: Pydantic settings and data models.
-- `skylib/`: vendored algorithmic core for aperture photometry, exact aperture
-  overlap, centroiding, background estimation, and statistics.
+- `kepler.skylib_lite`: vendored algorithmic core for aperture photometry,
+  exact aperture overlap, centroiding, background estimation, and statistics.
 - `EXTRACTION.md`: source provenance, dependency requirements, parity behaviors,
   and verification.
 
@@ -311,8 +337,8 @@ Important files and subfolders:
 - `schemas.py`: WCS settings and data models.
 - `config.py`: environment-backed solver configuration seam.
 - `state.py`: dataclass stand-ins for the Skynet ORM rows touched by WCS.
-- `skylib/`: vendored astrometry stack, including astrometry.net and ATLAS
-  backends.
+- `kepler.skylib_lite`: vendored astrometry stack, including astrometry.net and
+  ATLAS backends.
 - `EXTRACTION.md`: full provenance, backend requirements, and validation notes.
 
 Current caveats:

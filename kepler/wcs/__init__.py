@@ -14,9 +14,9 @@ Layout::
     header_utils.py     pixel-scale and RA/Dec guesses from FITS keywords
     config.py           backend configuration seam (was Dynaconf)
     state.py            plain-object seam for the Skynet ORM rows
-    skylib/             vendored subset of Skynet's skylib: the whole astrometry
-                        stack (anet subprocess backend + ATLAS triangle solver),
-                        plus the FITS/angle/HDU helpers it calls
+
+The vendored Skylib astrometry stack and FITS/angle/HDU helpers now live in
+``kepler.skylib_lite``.
 
 See EXTRACTION.md for provenance, what was left behind, and the external
 dependencies required.

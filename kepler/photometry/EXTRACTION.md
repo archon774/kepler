@@ -7,6 +7,10 @@ and numeric quirk is preserved exactly as it was in Skynet. The only edits are
 import rewiring and the removal of hard dependencies on Skynet's ORM and
 plate-solving stage, each marked in-place with an `# EXTRACTED:` comment.
 
+Current package note: the copied Skylib files described below now live under
+`kepler/skylib_lite/`; historical paths in this record describe the original
+extraction layout.
+
 ---
 
 ## 1. Layout

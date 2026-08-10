@@ -16,10 +16,11 @@ import numpy as np
 from numpy import transpose
 
 # EXTRACTED: was `from skylib.util.stats import chauvenet` (installed skylib
-# package) — now the vendored copy under fieldcal/skylib/.  ``chauvenet`` is the
-# outlier-rejection kernel of this solver; it is numba-jitted and numba is a hard
-# runtime dependency, not an optional accelerator.
-from .skylib.util.stats import chauvenet
+# package) — now the shared vendored copy under kepler.skylib_lite.
+# ``chauvenet`` is the outlier-rejection kernel of this solver; it is
+# numba-jitted and numba is a hard runtime dependency, not an optional
+# accelerator.
+from kepler.skylib_lite.util.stats import chauvenet
 
 from .schemas import PhotometryData
 

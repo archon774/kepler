@@ -10,8 +10,8 @@ from numpy.ma import MaskedArray
 from scipy.optimize import minimize
 from numba import njit, prange
 
-from ..calibration.background import estimate_background, sep_compatible
-from ..util.stats import weighted_median
+from kepler.skylib_lite.calibration.background import estimate_background, sep_compatible
+from kepler.skylib_lite.util.stats import weighted_median
 from .aperture_numba import sum_circle, sum_ellipse, sum_circann, sum_ellipann, _sum_circle, _sum_ellipse
 
 

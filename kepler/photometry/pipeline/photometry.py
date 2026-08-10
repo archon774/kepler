@@ -7,11 +7,11 @@ from typing import Mapping, Sequence
 import numpy as np
 import sep
 from astropy.wcs import WCS
-# EXTRACTED: was `from skylib...` (installed skylib package) — now the vendored
-# copy under photometry/skylib/.
-from ..skylib.extraction.centroiding import centroid_sources
-from ..skylib.photometry import aperture_photometry
-from ..skylib.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
+# EXTRACTED: was `from skylib...` (installed skylib package) — now the shared
+# vendored copy under kepler.skylib_lite where modules are reused.
+from kepler.skylib_lite.extraction.centroiding import centroid_sources
+from kepler.skylib_lite.photometry import aperture_photometry
+from kepler.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 # EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
 # (SQLAlchemy ORM row for a pipeline job) — see the seam in perform_photometry().

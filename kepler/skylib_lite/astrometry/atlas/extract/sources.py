@@ -7,7 +7,7 @@ from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
 
 # EXTRACTED: was `from skylib.io.fits_compression import select_image_hdu` —
-# vendored under wcs/skylib/io/fits_compression.py, import made relative.
+# vendored under kepler/skylib_lite/io/fits_compression.py, import made relative.
 from ....io.fits_compression import select_image_hdu
 
 try:
