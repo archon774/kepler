@@ -4,12 +4,12 @@ A catalog plugin is a *declaration*: what the catalog is called, how many
 sources it holds, which VizieR table backs it, which of its columns carry
 magnitudes, and how to convert those magnitudes into the photometric band a
 caller asked for. Plugins hold no network code — fetching rows is the job of
-``query/``, which binds a backend onto these declarations at import time (see
-``query/binding.py``).
+``kepler.query``, which binds a backend onto these declarations at import time
+(see ``kepler.query.binding``).
 
 That split is why the ``query_*`` methods below raise: a bare plugin knows what
-it *contains*, not how to reach it. Import ``query.registry`` instead of
-``catalogs`` when you need live, queryable catalogs.
+it *contains*, not how to reach it. Import ``kepler.query.registry`` instead of
+``kepler.catalogs`` when you need live, queryable catalogs.
 
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/
 observation_asset_processing/optical_data_processing/catalogs/catalog.py
@@ -70,7 +70,7 @@ class Catalog:
 
     def query_objects(self, names: List[str]) -> List[CatalogSource]:
         raise NotImplementedError(
-            "query_objects requires a query backend; import from query.registry"
+            "query_objects requires a query backend; import from kepler.query.registry"
         )
 
     def query_box(
@@ -83,7 +83,7 @@ class Catalog:
         limit: Optional[int] = None,
     ) -> List[CatalogSource]:
         raise NotImplementedError(
-            "query_box requires a query backend; import from query.registry"
+            "query_box requires a query backend; import from kepler.query.registry"
         )
 
     def query_circ(
@@ -95,19 +95,20 @@ class Catalog:
         limit: Optional[int] = None,
     ) -> List[CatalogSource]:
         raise NotImplementedError(
-            "query_circ requires a query backend; import from query.registry"
+            "query_circ requires a query backend; import from kepler.query.registry"
         )
 
     def table_to_sources(self, table) -> List[CatalogSource]:
         """Map backend rows onto ``CatalogSource`` objects.
 
-        Implemented by the backend (``query/vizier.py``), because the mapping is
-        driven by ``col_mapping`` expressions evaluated against provider-specific
-        column names. Declared here because three plugins — Landolt, USNO-B1 and
-        VSX — override it to apply photometric transforms, and two of those call
-        ``super().table_to_sources(...)`` to get the raw mapping first. Method
-        resolution reaches the backend implementation once a plugin is bound.
+        Implemented by the backend (``kepler.query.vizier``), because the
+        mapping is driven by ``col_mapping`` expressions evaluated against
+        provider-specific column names. Declared here because three plugins —
+        Landolt, USNO-B1 and VSX — override it to apply photometric transforms,
+        and two of those call ``super().table_to_sources(...)`` to get the raw
+        mapping first. Method resolution reaches the backend implementation once
+        a plugin is bound.
         """
         raise NotImplementedError(
-            "table_to_sources requires a query backend; import from query.registry"
+            "table_to_sources requires a query backend; import from kepler.query.registry"
         )

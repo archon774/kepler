@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Dict as TDict, List as TList, Optional
 
-from catalogs.schemas import CatalogSource
+from kepler.catalogs.schemas import CatalogSource
 
 from .vizier import VizierCatalog
 

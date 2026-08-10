@@ -18,7 +18,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Type
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from pydantic.alias_generators import to_camel
 
-from catalogs.schemas import (
+from kepler.catalogs.schemas import (
     CatalogMeta,
     CatalogSource,
     IAstrometry,

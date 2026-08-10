@@ -80,7 +80,7 @@ py-modules = ["database_tools"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["fieldcal*", "photometry*", "wcs*"]
+include = ["kepler*"]
 
 [tool.setuptools.package-data]
-"wcs.skylib.astrometry.anet" = ["ngc2000.dat"]
+"kepler.wcs.skylib.astrometry.anet" = ["ngc2000.dat"]

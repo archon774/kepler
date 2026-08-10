@@ -34,7 +34,7 @@ from typing import Iterable, Optional, Sequence
 from astropy import units as u
 from astropy.coordinates import Angle
 
-from catalogs.simbad import SIMBAD_OBJECT_TYPES
+from kepler.catalogs.simbad import SIMBAD_OBJECT_TYPES
 
 __all__ = ["ResolvedTarget", "resolve_simbad", "resolve_targets", "simbad_available"]
 

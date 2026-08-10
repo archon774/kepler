@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import re
 
-from catalogs import CATALOG_OPTIONS
+from kepler.catalogs import CATALOG_OPTIONS
 from .schemas import Mag  # noqa: F401  (referenced by the type annotation below)
 
 __all__ = ["resolve_ref_mag_for_filter"]
