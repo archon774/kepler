@@ -74,7 +74,7 @@ database_tools.py                                       # stays at root (see §4
 | `query/*.py` (12 modules) | `kepler/kernels/query/` | unchanged |
 | every `EXTRACTION.md` | moves with its folder | header note added: new path, provenance unchanged |
 
-`deps.py` moves as-is, and the composition root wraps it (design §5). Replacing
+`deps.py` moves as-is, and the composition root wraps it (design §6). Replacing
 it outright means rewriting the `deps.<name>(...)` call sites in `field_cal.py` —
 worth doing, but not in the same commit that relocates the file, or the move diff
 stops being reviewable. Sequenced immediately after Phase 1.
@@ -153,9 +153,9 @@ numba, and no Node:
 
 Chosen deliberately as the first slice: it exercises the whole stack — schema,
 envelope, artifact store, registry, error mapping — and it is fully testable in
-CI with no fixtures beyond a tiny FITS header. It also delivers the alias-
-divergence and dual-registry dispositions from design §6 immediately, which are
-real correctness wins independent of the rest.
+CI with no fixtures beyond a tiny FITS header. It needs no network, no solver
+data, no numba and no Node, so it is the earliest point at which the tool
+contract can be proven end to end.
 
 ### Phase 3 — Imaging and catalog-query tools
 
@@ -209,7 +209,7 @@ folded into a structural change.
 | `.gitleaks.toml` path-scoped allowlist for `ADS_DEV_KEY` / `ANTHROPIC_API_KEY` / `NASA_API_KEY` | secret-scan CI | Any new module referencing those names outside the current path list needs an allowlist entry. Phase 5 is where this bites, when `database_tools.py` logic moves under `kepler/tools/`. |
 | `database_tools.py` at repo root | CI `repository-shape` job asserts it exists | Keep the file. Phase 5 hollows it into a wrapper rather than deleting it. Same for `README.md`, `pyproject.toml`, `uv.lock`, `docs/architecture-brainstorm.md`. |
 | Node enters the toolchain | contributors, CI | Phase 4. Optional at runtime (`backend_unavailable` degrade), required for the TS tools. |
-| Field calibration is single-flight per process | concurrent callers | Documented in the tool description; see design §5. |
+| Field calibration is single-flight per process | concurrent callers | Documented in the tool description; see design §6. |
 
 ---
 
@@ -241,7 +241,7 @@ call runs in a default check — the existing repository convention, unchanged.
 | Adapters accumulate business logic and become a second kernel | Adapters may only translate, wire, classify errors, and surface residual uncertainty. Anything numeric belongs in a kernel, where it gets a ledger entry and a fixture — an adapter is never the place to quietly adjust a number |
 | Tool surface grows past what an agent can select from | Profiles + deferred loading from Phase 5; a hard budget for the `core` profile |
 | `tsc` surfaces errors that need behaviour changes to fix | Type-only fixes are in scope for Phase 4. A type error that is really a *numeric* bug is a remediation finding: log it, keep the phase moving with `// @ts-expect-error` plus a comment naming the finding ID, and fix it on the remediation track where it gets a fixture |
-| Parity still unvalidated after all this | The remediation track's R0 harness is what changes this — the Afterglow reference values give a differential cross-check for the zero-point path. The tool layer separately makes missing deployment data *legible* (`backend_unavailable`) |
+| Numeric behaviour still unvalidated after all this | Out of scope here by design — the remediation track owns it. The tool layer's contribution is structural: one call site per kernel entry point, a manifest that flags algorithm changes, and `backend_unavailable` making missing deployment data legible |
 | Six phases stall halfway | Every phase is independently useful. Phases 0–2 alone deliver a working, fully offline tool package with no deployment data required |
 
 ---
