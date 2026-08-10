@@ -30,7 +30,7 @@ verification already performed.
 Kepler/
   database_tools.py              # current astronomy database prototype
   pyproject.toml                 # Python package metadata and dependencies
-  requirements.txt               # pinned Python dependencies for the current repo
+  uv.lock                        # uv lockfile for reproducible installs
   docs/
     architecture-brainstorm.md   # future package architecture notes
   wcs/                           # Python WCS extraction from Skynet
@@ -43,18 +43,16 @@ Kepler/
 
 ## Python Setup
 
-Use a virtual environment and install the Python package with its dependencies:
+Use `uv` to create the virtual environment and install the Python package with
+its dependencies:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+uv sync
 ```
 
 `pyproject.toml` is the installable package metadata and includes the Python
 dependencies needed by the database prototype and extracted algorithm modules.
-`requirements.txt` remains as the pinned dependency snapshot that existed before
-packaging metadata was added.
+`uv.lock` records the resolved dependency set.
 
 Some extracted runtime paths also require non-Python solver data called out in
 the relevant `EXTRACTION.md` files, including astrometry.net index files and
