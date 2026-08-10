@@ -29,6 +29,7 @@ verification already performed.
 ```text
 Kepler/
   database_tools.py              # current astronomy database prototype
+  pyproject.toml                 # Python package metadata and dependencies
   requirements.txt               # pinned Python dependencies for the current repo
   docs/
     architecture-brainstorm.md   # future package architecture notes
@@ -42,18 +43,21 @@ Kepler/
 
 ## Python Setup
 
-Use a virtual environment and install the pinned dependencies:
+Use a virtual environment and install the Python package with its dependencies:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
-The root `requirements.txt` is the only dependency manifest today; it is not yet
-package metadata. Some extracted runtime paths require additional native or
-data-heavy dependencies called out in the relevant `EXTRACTION.md` files,
-including `numba`, `sep`, optional `photutils`, astrometry.net index files, and
+`pyproject.toml` is the installable package metadata and includes the Python
+dependencies needed by the database prototype and extracted algorithm modules.
+`requirements.txt` remains as the pinned dependency snapshot that existed before
+packaging metadata was added.
+
+Some extracted runtime paths also require non-Python solver data called out in
+the relevant `EXTRACTION.md` files, including astrometry.net index files and
 local UCAC4/UCAC5 catalogs.
 
 ## Python Entry Points
