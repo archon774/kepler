@@ -40,7 +40,8 @@ jobs:
       - name: Check required project files
         run: |
           test -f README.md
-          test -f requirements.txt
+          test -f pyproject.toml
+          test -f uv.lock
           test -f database_tools.py
           test -f docs/architecture-brainstorm.md
 

@@ -10,5 +10,6 @@
 /CONTRIBUTING.md        @archon774
 /.gitleaks.toml         @archon774
 /database_tools.py      @archon774
-/requirements.txt       @archon774
+/pyproject.toml         @archon774
+/uv.lock                @archon774
 /docs/                  @archon774
