@@ -16,16 +16,16 @@ import re
 
 import numpy as np
 from astropy.wcs import WCS
-# EXTRACTED: vendored — Skynet's general `sep`-based detector
+# EXTRACTED: shared vendored — Skynet's general `sep`-based detector
 # (skylib/extraction/main.py + centroiding.py, over
 # skylib/calibration/background.py) is the source list the astrometry.net path
-# solves from, so it came along at ./skylib/extraction/. Note that the ATLAS
-# path does NOT use it — that backend runs its own self-contained scipy
-# extractor at ./skylib/astrometry/atlas/extract/sources.py. This module is
+# solves from, so it lives in kepler.skylib_lite. Note that the ATLAS
+# path does NOT use it; that backend runs its own self-contained scipy
+# extractor at kepler.skylib_lite.astrometry.atlas.extract.sources. This module is
 # shared verbatim with Skynet's photometry / field-calibration pipelines.
-from .skylib.extraction import auto_sat_level, extract_sources
-# EXTRACTED: vendored — see ./skylib/util/fits.py.
-from .skylib.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
+from kepler.skylib_lite.extraction import auto_sat_level, extract_sources
+# EXTRACTED: shared vendored — see kepler.skylib_lite.util.fits.
+from kepler.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 # EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
 # (SQLAlchemy) — see ./state.py.

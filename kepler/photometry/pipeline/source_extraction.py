@@ -8,9 +8,9 @@ import re
 import numpy as np
 from astropy.wcs import WCS
 # EXTRACTED: was `from skylib.extraction import ...` / `from skylib.util.fits import ...`
-# (installed skylib package) — now the vendored copy under photometry/skylib/.
-from ..skylib.extraction import auto_sat_level, extract_sources
-from ..skylib.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
+# (installed skylib package) — now the shared vendored copy under kepler.skylib_lite.
+from kepler.skylib_lite.extraction import auto_sat_level, extract_sources
+from kepler.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 # EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
 # (SQLAlchemy ORM row for a pipeline job). `perform_source_extraction()` only

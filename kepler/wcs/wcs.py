@@ -22,8 +22,8 @@ from astropy.wcs import WCS
 
 # EXTRACTED: the `skylib.astrometry.*` imports below were absolute imports of the
 # installed skylib package. That package's astrometry stack is vendored under
-# ./skylib/ (see EXTRACTION.md), so they are relative here. Nothing else changed.
-from .skylib.astrometry.main import (
+# kepler.skylib_lite. Nothing else changed.
+from kepler.skylib_lite.astrometry.main import (
     AstrometryNetConfig,
     AtlasBackend,
     AtlasConfig,
@@ -32,7 +32,7 @@ from .skylib.astrometry.main import (
 )
 
 try:
-    from .skylib.astrometry.anet import AstrometryNetError, SolveFieldTimeout
+    from kepler.skylib_lite.astrometry.anet import AstrometryNetError, SolveFieldTimeout
 except ImportError:  # pragma: no cover - skylib predating the raising anet backend
     # Reachable when python-base.Dockerfile has not been rebuilt after a skylib
     # change. That older backend returns None instead of raising, so these
@@ -43,12 +43,12 @@ except ImportError:  # pragma: no cover - skylib predating the raising anet back
     class SolveFieldTimeout(AstrometryNetError):
         timeout_sec: float | None = None
 
-from .skylib.astrometry.anet.backend import (
+from kepler.skylib_lite.astrometry.anet.backend import (
     AstrometryNetBackend,
     solve_field_glob as anet_solve_field_glob,
 )
-from .skylib.astrometry.atlas.catalog import get_catalog_spec
-from .skylib.util.fits import get_fits_exp_length, get_fits_time
+from kepler.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
+from kepler.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 
 # EXTRACTED: was `from skynet_db.config import settings` — a Dynaconf instance
 # layered over the deployment's TOML config. See ./config.py; `build_anet_config`

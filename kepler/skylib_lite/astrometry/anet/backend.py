@@ -36,9 +36,9 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
 
-# EXTRACTED: was `from skylib.util.angle import angdist` — vendored under
-# wcs/skylib/util/angle.py, import made relative.
-from ...util.angle import angdist
+# EXTRACTED: was `from skylib.util.angle import angdist` — shared under
+# kepler.skylib_lite.util.angle.
+from kepler.skylib_lite.util.angle import angdist
 
 from ..types import SolveRequest, SolveSolution
 from .config import AstrometryNetConfig

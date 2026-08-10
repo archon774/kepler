@@ -1,5 +1,5 @@
 """
-SkyLib functions for bias/dark/flat/cosmetic calibration.
+SkyLib calibration subset.
 
 background: sky background estimation and subtraction.
 

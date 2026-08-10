@@ -83,4 +83,4 @@ include-package-data = true
 include = ["kepler*"]
 
 [tool.setuptools.package-data]
-"kepler.wcs.skylib.astrometry.anet" = ["ngc2000.dat"]
+"kepler.skylib_lite.astrometry.anet" = ["ngc2000.dat"]

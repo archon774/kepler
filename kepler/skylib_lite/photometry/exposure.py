@@ -12,7 +12,7 @@ from scipy.special import erf
 from astropy.time import Time
 from astropy.coordinates import AltAz, EarthLocation, NonRotationTransformationWarning, SkyCoord, get_body
 
-from ..util.angle import airmass_for_el
+from kepler.skylib_lite.util.angle import airmass_for_el
 
 
 __all__ = [

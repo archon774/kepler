@@ -20,9 +20,9 @@ from scipy.spatial import cKDTree
 
 # EXTRACTED: was `from skylib.util.angle import angdist` /
 # `from skylib.util.fits import get_fits_time` (installed skylib package) —
-# now the vendored copy under fieldcal/skylib/.
-from .skylib.util.angle import angdist
-from .skylib.util.fits import get_fits_time
+# now the shared vendored copy under kepler.skylib_lite.
+from kepler.skylib_lite.util.angle import angdist
+from kepler.skylib_lite.util.fits import get_fits_time
 
 # EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
 # (SQLAlchemy ORM row).  Field calibration reads only `.id` and

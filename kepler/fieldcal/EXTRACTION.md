@@ -8,6 +8,10 @@ ordering and comments are verbatim. Every place a Skynet dependency was cut is
 marked in-code with an `# EXTRACTED:` comment; this document is the index of
 those seams.
 
+Current package note: the copied Skylib utility files described below now live
+under `kepler/skylib_lite/`; historical paths in this record describe the
+original extraction layout.
+
 ---
 
 ## 1. What field calibration does
