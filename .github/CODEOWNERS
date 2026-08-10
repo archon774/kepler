@@ -7,6 +7,8 @@
 *                       @archon774
 
 /.github/               @archon774
+/CONTRIBUTING.md        @archon774
+/.gitleaks.toml         @archon774
 /database_tools.py      @archon774
 /requirements.txt       @archon774
 /docs/                  @archon774
