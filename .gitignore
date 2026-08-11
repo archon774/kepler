@@ -51,6 +51,7 @@ yarn-error.log*
 *.bak
 
 # Editor and OS files
+.vscode/
 .DS_Store
 Thumbs.db
 *.swp

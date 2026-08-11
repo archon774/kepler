@@ -295,7 +295,7 @@ def test_quantile_is_the_maples_estimator_not_numpys():
     From Maples et al. (2018), ApJS 238, 2: the interpolated quantile is
     multiplied by ``cf``, a small-sample correction (tabulated for n <= 5,
     ``1 + 2.2212*n**-1.137`` above). Its own docstring warns it "does not work
-    for q near 0 and 1" — at q = 1 it returns a value *above* the maximum.
+    for q near 0 and 1" — near q = 1 it returns a value *above* the maximum.
 
     Substituting ``np.quantile`` would change the ``sigma_type=1`` scale
     estimate and therefore which sources a robust rejection keeps.
@@ -305,8 +305,10 @@ def test_quantile_is_the_maples_estimator_not_numpys():
     assert quantile(data, 0.5) == pytest.approx(49.5726, abs=1e-3)
     assert quantile(data, 0.5) != pytest.approx(np.quantile(data, 0.5), abs=0.1)
 
-    # Documented breakdown at the ends: q=1 overshoots the sample maximum.
-    assert quantile(data, 1.0) > data.max()
+    # Documented breakdown near the ends: high quantiles overshoot the sample
+    # maximum. Keep this below q=1.0; the legacy implementation indexes one
+    # element past the array at exactly q=1.0, and Numba makes that undefined.
+    assert quantile(data, 0.999) > data.max()
 
 
 def test_quantile_correction_factor_is_tabulated_for_small_samples():

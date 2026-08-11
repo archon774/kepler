@@ -170,19 +170,24 @@ light-curve ingest path still uses browser globals such as `FileReader`.
 
 ## Validation
 
-Current CI is intentionally small:
+For Python changes, run the same checks CI enforces:
 
 ```bash
-python3 -m compileall tools algorithms
-npm run typecheck
+python3 -m compileall tools algorithms tests
+uv run pytest
 git diff --check
+```
+
+For TypeScript changes, also run:
+
+```bash
+npm run typecheck
 ```
 
 The extraction notes record broader one-off checks such as compile/import smoke
 tests, source diffs, and selected behavior checks. Full end-to-end WCS,
-photometry, and calibration parity still requires a real astronomy runtime:
-reference FITS data, native dependencies, solver binaries, and local catalog
-data.
+photometry, and calibration parity beyond the bundled pytest fixtures still
+requires solver binaries and local catalog data.
 
 ## Development Notes
 
