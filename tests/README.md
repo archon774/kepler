@@ -1,8 +1,8 @@
-# `tests/` — algorithm-preservation suite
+# `tests/` — algorithm and tool smoke suite
 
 ```bash
 uv sync
-uv run pytest                 # ~11 s, 1228 tests, no network
+uv run pytest                 # default no-network suite
 uv run pytest -m "not slow"   # skip the pixel-level work on real frames
 ```
 
@@ -13,6 +13,10 @@ Kepler's Python folders are **byte-preserving extractions** from Skynet (see
 algorithms are *right* — that question was settled upstream. They test whether
 the algorithms still do **exactly what they did before the extraction**,
 including the parts that are wrong.
+
+Most files are algorithm-preservation tests. Tool smoke tests live here too
+when they cover the public `tools/` surface without network calls or generated
+artifacts, so the default `pytest` run collects them with the rest of the suite.
 
 Three consequences shape everything here:
 
@@ -42,6 +46,7 @@ Three consequences shape everything here:
 | `test_query_binding_runner.py` | The `(Declaration, Backend)` MRO contract, region validation, config |
 | `test_photometry_extraction.py` | SEP extraction on real frames, crop regions, WCS construction |
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
+| `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
 | `test_wcs_headers.py` | Pixel scale and pointing across all 39 real headers |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |
 | `test_skylib_stats.py` | `chauvenet` and the statistics under the zero-point solve |
@@ -60,6 +65,12 @@ Three consequences shape everything here:
   or a local UCAC4/UCAC5 tree. Skips itself when the data is absent, which it
   normally is: the commonly packaged 4107-4119 index set starts at 22 arcmin
   and cannot solve these frames.
+
+## CI
+
+`.github/workflows/ci.yml` runs `uv run --locked pytest` as a required job.
+The default suite remains deterministic: network-marked tests are skipped unless
+`KEPLER_TEST_NETWORK=1` is set explicitly.
 
 ## Defects recorded here
 
@@ -119,8 +130,7 @@ Gaps are listed so they are visible rather than assumed.
 | **The ATLAS triangle solver** | `skylib_lite/astrometry/atlas/` — `sample_triangles`, `triangle_invariant_and_order`, `build_kdtree`, `solve_oriented`, `solver.py`. Only the orientation round-trip (`decompose_linear` ↔ `_known_cd_rad_per_pix`) is covered; matching itself needs a local UCAC catalog. |
 | **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The row mappers (`table_to_sources` on Landolt, USNO, VSX) are covered structurally via the MRO contract but not executed against real provider rows — that needs recorded VizieR responses, which this repository does not carry. |
 | **`fieldcal/batch_wcs_photometry_zeropoint_export.py`** | A batch driver over the whole pipeline; every stage it calls is covered individually, but the driver itself needs the solver data above to run. |
-| **`tools/`** | Out of scope for this change — the request was the algorithm folders. `tools/` is the newer public tool surface over `algorithms/` and warrants its own suite. |
-| **CI wiring** | `pytest` is pinned and configured, but `.github/workflows/ci.yml` is untouched: CLAUDE.md asks to keep workflow changes in their own PR. The suite is deterministic and bounded, so adding a job is a small follow-up. |
+| **Broader `tools/` coverage** | The Claude photometry tool has no-network smoke coverage here. The rest of `tools/` still warrants focused tests over the public tool schemas and runner behavior. |
 
 ## Adding tests
 
