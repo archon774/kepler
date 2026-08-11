@@ -39,10 +39,10 @@ from astropy.io import fits
 from scipy.spatial import cKDTree
 
 import hrfit
-from photometry.pipeline.photometry import perform_photometry
-from photometry.pipeline.schemas import PhotometrySettings, SourceExtractionSettings
-from photometry.pipeline.source_extraction import build_wcs_from_header
-from wcs.state import ProcessingRun
+from kepler.photometry.pipeline.photometry import perform_photometry
+from kepler.photometry.pipeline.schemas import PhotometrySettings, SourceExtractionSettings
+from kepler.photometry.pipeline.source_extraction import build_wcs_from_header
+from kepler.wcs.state import ProcessingRun
 
 logger = logging.getLogger(__name__)
 
