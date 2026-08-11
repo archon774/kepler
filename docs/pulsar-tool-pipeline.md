@@ -298,3 +298,81 @@ can report them and continue.
   and `stat()` calls can still raise `OSError` for unreadable files. If Stage 0
   is part of the public pipeline, per-file read failures should be collected
   into `errors` or `warnings` rather than aborting the call.
+
+---
+
+## 9. Review of Plotting Tools and Charts
+
+Review target: the `agent/pulsar-plots` work merged into `dev` by
+`808f2ad`, primarily commits `e28a5e0` and `96072af`.
+
+### Findings
+
+1. **High: the periodogram chart can mislabel what it plotted.**
+   `compute_pulsar_periodogram()` defaults to `channel="sum"`, searching
+   source1 + source2, but `PERIODOGRAM_CHART` hard-codes the rendered series as
+   "Polarization XX". The periodogram artifact also does not persist the
+   selected channel, so `plot_pulsar()` cannot recover the truth later. This is
+   scientifically misleading: the default plot is usually not XX at all, it is
+   the summed trace. Store `channel` in the periodogram ECSV metadata and map
+   it to "Sum", "Polarization XX", or "Polarization YY" when drawing.
+
+2. **Medium: frequency-mode periodograms inherit period-mode chart semantics.**
+   `plot_pulsar()` correctly detects a `frequency_hz` column, but still returns
+   the Astromancer period-mode spec: x label "Period (s)" and logarithmic
+   x-axis type. `freq_mode=True` uses a linear frequency grid, so the rendered
+   plot should say "Frequency (Hz)" and should not silently force the period
+   chart's axis semantics. Either make a frequency chart spec or override the
+   period spec whenever `frequency_hz` is the x column.
+
+3. **Medium: malformed `.ecsv` input can still raise instead of returning a
+   `ToolError`.** `plot_pulsar()` catches `_LoadError` around file existence
+   and raw-scan ingest, but `Table.read(file.path, format="ascii.ecsv")` is in
+   the same block and its exceptions are not wrapped. A bad artifact can escape
+   the result contract that "failures are returned as `errors` on the model,
+   never raised." Mirror `_load_artifact()` and convert unreadable table files
+   to `ToolError(code="parse_error", ...)`.
+
+4. **Medium: the public schema hides useful plotting controls.**
+   The Python function accepts `x_label`, `y_label`, `back_scale`,
+   `subtract_background`, `dpi`, `figsize`, and `subdir`, but the registry
+   schema advertises only `path`, `kind`, `title`, `show_hidden_series`, and
+   `output_name`. For agent callers this means a raw-scan plot cannot vary the
+   same baseline settings as stage 1, and generated figures cannot be sized or
+   redirected even though the function supports it. Add the missing schema
+   fields or intentionally remove the unsupported public parameters.
+
+5. **Low: current tests prove the renderer writes PNGs, not that the charts are
+   visually non-empty or correctly annotated.** `tests/test_pulsar_plots.py`
+   checks spec constants, inferred kind, PNG dimensions, series names and
+   metadata. That is good unit coverage, but it would not catch a blank axes
+   area, invisible traces, a missing peak marker caused by metadata drift, or
+   confidence lines hidden outside the plotted range. Add a small pixel-level
+   smoke check for the committed B0329+54 examples or inspect matplotlib axes
+   objects before saving.
+
+### What Looks Sound
+
+- The split between `algorithms/pulsar/charts.py` and `tools.pulsar` is the
+  right boundary. Chart identity, labels, hidden series, confidence-line names
+  and the folded x-axis ladder are treated as ported Astromancer semantics,
+  while matplotlib remains only the file renderer.
+- `compute_pulsar_periodogram()` now stores peak and confidence metadata in the
+  periodogram artifact, so `plot_pulsar()` can draw the diagnostic marker and
+  thresholds without recomputing the spectrum.
+- `plot_pulsar()` accepts raw scans as a convenience but still prefers the
+  artifact handoff: light-curve, periodogram and folded outputs can all be
+  plotted by passing their `.ecsv` paths directly.
+- The folded chart preserves Astromancer's hidden `Difference` and `Sum`
+  series and exposes them through `show_hidden_series`, which is a practical
+  translation of an interactive legend into a static PNG tool.
+- The committed example PNGs are an appropriate exception to the generated-file
+  rule: they are small, inspectable, and make the chart output reviewable
+  without rerunning the pipeline.
+
+### Suggested Follow-Up Order
+
+Fix the periodogram label/metadata issue first, because it can change the
+scientific meaning of the plot. Then fix frequency-mode chart semantics and
+the malformed-ECSV error path. Schema parity and pixel-level plot checks can
+follow as one focused hardening PR.
