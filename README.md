@@ -20,6 +20,7 @@ pieces into a coherent tool surface.
 | `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, and period-folding logic with Angular/RxJS/Highcharts removed. |
 | `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
 | `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
+| `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
 | `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
 
 Each extracted domain folder has an `EXTRACTION.md` file with provenance,
@@ -33,6 +34,8 @@ Kepler/
   database_tools.py              # current astronomy database prototype
   pyproject.toml                 # Python package metadata and dependencies
   uv.lock                        # uv lockfile for reproducible installs
+  package.json                   # TypeScript toolchain metadata
+  tsconfig.json                  # TypeScript compiler smoke-check config
   docs/
     tool-architecture.md         # master package architecture
   tools/                         # first plain Python tool wrappers and shared models
@@ -144,10 +147,24 @@ plate solving will not produce a solution.
 ## TypeScript Extracts
 
 `algorithms/lightcurve/`, `algorithms/periodogram/`, and `algorithms/hrdiagram/` contain
-framework-free TypeScript source extracted from Astromancer. There is currently no
-`package.json`, `tsconfig.json`, build command, or generated bundle in this
-repository. Treat these folders as algorithm source modules ready to be wired
-into a future TypeScript package or application.
+framework-free TypeScript source extracted from Astromancer. The root
+`package.json` and `tsconfig.json` provide a compiler-only setup for these
+modules; there are no runtime npm dependencies.
+
+Install the TypeScript toolchain with npm:
+
+```bash
+npm install
+```
+
+Run the TypeScript smoke check:
+
+```bash
+npm run typecheck
+```
+
+The compiler target is ES2022 and includes the DOM library because the preserved
+light-curve ingest path still uses browser globals such as `FileReader`.
 
 ## Validation
 
@@ -156,6 +173,7 @@ Current CI is intentionally small:
 ```bash
 python3 -m py_compile database_tools.py
 python3 -m compileall tools algorithms
+npm run typecheck
 git diff --check
 ```
 

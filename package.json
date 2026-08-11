@@ -1,0 +1,15 @@
+{
+  "name": "kepler-astro-algorithms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript tooling for Kepler's extracted astronomy algorithm modules.",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=16.20.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
