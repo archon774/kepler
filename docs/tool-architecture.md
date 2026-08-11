@@ -147,6 +147,7 @@ Keep shared Python models small until a tool needs more:
 
 - warning/error records;
 - file and artifact metadata;
+- runner session manifests;
 - table summaries;
 - WCS summaries;
 - catalog summaries;
@@ -175,6 +176,11 @@ Important modeling rules:
 - Tables expose column metadata rather than dumping huge payloads.
 - Measurements preserve uncertainty, method, calibration assumptions, and source.
 - Artifacts include local path, MIME type, size, created time, and producing tool.
+- Agent-loop artifacts are session-scoped under
+  `artifacts/sessions/<session_id>/...`; the runner writes
+  `session_manifest.json` in that directory with the ordered tool-call trace,
+  cache hits, warning/error summaries, and artifact paths, but not full tool
+  payloads.
 
 ---
 
@@ -255,6 +261,10 @@ Runtime behavior should be bounded:
 - credentials redacted from logs and outputs;
 - recursive local file scans avoided by default;
 - large payloads returned as artifacts plus summaries.
+- `tools.runner` persists a session manifest when it starts, after each tool
+  call, and at terminal states (`end_turn`, `max_turns`, or an exception), so
+  another caller can inspect the exact session context without re-running
+  remote queries.
 
 Serving is optional. A Python caller must be able to import and call every tool
 without running a server. If a serving surface is added later, generate it from

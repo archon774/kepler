@@ -14,7 +14,9 @@ import json
 import os
 import sys
 
+from tools import artifacts
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
+from tools.sessions import AgentSession, make_cache_key
 
 __all__ = ["run", "main"]
 
@@ -169,9 +171,14 @@ def run(
     max_turns: int = 20,
     model: str = "claude-sonnet-5",
     system: str = SYSTEM_PROMPT,
-) -> None:
+) -> str | None:
     """Run a bounded agentic loop answering ``user_message`` with the
-    ``tools`` schemas."""
+    ``tools`` schemas.
+
+    Returns the session manifest path when a session runs. The CLI ignores the
+    return value, but tests and Python callers can use it to inspect the saved
+    tool-call trace.
+    """
     import anthropic
 
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -183,6 +190,12 @@ def run(
 
     print(f"User: {user_message}\n" + "=" * 50)
     messages = [{"role": "user", "content": user_message}]
+    session = AgentSession(
+        user_message=user_message,
+        model=model,
+        max_turns=max_turns,
+        system=system,
+    )
 
     # Confirmed live: the model can re-issue an exactly identical tool call
     # (same name, same arguments) across turns, presumably not recognizing a
@@ -191,74 +204,127 @@ def run(
     # possibly differently-paginated one.
     call_cache: dict[str, dict] = {}
 
-    for turn in range(max_turns):
-        with client.messages.stream(
-            model=model,
-            max_tokens=128000,
-            system=system,
-            tools=TOOL_SCHEMAS,
-            messages=messages,
-        ) as stream:
-            for text in stream.text_stream:
-                print(text, end="", flush=True)
+    try:
+        with artifacts.scoped_artifacts(session.artifact_subdir):
+            session.save()
 
-            response = stream.get_final_message()
+            for turn in range(max_turns):
+                with client.messages.stream(
+                    model=model,
+                    max_tokens=128000,
+                    system=system,
+                    tools=TOOL_SCHEMAS,
+                    messages=messages,
+                ) as stream:
+                    text_parts: list[str] = []
+                    for text in stream.text_stream:
+                        text_parts.append(text)
+                        print(text, end="", flush=True)
 
-            if response.stop_reason == "end_turn":
-                print("\n\n[Task Complete]")
-                return
+                    response = stream.get_final_message()
+                    assistant_text = "".join(text_parts)
 
-            if response.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": response.content})
-                tool_results = []
-
-                for content_block in response.content:
-                    if content_block.type != "tool_use":
-                        continue
-
-                    tool_name = content_block.name
-                    tool_args = content_block.input
-                    tool_use_id = content_block.id
-                    cache_key = tool_name + json.dumps(tool_args, sort_keys=True, default=str)
-
-                    print(
-                        f"\n\n[*] [Turn {turn + 1}] Executing {tool_name} "
-                        f"with {tool_args}"
+                if response.stop_reason == "end_turn":
+                    session.record_turn(
+                        turn=turn + 1,
+                        stop_reason=response.stop_reason,
+                        assistant_text=assistant_text,
+                        tool_call_sequences=[],
                     )
+                    manifest_path = session.save(
+                        outcome="end_turn", current_turn=turn + 1
+                    )
+                    print("\n\n[Task Complete]")
+                    print(f"[Session Manifest] {manifest_path}")
+                    return str(manifest_path)
 
-                    if cache_key in call_cache:
-                        result = call_cache[cache_key]
-                        print("(repeated call -- returning cached result)")
-                    else:
-                        func = TOOL_FUNCTIONS.get(tool_name)
-                        if func is None:
-                            result = {
-                                "status": "error",
-                                "errors": [
-                                    {
-                                        "code": "invalid_input",
-                                        "message": f"Unknown tool: {tool_name}",
-                                    }
-                                ],
-                            }
+                if response.stop_reason == "tool_use":
+                    messages.append({"role": "assistant", "content": response.content})
+                    tool_results = []
+                    tool_call_sequences: list[int] = []
+
+                    for content_block in response.content:
+                        if content_block.type != "tool_use":
+                            continue
+
+                        tool_name = content_block.name
+                        tool_args = content_block.input
+                        tool_use_id = content_block.id
+                        cache_key = make_cache_key(tool_name, tool_args)
+
+                        print(
+                            f"\n\n[*] [Turn {turn + 1}] Executing {tool_name} "
+                            f"with {tool_args}"
+                        )
+
+                        cache_hit = cache_key in call_cache
+                        if cache_hit:
+                            result = call_cache[cache_key]
+                            print("(repeated call -- returning cached result)")
                         else:
-                            result = func(**tool_args).model_dump()
-                        call_cache[cache_key] = result
+                            func = TOOL_FUNCTIONS.get(tool_name)
+                            if func is None:
+                                result = {
+                                    "status": "error",
+                                    "errors": [
+                                        {
+                                            "code": "invalid_input",
+                                            "message": f"Unknown tool: {tool_name}",
+                                        }
+                                    ],
+                                }
+                            else:
+                                result = func(**tool_args).model_dump()
+                            call_cache[cache_key] = result
 
-                    print("Tool Output JSON Preview:")
-                    print(json.dumps(result, indent=2, default=str)[:400] + "...\n")
+                        sequence = session.record_tool_call(
+                            turn=turn + 1,
+                            tool_use_id=tool_use_id,
+                            tool_name=tool_name,
+                            arguments=tool_args,
+                            cache_key=cache_key,
+                            cache_hit=cache_hit,
+                            result=result,
+                        )
+                        tool_call_sequences.append(sequence)
+                        session.save(current_turn=turn + 1)
 
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_use_id,
-                            "content": json.dumps(result, default=str),
-                        }
+                        print("Tool Output JSON Preview:")
+                        print(json.dumps(result, indent=2, default=str)[:400] + "...\n")
+
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_use_id,
+                                "content": json.dumps(result, default=str),
+                            }
+                        )
+
+                    session.record_turn(
+                        turn=turn + 1,
+                        stop_reason=response.stop_reason,
+                        assistant_text=assistant_text,
+                        tool_call_sequences=tool_call_sequences,
                     )
+                    session.save(current_turn=turn + 1)
+                    messages.append({"role": "user", "content": tool_results})
+                else:
+                    session.record_turn(
+                        turn=turn + 1,
+                        stop_reason=response.stop_reason,
+                        assistant_text=assistant_text,
+                        tool_call_sequences=[],
+                    )
+                    session.save(current_turn=turn + 1)
 
-                messages.append({"role": "user", "content": tool_results})
-
-    print("\n\n[Max turns reached]")
+            print("\n\n[Max turns reached]")
+            manifest_path = session.save(outcome="max_turns", current_turn=max_turns)
+            print(f"[Session Manifest] {manifest_path}")
+            return str(manifest_path)
+    except Exception:
+        manifest_path = session.save(outcome="error")
+        print(f"\n\n[Session Manifest] {manifest_path}", file=sys.stderr)
+        raise
 
 
 def main() -> None:

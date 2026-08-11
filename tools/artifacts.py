@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from mimetypes import guess_type
 from pathlib import Path
+from typing import Iterator
 from typing import Optional
 
 from astropy.table import Table
@@ -23,6 +26,8 @@ __all__ = [
     "describe_artifact",
     "list_artifacts",
     "preview_rows",
+    "current_artifact_subdir",
+    "scoped_artifacts",
 ]
 
 _FITS_SUFFIXES = {".fit", ".fits", ".fts"}
@@ -30,6 +35,29 @@ _TABLE_SUFFIXES = {".csv", ".ecsv", ".parquet", ".tsv"}
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 _TEXT_SUFFIXES = {".json", ".log", ".md", ".txt", ".yaml", ".yml"}
 _WRITE_SUFFIXES = {"ecsv": ".ecsv", "csv": ".csv", "fits": ".fits"}
+_ACTIVE_ARTIFACT_SUBDIR: ContextVar[str | None] = ContextVar(
+    "kepler_active_artifact_subdir", default=None
+)
+
+
+def current_artifact_subdir() -> str | None:
+    """Return the active artifact subdirectory, if a caller scoped one."""
+
+    return _ACTIVE_ARTIFACT_SUBDIR.get()
+
+
+@contextmanager
+def scoped_artifacts(subdir: str | Path) -> Iterator[None]:
+    """Route artifact writes through ``subdir`` for the current context."""
+
+    relative = Path(subdir)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"artifact scope must be a relative subdirectory: {subdir!r}")
+    token = _ACTIVE_ARTIFACT_SUBDIR.set(str(relative))
+    try:
+        yield
+    finally:
+        _ACTIVE_ARTIFACT_SUBDIR.reset(token)
 
 
 def describe_file(path: str | Path) -> FileMetadata:
@@ -148,6 +176,18 @@ def _reserve_path(directory: Path, stem: str, suffix: str) -> Path:
     return path
 
 
+def _write_directory(subdir: Optional[str]) -> Path:
+    """Return the artifact write directory, including an active session scope."""
+
+    directory = ARTIFACT_DIR
+    active_subdir = current_artifact_subdir()
+    if active_subdir:
+        directory = directory / active_subdir
+    if subdir:
+        directory = directory / subdir
+    return directory
+
+
 def write_table(
     table: Table, name: str, *, subdir: Optional[str] = None, fmt: str = "ecsv"
 ) -> ArtifactRef:
@@ -156,7 +196,7 @@ def write_table(
     if fmt not in _WRITE_SUFFIXES:
         raise ValueError(f"Unsupported artifact format: {fmt!r}")
 
-    directory = ARTIFACT_DIR / subdir if subdir else ARTIFACT_DIR
+    directory = _write_directory(subdir)
     path = _reserve_path(directory, _safe_stem(name), _WRITE_SUFFIXES[fmt])
 
     if fmt == "csv":
@@ -177,7 +217,7 @@ def write_text(
 ) -> ArtifactRef:
     """Write arbitrary text to disk and return a reference to it."""
 
-    directory = ARTIFACT_DIR / subdir if subdir else ARTIFACT_DIR
+    directory = _write_directory(subdir)
     path = _reserve_path(directory, _safe_stem(name), f".{ext.lstrip('.')}")
     path.write_text(text, encoding="utf-8")
     return ArtifactRef(path=str(path), format=ext.lstrip("."), row_count=None)

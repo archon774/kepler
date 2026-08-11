@@ -1,7 +1,7 @@
 # External Astro-Agent Design Practice Applied to Kepler
 
 Date: 2026-08-11
-Status: proposal — no code changed
+Status: proposal, with the session-manifest item implemented in `tools.runner`
 
 This document reads Kepler's current architecture (`docs/tool-architecture.md`, `CLAUDE.md`,
 `tools/`, `algorithms/`) against how six external astrophysics-AI-agent systems and three
@@ -192,26 +192,25 @@ ResearchBench and ReplicationBench both independently found that current agents'
 mode on real astrophysics research tasks is *integration* across steps, not any single tool
 call — which is the same problem at a smaller scale.
 
-**Current state in Kepler.** `tools/runner.py` already has a primitive version of this: a
+**Prior state, checked 2026-08-11.** `tools/runner.py` already had a primitive version of this: a
 `call_cache: dict[str, dict]` keyed by `tool_name + json.dumps(tool_args, sort_keys=True)`,
 added specifically because "the model can re-issue an exactly identical tool call... across
 turns, presumably not recognizing a prior result as still current" (comment, `tools/runner.py`
 around the cache definition). It is real, evidence-based engineering — the comment cites a
-transcript where this actually happened. But it is scoped to one `run()` call: it dies with
+transcript where this actually happened. But it was scoped to one `run()` call: it died with
 the process, and nothing downstream of a session (a human reviewing what an agent did, or a
 second agent picking up the same research task later) can see what was called, in what order,
 with what results.
 
-**Recommendation.** When a `run()` call ends (`end_turn` or `max_turns reached`), write the
-`call_cache` — tool name, arguments, and result `status`/`artifact` paths, not full payloads —
-to a session-manifest artifact via the existing `tools/artifacts.py` machinery, the same way
-every provider tool already writes its full result to disk and returns a bounded preview. This
-does not require adopting Kosmos's cross-agent shared-state architecture wholesale; it is the
-minimum version of the same idea, using infrastructure Kepler already has (`tools/workspace.py`
-already lists and describes artifacts by directory). A second agent, or a human, could then
-call `tools.workspace.describe_artifact` on a prior session's manifest instead of re-deriving
-what was already tried — which is precisely the integration-failure gap the benchmarks
-measured.
+**Implemented.** `tools.runner.run()` now creates a session id, scopes artifacts written by
+tool calls under `artifacts/sessions/<session_id>/...`, and writes a
+`session_manifest.json` at session start, after each tool call, and when the loop ends
+(`end_turn`, `max_turns`, or exception). The manifest records tool name, arguments,
+cache-hit status, result status/count, warnings/errors, and artifact paths — not full tool
+payloads. `tools.workspace.list_sessions()` and `tools.workspace.describe_session()` expose
+those manifests for later review without re-running remote queries. This is the minimum
+version of the Kosmos-style shared-state idea, using Kepler's existing local artifact model
+rather than adopting a cross-agent world-model architecture wholesale.
 
 ---
 
