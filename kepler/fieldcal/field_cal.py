@@ -46,7 +46,7 @@ from .ref_mag import resolve_ref_mag_for_filter
 # Catalog metadata (band tables and colour transforms) is read directly from
 # Kepler's catalogs package: it is pure data and pulls in no network stack.
 # The queries themselves go through deps.query_catalogs -- see deps.py.
-from catalogs import CATALOGS
+from kepler.catalogs import CATALOGS
 # EXTRACTED: was `from .photometry import run_photometry`,
 # `from .source_extraction import get_source_radec, run_source_extraction` and
 # `from .wcs import build_wcs_for_processing_run` — sibling optical-processing

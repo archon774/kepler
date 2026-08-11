@@ -8,13 +8,13 @@ EXTRACTION SEAM.  In Skynet these were plain sibling-module imports inside
     from .wcs import build_wcs_for_processing_run, solve_wcs
 
 None of those are field-calibration algorithms — they are aperture/PSF
-photometry, SEP source extraction, and plate solving, which live in Kepler's
-own ``photometry/`` and ``wcs/`` folders.  They are re-exposed here as
+photometry, SEP source extraction, and plate solving, which live in
+``kepler.photometry`` and ``kepler.wcs``.  They are re-exposed here as
 overridable module-level names so that:
 
-  * ``fieldcal`` imports cleanly with nothing else installed, and
+  * ``kepler.fieldcal`` imports without the remote catalog stack, and
   * a host application wires the real implementations in with one assignment,
-    e.g. ``fieldcal.deps.run_photometry = my_photometry_runner``.
+    e.g. ``kepler.fieldcal.deps.run_photometry = my_photometry_runner``.
 
 Call sites in ``field_cal.py`` use ``deps.<name>(...)`` (rather than a
 ``from .deps import <name>`` binding) precisely so that late injection works.
@@ -43,9 +43,9 @@ class FieldCalDependencyError(NotImplementedError):
 def _missing(name: str, original: str, home: str):
     def _stub(*_args: Any, **_kwargs: Any):
         raise FieldCalDependencyError(
-            f"fieldcal.deps.{name} has not been provided. "
-            f"EXTRACTED: was `{original}` in Skynet; belongs in Kepler/{home}/. "
-            f"Assign an implementation: `fieldcal.deps.{name} = <callable>`."
+            f"kepler.fieldcal.deps.{name} has not been provided. "
+            f"EXTRACTED: was `{original}` in Skynet; belongs in kepler.{home}. "
+            f"Assign an implementation: `kepler.fieldcal.deps.{name} = <callable>`."
         )
 
     _stub.__name__ = name
@@ -99,19 +99,19 @@ solve_wcs = _missing("solve_wcs", "from .wcs import solve_wcs", "wcs")
 
 
 def _default_query_catalogs(*args: Any, **kwargs: Any):
-    """Query catalogs through Kepler's ``query/`` package.
+    """Query catalogs through Kepler's ``kepler.query`` package.
 
-    Unlike the stubs above this has a working default, because ``query/`` is
+    Unlike the stubs above this has a working default, because ``kepler.query`` is
     in-repo: field calibration can fetch its own reference sources with nothing
     wired up. The import is deferred to first call so that importing
-    ``fieldcal`` does not pull in astroquery — a caller who supplies
+    ``kepler.fieldcal.deps`` does not pull in astroquery — a caller who supplies
     ``catalog_sources`` never pays for it, and the whole zero-point solve runs
     without a network stack.
 
     Replace it to route catalog queries elsewhere — a local catalog service, a
     cache, a test double::
 
-        fieldcal.deps.query_catalogs = my_query_function
+        kepler.fieldcal.deps.query_catalogs = my_query_function
 
     Signature: query_catalogs(catalogs, *, wcs=None, ra_hours=None,
                               dec_degs=None, radius_arcmins=None,
@@ -121,7 +121,7 @@ def _default_query_catalogs(*args: Any, **kwargs: Any):
                               image_filter=None, custom_filter_lookup=None)
                -> list[CatalogSource]
     """
-    from query.runner import query_catalogs as _impl
+    from kepler.query.runner import query_catalogs as _impl
 
     return _impl(*args, **kwargs)
 

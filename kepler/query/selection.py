@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, Sequence
 
-from catalogs import CATALOGS
+from kepler.catalogs import CATALOGS
 
 __all__ = [
     "catalog_supports_filter",

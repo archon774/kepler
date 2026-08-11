@@ -1,29 +1,29 @@
 """The live, queryable catalog registry.
 
-``catalogs.CATALOGS`` holds declarations that cannot be queried;
-``query.registry.CATALOGS`` holds the same eleven catalogs bound to their
+``kepler.catalogs.CATALOGS`` holds declarations that cannot be queried;
+``kepler.query.registry.CATALOGS`` holds the same eleven catalogs bound to their
 backends. Import this one to actually fetch sources::
 
-    from query.registry import CATALOGS
+    from kepler.query.registry import CATALOGS
 
     sources = CATALOGS["APASS"].query_circ(ra_hours=13.77, dec_degs=28.38,
                                            radius_arcmins=10)
 
 Band tables and colour transforms are identical between the two registries —
 binding adds query methods and changes nothing about the photometry. Code that
-only reads ``mags`` or ``filter_lookup`` should import from ``catalogs`` and
-stay free of the astroquery dependency.
+only reads ``mags`` or ``filter_lookup`` should import from ``kepler.catalogs``
+and stay free of the astroquery dependency.
 
 Importing this module imports astroquery and installs the cache patch described
-in ``query/cache.py``. It makes no network calls.
+in ``kepler.query.cache``. It makes no network calls.
 """
 
 from __future__ import annotations
 
 from typing import Dict
 
-from catalogs import CATALOGS as _DECLARATIONS
-from catalogs.catalog import Catalog
+from kepler.catalogs import CATALOGS as _DECLARATIONS
+from kepler.catalogs.catalog import Catalog
 
 from .binding import bind_registry
 

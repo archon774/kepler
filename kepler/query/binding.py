@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Type
 
-from catalogs.catalog import Catalog
+from kepler.catalogs.catalog import Catalog
 
 from .sdss import SDSSQueryBackend
 from .skymapper import SkyMapperQueryBackend

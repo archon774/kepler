@@ -43,7 +43,7 @@ from typing import Iterable, Optional
 import numpy as np
 from astropy.wcs import WCS
 
-from catalogs.schemas import CatalogSource
+from kepler.catalogs.schemas import CatalogSource
 
 from .geometry import (
     boxes_from_wcs,

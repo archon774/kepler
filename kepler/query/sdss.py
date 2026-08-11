@@ -29,7 +29,7 @@ from astropy.coordinates import Angle, SkyCoord
 from astropy.units import arcmin, arcsec, deg, hour
 from astroquery.sdss import SDSSClass
 
-from catalogs.schemas import CatalogSource
+from kepler.catalogs.schemas import CatalogSource
 
 from .vizier import VizierCatalog, _round_for_cache
 
