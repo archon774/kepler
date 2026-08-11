@@ -13,7 +13,7 @@ it is the photometric zero-point / limiting-magnitude solver (it takes
 ``list[PhotometryData]`` and returns ``m0, m0_error, sigma, limmag,
 rej_percent``). ``wcs.py`` does not import it and it performs no astrometry, so
 it is deliberately left behind for the photometry / field-calibration
-extraction. See EXTRACTION.md.
+extraction. See docs/extraction.md, WCS.
 """
 
 from __future__ import annotations

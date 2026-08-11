@@ -1,6 +1,6 @@
 """Field calibration — photometric zero-point solve against a reference catalog.
 
-Extracted from the Skynet optical data-processing pipeline; see EXTRACTION.md
+Extracted from the Skynet optical data-processing pipeline; see docs/extraction.md, Field Calibration
 for exact provenance and every severed dependency.
 
 Field calibration does not own catalogs. Band tables and colour transforms live

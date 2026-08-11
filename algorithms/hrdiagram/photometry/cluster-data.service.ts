@@ -26,7 +26,7 @@
 //   getInterfaceStarCounts- per-catalog cluster/field/unused tallies.
 //   computeGalacticCoordinates - equatorial -> galactic for the cluster centre.
 //
-// CUT (see ../EXTRACTION.md for detail):
+// CUT (see docs/extraction.md, HR Diagram / Isochrone Matching for detail):
 //   @Injectable, constructor DI, sourcesSubject / clusterSourcesSubject and
 //   their observables, fetchCatalog / fetchFieldStarRemoval (Job polling),
 //   getCatalogResults / getFSRResults (HttpClient GETs), initValues (job

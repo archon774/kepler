@@ -121,7 +121,7 @@ addressing an operational hazard.
 
 | Class | Meaning | Count |
 |---|---|---:|
-| **A** | Upstream defect already documented in an `EXTRACTION.md` | 14 |
+| **A** | Upstream defect already documented in `docs/extraction.md` | 14 |
 | **B** | Upstream defect documented nowhere — the review's main yield | ~90 |
 | **C** | Introduced by the extraction | 5 |
 | **D** | Operational hazard rather than a numeric error | ~15 |
@@ -131,7 +131,7 @@ itself broke:
 
 | ID | What |
 |---|---|
-| CAT-08 | `query/EXTRACTION.md` §5.7 claims the runner passes a fresh `constraints` dict per catalog. It does not — SkyMapper's `flags=0` leaks into every subsequent catalog **and** into the caller's dict |
+| CAT-08 | `docs/extraction.md`, Query §5.7 claims the runner passes a fresh `constraints` dict per catalog. It does not — SkyMapper's `flags=0` leaks into every subsequent catalog **and** into the caller's dict |
 | CAT-17 | `_round_for_cache`'s docstring claims the region "is never shrunk". The centre snap moves by up to ±5″ with no compensating growth |
 | CAT-22 | Kepler moved SIMBAD's probe from import-time to lazy+cached, introducing a latch: one transient failure disables resolution for the process lifetime |
 | CAT-29 | `query_catalogs_for_image` re-pointed from `CATALOG_OPTIONS` to `CATALOGS`, unlisted in the extraction record |
@@ -228,7 +228,7 @@ smallest targeted test for those IDs.
 | **W2** | **Silent wrong-number defects, all severities.** The ones that hand an agent a plausible lie: reference-magnitude mis-declarations (CAT-03, CAT-04, CAT-05, CAT-06, CAT-13, CAT-14), photometry bias (PHOT-01, PHOT-02, PHOT-03, PHOT-06, PHOT-10), astrometry acceptance (WCS-03, WCS-06), geometry (CAT-09, CAT-10, CAT-11), cluster/timeseries numerics (TS-05, TS-14, TS-09) | targeted test per finding |
 | **W3** | **Loud failures — crashes, hangs, aborts.** WCS-05, WCS-21, WCS-22, PHOT-04, PHOT-05, PHOT-11, CAT-07, CAT-18, TS-04, TS-12, TS-16, TS-18 | targeted test per finding |
 | **W4** | **Bounded and latent defects.** WCS-08..WCS-20, PHOT-07..PHOT-09, PHOT-12..PHOT-14, CAT-12, CAT-15, CAT-16, CAT-19, TS-06..TS-08, TS-10, TS-11, TS-13, TS-15 | targeted test per finding |
-| **W5** | **Hygiene and documentation.** Remaining low-severity findings, the class-C documentation corrections (CAT-08 §5.7, CAT-17 docstring, CAT-29 §3), and recording every class-B finding in the relevant `EXTRACTION.md` | docs or targeted test, as appropriate |
+| **W5** | **Hygiene and documentation.** Remaining low-severity findings, the class-C documentation corrections (CAT-08 §5.7, CAT-17 docstring, CAT-29 §3), and recording every class-B finding in `docs/extraction.md` | docs or targeted test, as appropriate |
 
 ### Immediate action plan after architecture migration
 
@@ -310,8 +310,8 @@ test before exposing the tool, or keep that tool out of the first public surface
 
 ## 8. Fix notes
 
-Each remediation PR should include a concise fix note in its PR body or in the
-relevant `EXTRACTION.md` when the divergence is important for future readers:
+Each remediation PR should include a concise fix note in its PR body or in
+`docs/extraction.md` when the divergence is important for future readers:
 
 ```
 Finding:      <IDs closed>
@@ -399,7 +399,7 @@ answer with no signal). Locations are given in the source reports.
 | CAT-05 | high | ● | UCAC5's `{'*': 'Open'}` wildcard makes every filter resolve to the 579–642 nm bandpass; with `stop_on_success` it short-circuits the whole chain. ~1.7 mag of colour-dependent scatter |
 | CAT-06 | high | | APASS's `U` transform references `uprime`, a band APASS does not carry — so U-band calibration against the default catalog always fails, with a message naming neither filter nor catalog |
 | CAT-07 | high | | `boxes_from_wcs` raises `ValueError` whenever CRPIX is at or outside the array edge; the docstring blames a cause that is not the trigger |
-| CAT-08 | high | | **(C)** SkyMapper's `flags=0` leaks into every subsequent catalog *and* the caller's dict — `EXTRACTION.md` §5.7 claims otherwise |
+| CAT-08 | high | | **(C)** SkyMapper's `flags=0` leaks into every subsequent catalog *and* the caller's dict — `docs/extraction.md`, Query §5.7 claims otherwise |
 | CAT-09 | high | ● | `image_boxes_from_wcs` swaps the x and y pixel scales. A 2×1-binned frame gets a box 4× too wide and 4× too short — the field is silently under-covered |
 | CAT-10 | high | ● | 2MASS `JHK→BVRI` cubics applied with no colour-range guard; the published relation is valid only for −0.1 < J−K < 1.0. At J−K = 2.0 the result is nonsense |
 | CAT-11 | high | | Wide, short fields near a pole: `arcsin` of >1 yields NaN. VizieR path silently drops every source; SDSS path emits `nan` into the SQL |
@@ -476,7 +476,7 @@ Carried forward as open work, not as findings:
    called, so astroquery's column-renaming behavior (CAT-20), SkyServer's
    response to a `nan` in a WHERE clause (CAT-11), and which otype vocabulary
    astroquery 0.4.11 emits (CAT-21) all remain untested. This is the gap
-   `query/EXTRACTION.md` §7 already declares.
+   `docs/extraction.md`, Query §7 already declares.
 3. **UCAC4/UCAC5 on-disk formats (WCS-19).** Decisive test needs one real zone
    file: check `size % 78` vs `% 80`, the filename convention, and the sign of the
    I*4 at offset 4 for a southern zone.

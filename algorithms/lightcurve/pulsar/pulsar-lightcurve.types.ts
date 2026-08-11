@@ -12,7 +12,7 @@
 // (`backScale` is the background-subtraction window width in seconds), and the
 // data container.
 //
-// LEFT BEHIND from the same source file (see ../EXTRACTION.md):
+// LEFT BEHIND from the same source file (see docs/extraction.md, Light Curve):
 //   - PulsarChartInfo / PulsarChartInfoStorageObject — chart titles + axis labels
 //   - PulsarPeriodogram / PulsarPeriodogramStorageObject / ...Interface — periodogram
 //   - PulsarStorage — localStorage read/write
@@ -109,7 +109,7 @@ export class PulsarInterfaceImpl implements PulsarInterface {
     this.backScale = backScale;
   }
 
-  // PRESERVED QUIRK (not fixed — see EXTRACTION.md §9.3): the `!` negation is
+  // PRESERVED QUIRK (not fixed — see docs/extraction.md, Light Curve §9.3): the `!` negation is
   // in the source. PulsarService.getIsLightCurveOptionValid returns the same
   // flag WITHOUT negating, so the two disagree for every input. Only the
   // service version is reachable from the UI, which is why the sign error here

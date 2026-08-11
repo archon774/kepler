@@ -6,7 +6,7 @@
 # `wcs.py` imports `build_wcs_from_header`, `get_source_xy` and
 # `perform_source_extraction` from here, so the module was taken whole rather
 # than split; `get_source_radec` came along unused by the solve. Only the import
-# block was rewritten (changes marked `EXTRACTED:`). See EXTRACTION.md.
+# block was rewritten (changes marked `EXTRACTED:`). See docs/extraction.md, WCS.
 
 from __future__ import annotations
 

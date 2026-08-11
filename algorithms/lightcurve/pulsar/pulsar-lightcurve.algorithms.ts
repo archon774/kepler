@@ -17,7 +17,7 @@
 //   interpolateLinear          1227-1240  linear upsampling by integer factor
 //   resampleLinear             1250-1262  linear resample to a new length
 //
-// FRAMEWORK SEAMS CUT (see ../EXTRACTION.md for the full list):
+// FRAMEWORK SEAMS CUT (see docs/extraction.md, Light Curve for the full list):
 //   - `@Injectable()` decorator and the `@angular/core` import
 //   - every `this.pulsarStorage.save*()` / `get*()` call (localStorage)
 //   - every `this.<name>Subject.next(...)` emission (RxJS BehaviorSubject)

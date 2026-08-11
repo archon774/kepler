@@ -148,7 +148,7 @@ export class VariableLightCurveAlgorithms {
      *  all before any plotting. The pulsar version defers both steps until
      *  after binning.
      *
-     *  PRESERVED QUIRK (not fixed — see EXTRACTION.md §9.1): `data` and `error`
+     *  PRESERVED QUIRK (not fixed — see docs/extraction.md, Light Curve §9.1): `data` and `error`
      *  are built by two passes with DIFFERENT filter predicates —
      *  getChartVariableErrorArray additionally requires `row.errorMSE !== null`
      *  — and are then indexed in lockstep as data[i] / error[i]. A single row

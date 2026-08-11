@@ -3,7 +3,7 @@
 //     pulsar-period-folding-form.component.ts  (307 lines total)
 //   - isComputing$ subscriber body, lines 157-183 -> foldingRangeFromPeriodogram()
 //
-// SCOPE NOTE: period folding itself is NOT extracted here — see EXTRACTION.md.
+// SCOPE NOTE: period folding itself is NOT extracted here — see docs/extraction.md, Periodogram.
 // This file captures only the seam where periodogram OUTPUT becomes folding
 // INPUT, because that mapping is periodogram-side semantics (it has to know
 // about the period/frequency mode flag).

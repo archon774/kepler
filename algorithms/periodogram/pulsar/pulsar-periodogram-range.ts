@@ -10,7 +10,7 @@
 // construction is periodogram algorithm, so it is extracted here. The
 // surrounding file parsing (P_topo / SRC_NAME / UTC / DATE_OBS header
 // scraping, column mapping, background subtraction) is light-curve territory
-// and was left behind — see EXTRACTION.md.
+// and was left behind — see docs/extraction.md, Periodogram.
 //
 // EXTRACTED: was inline inside an Angular FileReader onload handler; all
 // `this.service.setPeriodogram*` / `setPeriodFolding*` writes are returned as

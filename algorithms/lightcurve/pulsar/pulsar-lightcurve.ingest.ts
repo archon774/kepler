@@ -57,7 +57,7 @@ export interface PulsarIngestHost {
   setPeriodFoldingSpeed(speed: number): void;
 
   // Periodogram bounds derived from the file.
-  // NOTE: overlaps with the periodogram extraction — see ../EXTRACTION.md.
+  // NOTE: overlaps with the periodogram extraction — see docs/extraction.md, Light Curve.
   getPeriodogramMethod(): boolean;
   setPeriodogramStartPeriod(startPeriod: number): void;
   setPeriodogramEndPeriod(endPeriod: number): void;

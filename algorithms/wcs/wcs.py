@@ -6,7 +6,7 @@
 # Only the import block below was rewritten (each change is marked `EXTRACTED:`).
 # Every function body, constant, numeric expression and comment — including the
 # legacy-Afterglow parity notes and the 2026-08-03 pointing-seed removal note —
-# is unchanged. See EXTRACTION.md.
+# is unchanged. See docs/extraction.md, WCS.
 
 from __future__ import annotations
 

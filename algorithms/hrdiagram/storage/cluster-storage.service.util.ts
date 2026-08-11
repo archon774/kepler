@@ -12,7 +12,7 @@
 //
 // Framework seams: none in the body (no Angular decorators here). The parent
 // ClusterStorageService that consumed these shapes was localStorage
-// persistence plumbing and is NOT extracted — see ../EXTRACTION.md. Its
+// persistence plumbing and is NOT extracted — see docs/extraction.md, HR Diagram / Isochrone Matching. Its
 // default-value block IS preserved, in
 // ../isochrone-matching/cluster-isochrone.service.ts.
 

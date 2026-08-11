@@ -13,7 +13,7 @@
 //
 // The variable parameter block is deliberately smaller than the pulsar one —
 // no `points` and no `method`. The variable tool hardcodes 2000 steps and is
-// period-mode only. See EXTRACTION.md for the full pulsar-vs-variable split.
+// period-mode only. See docs/extraction.md, Periodogram for the full pulsar-vs-variable split.
 //
 // Framework seams: none — these are plain TS types and classes.
 //

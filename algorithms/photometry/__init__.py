@@ -1,6 +1,6 @@
 """Photometry: aperture photometry and the source extraction that feeds it.
 
-Extracted from the Skynet codebase; see EXTRACTION.md for exact provenance,
+Extracted from the Skynet codebase; see docs/extraction.md, Photometry for exact provenance,
 the infrastructure seams that were cut, and required dependencies.
 
 Layout:
