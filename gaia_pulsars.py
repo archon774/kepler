@@ -19,86 +19,85 @@ client = Anthropic(
 #         block.text for block in message.content if block.type == "text"
 #     )
 
-tools = [
-    {
-        "name": "find_pulsar",
-        "description": "Find a pulsar in the ATNF Pulsar Catalogue based on its coordinates.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ra": {
-                    "type": "string",
-                    "description": "Right ascension in hours, minutes, seconds (e.g., 19h 21m 44.815s)"
-                },
-                "dec": {
-                    "type": "string",
-                    "description": "Declination in degrees, arcminutes, arcseconds (e.g., +21° 53′ 02.25″)"
-                }
-            },
-            "required": ["ra", "dec"]
-        }
-    }
+# tools = [
+#     {
+#         "name": "find_pulsar",
+#         "description": "Find a pulsar in the ATNF Pulsar Catalogue based on its coordinates.",
+#         "input_schema": {
+#             "type": "object",
+#             "properties": {
+#                 "ra": {
+#                     "type": "string",
+#                     "description": "Right ascension in hours, minutes, seconds (e.g., 19h 21m 44.815s)"
+#                 },
+#                 "dec": {
+#                     "type": "string",
+#                     "description": "Declination in degrees, arcminutes, arcseconds (e.g., +21° 53′ 02.25″)"
+#                 }
+#             },
+#             "required": ["ra", "dec"]
+#         }
+#     },
+#     {
+#         "name": "catologue_pulsars_by_rotation_period",
+#         "description": "Create dictionary of pulsars in a given RA and DEC by rotational period, from fastest to slowest.",
+#         "input_schema": {
+#             "type": "object",
+#             "properties": {
+#                 "ra": {"type": "string","description": "Right ascension in hours, minutes, seconds (e.g., 19h 21m 44.815s)"},
+#                 "dec": {"type": "string","description": "Declination in degrees, arcminutes, arcseconds (e.g., +21° 53′ 02.25″)"},
+#                 "name": {"type": "string", "description": "Name of the pulsar using PSR prefix (e.g., PSR B1919+21)"},
+#             },
+#             "required": ["ra", "dec", "name"],
+#         },
+#     },
+# ]
 
-    {
-        "name": "catologue_pulsars_by_rotation_period",
-        "description": "Create dictionary of pulsars in a given RA and DEC by rotational period, from fastest to slowest.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ra": {"type": "string","description": "Right ascension in hours, minutes, seconds (e.g., 19h 21m 44.815s)"},
-                "dec": {"type": "string","description": "Declination in degrees, arcminutes, arcseconds (e.g., +21° 53′ 02.25″)"}
-                "name": {"type": "string", "description": "Name of the pulsar using PSR prefix (e.g., PSR B1919+21)"},
-            },
-            "required": ["ra", "dec", "name"],
-        },
-    },
-
-
-]
-messages = [{"role": "user", "content": "What's the name of the pulsar with right ascension RA: 19h 21m 44.815s and declination DEC: +21° 53′ 02.25″?"}]
+# messages = [{"role": "user", "content": "What's the name of the pulsar with right ascension RA: 19h 21m 44.815s and declination DEC: +21° 53′ 02.25″?"}]
 
 
-# Claude replies with a tool_use block naming the tool and its arguments.
-response = client.messages.create(
-    model="claude-haiku-4-5-20251001",
-    max_tokens=1024,
-    tools=tools,
-    # Ask for at most one tool call per turn.
-    tool_choice={"type": "auto", "disable_parallel_tool_use": False},
-    messages=messages,
-)
-tool_use = next(block for block in response.content if block.type == "tool_use")
-print(f"Claude called {tool_use.name} with {json.dumps(tool_use.input)}")
+# # Claude replies with a tool_use block naming the tool and its arguments.
+# response = client.messages.create(
+#     model="claude-haiku-4-5-20251001",
+#     max_tokens=1024,
+#     tools=tools,
+#     # Ask for at most one tool call per turn.
+#     tool_choice={"type": "auto", "disable_parallel_tool_use": False},
+#     messages=messages,
+# )
+# tool_use = next(block for block in response.content if block.type == "tool_use")
+# print(f"Claude called {tool_use.name} with {json.dumps(tool_use.input)}")
 
-# Run the tool, then send the result back in a tool_result block.
-pulsar = "PSR B1919+21"  
-messages += [
-    {"role": "assistant", "content": response.content},
-    {
-        "role": "user",
-        "content": [
-            {"type": "tool_result", "tool_use_id": tool_use.id, "content": pulsar}
-        ],
-    },
-]
-followup = client.messages.create(
-    model="claude-haiku-4-5-20251001",
-    max_tokens=1024,
-    tools=tools,
-    tool_choice={"type": "auto", "disable_parallel_tool_use": False},
-    messages=messages,
-)
+# # Run the tool, then send the result back in a tool_result block.
+# pulsar = "PSR B1919+21"  
+# messages += [
+#     {"role": "assistant", "content": response.content},
+#     {
+#         "role": "user",
+#         "content": [
+#             {"type": "tool_result", "tool_use_id": tool_use.id, "content": pulsar}
+#         ],
+#     },
+# ]
+# followup = client.messages.create(
+#     model="claude-haiku-4-5-20251001",
+#     max_tokens=1024,
+#     tools=tools,
+#     tool_choice={"type": "auto", "disable_parallel_tool_use": False},
+#     messages=messages,
+# )
 
 
-# Claude uses the result to answer the original question.
-final_text = next(block for block in followup.content if block.type == "text")
-print(final_text.text)
+# # Claude uses the result to answer the original question.
+# final_text = next(block for block in followup.content if block.type == "text")
+# print(final_text.text)
 
 
 ########################
 
 
 from astropy.coordinates import SkyCoord
+import astropy.units as u
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -118,13 +117,13 @@ def resolve_object(name):
     c = SkyCoord.from_name(name)
     return {"name": name, "ra_deg": round(c.ra.deg, 6), "dec_deg": round(c.dec.deg, 6)} # .dec is from SkyCoord
 
-# def find_object_by_coordinates(ra_deg, dec_deg):
-#     """Find an object name given its RA and Dec in degrees using Simbad."""
-#     c = SkyCoord(ra=ra_deg, dec=dec_deg)
-#     result = Simbad.query_region(c, radius=1*=u.arcsec)
-#     if result is not None and len(result) > 0:
-#         return {"ra_deg": ra_deg, "dec_deg": dec_deg, "name": result[0]['NAME']}
-#     return {"ra_deg": ra_deg, "dec_deg": dec_deg, "name": None}
+def find_object_by_coordinates(ra_deg, dec_deg):
+    """Find an object name given its RA and Dec in degrees using Simbad."""
+    c = SkyCoord(ra=ra_deg, dec=dec_deg)
+    result = Simbad.query_region(c, radius=1 * u.arcsec)
+    if result is not None and len(result) > 0:
+        return {"ra_deg": ra_deg, "dec_deg": dec_deg, "name": result[0]['NAME']}
+    return {"ra_deg": ra_deg, "dec_deg": dec_deg, "name": None}
 
 def query_gaia_cone(ra_deg, dec_deg, radius_deg=0.1, mag_limit=21.0):
     """Query Gaia DR3 for sources inside a cone, optionally brighter than mag_limit (G band).
@@ -273,7 +272,7 @@ def run_agent(question, max_turns=8, verbose=True):
 if __name__ == "__main__":
     answer = run_agent(
         "Compare how many Gaia sources brighter than G=15 lie within 0.1 degrees of the "
-        "centres of the Pleiades and the Hyades. Which field is denser, and by how much?"
+        "centres of the Pleiades and the Hyades. Which field is denser and by how much?"
     )
     print("\n=== FINAL ANSWER ===\n" + answer)
 
