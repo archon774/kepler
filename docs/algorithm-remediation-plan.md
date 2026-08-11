@@ -8,8 +8,7 @@ Scope: correctness of the algorithms in `wcs/`, `photometry/`, `fieldcal/`,
 This document is the output of a four-part algorithm review and the plan for
 rolling out fixes. It is deliberately **separate from**
 [`tool-architecture.md`](tool-architecture.md), which owns file organization and
-tool wiring and asserts nothing about correctness. The two tracks interlock at
-exactly one point, §7.
+tool wiring and asserts nothing about correctness.
 
 ---
 
@@ -51,43 +50,48 @@ documentation claims rather than code — see §4, class C.
 
 ---
 
-## 2. The prerequisite: there is nothing to catch a bad fix
+## 2. The prerequisite: every fix needs a targeted test
 
-This repository has **no test suite, no golden values, and no numeric baseline**.
-CI compiles one file and checks that five files exist. The extracted packages are
-never imported.
+This repository still has very little automated coverage. The architecture
+migration will make the Python algorithms importable under `kepler/`, but it will
+not prove that a numeric edit is correct.
 
 You cannot safely fix a weighted zero-point solver, a triangle matcher, or a
-Lomb–Scargle normalization under those conditions. Every edit is unfalsifiable:
-nothing distinguishes "fixed the bug" from "moved the answer in a different wrong
-direction". Several findings below are *pairs of errors that currently cancel* —
+Lomb-Scargle normalization without a check tied to the behavior being changed.
+Several findings below are *pairs of errors that currently cancel* —
 `getMass`/`getPhysicalRadius` (TS-21) has two 1000× unit errors that cancel
 exactly, and "fixing" either one alone introduces a 10⁶× error. Without a
-harness, that is a live hazard.
+targeted test, that is a live hazard.
 
-### R0 — Numeric regression harness (blocks every numeric fix)
+### Test rule for every remediation PR
 
-- **Characterization first, not correctness.** Record *current* output for each
-  algorithm on each fixture — bugs included. This is a tripwire, not an
-  assertion. Every subsequent fix must move a fixture in exactly the expected
-  place and nowhere else.
-- **Pure-function fixtures need nothing installed** and cover a large share of the
-  findings: color transforms, `calc_solution`, Lomb–Scargle, CCM extinction,
-  `equatorial2Galactic`, `floatMod`, `getPeriodStep`, the sexagesimal parsers.
-  Build these first — they are cheap and they gate Waves 1–2.
-- **Differential cross-check for the zero-point path.**
-  `/home/claude/skynet-data/pipeline_data/afterglow_results/` exists and holds 74
-  reference zero points across BVR, SDSS and narrowband frames, plus per-source
-  photometry. **These are Afterglow's outputs, so they carry Afterglow's own
-  defects** — they are a differential reference, not ground truth. A deliberate
-  fix should produce a specific, explainable delta against them, not perfect
-  agreement.
-- **Upstream is present** (`/home/claude/skynet`, `/home/claude/astromancer`), so
-  an upstream-parity fixture is available for any algorithm where "what does
-  Skynet do here?" needs an answer during a fix.
+Each bug-fix PR must include the smallest test that would have failed before the
+fix and passes after it. Prefer tiny deterministic inputs over broad
+characterization suites.
 
-R0 runs alongside architecture Phase 0. Both are pure additions; neither touches
-an algorithm.
+Good first tests are pure-function checks that need no remote services or large
+data:
+
+- catalog band/filter resolution;
+- `calc_solution` zero-point behavior;
+- Lomb-Scargle helpers;
+- CCM extinction helpers;
+- `equatorial2Galactic`;
+- `floatMod`;
+- `getPeriodStep`;
+- sexagesimal parsing and formatting.
+
+For image, catalog-query, and field-calibration bugs, keep tests as small as the
+bug allows:
+
+- use synthetic FITS headers before real FITS products;
+- use synthetic source/catalog rows before downloaded catalogs;
+- use mocks or tiny in-memory tables before live providers;
+- use one focused fixture per changed behavior.
+
+When a full runtime dependency is unavoidable, mark that test separately and keep
+the default test suite deterministic. The fix PR should still include a local
+unit-level test for the decision logic whenever possible.
 
 ---
 
@@ -110,9 +114,9 @@ Those three are the top of the queue.
 
 ## 4. Finding classes (provenance, not permission)
 
-Under the current scope every class gets fixed. Class is recorded because it
-determines what the fix ledger says and what anyone comparing against a legacy
-Skynet run needs to know.
+Under the current scope every class gets fixed. Class is recorded so each fix PR
+can say whether it is restoring extraction intent, diverging from upstream, or
+addressing an operational hazard.
 
 | Class | Meaning | Count |
 |---|---|---:|
@@ -212,22 +216,42 @@ testing will never show it.
 
 ## 6. Rollout waves
 
-Ordered by (silent before loud), then severity, then dependency. Each wave is one
-or more PRs; every numeric fix requires its R0 fixture to exist first.
+Ordered by silent wrong science first, then severity, then dependency. A wave is
+not a release train or a framework phase; it is a priority queue for small
+bug-fix PRs. Every PR should name the finding IDs it closes and include the
+smallest targeted test for those IDs.
 
 | Wave | Contents | Gate |
 |---|---|---|
-| **W0** | R0 harness — characterization fixtures, pure-function coverage first, Afterglow differential check | — |
-| **W1** | The 7 blockers (§5), silent three first | W0 fixtures for the affected functions |
-| **W2** | **Silent wrong-number defects, all severities.** The ones that hand an agent a plausible lie: reference-magnitude mis-declarations (CAT-03, CAT-04, CAT-05, CAT-06, CAT-13, CAT-14), photometry bias (PHOT-01, PHOT-02, PHOT-03, PHOT-06, PHOT-10), astrometry acceptance (WCS-03, WCS-06), geometry (CAT-09, CAT-10, CAT-11), cluster/timeseries numerics (TS-05, TS-14, TS-09) | W0 |
-| **W3** | **Loud failures — crashes, hangs, aborts.** WCS-05, WCS-21, WCS-22, PHOT-04, PHOT-05, PHOT-11, CAT-07, CAT-18, TS-04, TS-12, TS-16, TS-18 | W0 for any with a numeric component |
-| **W4** | **Bounded and latent defects.** WCS-08..WCS-20, PHOT-07..PHOT-09, PHOT-12..PHOT-14, CAT-12, CAT-15, CAT-16, CAT-19, TS-06..TS-08, TS-10, TS-11, TS-13, TS-15 | W0 |
-| **W5** | **Hygiene and documentation.** Remaining low-severity findings, the class-C documentation corrections (CAT-08 §5.7, CAT-17 docstring, CAT-29 §3), and recording every class-B finding in the relevant `EXTRACTION.md` — the documenting is itself a deliverable | — |
+| **W1** | The 7 blockers (§5), silent three first | targeted test per finding |
+| **W2** | **Silent wrong-number defects, all severities.** The ones that hand an agent a plausible lie: reference-magnitude mis-declarations (CAT-03, CAT-04, CAT-05, CAT-06, CAT-13, CAT-14), photometry bias (PHOT-01, PHOT-02, PHOT-03, PHOT-06, PHOT-10), astrometry acceptance (WCS-03, WCS-06), geometry (CAT-09, CAT-10, CAT-11), cluster/timeseries numerics (TS-05, TS-14, TS-09) | targeted test per finding |
+| **W3** | **Loud failures — crashes, hangs, aborts.** WCS-05, WCS-21, WCS-22, PHOT-04, PHOT-05, PHOT-11, CAT-07, CAT-18, TS-04, TS-12, TS-16, TS-18 | targeted test per finding |
+| **W4** | **Bounded and latent defects.** WCS-08..WCS-20, PHOT-07..PHOT-09, PHOT-12..PHOT-14, CAT-12, CAT-15, CAT-16, CAT-19, TS-06..TS-08, TS-10, TS-11, TS-13, TS-15 | targeted test per finding |
+| **W5** | **Hygiene and documentation.** Remaining low-severity findings, the class-C documentation corrections (CAT-08 §5.7, CAT-17 docstring, CAT-29 §3), and recording every class-B finding in the relevant `EXTRACTION.md` | docs or targeted test, as appropriate |
+
+### Immediate action plan after architecture migration
+
+Start with Python findings that affect the first likely tools and can be tested
+without live services or large datasets:
+
+| PR | Findings | Test shape |
+|---|---|---|
+| 1 | CAT-01 | Pure unit test for direct-band filter resolution: Johnson `V` must not resolve to SkyMapper `v`; `U` must not shadow the declared transform path. |
+| 2 | CAT-02 | Unit test the SDSS SQL/query builder so a limit becomes `TOP <n>` and the public `limit` argument is honored without making a live SkyServer call. |
+| 3 | WCS-02 | Unit test `SolverSettings` and astrometry.net config construction so `ANET_TIMEOUT_S` produces a finite `timeout_s` and reaches the already-written timeout path. |
+| 4 | WCS-01 / WCS-25 | Synthetic-header/settings test proving the ATLAS catalog search radius is capped and the cap is constructible through settings. |
+| 5 | PHOT-03 | Tiny `calc_solution` or rejection-kernel test showing <=10 calibration stars with an outlier get the intended rejection behavior. |
+
+TypeScript blockers stay out of the first Python-tool remediation path unless a
+minimal TypeScript test runner is added in the same PR. Before exposing any
+TypeScript-backed tool, close TS-01, TS-02 and TS-03 with targeted tests against
+the relevant exported functions.
 
 ### Three sequencing rules that are not negotiable
 
 1. **Duplicated files are 2–3 fixes, not one.** A fix landing in one copy and not
-   the others is a *new* defect, and the reviews found four such defects already:
+   the others is a *new* defect, and the reviews found several such defects
+   already:
 
    | Defect | File | Copies |
    |---|---|---:|
@@ -238,8 +262,10 @@ or more PRs; every numeric fix requires its R0 fixture to exist first.
    | `getPeriodStep` returns a step of 0 (TS-12) | three TS modules | 3 |
    | `floatMod` non-terminating (TS-02) | two TS modules | 2 |
 
-   **Land architecture Phase 1b (deduplication) before Wave 2**, or accept that
-   every one of those is applied by hand N times with nothing checking.
+   The simplified architecture does not consolidate helper trees as part of the
+   tool migration. Until that changes intentionally, each remediation PR must
+   patch every duplicate copy it affects and test the public behavior reached
+   through each domain.
 
 2. **Do not fix TS-21.** `getMass`/`getPhysicalRadius` carry two 1000× unit errors
    that cancel exactly: `rad(vd)/3600` treats mas/yr as arcsec/yr while
@@ -259,63 +285,43 @@ or more PRs; every numeric fix requires its R0 fixture to exist first.
 
 ## 7. Where this track touches the architecture
 
-One interlock, in two directions.
+The simplified architecture migration should land first: create the `kepler`
+package shell, move the Python algorithm folders under `kepler/`, and add the
+first simple local tools. That gives remediation stable import paths and avoids
+mixing file moves with behavior changes.
 
-### The architecture closes a class of findings structurally
+After that, algorithm fixes start as focused PRs with targeted tests. A tool can
+still guard its own inputs and keep outputs bounded, but the following findings
+remain remediation work when they affect algorithm behavior:
 
-These are class-D operational hazards that the tool layer fixes by construction,
-not by editing an algorithm. They need no separate remediation work — they need
-the architecture phase that covers them:
+- timeout and runaway behavior, such as WCS-02 and WCS-21;
+- mutation of caller-owned objects, such as WCS-28 and PHOT-17;
+- unbounded query behavior, such as CAT-02;
+- swallowed mapping or provider errors, such as CAT-20 and WCS-23;
+- browser-only TypeScript behavior, such as TS-17, when those algorithms are
+  exposed.
 
-| Finding | Closed by |
-|---|---|
-| WCS-23 — blanket `except` reports config and I/O failures as "no solution" | P5 error taxonomy + backend probing (`backend_unavailable` ≠ `no_solution`) |
-| WCS-02, WCS-21 — no timeouts anywhere | `runtime/limits.py` |
-| WCS-28, PHOT-17 — mutate the caller's settings object, `CatalogSource` list and `Header` | P1 ephemeral run context, P2 write-to-copy |
-| PHOT-08 — degenerate solve writes a header and reports success | P2 + P5 |
-| PHOT-16 — batch driver swallows every exception into a blank CSV cell | P5 |
-| PHOT-17 — `fieldcal.deps` process globals | P3 composition root |
-| CAT-02, CAT-19 — unbounded and undetectably-truncated results | P6 bounded output + `partial` status |
-| CAT-20 — mapping failures are indistinguishable from an empty sky region | P5 (`empty` vs `error` are different statuses) |
-| CAT-27 — SQL built by string interpolation from a caller-suppliable spec | `runtime` input validation |
-| TS-17 — `alert()` raises `ReferenceError` off-browser | P8 bridge |
-| WCS-28 — library prints to stdout per frame | `runtime/logging.py` |
-
-### The architecture makes the rest reviewable
-
-One call site per domain entry point, an algorithm manifest that flags any commit
-touching algorithm code, and a no-duplicate-hash assertion that stops the
-triplication re-forming. That is the whole of the dependency in the other
-direction.
-
-Interleaving:
-
-```
-Arch:  Phase 0 ── Phase 1 ── Phase 1b ── Phase 2 ── Phase 3 ── Phase 4 ─ …
-Fix:   W0 ───────────────────────────── W1 ── W2 ── W3 ── W4 ── W5
-            └ W0 runs beside Phase 0     └ after 1b, so a fix lands once
-```
+Do not rely on the tool wrapper to hide a known algorithm bug. If a bug can
+produce wrong science or unsafe runtime behavior, either fix it with a targeted
+test before exposing the tool, or keep that tool out of the first public surface.
 
 ---
 
-## 8. Fix ledger
+## 8. Fix notes
 
-Every divergence from what Skynet or Astromancer ships gets an entry in
-`docs/parity-ledger.md`, so anyone comparing Kepler against a legacy run can
-account for the difference:
+Each remediation PR should include a concise fix note in its PR body or in the
+relevant `EXTRACTION.md` when the divergence is important for future readers:
 
 ```
-### L-nnn  <title>
-Finding:       <IDs closed>
-Upstream:      <what Skynet/Astromancer does, with upstream file:line>
-Kepler:        <what Kepler now does>
-Class:         A | B | C | D
-Numeric delta: <magnitude of change, on which fixture>
-Wave:          <n>
+Finding:      <IDs closed>
+Before:       <what Skynet/Astromancer/current Kepler did>
+After:        <what Kepler now does>
+Test:         <targeted test added>
+Notes:        <numeric delta or compatibility concern, if relevant>
 ```
 
-Class-C fixes need no ledger entry — restoring intended behavior is not a
-divergence.
+Do not create a separate tracking document until the project has a concrete need
+for one.
 
 ---
 
@@ -463,7 +469,8 @@ Carried forward as open work, not as findings:
 1. **No end-to-end run of anything.** No `solve-field`, no index files, no UCAC
    catalog, no `node`/`tsc`, no reference FITS. Every runtime claim is isolated
    execution of an extracted function against the real numeric stack, or
-   arithmetic on the code. R0 is what changes this.
+   arithmetic on the code. Targeted remediation tests should close these gaps
+   only when a fix needs that runtime path.
 2. **No live provider response.** VizieR/SkyServer/SIMBAD were deliberately not
    called, so astroquery's column-renaming behavior (CAT-20), SkyServer's
    response to a `nan` in a WHERE clause (CAT-11), and which otype vocabulary
