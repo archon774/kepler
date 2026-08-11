@@ -11,7 +11,7 @@ folders are intentionally independent while the extraction work settles.
 
 | Path | Status | What it contains |
 |---|---|---|
-| `database_tools.py` | Prototype | A Claude/Anthropic tool runner around `astroquery`, `psrqpy`, and `ads` for SIMBAD, NED, VizieR, ATNF, ADS, MAST, and MPC queries. |
+| `kepler/` | Tool package | One thin tool per astronomy database (SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA, ADS) built on `astroquery`/`psrqpy`, following `docs/tool-architecture.md`. Every tool writes its full result to disk and returns a bounded summary — no hardcoded row caps. |
 | `wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry, with vendored `skylib` routines for SEP extraction, centroiding, background estimation, aperture sums, and statistics. |
 | `fieldcal/` | Extracted Python algorithm | Skynet photometric zero-point calibration: catalog-source matching, variable-star filtering, reference-magnitude resolution, and weighted zero-point solving. |
@@ -30,11 +30,13 @@ verification already performed.
 
 ```text
 Kepler/
-  database_tools.py              # current astronomy database prototype
+  kepler/                        # per-database astronomy tools (see docs/tool-architecture.md)
+    tools/                       # simbad.py, ned.py, vizier.py, atnf.py, mast.py, mpc.py, casda.py
   pyproject.toml                 # Python package metadata and dependencies
   uv.lock                        # uv lockfile for reproducible installs
   docs/
     architecture-brainstorm.md   # future package architecture notes
+    tool-architecture.md         # the tool-package shape kepler/ follows
   wcs/                           # Python WCS extraction from Skynet
   photometry/                    # Python photometry extraction from Skynet
   fieldcal/                      # Python zero-point calibration extraction
@@ -64,21 +66,39 @@ local UCAC4/UCAC5 catalogs.
 
 ## Python Entry Points
 
-The database prototype can be called directly:
+Each database has its own tool function, callable directly with no server or
+agent runtime required:
 
 ```python
-from database_tools import AstroQueryTool
+from kepler.tools.simbad import search_simbad
+from kepler.tools.vizier import search_vizier
+from kepler.tools.ned import search_ned
 
-tool = AstroQueryTool()
-result = tool.execute({
-    "database": "SIMBAD",
-    "query_type": "object_name",
-    "target": "M31",
-})
+search_simbad("M31")
+search_vizier("Cas A", category="radio")   # any VizieR spectrum, any catalog
+search_ned("Cas A", table="photometry")    # NED's full historical flux table
 ```
 
-ADS queries require `ADS_DEV_KEY`. The interactive Anthropic runner in
-`database_tools.py` requires `ANTHROPIC_API_KEY` and is still prototype code.
+Every tool returns a bounded `kepler.models.ToolResult`: a short inline
+preview plus, when a result is larger than that, a path to the complete
+table written under `artifacts/`. See `docs/tool-architecture.md` for the
+full tool list and design rules.
+
+Literature search, citation lookup, and literature-review generation are
+available via `kepler.tools.ads` (`search_ads`, `get_citing_papers`,
+`get_referenced_papers`, `build_literature_review`), built on
+`astroquery.nasa_ads` rather than the standalone `ads` package
+`database_tools.py` used. Requires an API token in `ADS_DEV_KEY` — get one
+from https://ui.adsabs.harvard.edu/user/settings/token.
+`build_literature_review` writes a Markdown review with full citations and
+abstracts to `artifacts/ads/`.
+
+An optional agentic runner is available for wiring these tools into an
+Anthropic tool-use loop:
+
+```bash
+ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
+```
 
 The extracted Python domains expose callable algorithm entry points:
 
@@ -139,7 +159,7 @@ into a future TypeScript package or application.
 Current CI is intentionally small:
 
 ```bash
-python3 -m py_compile database_tools.py
+python3 -m compileall kepler catalogs
 git diff --check
 ```
 

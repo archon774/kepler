@@ -46,6 +46,12 @@ Important files:
   `catalogs/` and `query/`.
 - `simbad.py`: the 206-entry SIMBAD object-type vocabulary.
 - `EXTRACTION.md`: provenance, renames, preserved behaviours, verification.
+- `ned.py`, `atnf.py`, `ads.py`: newer, non-extracted lookup tables for
+  `kepler.tools.ned`, `kepler.tools.atnf`, and `kepler.tools.ads` — NED's
+  `table=` vocabulary, the ATNF/psrqpy parameter list (copied as static data
+  rather than importing `psrqpy` here), and ADS's field-search syntax plus a
+  citation formatter, all declaration/formatting only, keeping this package's
+  zero-query-library-import contract.
 
 Current caveats:
 
@@ -128,6 +134,42 @@ Current caveats:
 - There is no TypeScript package manifest or build config in this repository.
 - Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser
   export handlers were removed.
+
+## `kepler/`
+
+Per-database astronomy tools, following `docs/tool-architecture.md`. Not part
+of the Skynet/Astromancer extraction — this is new code, built on top of the
+existing `catalogs/`/`query/` packages (which it imports but does not modify)
+and directly on `astroquery`/`psrqpy` for databases those packages don't
+cover.
+
+- `tools/simbad.py`, `ned.py`, `vizier.py`, `atnf.py`, `mast.py`, `mpc.py`,
+  `casda.py`, `ads.py`: one thin tool module per database. `vizier.py` reaches
+  any of VizieR's ~20,000 catalogs (any spectrum, via `category=`), bypassing
+  the photometric `catalogs`/`query` mapping entirely to avoid a
+  magnitude-vs-flux bug in `query/vizier.py` that would otherwise drop radio
+  measurements. `ads.py` builds NASA/SAO ADS's fielded query syntax
+  (`author:"..."`, `title:"..."`, `year:2015-2020`) from structured
+  parameters rather than passing free text through, and can write a Markdown
+  literature review with full citations to `artifacts/ads/`
+  (`build_literature_review`). Needs `ADS_DEV_KEY`.
+- `tools/resolve.py`: shared SIMBAD name resolution.
+- `tools/registry.py`: every tool's schema, for wiring into an agent loop.
+- `models.py`, `artifacts.py`, `config.py`: the shared result shape, local
+  output handling (including `write_text` for non-tabular artifacts like
+  literature reviews), and environment-backed settings every tool uses.
+- `runner.py`: an optional agentic loop over the tool schemas (needs
+  `ANTHROPIC_API_KEY`); every tool works from ordinary Python without it.
+
+Current caveats:
+
+- `kepler/tools/ads.py` has not been run against the real ADS API — no
+  `ADS_DEV_KEY` was available in the environment this was built in. Its
+  query-building is grounded in ADS's own documentation and
+  `astroquery.nasa_ads`'s source, not live confirmation.
+- `wcs/`, `photometry/`, `fieldcal/`, `catalogs/`, and `query/` have not moved
+  under `kepler/` — only the per-database tool slice has, per an explicit,
+  narrower request than `docs/tool-architecture-migration.md`'s full plan.
 
 ## `lightcurve/`
 

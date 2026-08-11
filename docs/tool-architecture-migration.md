@@ -176,6 +176,16 @@ The practical sequencing is:
 - Reorganizing extracted helper directories.
 - Consolidating duplicated implementation internals.
 - Replacing `fieldcal.deps` unless a first-slice tool requires it.
-- Moving `database_tools.py` logic.
-- Adding heavier image, catalog-query, or TypeScript-backed tools.
+- Adding heavier image or TypeScript-backed tools.
 - Building a serving framework.
+
+**Update:** "Moving `database_tools.py` logic" was originally listed here as
+out of scope for this pass, deferred until after Steps 1-3 and the
+remediation plan. It was pulled forward by explicit request ahead of that
+sequencing: `kepler/tools/` now holds one thin tool per database (SIMBAD,
+NED, VizieR, ATNF, MAST, MPC, CASDA), and `database_tools.py` has been
+deleted. This did not do Steps 1-3 as written above — `wcs/`, `photometry/`,
+`fieldcal/`, `catalogs/`, and `query/` have not moved under `kepler/`, and
+`catalogs/`/`query/` were not touched at all. Only the database-tools slice
+landed early; the rest of this migration is still ahead. Literature search
+(ADS) was not carried over and is being redesigned separately.

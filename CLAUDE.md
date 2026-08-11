@@ -7,9 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Kepler is a **staging area for extracted astronomy algorithms**, not yet a coherent
 package. It holds three things:
 
-1. `database_tools.py` — a prototype Anthropic tool runner over `astroquery`/`psrqpy`/`ads`.
+1. `kepler/` — per-database astronomy tools (SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA,
+   ADS) built on `astroquery`/`psrqpy`, following `docs/tool-architecture.md`.
 2. Eight domain folders (`wcs/`, `photometry/`, `fieldcal/`, `catalogs/`, `query/`, `lightcurve/`, `periodogram/`, `hrdiagram/`) containing code lifted verbatim out of two upstream codebases.
 3. `docs/architecture-brainstorm.md` — the plan for the package this should become.
+
+`database_tools.py`, the single combined Anthropic tool this repository started with, has
+been retired in favor of `kepler/tools/`: one thin tool per database instead of one tool
+with a `database` enum switch, each writing its full result to disk rather than truncating
+to a handful of rows. See `docs/tool-architecture.md` and `docs/tool-architecture-migration.md`.
 
 The top-level folders are intentionally independent while the extraction work settles.
 `README.md` and `docs/repository-folders.md` describe the current state; the brainstorm
@@ -40,16 +46,17 @@ folder** — it is the only place the upstream mapping is recorded.
 
 ```bash
 uv sync                                  # create .venv and install pinned deps
-python3 -m py_compile database_tools.py  # the only Python check CI runs
+python3 -m compileall kepler catalogs    # the only Python check CI runs
 git diff --check                         # whitespace check
 ```
 
 There is **no test suite, linter, or type-checker configured** in this repository. Do not
 claim tests pass; there are none to run. CI (`.github/workflows/ci.yml`) runs only the
-`py_compile` above plus a `repository-shape` job asserting that `README.md`,
-`pyproject.toml`, `uv.lock`, `database_tools.py`, and `docs/architecture-brainstorm.md`
-exist — renaming or removing any of those breaks CI. Note that CI never imports or
-compiles the extracted `wcs/`, `photometry/`, or `fieldcal/` packages.
+`compileall` above plus a `repository-shape` job asserting that `README.md`,
+`pyproject.toml`, `uv.lock`, and `docs/architecture-brainstorm.md` exist — renaming or
+removing any of those breaks CI. `compileall` is a syntax check only (no dependencies are
+installed in CI, so nothing is actually imported); it covers `kepler/` and `catalogs/` but
+still never touches `query/`, `wcs/`, `photometry/`, or `fieldcal/`.
 
 Other workflows: `secret-scan.yml` (gitleaks over tree and full history) and
 `workflow-safety.yml` (actionlint + zizmor). The `.gitleaks.toml` allowlist for env-var
@@ -180,7 +187,7 @@ were removed. Ownership is likewise strict and cross-cutting:
   Default checks must stay deterministic and bounded.
 - Do not commit downloaded FITS products, generated plots, caches, or large datasets
   (`.gitignore` already covers `fits_downloads/`, `artifacts/`, `data/`, etc.).
-- `database_tools.py` requires `ADS_DEV_KEY` for ADS queries and `ANTHROPIC_API_KEY` for its
-  interactive runner. It is prototype code; `docs/architecture-brainstorm.md` plans to move
-  its logic into `tools/` and `services/` modules with `ToolResult` envelopes, keeping the
-  module temporarily as a compatibility wrapper.
+- `kepler/runner.py`'s optional agentic loop requires `ANTHROPIC_API_KEY`. `kepler/tools/ads.py`
+  (literature search, citation lookup, literature reviews) requires `ADS_DEV_KEY` — get one
+  from https://ui.adsabs.harvard.edu/user/settings/token. It uses `astroquery.nasa_ads`, not
+  the standalone `ads` package `database_tools.py` used; that pin has been removed.

@@ -16,7 +16,8 @@ regexes = [
 paths = [
   '''README\.md''',
   '''CONTRIBUTING\.md''',
-  '''database_tools\.py''',
+  '''kepler/runner\.py''',
+  '''kepler/tools/ads\.py''',
   '''docs/.*\.md''',
   '''\.github/workflows/.*\.yml''',
 ]

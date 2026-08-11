@@ -2,13 +2,13 @@
 
 ## Project Structure & Module Organization
 
-Kepler is an early-stage astronomy tooling workspace with independent extracted modules. Python source lives in `wcs/`, `photometry/`, and `fieldcal/`, each with an `EXTRACTION.md` describing provenance, dependencies, and parity notes. Framework-free TypeScript algorithms live in `lightcurve/`, `periodogram/`, and `hrdiagram/`; these currently have no `package.json` or `tsconfig.json`. Root files include `database_tools.py`, `pyproject.toml`, `uv.lock`, `README.md`, `CONTRIBUTING.md`, and planning docs under `docs/`.
+Kepler is an early-stage astronomy tooling workspace with independent extracted modules. Python source lives in `wcs/`, `photometry/`, and `fieldcal/`, each with an `EXTRACTION.md` describing provenance, dependencies, and parity notes. `kepler/tools/` holds one thin tool per astronomy database (SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA), following `docs/tool-architecture.md`. Framework-free TypeScript algorithms live in `lightcurve/`, `periodogram/`, and `hrdiagram/`; these currently have no `package.json` or `tsconfig.json`. Root files include `pyproject.toml`, `uv.lock`, `README.md`, `CONTRIBUTING.md`, and planning docs under `docs/`.
 
 ## Build, Test, and Development Commands
 
 - `uv sync`: create/update the Python 3.12 environment from `pyproject.toml` and `uv.lock`.
-- `uv run kepler-database-tool`: run the packaged database prototype entry point.
-- `python3 -m py_compile database_tools.py`: current CI syntax smoke test.
+- `uv run kepler-astro-query "<question>"`: run the optional agentic loop over the `kepler.tools` schemas (requires `ANTHROPIC_API_KEY`).
+- `python3 -m compileall kepler catalogs`: current CI syntax smoke test.
 - `git diff --check`: catch trailing whitespace and patch formatting issues before review.
 
 End-to-end WCS, photometry, and field calibration runs require external FITS data, native astronomy dependencies, solver binaries, and local catalog data documented in each module's `EXTRACTION.md`.
@@ -27,4 +27,4 @@ Recent history uses short, imperative commit subjects such as `Use uv for depend
 
 ## Security & Configuration Tips
 
-Never commit API keys, local environment files, large astronomy datasets, archive dumps, or generated artifacts. `ADS_DEV_KEY` and `ANTHROPIC_API_KEY` are required only for the relevant database prototype paths. Workflow changes should remain narrow and pass the secret-scan and workflow-safety jobs.
+Never commit API keys, local environment files, large astronomy datasets, archive dumps, or generated artifacts. `ANTHROPIC_API_KEY` is required only for `kepler.runner`'s optional agentic loop; `ADS_DEV_KEY` is required for `kepler.tools.ads` (literature search and reviews) — get one from https://ui.adsabs.harvard.edu/user/settings/token. Workflow changes should remain narrow and pass the secret-scan and workflow-safety jobs.
