@@ -2,20 +2,19 @@
 
 Kepler is an early-stage astronomy tooling repository. Its current state is a
 small installable Python tool collection, extracted astronomy algorithms, a
-prototype database-query tool, and an architecture document for turning those
-pieces into a coherent tool surface.
+split database-query tool surface, and an architecture document for turning
+those pieces into a coherent tool surface.
 
 ## Current Contents
 
 | Path | Status | What it contains |
 |---|---|---|
-| `database_tools.py` | Prototype | A Claude/Anthropic tool runner around `astroquery`, `psrqpy`, and `ads` for SIMBAD, NED, VizieR, ATNF, ADS, MAST, and MPC queries. |
-| `tools/` | Python tools | First plain Python tool wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, and local artifact inspection. |
+| `tools/` | Python tools | Plain Python wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, local artifact inspection, and remote database/archive queries. |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
 | `algorithms/fieldcal/` | Extracted Python algorithm | Skynet photometric zero-point calibration: catalog-source matching, variable-star filtering, reference-magnitude resolution, and weighted zero-point solving. |
 | `algorithms/skylib_lite/` | Shared Python support | Consolidated local Skylib subset used by WCS, photometry, and field calibration: astrometry, SEP extraction, background estimation, aperture photometry, FITS helpers, angle math, and statistics. |
-| `algorithms/catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations: band tables, filter/colour transforms, column mappings, and the SIMBAD object-type vocabulary for eleven catalogs. Declaration only — no network code. |
+| `algorithms/catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations, SIMBAD object-type vocabulary, and provider lookup tables used by ADS/NED/ATNF tools. Declaration only — no network code. |
 | `algorithms/query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
 | `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, and period-folding logic with Angular/RxJS/Highcharts removed. |
 | `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
@@ -31,14 +30,13 @@ verification already performed.
 
 ```text
 Kepler/
-  database_tools.py              # current astronomy database prototype
   pyproject.toml                 # Python package metadata and dependencies
   uv.lock                        # uv lockfile for reproducible installs
   package.json                   # TypeScript toolchain metadata
   tsconfig.json                  # TypeScript compiler smoke-check config
   docs/
     tool-architecture.md         # master package architecture
-  tools/                         # first plain Python tool wrappers and shared models
+  tools/                         # public Python tool wrappers, runner, shared models
   algorithms/
     wcs/                         # Python WCS extraction from Skynet
     photometry/                  # Python photometry extraction from Skynet
@@ -61,7 +59,7 @@ uv sync
 ```
 
 `pyproject.toml` is the installable package metadata and includes the Python
-dependencies needed by the database prototype and extracted algorithm modules.
+dependencies needed by the split database tools and extracted algorithm modules.
 `uv.lock` records the resolved dependency set.
 
 Some extracted runtime paths also require non-Python solver data called out in
@@ -70,29 +68,31 @@ local UCAC4/UCAC5 catalogs.
 
 ## Python Entry Points
 
-The database prototype can be called directly:
+ADS queries require `ADS_DEV_KEY`. The optional Anthropic runner exposed by
+`tools.runner` requires `ANTHROPIC_API_KEY`.
 
-```python
-from database_tools import AstroQueryTool
-
-tool = AstroQueryTool()
-result = tool.execute({
-    "database": "SIMBAD",
-    "query_type": "object_name",
-    "target": "M31",
-})
-```
-
-ADS queries require `ADS_DEV_KEY`. The interactive Anthropic runner in
-`database_tools.py` requires `ANTHROPIC_API_KEY` and is still prototype code.
-
-The first plain Python tools live under `tools`:
+The plain Python tools live under `tools`:
 
 ```python
 from tools.astrometry import describe_image_wcs
 from tools.catalogs import list_photometric_catalogs, resolve_reference_band
 from tools.calibration import solve_zeropoint_from_measurements
+from tools.simbad import search_simbad
+from tools.vizier import search_vizier
+from tools.ned import search_ned
+from tools.ads import search_ads, build_literature_review
+from tools.mast import search_mast
+from tools.mpc import search_mpc
+from tools.atnf import search_atnf
+from tools.casda import search_casda
 from tools.workspace import describe_artifact, list_artifacts
+```
+
+An optional agentic runner is available for wiring these tools into an
+Anthropic tool-use loop:
+
+```bash
+ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
 ```
 
 Advanced callers can still import the extracted algorithm packages directly:
@@ -113,9 +113,9 @@ from algorithms.query.simbad import resolve_simbad
 `algorithms.fieldcal.deps.query_catalogs` already defaults to `algorithms.query`.
 
 Catalog metadata and catalog access are separate on purpose. Import
-`algorithms.catalogs` for band tables and colour transforms — it is pure data and
-pulls in no network stack. Import `algorithms.query.registry` when you need to
-actually fetch sources.
+`algorithms.catalogs` for band tables, colour transforms, and provider
+vocabularies; it is pure data and pulls in no network stack. Import
+`algorithms.query.registry` when you need to actually fetch sources.
 
 ## Catalog Query Configuration
 
@@ -171,7 +171,6 @@ light-curve ingest path still uses browser globals such as `FileReader`.
 Current CI is intentionally small:
 
 ```bash
-python3 -m py_compile database_tools.py
 python3 -m compileall tools algorithms
 npm run typecheck
 git diff --check

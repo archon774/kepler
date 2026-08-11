@@ -1,11 +1,15 @@
-"""Kepler: photometric catalog declarations.
+"""Kepler: catalog and provider declarations.
 
-This package answers "what does Kepler know about each catalog" — band tables,
-colour transforms, VizieR table IDs, row limits, and the photometric conversions
-some catalogs need on their rows. It answers nothing about *reaching* them: no
-module here imports ``astroquery`` or opens a socket. Fetching is ``query/``'s
-job, and ``algorithms.query.registry`` is what a caller wanting live catalogs
-imports.
+This package answers "what does Kepler know about each catalog/provider" —
+band tables, colour transforms, VizieR table IDs, row limits, photometric
+conversions, and static provider vocabularies. It answers nothing about
+*reaching* them: no module here imports ``astroquery``, ``psrqpy``, or opens a
+socket. Fetching is ``algorithms.query`` or ``tools.*``'s job.
+
+The package-level registry exports the photometric catalog declarations used
+by field calibration and query orchestration. Provider-specific helpers for
+database tools live in direct submodules such as ``algorithms.catalogs.ads``,
+``algorithms.catalogs.atnf``, and ``algorithms.catalogs.ned``.
 
 Two registries live here, and the difference between them is load-bearing:
 
