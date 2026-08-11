@@ -249,3 +249,52 @@ can report them and continue.
   and more `steps`.
 - **`sonificationBrowser` is not ported** — it drives an `AudioContext`, which
   a file-writing tool has no use for. It remains extracted in TypeScript.
+
+---
+
+## 8. Pressing Issues and Tooling Bugs
+
+- **The document is stale about scan discovery.** `tools.pulsar` and
+  `tools.registry` now expose `list_pulsar_scans` and `resolve_pulsar_scan`,
+  so §7's "No name-to-scan resolution" note is no longer true. The main
+  diagram, stage count, result-contract table and "Not covered" section need
+  to be updated so agents see the optional Stage 0 discovery step before the
+  four processing stages.
+
+- **The periodogram schema hides the recommended diagnostic knobs.**
+  `compute_pulsar_periodogram()` accepts `back_scale` and
+  `subtract_background`, and both this document and the tool description tell
+  callers to vary `back_scale` when red-noise peaks move. The registry schema
+  does not advertise either parameter, so an agent using `TOOL_SCHEMAS` cannot
+  follow that guidance. Add them to the schema and pin the parity with a
+  registry test.
+
+- **Degenerate periodogram inputs can escape the "errors, never raised"
+  contract.** A constant light-curve artifact raises `ZeroDivisionError` from
+  `algorithms.pulsar.periodogram.lomb_scargle()` because the variance is zero,
+  and an all-NaN artifact returns `errors=[]` with `peak_period_s` set to the
+  lower search bound and `peak_power=nan`. Stage 2 should filter/validate
+  finite values, reject zero-variance data with a `ToolError`, and catch this
+  class of arithmetic failure at the tool boundary.
+
+- **`top_peaks` is ambiguous in frequency mode.** In period mode each entry's
+  `x` is seconds; in `freq_mode=True` it is Hz, while the model/docs still
+  talk about period harmonics. Return explicit `period_s` and `frequency_hz`
+  fields per peak, or make the schema/documentation mode-specific enough that
+  callers cannot fold using a frequency value as if it were a period.
+
+- **Folded rendering lacks hard resource guards for bad periods.**
+  `fold_lightcurve()` preserves upstream's repeated-subtraction `floatMod`,
+  so a tiny positive `period_s` can run for an impractically large number of
+  loop iterations. The folded sonifier also sizes interpolation from
+  `sample_rate * period_s`, while public `sample_rate` and very long periods
+  are not bounded by the schema. Validate periods against the observation
+  baseline/Nyquist range and cap rendered interpolation work before allocating
+  arrays or entering the fold.
+
+- **Stage 0 does not yet follow the same error-return discipline.**
+  `list_pulsar_scans()` and `resolve_pulsar_scan()` return structured
+  `ToolError`s for missing directories and ambiguous names, but header reads
+  and `stat()` calls can still raise `OSError` for unreadable files. If Stage 0
+  is part of the public pipeline, per-file read failures should be collected
+  into `errors` or `warnings` rather than aborting the call.
