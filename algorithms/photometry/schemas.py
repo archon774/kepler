@@ -2,7 +2,7 @@
 #
 # EXTRACTED from skynet/packages/py/skynet-db/skynet_db/runners/common/schemas.py
 # (331 lines). Only the photometry / source-extraction settings and data objects
-# are kept here. Left behind in Skynet, because they belong to other pipeline
+# are kept here. Left behind in Skynet, because they belong to other processing
 # stages and other Kepler modules:
 #   - Mag                            (unused by the photometry path)
 #   - WcsCalibrationSettings         -> astrometry / Kepler wcs/
@@ -30,7 +30,7 @@ from pydantic.alias_generators import to_pascal
 # photometric math does not need. Reproduced verbatim below are the two pieces
 # that DO affect the data these models carry:
 #   * `model_config` (camelCase alias generator + populate_by_name +
-#     from_attributes + use_enum_values), because the pipeline constructs and
+#     from_attributes + use_enum_values), because the photometry code constructs and
 #     round-trips these models by snake_case field name, and
 #     `IPhotometry.flux_error` / `mag_error` rely on their explicit aliases
 #     ("flux_err_counts" / "magnitude_err_mag") matching the renamed skylib
@@ -101,7 +101,7 @@ class SkynetBaseModel(BaseModel):
 
 class IPhotometry(SkynetBaseModel):
     # In legacy Marshmallow, flux/flux_err_counts were required;
-    # we keep them Optional here for robustness in pipeline flows.
+    # we keep them Optional here for robustness in processing flows.
     catalog_name: Optional[str] = None
     ref_mag: Optional[float] = None
     ref_mag_error: Optional[float] = None
@@ -243,7 +243,7 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
 
 class Photometry(SkynetBaseModel):
     # Not referenced by run_photometry(); kept because it is the photometry
-    # record shape the pipeline persists, and it documents the unit-suffixed
+    # record shape the legacy process persists, and it documents the unit-suffixed
     # names that run_photometry() translates the skylib columns into.
     flux: Optional[float] = None
     flux_err_counts: Optional[float] = None
