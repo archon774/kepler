@@ -1,9 +1,9 @@
 # Repository Folder Guide
 
 This guide explains the current source folders in Kepler. It documents the
-repository as it exists now: a Python package shell around extracted algorithm
-modules, a prototype database tool, TypeScript extraction folders, and planning
-material for future tool work.
+repository as it exists now: root-level tool modules, distinguished extracted
+algorithm modules, a prototype database tool, and planning material for future
+tool work.
 
 Generated folders such as `__pycache__/`, Git internals such as `.git/`, and
 workspace support folders are not part of the source layout.
@@ -23,23 +23,16 @@ deliberately small because the extracted science code still needs native
 dependencies, external catalog data, and reference FITS fixtures for full
 end-to-end validation.
 
-## `kepler/`
-
-The installable Python package root.
+## `tools/`
 
 Important files and subfolders:
 
-- `tools/`: the first plain Python user-facing tool wrappers.
 - `models.py`: small shared result, warning/error, WCS, catalog, zero-point,
   and artifact summary models.
 - `config.py`: small environment-backed settings helpers for the tool layer.
 - `artifacts.py`: local artifact description and listing helpers.
-- `kepler/wcs/`, `kepler/photometry/`, `kepler/fieldcal/`,
-  `kepler/catalogs/`, `kepler/query/`: extracted Python algorithm packages.
-
-## `kepler/tools/`
-
-Plain Python tool wrappers around the first local Kepler surfaces.
+- `astrometry.py`, `calibration.py`, `catalogs.py`, `workspace.py`: the first
+  plain Python user-facing tool wrappers.
 
 Current tools:
 
@@ -54,7 +47,21 @@ Current tools:
 - `workspace.list_artifacts(directory=None)` and
   `workspace.describe_artifact(path)`: inspect local artifact files.
 
-## `kepler/catalogs/`
+## `algorithms/`
+
+Extracted algorithm packages and shared algorithm support code.
+
+Important files and subfolders:
+
+- `algorithms/wcs/`, `algorithms/photometry/`, `algorithms/fieldcal/`,
+  `algorithms/catalogs/`, `algorithms/query/`: extracted Python algorithm
+  packages.
+- `algorithms/skylib_lite/`: consolidated local subset of Skynet's `skylib` used
+  by the extracted Python algorithms.
+- `algorithms/lightcurve/`, `algorithms/periodogram/`, `algorithms/hrdiagram/`:
+  extracted TypeScript algorithm packages.
+
+## `algorithms/catalogs/`
 
 Extracted Python catalog declarations from Skynet and Afterglow.
 
@@ -75,7 +82,7 @@ Important files:
   reference-magnitude resolution reads. It is *not* redundant with `CATALOGS`;
   see `EXTRACTION.md` §4.
 - `schemas.py`: `CatalogSource` and friends — the data contract between
-  `kepler.catalogs` and `kepler.query`.
+  `algorithms.catalogs` and `algorithms.query`.
 - `simbad.py`: the 206-entry SIMBAD object-type vocabulary.
 - `EXTRACTION.md`: provenance, renames, preserved behaviours, verification.
 
@@ -88,15 +95,15 @@ Current caveats:
 
 Project documentation and planning material.
 
-- `architecture-brainstorm.md` describes the intended future package direction:
-  public astronomy tool contracts, application services, Pydantic models,
-  provenance, artifacts, bounded remote calls, and dependency policy.
+- `tool-architecture.md` is the master package architecture document: public
+  tools, algorithm ownership, future services, runtime policy, and
+  `skylib_lite` consolidation.
 - `repository-folders.md` is this current-state folder guide.
 
 Docs in this folder should distinguish clearly between the repository's current
 extracted-code state and the planned package architecture.
 
-## `kepler/fieldcal/`
+## `algorithms/fieldcal/`
 
 Extracted Python photometric field-calibration code from Skynet.
 
@@ -115,23 +122,23 @@ Important files and subfolders:
   `perform_field_calibration`.
 - `solution.py`: zero-point solver, exposed as `calc_solution`.
 - `ref_mag.py`: reference-magnitude/filter-resolution logic.
-- `deps.py`: seam for cross-domain dependencies owned by `kepler.wcs`,
-  `kepler.photometry`, and `kepler.query`.
-- `skylib/`: vendored utility subset used by calibration.
+- `deps.py`: seam for cross-domain dependencies owned by `algorithms.wcs`,
+  `algorithms.photometry`, and `algorithms.query`.
+- `algorithms.skylib_lite`: shared vendored utility subset used by calibration.
 - `EXTRACTION.md`: provenance, severed Skynet dependencies, known parity
   behavior, dependency notes, and verification.
 
 Current caveats:
 
 - Field calibration does not own catalogs. Band tables and colour transforms
-  live in `kepler.catalogs`; catalog selection and querying live in
-  `kepler.query`.
-- `kepler.fieldcal.deps` must be wired before `perform_field_calibration` can
+  live in `algorithms.catalogs`; catalog selection and querying live in
+  `algorithms.query`.
+- `algorithms.fieldcal.deps` must be wired before `perform_field_calibration` can
   call WCS, source extraction, or photometry. `deps.query_catalogs` is the
-  exception: it defaults to `kepler.query` and needs no wiring.
+  exception: it defaults to `algorithms.query` and needs no wiring.
 - `numba` and `scipy` are required for real numeric execution.
 
-## `hrdiagram/`
+## `algorithms/hrdiagram/`
 
 Extracted TypeScript algorithms from Astromancer's cluster/HR-diagram tool.
 
@@ -162,7 +169,7 @@ Current caveats:
 - Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser
   export handlers were removed.
 
-## `lightcurve/`
+## `algorithms/lightcurve/`
 
 Extracted TypeScript algorithms from Astromancer's pulsar and variable-star
 light-curve tools.
@@ -191,9 +198,9 @@ Current caveats:
 - There is no TypeScript package manifest or build config in this repository.
 - Browser/UI concerns were removed except where browser APIs carried the
   original ingest algorithm.
-- Periodogram logic lives separately in `periodogram/`.
+- Periodogram logic lives separately in `algorithms/periodogram/`.
 
-## `periodogram/`
+## `algorithms/periodogram/`
 
 Extracted TypeScript periodogram algorithms from Astromancer.
 
@@ -220,9 +227,31 @@ Current caveats:
 - There is no TypeScript package manifest or build config in this repository.
 - Highcharts rendering fixes and UI storage paths are documented but not
   extracted.
-- Period folding itself is owned by `lightcurve/`.
+- Period folding itself is owned by `algorithms/lightcurve/`.
 
-## `kepler/photometry/`
+## `algorithms/skylib_lite/`
+
+Consolidated local subset of Skynet's `skylib` used by the extracted Python
+algorithm packages.
+
+Important files and subfolders:
+
+- `astrometry/`: astrometry.net subprocess backend, ATLAS triangle solver,
+  solver data, and related types used by `algorithms.wcs`.
+- `calibration/`: background estimation and SEP compatibility helpers.
+- `extraction/`: SEP-based source extraction and centroiding.
+- `io/`: FITS compression/HDU selection helper used by the WCS solver stack.
+- `photometry/`: aperture photometry, exact aperture sums, and exposure helpers.
+- `util/`: angle, FITS, overlap, and statistics helpers shared across WCS,
+  photometry, and field calibration.
+
+Current caveats:
+
+- This is vendored legacy science code. Architecture work should move imports
+  and package boundaries only; numerical fixes belong in targeted remediation
+  PRs with tests.
+
+## `algorithms/photometry/`
 
 Extracted Python source-extraction and aperture-photometry code from Skynet.
 
@@ -240,8 +269,8 @@ Important files and subfolders:
   extraction entry points.
 - `pipeline/photometry.py`: `run_photometry` and `perform_photometry`.
 - `pipeline/schemas.py`: Pydantic settings and data models.
-- `skylib/`: vendored algorithmic core for aperture photometry, exact aperture
-  overlap, centroiding, background estimation, and statistics.
+- `algorithms.skylib_lite`: vendored algorithmic core for aperture photometry,
+  exact aperture overlap, centroiding, background estimation, and statistics.
 - `EXTRACTION.md`: source provenance, dependency requirements, parity behaviors,
   and verification.
 
@@ -252,11 +281,11 @@ Current caveats:
 - This folder intentionally owns photometry, not WCS plate solving or field
   calibration.
 
-## `kepler/query/`
+## `algorithms/query/`
 
 Extracted Python remote catalog access from Skynet and Afterglow.
 
-Every network call in the catalog path. Sits above `kepler.catalogs` and imports
+Every network call in the catalog path. Sits above `algorithms.catalogs` and imports
 it; never the reverse.
 
 Primary responsibilities:
@@ -291,7 +320,7 @@ Current caveats:
 - Live remote calls must stay out of default checks; see the repository
   conventions.
 
-## `kepler/wcs/`
+## `algorithms/wcs/`
 
 Extracted Python astrometric WCS-calibration code from Skynet.
 
@@ -311,8 +340,8 @@ Important files and subfolders:
 - `schemas.py`: WCS settings and data models.
 - `config.py`: environment-backed solver configuration seam.
 - `state.py`: dataclass stand-ins for the Skynet ORM rows touched by WCS.
-- `skylib/`: vendored astrometry stack, including astrometry.net and ATLAS
-  backends.
+- `algorithms.skylib_lite`: vendored astrometry stack, including astrometry.net and
+  ATLAS backends.
 - `EXTRACTION.md`: full provenance, backend requirements, and validation notes.
 
 Current caveats:
