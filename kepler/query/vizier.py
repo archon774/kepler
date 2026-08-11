@@ -37,8 +37,8 @@ from astropy.table import Table
 from astropy.units import arcmin, deg, hour
 from astroquery.vizier import Vizier
 
-from catalogs.catalog import Catalog
-from catalogs.schemas import CatalogSource, Mag
+from kepler.catalogs.catalog import Catalog
+from kepler.catalogs.schemas import CatalogSource, Mag
 
 from .cache import install_cache_error_suppression
 from .config import settings

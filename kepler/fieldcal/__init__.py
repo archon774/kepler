@@ -4,7 +4,7 @@ Extracted from the Skynet optical data-processing pipeline; see EXTRACTION.md
 for exact provenance and every severed dependency.
 
 Field calibration does not own catalogs. Band tables and colour transforms live
-in Kepler's ``catalogs`` package, catalog queries in ``query`` — including the
+in ``kepler.catalogs``, catalog queries in ``kepler.query`` — including the
 filter-aware catalog selection and the query entry point this package used to
 re-export.
 
@@ -20,15 +20,15 @@ Pipeline (``perform_field_calibration``):
 Before calling ``perform_field_calibration``, wire the cross-domain callables
 that this package does not own::
 
-    from fieldcal import deps
-    deps.run_photometry = ...              # Kepler/photometry/
-    deps.run_source_extraction = ...       # Kepler/photometry/
-    deps.get_source_radec = ...            # Kepler/photometry/
-    deps.build_wcs_for_processing_run = ...  # Kepler/wcs/
+    from kepler.fieldcal import deps
+    deps.run_photometry = ...              # kepler.photometry
+    deps.run_source_extraction = ...       # kepler.photometry
+    deps.get_source_radec = ...            # kepler.photometry
+    deps.build_wcs_for_processing_run = ...  # kepler.wcs
 
 ``deps.query_catalogs`` already has a working default backed by Kepler's
-``query`` package, so catalog fetching needs no wiring; override it to route
-queries elsewhere.
+``kepler.query`` package, so catalog fetching needs no wiring; override it to
+route queries elsewhere.
 """
 
 from . import deps

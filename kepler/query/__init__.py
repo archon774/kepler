@@ -1,16 +1,16 @@
 """Kepler: remote catalog access.
 
-Where ``catalogs/`` declares what Kepler knows about each catalog, this package
-goes and gets the rows. It owns every network call in the catalog path.
+Where ``kepler.catalogs`` declares what Kepler knows about each catalog, this
+package goes and gets the rows. It owns every network call in the catalog path.
 
 Start here:
 
-``query.registry.CATALOGS``
+``kepler.query.registry.CATALOGS``
     The eleven catalogs, bound to their backends and ready to query.
-``query.runner.query_catalogs``
+``kepler.query.runner.query_catalogs``
     Query several catalogs over a region, a set of solved images, or a list of
     object names, with filter-aware narrowing and footprint clipping.
-``query.simbad.resolve_simbad``
+``kepler.query.simbad.resolve_simbad``
     Resolve a free-text identifier to coordinates and an object type.
 
 Layout::
@@ -27,10 +27,10 @@ Layout::
     runner.py      orchestration entry points
     simbad.py      identifier resolution
 
-Importing ``query.registry``, ``query.runner`` or any backend pulls in
-astroquery and installs the cache patch described in ``cache.py``. Importing
-``query.selection`` or ``query.geometry`` does not — filter matching and
-geometry work on declarations alone.
+Importing ``kepler.query.registry``, ``kepler.query.runner`` or any backend
+pulls in astroquery and installs the cache patch described in ``cache.py``.
+Importing ``kepler.query.selection`` or ``kepler.query.geometry`` does not —
+filter matching and geometry work on declarations alone.
 
 Nothing here is imported at Kepler start-up, and no module makes a network call
 at import time.

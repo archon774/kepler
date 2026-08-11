@@ -4,13 +4,14 @@ This package answers "what does Kepler know about each catalog" — band tables,
 colour transforms, VizieR table IDs, row limits, and the photometric conversions
 some catalogs need on their rows. It answers nothing about *reaching* them: no
 module here imports ``astroquery`` or opens a socket. Fetching is ``query/``'s
-job, and ``query/registry.py`` is what a caller wanting live catalogs imports.
+job, and ``kepler.query.registry`` is what a caller wanting live catalogs
+imports.
 
 Two registries live here, and the difference between them is load-bearing:
 
 ``CATALOGS``
     All 11 catalogs, keyed by Kepler catalog name. Read by filter-aware catalog
-    selection (``query/selection.py``) and by the query runner.
+    selection (``kepler.query.selection``) and by the query runner.
 ``CATALOG_OPTIONS``
     A two-catalog (APASS, PanSTARRS) subset in ``catalog_options.py``, read only
     by reference-magnitude resolution. It carries narrowband aliases —

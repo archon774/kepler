@@ -16,7 +16,7 @@ Dynaconf's ``getattr`` fallback produced, and each builder already handles it
 
 Callers with their own configuration should ignore this module and pass their
 own object to ``build_anet_config(cfg)`` / ``build_atlas_config(cfg)``, or
-assign ``wcs.settings``.
+assign ``kepler.wcs.wcs.settings``.
 """
 
 from __future__ import annotations

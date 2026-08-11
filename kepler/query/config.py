@@ -11,9 +11,9 @@ Nothing here changes query results. The server choice affects latency and
 availability, and the cache settings affect how often a query goes out over the
 wire — but a cache hit and a cache miss return the same rows.
 
-Callers with their own configuration should assign ``query.config.settings``
-before the first query, or pass an object exposing the same four attributes to
-whichever backend they construct.
+Callers with their own configuration should assign
+``kepler.query.config.settings`` before the first query, or pass an object
+exposing the same four attributes to whichever backend they construct.
 """
 
 from __future__ import annotations
@@ -51,12 +51,14 @@ class QuerySettings:
     * ``VIZIER_CACHE_ENABLED`` — whether astroquery caches responses on disk.
       When on, the backends also round query centres and sizes to a fixed
       granularity so that near-identical fields hit the same cache entry; see
-      ``query/vizier.py``. That rounding is observable, so turning the cache on
-      or off can change which sources a query returns near a field edge.
+      ``kepler.query.vizier``. That rounding is observable, so turning the
+      cache on or off can change which sources a query returns near a field
+      edge.
     * ``VIZIER_CACHE_AGE_DAYS`` — entries older than this are deleted the next
       time anything is written to the cache.
     The SDSS data release is deliberately *not* here: it lives on the plugin in
-    ``catalogs/sdss_catalog.py``, which derives its ``display_name`` from it.
+    ``kepler.catalogs.sdss_catalog``, which derives its ``display_name`` from
+    it.
     """
 
     def __init__(
