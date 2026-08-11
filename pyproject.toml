@@ -73,10 +73,9 @@ dependencies = [
 ]
 
 [project.scripts]
-kepler-database-tool = "database_tools:main"
+kepler-astro-query = "tools.runner:main"
 
 [tool.setuptools]
-py-modules = ["database_tools"]
 include-package-data = true
 
 [tool.setuptools.packages.find]

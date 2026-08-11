@@ -18,7 +18,7 @@ Kepler is early-stage astronomy tooling. Keep pull requests narrow and target
 Run the smallest relevant checks before opening a PR:
 
 ```bash
-python3 -m py_compile database_tools.py
+python3 -m compileall kepler catalogs
 git diff --check
 ```
 

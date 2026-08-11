@@ -7,12 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Kepler is a **staging area for extracted astronomy algorithms**, not yet a coherent
 package. It holds four things:
 
-1. `database_tools.py` — a prototype Anthropic tool runner over `astroquery`/`psrqpy`/`ads`.
-2. `tools/` — plain Python tool wrappers and shared tool-facing models.
-3. `algorithms/` — extracted algorithm folders (`wcs/`, `photometry/`,
+1. `tools/` — plain Python tool wrappers, split database/archive tools, an optional runner,
+   and shared tool-facing models.
+2. `algorithms/` — extracted algorithm folders (`wcs/`, `photometry/`,
    `fieldcal/`, `catalogs/`, `query/`, `lightcurve/`, `periodogram/`,
    `hrdiagram/`) plus the shared `skylib_lite/` subset.
-4. `docs/tool-architecture.md` — the master architecture for the tool collection.
+3. `docs/tool-architecture.md` — the master architecture for the tool collection.
 
 The top-level `tools/` and `algorithms/` folders are intentionally separate.
 `tools/` is the public tool surface; `algorithms/` holds lower-level extracted
@@ -44,16 +44,15 @@ folder** — it is the only place the upstream mapping is recorded.
 
 ```bash
 uv sync                                  # create .venv and install pinned deps
-python3 -m py_compile database_tools.py  # the only Python check CI runs
-python3 -m compileall tools algorithms   # local package syntax/import smoke
+python3 -m compileall tools algorithms   # local package syntax smoke
 git diff --check                         # whitespace check
 ```
 
 There is **no test suite, linter, or type-checker configured** in this repository. Do not
 claim tests pass; there are none to run. CI (`.github/workflows/ci.yml`) runs only the
-`py_compile` above plus a `repository-shape` job asserting that `README.md`,
-`pyproject.toml`, `uv.lock`, `database_tools.py`, and `docs/tool-architecture.md`
-exist. Note that CI never imports or compiles the extracted algorithm packages.
+`compileall` above plus a `repository-shape` job asserting that `README.md`,
+`pyproject.toml`, `uv.lock`, `tools/registry.py`, `tools/runner.py`, and
+`docs/tool-architecture.md` exist.
 
 Other workflows: `secret-scan.yml` (gitleaks over tree and full history) and
 `workflow-safety.yml` (actionlint + zizmor). The `.gitleaks.toml` allowlist for env-var
@@ -83,10 +82,9 @@ see below. Ownership is strict:
   `algorithms.photometry.pipeline.source_extraction.run_source_extraction`.
 - `algorithms/fieldcal/` owns the photometric zero-point solve —
   `perform_field_calibration` and `calc_solution`. It does **not** own catalogs.
-- `algorithms/catalogs/` owns photometric catalog declarations — band tables, colour
-  transforms, column mappings, VizieR IDs, and the SIMBAD object-type table for
-  eleven catalogs. Declaration only: nothing here imports `astroquery` or opens a
-  socket.
+- `algorithms/catalogs/` owns photometric catalog declarations plus provider
+  lookup tables for ADS, NED, and ATNF. Declaration only: nothing here imports
+  `astroquery`, `psrqpy`, or opens a socket.
 - `algorithms/query/` owns remote catalog access — the VizieR engine, SDSS SkyServer SQL,
   SIMBAD resolution, the astroquery cache layer, filter-aware catalog selection,
   WCS-footprint geometry, and the query orchestration entry points.
@@ -187,7 +185,6 @@ were removed. Ownership is likewise strict and cross-cutting:
   Default checks must stay deterministic and bounded.
 - Do not commit downloaded FITS products, generated plots, caches, or large datasets
   (`.gitignore` already covers `fits_downloads/`, `artifacts/`, `data/`, etc.).
-- `database_tools.py` requires `ADS_DEV_KEY` for ADS queries and `ANTHROPIC_API_KEY` for its
-  interactive runner. It is prototype code; `docs/tool-architecture.md` plans to move
-  its logic into `tools/` and `services/` modules with `ToolResult` envelopes, keeping the
-  module temporarily as a compatibility wrapper.
+- ADS-backed tools require `ADS_DEV_KEY`; the optional `tools.runner` Anthropic loop
+  requires `ANTHROPIC_API_KEY`. Remote astronomy service calls stay out of default
+  checks and should return bounded previews plus artifact paths for complete results.

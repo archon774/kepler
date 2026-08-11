@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
+FITS_DOWNLOAD_DIR_ENV = "KEPLER_FITS_DOWNLOAD_DIR"
 
 
 def env_value(name: str, default: str | None = None) -> str | None:
@@ -28,12 +29,21 @@ def env_path(name: str, default: str | Path | None = None) -> Path | None:
     return Path(value).expanduser()
 
 
+ARTIFACT_DIR = env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")
+FITS_DOWNLOAD_DIR = env_path(FITS_DOWNLOAD_DIR_ENV, "fits_downloads") or Path(
+    "fits_downloads"
+)
+PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
+DEFAULT_MAX_CATALOGS = int(env_value("KEPLER_MAX_CATALOGS", "20") or "20")
+DEFAULT_MAX_OBSERVATIONS = int(
+    env_value("KEPLER_MAX_OBSERVATIONS", "25") or "25"
+)
+CASDA_OPAL_USERNAME = env_value("CASDA_OPAL_USERNAME")
+
+
 def artifact_directory(directory: str | Path | None = None) -> Path:
     """Resolve the local artifact directory for workspace tools."""
 
     if directory is not None:
         return Path(directory).expanduser().resolve()
-    configured = env_path(ARTIFACT_DIR_ENV, ".")
-    if configured is None:
-        return Path(".").resolve()
-    return configured.resolve()
+    return ARTIFACT_DIR.expanduser().resolve()

@@ -28,6 +28,17 @@ tools/
   astrometry.py       # WCS/header summary tools
   calibration.py      # zero-point tools
   catalogs.py         # catalog declarations and band helpers
+  simbad.py           # SIMBAD object, measurement, and bibliography tools
+  ned.py              # NED historical table tools
+  vizier.py           # broad VizieR catalog search tools
+  atnf.py             # ATNF pulsar catalog tools
+  ads.py              # ADS literature search/review tools
+  mast.py             # MAST archive/product tools
+  mpc.py              # Minor Planet Center observation tools
+  casda.py            # CASDA archive tools
+  resolve.py          # SIMBAD-backed target resolution
+  registry.py         # optional agent/tool schema registry
+  runner.py           # optional Anthropic agent loop
   workspace.py        # local artifact helpers
   models.py           # shared result, warning/error, WCS, catalog, artifact models
   config.py           # small environment-backed settings helpers
@@ -39,18 +50,15 @@ algorithms/
   photometry/           # Python source extraction and aperture photometry
   fieldcal/             # Python zero-point field calibration
   skylib_lite/          # shared vendored Skylib subset
-  catalogs/             # Python catalog declarations, no network calls
+  catalogs/             # Python catalog/provider declarations, no network calls
   query/                # Python remote catalog access
 
   lightcurve/           # TypeScript light-curve algorithms
   periodogram/          # TypeScript periodogram algorithms
   hrdiagram/            # TypeScript HR-diagram algorithms
-
-database_tools.py       # root compatibility entry point
 docs/
 ```
 
-`database_tools.py` remains at the repository root as a compatibility prototype.
 The Python distribution discovers the `tools*` and `algorithms*` packages;
 package data such as
 `ngc2000.dat` belongs to the corresponding `algorithms.skylib_lite.*` package path.
@@ -68,7 +76,7 @@ Tools are the public surface. They should stay thin:
 - write large arrays, tables, generated FITS files, and plots to disk instead
   of embedding them in inline results.
 
-The first implemented tools are intentionally local and no-network:
+The first local, no-network tools are:
 
 - `tools.astrometry.describe_image_wcs(path)`
 - `tools.catalogs.list_photometric_catalogs()`
@@ -77,13 +85,30 @@ The first implemented tools are intentionally local and no-network:
 - `tools.workspace.list_artifacts(directory=None)`
 - `tools.workspace.describe_artifact(path)`
 
+The split remote database/archive tools follow the same boundary: bounded
+inline previews, complete result artifacts, provider warnings/errors, and no
+live calls in default validation:
+
+- `tools.resolve.resolve_target(name)`
+- `tools.simbad.search_simbad(name)`
+- `tools.simbad.search_simbad_measurements(name, table="flux")`
+- `tools.simbad.search_simbad_bibliography(name)`
+- `tools.ned.search_ned(name, table="photometry")`
+- `tools.vizier.list_vizier_catalogs(keywords)`
+- `tools.vizier.search_vizier(...)`
+- `tools.atnf.search_atnf(name)`
+- `tools.ads.search_ads(...)`
+- `tools.ads.build_literature_review(...)`
+- `tools.mast.search_mast(name, ...)`
+- `tools.mpc.search_mpc(designation)`
+- `tools.casda.search_casda(...)`
+
 Next Python tools should follow the same pattern before adding new layers:
 
 - `solve_astrometry(path, settings=None)`
 - `extract_sources(path, settings=None)`
 - `measure_photometry(path, sources, settings=None)`
 - `calibrate_zeropoint(path, settings=None)`
-- `resolve_target(name)`
 - `search_catalog(catalog, region, limit=50)`
 - `search_catalogs_for_image(path, limit=50)`
 
@@ -108,7 +133,7 @@ Current algorithm ownership:
 | `algorithms.wcs` | FITS-header WCS construction, astrometry.net solving, ATLAS solving, WCS validation, FITS header write-back | Requires solver binaries/indexes or local UCAC data for end-to-end solving. |
 | `algorithms.photometry` | Source extraction and aperture photometry | Uses `algorithms.skylib_lite` extraction, calibration, photometry, and utility code. |
 | `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
-| `algorithms.catalogs` | Catalog declarations, band tables, filter mappings, SIMBAD vocabulary | Declaration only; importing it should not perform network work. |
+| `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
 | `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding | No `package.json` or `tsconfig.json` yet. |
 | `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
@@ -242,7 +267,6 @@ server.
 
 Default checks stay lightweight and deterministic:
 
-- `python3 -m py_compile database_tools.py`
 - `python3 -m compileall tools algorithms`
 - smoke imports for `tools.*` and `algorithms.*`
 - `git diff --check`

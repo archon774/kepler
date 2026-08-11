@@ -2,8 +2,7 @@
 
 This guide explains the current source folders in Kepler. It documents the
 repository as it exists now: root-level tool modules, distinguished extracted
-algorithm modules, a prototype database tool, and planning material for future
-tool work.
+algorithm modules, and planning material for future tool work.
 
 Generated folders such as `__pycache__/`, Git internals such as `.git/`, and
 workspace support folders are not part of the source layout.
@@ -28,11 +27,15 @@ end-to-end validation.
 Important files and subfolders:
 
 - `models.py`: small shared result, warning/error, WCS, catalog, zero-point,
-  and artifact summary models.
+  remote query, and artifact summary models.
 - `config.py`: small environment-backed settings helpers for the tool layer.
 - `artifacts.py`: local artifact description and listing helpers.
-- `astrometry.py`, `calibration.py`, `catalogs.py`, `workspace.py`: the first
+- `astrometry.py`, `calibration.py`, `catalogs.py`, `workspace.py`: local
   plain Python user-facing tool wrappers.
+- `simbad.py`, `ned.py`, `vizier.py`, `atnf.py`, `ads.py`, `mast.py`,
+  `mpc.py`, `casda.py`, `resolve.py`: split remote database/archive tools.
+- `registry.py`, `runner.py`: optional agent schema registry and Anthropic
+  runner over the same ordinary Python tool functions.
 
 Current tools:
 
@@ -46,6 +49,11 @@ Current tools:
   solve a zero point from local measurement and catalog-source records.
 - `workspace.list_artifacts(directory=None)` and
   `workspace.describe_artifact(path)`: inspect local artifact files.
+- `resolve.resolve_target(name)`: resolve a target through SIMBAD.
+- `simbad.*`, `ned.search_ned`, `vizier.*`, `atnf.search_atnf`,
+  `ads.*`, `mast.search_mast`, `mpc.search_mpc`, and `casda.search_casda`:
+  query remote astronomy databases and archives, returning bounded previews
+  plus local artifact paths for complete tables or reviews.
 
 ## `algorithms/`
 
@@ -65,10 +73,11 @@ Important files and subfolders:
 
 Extracted Python catalog declarations from Skynet and Afterglow.
 
-What Kepler knows about each photometric catalog, and nothing about reaching
-them: no module here imports `astroquery` or opens a socket. Eleven catalogs —
-APASS, Landolt, PanSTARRS, SDSS, SkyMapper, Stetson, 2MASS, Tycho-2, UCAC5,
-USNO-B1, VSX.
+What Kepler knows about catalogs and provider vocabularies, and nothing about
+reaching them: no module here imports `astroquery`, `psrqpy`, or opens a
+socket. Photometric catalog declarations cover eleven catalogs — APASS,
+Landolt, PanSTARRS, SDSS, SkyMapper, Stetson, 2MASS, Tycho-2, UCAC5, USNO-B1,
+VSX.
 
 Each plugin declares its band table (`mags`), its filter/colour transforms
 (`filter_lookup`), its column mapping, and its VizieR table ID. Three plugins
@@ -84,6 +93,9 @@ Important files:
 - `schemas.py`: `CatalogSource` and friends — the data contract between
   `algorithms.catalogs` and `algorithms.query`.
 - `simbad.py`: the 206-entry SIMBAD object-type vocabulary.
+- `ads.py`: ADS field lists and citation formatting helpers for `tools.ads`.
+- `atnf.py`: ATNF pulsar-parameter vocabulary for `tools.atnf`.
+- `ned.py`: NED table-name and photometry-format vocabulary for `tools.ned`.
 - `EXTRACTION.md`: provenance, renames, preserved behaviours, verification.
 
 Current caveats:

@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+__all__ = [
+    "KeplerToolModel",
+    "ToolWarning",
+    "ToolError",
+    "ArtifactRef",
+    "ToolResult",
+    "FileMetadata",
+    "ArtifactMetadata",
+    "TableSummary",
+    "WcsSummary",
+    "CatalogSummary",
+    "ReferenceBandResolution",
+    "ZeropointSolution",
+    "coerce_optional_int",
+]
 
 
 class KeplerToolModel(BaseModel):
@@ -21,6 +37,32 @@ class ToolWarning(KeplerToolModel):
 class ToolError(KeplerToolModel):
     code: str
     message: str
+
+
+class ArtifactRef(KeplerToolModel):
+    """A file a tool wrote to disk, plus enough metadata to use it."""
+
+    path: str
+    format: str
+    row_count: Optional[int] = None
+    columns: list[str] = Field(default_factory=list)
+
+
+class ToolResult(KeplerToolModel):
+    """Bounded result returned by remote/catalog database tools.
+
+    ``preview`` is a small inline sample only. Full data goes to ``artifact``
+    or ``artifacts`` when a tool writes files.
+    """
+
+    status: Literal["ok", "partial", "not_found", "error"]
+    count: Optional[int] = None
+    preview: list[dict[str, Any]] = Field(default_factory=list)
+    columns: list[str] = Field(default_factory=list)
+    artifact: Optional[ArtifactRef] = None
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
 
 
 class FileMetadata(KeplerToolModel):
@@ -73,7 +115,13 @@ class ReferenceBandResolution(KeplerToolModel):
     image_filter: str | None = None
     supported: bool
     reference: str | None = None
-    kind: Literal["direct_band", "lookup_band", "expression", "wildcard", "unresolved"] = "unresolved"
+    kind: Literal[
+        "direct_band",
+        "lookup_band",
+        "expression",
+        "wildcard",
+        "unresolved",
+    ] = "unresolved"
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 
@@ -87,3 +135,23 @@ class ZeropointSolution(KeplerToolModel):
     source_count: int = 0
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
+
+
+def coerce_optional_int(value: Union[int, str, None]) -> Optional[int]:
+    """Coerce a JSON-ish tool argument to ``Optional[int]``."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"expected an integer or null, got {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lower() in ("none", "null", ""):
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            pass
+    raise ValueError(f"expected an integer or null, got {value!r}")
