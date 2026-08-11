@@ -14,7 +14,7 @@ from algorithms.skylib_lite.photometry import aperture_photometry
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 # EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
-# (SQLAlchemy ORM row for a pipeline job) — see the seam in perform_photometry().
+# (SQLAlchemy ORM row for a processing job) — see the seam in perform_photometry().
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...`
 from .schemas import (
     PhotometryData,

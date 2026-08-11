@@ -78,8 +78,8 @@ see below. Ownership is strict:
   triangle solver against local UCAC4/UCAC5, validates against parity/pointing hints,
   writes the accepted solution into the FITS header.
 - `algorithms/photometry/` owns SEP source extraction and aperture photometry —
-  `algorithms.photometry.pipeline.photometry.{run_photometry, perform_photometry}` and
-  `algorithms.photometry.pipeline.source_extraction.run_source_extraction`.
+  `algorithms.photometry.photometry.{run_photometry, perform_photometry}` and
+  `algorithms.photometry.source_extraction.run_source_extraction`.
 - `algorithms/fieldcal/` owns the photometric zero-point solve —
   `perform_field_calibration` and `calc_solution`. It does **not** own catalogs.
 - `algorithms/catalogs/` owns photometric catalog declarations plus provider

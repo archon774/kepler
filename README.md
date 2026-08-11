@@ -99,8 +99,8 @@ Advanced callers can still import the extracted algorithm packages directly:
 
 ```python
 from algorithms.wcs.wcs import solve_wcs
-from algorithms.photometry.pipeline.photometry import run_photometry, perform_photometry
-from algorithms.photometry.pipeline.source_extraction import run_source_extraction
+from algorithms.photometry.photometry import run_photometry, perform_photometry
+from algorithms.photometry.source_extraction import run_source_extraction
 from algorithms.fieldcal import perform_field_calibration, calc_solution
 from algorithms.query.runner import query_catalogs
 from algorithms.query.simbad import resolve_simbad

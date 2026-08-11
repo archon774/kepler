@@ -13,7 +13,7 @@ from algorithms.skylib_lite.extraction import auto_sat_level, extract_sources
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 # EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
-# (SQLAlchemy ORM row for a pipeline job). `perform_source_extraction()` only
+# (SQLAlchemy ORM row for a processing job). `perform_source_extraction()` only
 # ever reads `.observation_asset_id` off it via getattr, so the parameter is now
 # duck-typed — see the seam note there.
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...`

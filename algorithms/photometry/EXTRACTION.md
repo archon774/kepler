@@ -21,11 +21,9 @@ extraction layout.
 algorithms/photometry/
 ├── EXTRACTION.md          this file
 ├── __init__.py            new
-├── pipeline/              the observation-asset processing stage (orchestration)
-│   ├── __init__.py        new
-│   ├── photometry.py      edited: 3 seams
-│   ├── source_extraction.py  edited: 2 seams
-│   └── schemas.py         subset + base-model shim
+├── photometry.py          edited: 3 seams
+├── source_extraction.py   edited: 2 seams
+└── schemas.py             subset + base-model shim
 algorithms/skylib_lite/    vendored algorithmic core (all files byte-identical)
 ├── photometry/{__init__,aperture,aperture_numba,exposure}.py
 ├── extraction/{__init__,main,centroiding}.py
@@ -33,9 +31,10 @@ algorithms/skylib_lite/    vendored algorithmic core (all files byte-identical)
 └── util/{__init__,overlap,stats,angle,fits}.py
 ```
 
-`pipeline/` orchestrates; `algorithms/skylib_lite/` does the math. The split
+The top-level photometry modules provide the source-extraction and photometry
+entry points; `algorithms/skylib_lite/` does the lower-level math. The split
 mirrors the original package boundary (`skynet-db` runner vs. the `skylib`
-library).
+library) without retaining a nested pipeline package.
 
 ---
 
@@ -76,7 +75,7 @@ Modules that came along but are **not on the photometry call path**:
 - `photometry/exposure.py` — exposure-time calculator, sky-brightness model
   (Henyey–Greenstein scattering), Planck's law, CCM dust extinction. In the
   `skylib.photometry` package and squarely algorithmic, so it was pulled in as
-  instructed, but nothing in `pipeline/` calls it. Its only internal dependency
+  instructed, but the photometry entry points do not call it. Its only internal dependency
   is `util/angle.airmass_for_el`.
 - `util/angle.py` `angdist` / `average_radec`, `util/fits.py` `get_fits_fov`,
   `util/stats.py` `chauvenet2*` / `chauvenet3*` / `chauvenet` / `stddev2` /
@@ -84,19 +83,19 @@ Modules that came along but are **not on the photometry call path**:
   self-contained (numpy + numba + astropy only) and cutting them apart would
   have risked silently changing behavior for no benefit.
 
-### 2.2 Pipeline stage
+### 2.2 Photometry modules
 
 | Source (under `skynet/packages/py/skynet-db/skynet_db/`) | Lines | Destination | Lines |
 |---|---:|---|---:|
-| `runners/observation_asset_processing/optical_data_processing/photometry.py` | 264 | `pipeline/photometry.py` | 289 |
-| `runners/observation_asset_processing/optical_data_processing/source_extraction.py` | 310 | `pipeline/source_extraction.py` | 319 |
-| `runners/common/schemas.py` (subset) | 331 total | `pipeline/schemas.py` | 311 |
+| `runners/observation_asset_processing/optical_data_processing/photometry.py` | 264 | `photometry.py` | 289 |
+| `runners/observation_asset_processing/optical_data_processing/source_extraction.py` | 310 | `source_extraction.py` | 319 |
+| `runners/common/schemas.py` (subset) | 331 total | `schemas.py` | 311 |
 
 The growth in the first two files is entirely `# EXTRACTED:` comment blocks. No
 executable line was altered other than the import statements and the two
 parameter annotations listed in §3.
 
-`pipeline/schemas.py` takes these classes verbatim from `runners/common/schemas.py`:
+`schemas.py` takes these classes verbatim from `runners/common/schemas.py`:
 `IPhotometry` (19–28), `IAperture` (31–40), `PhotometrySettings` (43–60),
 `ISourceMeta` (63–68), `IAstrometry` (71–86), `IFwhm` (89–92), `ISourceId` (95–96),
 `SourceExtractionSettings` (98–126), `SourceExtractionData` (129–157),
@@ -113,13 +112,13 @@ Every seam is marked in the source with `# EXTRACTED: was <original symbol>`.
 
 | # | File | Cut | Consequence |
 |---|---|---|---|
-| 1 | `pipeline/photometry.py`, `pipeline/source_extraction.py` | `from skylib...` (installed package) -> `from algorithms.skylib_lite...` (shared vendored copy) | None. Same code. |
-| 2 | `pipeline/source_extraction.py` | `from skynet_db.models import ObservationAssetProcessingRun`; the `processing_run:` annotation on `perform_source_extraction` | None. The body already read the run duck-typed (`getattr(processing_run, "observation_asset_id", None)`); only the SQLAlchemy type annotation was dropped. |
-| 3 | `pipeline/photometry.py` | Same ORM import + annotation on `perform_photometry` | None on the returned values. |
-| 4 | `pipeline/photometry.py` | `from .wcs import build_wcs_from_header` -> `from .source_extraction import build_wcs_from_header` | None. Not a reimplementation: `wcs.py` itself does `from .source_extraction import build_wcs_from_header`, so this is the identical function imported from its point of definition. Avoids dragging in the astrometry.net/ATLAS plate-solving stage (which belongs to `algorithms/wcs/`). |
-| 5 | `pipeline/photometry.py` | `build_wcs_for_processing_run(processing_run, header)` → `build_wcs_from_header(header)` | **Behavioral.** The original (`optical_data_processing/wcs.py:151`) is `build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`. The first term is kept; the second reconstructs a WCS from the plate solution persisted on the ORM row. If the FITS header carries no celestial WCS, `wcs` is now `None` where Skynet could still have recovered one from the database. Affects `perform_photometry()` only — `run_photometry()`, the numeric entry point, is untouched. |
-| 6 | `pipeline/photometry.py` | `processing_run.ensure_photometry()` / `photometry_state.zero_point_mag = ...` | None on the returned values. Pure ORM job-state persistence; `settings.zero_point_mag` is already folded into each magnitude by `PhotometryData.from_source_and_row()`. |
-| 7 | `pipeline/schemas.py` | `from skynet_sdk.schemas import SkynetBaseModel` → local base class | See below. |
+| 1 | `photometry.py`, `source_extraction.py` | `from skylib...` (installed package) -> `from algorithms.skylib_lite...` (shared vendored copy) | None. Same code. |
+| 2 | `source_extraction.py` | `from skynet_db.models import ObservationAssetProcessingRun`; the `processing_run:` annotation on `perform_source_extraction` | None. The body already read the run duck-typed (`getattr(processing_run, "observation_asset_id", None)`); only the SQLAlchemy type annotation was dropped. |
+| 3 | `photometry.py` | Same ORM import + annotation on `perform_photometry` | None on the returned values. |
+| 4 | `photometry.py` | `from .wcs import build_wcs_from_header` -> `from .source_extraction import build_wcs_from_header` | None. Not a reimplementation: `wcs.py` itself does `from .source_extraction import build_wcs_from_header`, so this is the identical function imported from its point of definition. Avoids dragging in the astrometry.net/ATLAS plate-solving stage (which belongs to `algorithms/wcs/`). |
+| 5 | `photometry.py` | `build_wcs_for_processing_run(processing_run, header)` → `build_wcs_from_header(header)` | **Behavioral.** The original (`optical_data_processing/wcs.py:151`) is `build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`. The first term is kept; the second reconstructs a WCS from the plate solution persisted on the ORM row. If the FITS header carries no celestial WCS, `wcs` is now `None` where Skynet could still have recovered one from the database. Affects `perform_photometry()` only — `run_photometry()`, the numeric entry point, is untouched. |
+| 6 | `photometry.py` | `processing_run.ensure_photometry()` / `photometry_state.zero_point_mag = ...` | None on the returned values. Pure ORM job-state persistence; `settings.zero_point_mag` is already folded into each magnitude by `PhotometryData.from_source_and_row()`. |
+| 7 | `schemas.py` | `from skynet_sdk.schemas import SkynetBaseModel` → local base class | See below. |
 
 ### Seam 7 in detail
 
@@ -131,7 +130,7 @@ for photometry and were reproduced verbatim:
 
 - **`model_config`** — `alias_generator=to_camel` (base.py:85–103), plus
   `populate_by_name`, `from_attributes`, `use_enum_values`. Required because the
-  pipeline constructs and round-trips these models by snake_case field name while
+  photometry code constructs and round-trips these models by snake_case field name while
   `IPhotometry.flux_error` / `mag_error` rely on their *explicit* aliases
   (`flux_err_counts` / `magnitude_err_mag`) matching the columns
   `run_photometry()` renames the skylib output to.
@@ -154,7 +153,7 @@ dump, and camelCase alias generation with the two explicit aliases surviving.
 
 ### What was *not* cut
 
-`logging` was left exactly as-is in `pipeline/photometry.py` (module logger, six
+`logging` was left exactly as-is in `photometry.py` (module logger, six
 `logger.info` calls) and the `print(f"[source_extraction] ...")` diagnostic in
 `run_source_extraction` was left in place. These are stdlib, carry no Skynet
 dependency, and removing them would have been a rewrite.
@@ -172,7 +171,7 @@ dependency, and removing them would have been a rewrite.
 | `optical_data_processing/test-photometry.py` (110 lines) | See §5. |
 | `skylib/calibration/{bias,dark,flat,cosmic,cosmetic}.py` | Pre-photometry image calibration; not reachable from the photometry path. |
 | `skylib/{astrometry,catalogs,combine,color,enhancement,ephem,io,quality,sonification}/` | Unrelated to photometry. |
-| `runners/common/schemas.py`: `Mag`, `WcsCalibrationSettings`, `ICatalogSource`, `CatalogSource`, `Catalog`, `PhotometricCalibrationSettings`, `FieldCalResult`, `ImageProperties` | Other pipeline stages / other Kepler modules. |
+| `runners/common/schemas.py`: `Mag`, `WcsCalibrationSettings`, `ICatalogSource`, `CatalogSource`, `Catalog`, `PhotometricCalibrationSettings`, `FieldCalResult`, `ImageProperties` | Other Skynet stages / other Kepler modules. |
 | `skynet_db.models`, `skynet_db.config`, `runners/utils.py`, `runners/common` job machinery | ORM, S3, job-state. The seams above. |
 
 ---
@@ -221,15 +220,15 @@ Preserved here:
 
 | Location | Behavior |
 |---|---|
-| `pipeline/photometry.py:55` | `# Always recompute RA/Dec from current x/y — legacy parity (legacy always overwrote via wcs arg)` |
-| `pipeline/photometry.py:237–238` | Build `PhotometryData` first, *then* apply WCS, so RA/Dec reflects the row's centroided pixel position — legacy parity. |
-| `pipeline/schemas.py:279` | `# x/y from the row (post-centroid positions) override source positions — legacy parity` |
+| `photometry.py:55` | `# Always recompute RA/Dec from current x/y — legacy parity (legacy always overwrote via wcs arg)` |
+| `photometry.py:237–238` | Build `PhotometryData` first, *then* apply WCS, so RA/Dec reflects the row's centroided pixel position — legacy parity. |
+| `schemas.py:279` | `# x/y from the row (post-centroid positions) override source positions — legacy parity` |
 | `skylib/photometry/aperture.py:218` | `k = 0  # temporary fix for k = 0 not being allowed in AgA` — "AgA" is Afterglow Access. Clamps any automatic aperture factor ≤ 0.1 to 0, which then triggers the SNR-optimal aperture search. |
 
 **No centroiding during field-calibration photometry** — this is realized by two
 pieces that are both preserved: `PhotometrySettings.centroid_radius` defaults to
-`0.0` (`pipeline/schemas.py`), and `run_photometry()` centroids only under
-`if r_cent > 0:` (`pipeline/photometry.py:207`). `field_cal.py` does not override
+`0.0` (`schemas.py`), and `run_photometry()` centroids only under
+`if r_cent > 0:` (`photometry.py:207`). `field_cal.py` does not override
 `centroid_radius`, so calibration photometry runs uncentroided by default.
 
 **`apcorr_tol=0` during calibration** — ⚠️ this one is **outside this extraction**.
@@ -312,7 +311,7 @@ parity with legacy output.
    `reject_outliers=True` and a non-`None` mask.
 3. `skylib/extraction/centroiding.py:305` — in the `method='win'` all-good branch,
    `y[:] = y + 1` uses the input `y` rather than the windowed result `y1`.
-   Unreached on this pipeline path: `run_photometry` calls `centroid_sources`
+   Unreached on this photometry path: `run_photometry` calls `centroid_sources`
    with the default `method='iraf'`.
 4. `skylib/extraction/main.py:257–261` — the "Make sure that a >= b" block assigns
    through `sources[s][...]` where `s` is a boolean mask. Boolean indexing returns
@@ -344,7 +343,7 @@ Required by the extracted code:
 | `numba` | **Hard requirement.** All aperture summation kernels, exact overlap, centroiding, Chauvenet rejection, isophotal analysis. No pure-Python fallback exists. |
 | `astropy` | `wcs.WCS`, `io.fits.Header`, `stats.gaussian_fwhm_to_sigma` / `gaussian_sigma_to_fwhm`, `convolution.Gaussian2DKernel` / `Kernel2D`, `modeling.models.Gaussian2D`; `time.Time` and `coordinates.*` in `exposure.py`. |
 | `sep` | `Background`, `extract`, `winpos`, and the `APER_*` / `OBJ_*` flag constants. |
-| `pydantic` (v2) | `pipeline/schemas.py` settings and data objects; `pydantic.alias_generators.to_pascal` backs the local `to_camel`. |
+| `pydantic` (v2) | `schemas.py` settings and data objects; `pydantic.alias_generators.to_pascal` backs the local `to_camel`. |
 
 **Optional / lazy:**
 
@@ -367,7 +366,7 @@ not on the photometry call path if that import proves inconvenient.
 - `python3 -m compileall` over the whole tree — clean.
 - Import-graph audit: no `skynet_db`, `skynet_sdk`, or absolute `skylib` imports
   remain outside `# EXTRACTED:` comments.
-- `pipeline/schemas.py` executed and exercised (settings construction,
+- `schemas.py` executed and exercised (settings construction,
   `model_copy(update={"apcorr_tol": 0.0})`, `from_source_and_row` with
   `zero_point_mag`, annulus derivation, NaN→None dump, alias generation).
 
@@ -375,4 +374,4 @@ not on the photometry call path if that import proves inconvenient.
 `scipy`, `numba`, `sep`, and `photutils` are not installed here. The vendored
 skylib files are byte-identical to their source, so no numeric drift can have
 been introduced there; the untested surface is limited to the import rewiring in
-`pipeline/`.
+the top-level photometry modules.
