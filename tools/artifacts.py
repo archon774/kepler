@@ -1,0 +1,202 @@
+"""Local file and table artifact helpers."""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime, timezone
+from mimetypes import guess_type
+from pathlib import Path
+from typing import Optional
+
+from astropy.table import Table
+
+from .config import ARTIFACT_DIR, artifact_directory
+from .models import ArtifactMetadata, ArtifactRef, FileMetadata
+
+__all__ = [
+    "describe_file",
+    "artifact_type_for_path",
+    "describe_artifact_file",
+    "list_artifact_files",
+    "write_table",
+    "write_text",
+    "describe_artifact",
+    "list_artifacts",
+    "preview_rows",
+]
+
+_FITS_SUFFIXES = {".fit", ".fits", ".fts"}
+_TABLE_SUFFIXES = {".csv", ".ecsv", ".parquet", ".tsv"}
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+_TEXT_SUFFIXES = {".json", ".log", ".md", ".txt", ".yaml", ".yml"}
+_WRITE_SUFFIXES = {"ecsv": ".ecsv", "csv": ".csv", "fits": ".fits"}
+
+
+def describe_file(path: str | Path) -> FileMetadata:
+    """Return basic local file metadata without reading file contents."""
+
+    resolved = Path(path).expanduser().resolve(strict=False)
+    exists = resolved.exists()
+    if not exists:
+        return FileMetadata(
+            path=str(resolved),
+            exists=False,
+            suffix=resolved.suffix or None,
+        )
+
+    stat = resolved.stat()
+    modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+    is_file = resolved.is_file()
+    return FileMetadata(
+        path=str(resolved),
+        exists=True,
+        is_file=is_file,
+        size_bytes=stat.st_size if is_file else None,
+        modified_time=modified,
+        suffix=resolved.suffix or None,
+    )
+
+
+def artifact_type_for_path(path: str | Path) -> str:
+    """Infer a coarse artifact type from the filename suffix."""
+
+    suffix = Path(path).suffix.lower()
+    if suffix in _FITS_SUFFIXES:
+        return "fits"
+    if suffix in _TABLE_SUFFIXES:
+        return "table"
+    if suffix in _IMAGE_SUFFIXES:
+        return "image"
+    if suffix in _TEXT_SUFFIXES:
+        return "text"
+    return "file"
+
+
+def describe_artifact_file(path: str | Path) -> ArtifactMetadata:
+    """Describe a single local artifact file."""
+
+    file = describe_file(path)
+    media_type, _encoding = guess_type(file.path)
+    return ArtifactMetadata(
+        file=file,
+        artifact_type=artifact_type_for_path(file.path),
+        media_type=media_type,
+    )
+
+
+def list_artifact_files(directory: str | Path | None = None) -> list[ArtifactMetadata]:
+    """List direct child files in the artifact directory."""
+
+    root = artifact_directory(directory)
+    if not root.exists():
+        return []
+    if not root.is_dir():
+        raise NotADirectoryError(str(root))
+    return [
+        describe_artifact_file(path)
+        for path in sorted(root.iterdir())
+        if path.is_file()
+    ]
+
+
+def _to_native(value):
+    """Convert a numpy/masked scalar to a plain Python type where possible."""
+
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            value = item()
+        except Exception:
+            return value
+    if isinstance(value, float) and value != value:
+        return None
+    return value
+
+
+def preview_rows(table: Table, limit: int) -> list[dict]:
+    """Return the first ``limit`` rows of ``table`` as JSON-safe dicts."""
+
+    if table is None or len(table) == 0:
+        return []
+    n = min(limit, len(table))
+    colnames = [str(c) for c in table.colnames]
+    return [
+        {name: _to_native(table[name][i]) for name in colnames} for i in range(n)
+    ]
+
+
+def _safe_stem(label: str) -> str:
+    """Turn an arbitrary label into a safe filename stem."""
+
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_")
+    return stem or "artifact"
+
+
+def _reserve_path(directory: Path, stem: str, suffix: str) -> Path:
+    """Return a path under ``directory`` that does not already exist."""
+
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{stem}{suffix}"
+    counter = 1
+    while path.exists():
+        path = directory / f"{stem}_{counter}{suffix}"
+        counter += 1
+    return path
+
+
+def write_table(
+    table: Table, name: str, *, subdir: Optional[str] = None, fmt: str = "ecsv"
+) -> ArtifactRef:
+    """Write ``table`` to disk in full and return a reference to it."""
+
+    if fmt not in _WRITE_SUFFIXES:
+        raise ValueError(f"Unsupported artifact format: {fmt!r}")
+
+    directory = ARTIFACT_DIR / subdir if subdir else ARTIFACT_DIR
+    path = _reserve_path(directory, _safe_stem(name), _WRITE_SUFFIXES[fmt])
+
+    if fmt == "csv":
+        table.write(path, format="ascii.csv", overwrite=True)
+    else:
+        table.write(path, format=fmt, overwrite=True)
+
+    return ArtifactRef(
+        path=str(path),
+        format=fmt,
+        row_count=len(table),
+        columns=[str(c) for c in table.colnames],
+    )
+
+
+def write_text(
+    text: str, name: str, *, subdir: Optional[str] = None, ext: str = "md"
+) -> ArtifactRef:
+    """Write arbitrary text to disk and return a reference to it."""
+
+    directory = ARTIFACT_DIR / subdir if subdir else ARTIFACT_DIR
+    path = _reserve_path(directory, _safe_stem(name), f".{ext.lstrip('.')}")
+    path.write_text(text, encoding="utf-8")
+    return ArtifactRef(path=str(path), format=ext.lstrip("."), row_count=None)
+
+
+def describe_artifact(path: str) -> dict:
+    """Return basic metadata for a previously written artifact."""
+
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(path)
+    stat = p.stat()
+    return {"path": str(p), "size_bytes": stat.st_size, "modified": stat.st_mtime}
+
+
+def list_artifacts(directory: Optional[str] = None) -> list[str]:
+    """List files under the artifact directory, or ``directory`` if given."""
+
+    root = Path(directory) if directory else ARTIFACT_DIR
+    if not root.exists():
+        return []
+    return sorted(str(p) for p in root.iterdir() if p.is_file())
