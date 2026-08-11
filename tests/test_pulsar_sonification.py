@@ -1058,7 +1058,11 @@ def test_registry_exposes_all_four_pipeline_stages() -> None:
         # schema list can order them without this document.
         assert "PULSAR PIPELINE STAGE" in schema["description"]
 
-    assert TOOL_SCHEMAS[-4]["name"] == "load_pulsar_lightcurve"
+    # Ordered relative to each other, so an agent reading the schema list top
+    # to bottom meets them in pipeline order. Positions are not pinned -- other
+    # tools get inserted around them.
+    names_in_registry = [s["name"] for s in TOOL_SCHEMAS]
+    assert [n for n in names_in_registry if n in names] == names
 
 
 # ---------------------------------------------------------------------------

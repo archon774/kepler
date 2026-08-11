@@ -23,6 +23,7 @@ from tools.mpc import search_mpc
 from tools.ned import search_ned
 from tools.pulsar import (
     compute_pulsar_periodogram,
+    plot_pulsar,
     list_pulsar_scans,
     resolve_pulsar_scan,
     fold_pulsar_lightcurve,
@@ -608,6 +609,43 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "plot_pulsar",
+        "description": "Plot a pulsar artifact as a PNG image: the light curve, the "
+        "periodogram, or the folded pulse profile. Pass any artifact from the "
+        "pulsar pipeline (or a raw scan) and the chart is chosen from its "
+        "columns. Local only -- no network. "
+        "The periodogram plot is the most informative of the three when a "
+        "period looks wrong: it shows the whole spectrum on a log axis with the "
+        "peak marked and the false-alarm lines drawn, so interference and "
+        "harmonic combs are visible immediately in a way the numbers alone do "
+        "not convey. Axis labels, series names and styling come from "
+        "Astromancer's own chart configuration, not from this tool.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "An artifact from load_pulsar_lightcurve, "
+                    "compute_pulsar_periodogram or fold_pulsar_lightcurve, or a raw "
+                    "pulsar scan.",
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "'auto' (default, inferred from the columns), "
+                    "'lightcurve', 'periodogram' or 'folded'.",
+                },
+                "title": {"type": "string", "description": "Override the chart title."},
+                "show_hidden_series": {
+                    "type": "boolean",
+                    "description": "Draw the folded plot's Difference and Sum series, "
+                    "which Astromancer declares hidden by default.",
+                },
+                "output_name": {"type": "string", "description": "PNG filename stem."},
+            },
+            "required": ["path"],
+        },
+    },
+    {
         "name": "sonify_pulsar",
         "description": "PULSAR PIPELINE STAGE 4 of 4. Render a pulsar as audio you "
         "can listen to: the light curve becomes the amplitude envelope on white "
@@ -707,5 +745,6 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "load_pulsar_lightcurve": load_pulsar_lightcurve,
     "compute_pulsar_periodogram": compute_pulsar_periodogram,
     "fold_pulsar_lightcurve": fold_pulsar_lightcurve,
+    "plot_pulsar": plot_pulsar,
     "sonify_pulsar": sonify_pulsar,
 }

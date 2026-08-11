@@ -25,6 +25,7 @@ __all__ = [
     "PulsarPeriodogram",
     "PulsarFoldedProfile",
     "PulsarSonification",
+    "PulsarPlot",
     "coerce_optional_int",
 ]
 
@@ -319,6 +320,36 @@ class PulsarSonification(KeplerToolModel):
     speed: float | None = None
     cal: float | None = None
     noise_seed: int | None = None
+
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarPlot(KeplerToolModel):
+    """A rendered pulsar chart.
+
+    The chart's identity -- axis labels, series names, whether the x axis is
+    logarithmic -- comes from ``algorithms.pulsar.charts``, which carries
+    Astromancer's own configuration rather than choices made here.
+    """
+
+    file: FileMetadata
+    artifact: Optional[ArtifactRef] = None
+
+    kind: Literal["lightcurve", "periodogram", "folded"] | None = None
+    title: str | None = None
+    x_axis_label: str | None = None
+    y_axis_label: str | None = None
+    x_axis_type: Literal["linear", "logarithmic"] | None = None
+
+    series: list[str] = Field(default_factory=list)
+    hidden_series: list[str] = Field(default_factory=list)
+    """Series upstream declares with ``visible: false`` -- present in the
+    legend but off until clicked. Pass ``show_hidden_series=True`` to draw
+    them."""
+
+    source_name: str | None = None
+    period_s: float | None = None
 
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)

@@ -2544,6 +2544,32 @@ The four tools that sit on these are documented in
   reference render exists to compare against; the seeded carrier is what makes
   the Python side checkable at all.
 
+### 8b. Chart specifications (2026-08-11)
+
+The three Highcharts components were originally left behind as UI. That held
+while nothing rendered; `tools.pulsar.plot_pulsar` now does, so the parts that
+decide **what** is drawn are extracted into
+`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts` and ported to
+`algorithms/pulsar/charts.py`.
+
+| Upstream | Lines | Extracted |
+| --- | --- | --- |
+| `pulsar-light-curve-highchart.component.ts` | 206 | series literal (144-161), axis titles |
+| `pulsar-periodogram-highcharts.component.ts` | 319 | logarithmic x axis (41), channel series names (128-130), Global Maxima marker (276-291), confidence lines (234-260) |
+| `pulsar-period-folding-highchart.component.ts` | 331 | series set incl. `visible: false` on Difference/Sum (234-237), single-source name (268), **`updateXAxisScale`** |
+| `pulsar.service.util.ts` | — | `PulsarChartInfo` (133-138), `PulsarPeriodogram` (400-411), `PulsarPeriodFolding` (620-631) default labels |
+
+`updateXAxisScale` was previously recorded as a flagged judgment call, left
+behind as a viewport computation. It is extracted now because it sets the
+folded plot's x extent, and without it a rendered profile does not match
+Astromancer's.
+
+Still left behind, deliberately: `Highcharts.Chart` handles, `addSeries` /
+`upsertSeries` / `setData` / `setExtremes`, the boost module config
+(`seriesThreshold: 5000`), `turboThreshold: 20000`, export-button options,
+tooltip `pointFormat` strings, and the RxJS form subscriptions. A renderer
+needs the specification, not the widget.
+
 ### 9. Remaining gaps
 
 Both entry points are extracted and both are ported; the pipeline in
