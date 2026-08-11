@@ -139,6 +139,7 @@ identical function any other caller would import and run.
 | `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
 | `docs/extraction.md` | Provenance | Consolidated extraction records for every algorithm package under `algorithms/`. |
 | `docs/pulsar-tool-pipeline.md` | Architecture | The pulsar tool chain — light curve, periodogram, fold, sonify — and the extracted Astromancer code behind each stage. |
+| `docs/examples/` | Sample output | One committed pulsar sonification (`psr_b0329_54_sonification.wav`), produced by the agent loop. The only generated file in the repository. |
 | `docs/repository-folders.md` | Folder guide | Per-folder responsibilities, important files, and current caveats for every source folder. |
 | `docs/algorithm-remediation-plan.md` | Planning | Plan for addressing the known algorithm defects pinned by the test suite. |
 

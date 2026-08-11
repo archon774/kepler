@@ -189,6 +189,11 @@ artifacts/pulsar/
   psr_b0329_54_sonification_lightcurve.wav# stage 4, without one
 ```
 
+A rendered sample is committed at
+`docs/examples/psr_b0329_54_sonification.wav` — produced by the agent loop, not
+a script; see that folder's README for the tool calls it chose. It is the only
+generated file in the repository.
+
 Pass `output_name` to override the stem, or `subdir` to change the folder.
 Existing files are never overwritten: a second run appends `_1`, `_2`, ….
 `artifacts/` is in `.gitignore`.
