@@ -1,0 +1,51 @@
+{
+  "input_fits": "/Users/archon/skynet/skynet/pipeline_data/test_bad_vals/ngc_5286_12158933-2 (1).fits",
+  "input_fits_name": "ngc_5286_12158933-2 (1).fits",
+  "output_dir": "/Users/archon/skynet/skynet/pipeline_data/zp-fits/test_bad_vals/ngc_5286_12158933-2_(1)",
+  "output_plot": "/Users/archon/skynet/skynet/pipeline_data/zp-fits/test_bad_vals/ngc_5286_12158933-2_(1)/zp_fit.png",
+  "output_csv": "/Users/archon/skynet/skynet/pipeline_data/zp-fits/test_bad_vals/ngc_5286_12158933-2_(1)/zp_fit_data.csv",
+  "output_summary": "/Users/archon/skynet/skynet/pipeline_data/zp-fits/test_bad_vals/ngc_5286_12158933-2_(1)/zp_fit_summary.json",
+  "filter": "B",
+  "telescope": "Prompt6",
+  "image_width": 1406,
+  "image_height": 1374,
+  "pixel_scale_arcsec": 0.39835303951780765,
+  "catalogs": [
+    "APASS"
+  ],
+  "zero_point": 2.6024780364643587,
+  "zero_point_error": 0.01726205643121736,
+  "zero_point_slop": 0.08634367965506255,
+  "limmag5": 24.25636474425123,
+  "rej_percent": 17.948717948717952,
+  "num_photometered_sources": 949,
+  "num_detected_sources": 949,
+  "num_catalog_sources": 63,
+  "num_catalog_sources_after_variable_filter": 60,
+  "num_catalog_sources_matched_to_detected_sources": 41,
+  "num_calibration_sources_after_photometry": 41,
+  "num_calibration_sources_after_snr_filter": 41,
+  "num_calibration_sources_before_fit_rejection": 39,
+  "num_fit_accepted_sources": 32,
+  "num_fit_rejected_sources": 7,
+  "fit_model": "catalog_mag = instrumental_mag + zero_point",
+  "fit_slope": 1.0,
+  "fit_offset": 2.6024780364643587,
+  "production_calc_solution": {
+    "zero_point": 2.6024780364643587,
+    "zero_point_error": 0.01726205643121736,
+    "zero_point_slop": 0.08634367965506255,
+    "limmag5": 24.25636474425123,
+    "rej_percent": 17.948717948717952
+  },
+  "diagnostic_vs_production_max_abs_diff": 0.0,
+  "diagnostic_agrees_with_production": true,
+  "afterglow_web_zp": null,
+  "afterglow_web_zp_err": null,
+  "afterglow_web_zp_correction": null,
+  "notes": [
+    "Diagnostic calc_solution agrees with production within 1e-06 (max abs diff 0.00e+00).",
+    "ra/dec columns are in degrees. 'Photometered sources' (Panel 1, gray) are all source-extraction detections; calibration candidates are the catalog-matched, photometered subset fed to the zero-point solve."
+  ],
+  "parity": {}
+}
