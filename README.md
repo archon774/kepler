@@ -1,48 +1,54 @@
 # Kepler
 
 Kepler is an early-stage astronomy tooling repository. Its current state is a
-set of extracted astronomy algorithms, a prototype database-query tool, and a
-planning document for turning those pieces into a coherent package.
-
-This is not yet a single installable Python or TypeScript package. The top-level
-folders are intentionally independent while the extraction work settles.
+small installable Python tool collection, extracted astronomy algorithms, a
+split database-query tool surface, and an architecture document for turning
+those pieces into a coherent tool surface.
 
 ## Current Contents
 
 | Path | Status | What it contains |
 |---|---|---|
-| `database_tools.py` | Prototype | A Claude/Anthropic tool runner around `astroquery`, `psrqpy`, and `ads` for SIMBAD, NED, VizieR, ATNF, ADS, MAST, and MPC queries. |
-| `wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
-| `photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry, with vendored `skylib` routines for SEP extraction, centroiding, background estimation, aperture sums, and statistics. |
-| `fieldcal/` | Extracted Python algorithm | Skynet photometric zero-point calibration: catalog-source matching, variable-star filtering, reference-magnitude resolution, and weighted zero-point solving. |
-| `catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations: band tables, filter/colour transforms, column mappings, and the SIMBAD object-type vocabulary for eleven catalogs. Declaration only — no network code. |
-| `query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
-| `lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, and period-folding logic with Angular/RxJS/Highcharts removed. |
-| `periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
-| `hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
-| `docs/architecture-brainstorm.md` | Planning | Proposed direction for a future package with public tool contracts, services, Pydantic models, provenance, artifacts, and bounded remote calls. |
+| `tools/` | Python tools | Plain Python wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, local artifact inspection, and remote database/archive queries. |
+| `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
+| `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
+| `algorithms/fieldcal/` | Extracted Python algorithm | Skynet photometric zero-point calibration: catalog-source matching, variable-star filtering, reference-magnitude resolution, and weighted zero-point solving. |
+| `algorithms/skylib_lite/` | Shared Python support | Consolidated local Skylib subset used by WCS, photometry, and field calibration: astrometry, SEP extraction, background estimation, aperture photometry, FITS helpers, angle math, and statistics. |
+| `algorithms/catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations, SIMBAD object-type vocabulary, and provider lookup tables used by ADS/NED/ATNF tools. Declaration only — no network code. |
+| `algorithms/query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
+| `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, and period-folding logic with Angular/RxJS/Highcharts removed. |
+| `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
+| `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
+| `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
+| `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
+| `docs/extraction.md` | Provenance | Consolidated extraction records for every algorithm package under `algorithms/`. |
 
-Each extracted domain folder has an `EXTRACTION.md` file with provenance,
+The consolidated extraction record in `docs/extraction.md` captures provenance,
 severed framework dependencies, known parity behaviors, dependency notes, and
-verification already performed.
+verification already performed for every extracted algorithm package.
 
 ## Repository Shape
 
 ```text
 Kepler/
-  database_tools.py              # current astronomy database prototype
   pyproject.toml                 # Python package metadata and dependencies
   uv.lock                        # uv lockfile for reproducible installs
+  package.json                   # TypeScript toolchain metadata
+  tsconfig.json                  # TypeScript compiler smoke-check config
   docs/
-    architecture-brainstorm.md   # future package architecture notes
-  wcs/                           # Python WCS extraction from Skynet
-  photometry/                    # Python photometry extraction from Skynet
-  fieldcal/                      # Python zero-point calibration extraction
-  catalogs/                      # Python catalog declarations (no network code)
-  query/                         # Python remote catalog access (VizieR/SDSS/SIMBAD)
-  lightcurve/                    # TypeScript light-curve extraction
-  periodogram/                   # TypeScript periodogram extraction
-  hrdiagram/                     # TypeScript HR-diagram extraction
+    extraction.md                # master algorithm extraction record
+    tool-architecture.md         # master package architecture
+  tools/                         # public Python tool wrappers, runner, shared models
+  algorithms/
+    wcs/                         # Python WCS extraction from Skynet
+    photometry/                  # Python photometry extraction from Skynet
+    fieldcal/                    # Python zero-point calibration extraction
+    skylib_lite/                 # shared vendored Skylib subset
+    catalogs/                    # Python catalog declarations (no network code)
+    query/                       # Python remote catalog access (VizieR/SDSS/SIMBAD)
+    lightcurve/                  # TypeScript light-curve extraction
+    periodogram/                 # TypeScript periodogram extraction
+    hrdiagram/                   # TypeScript HR-diagram extraction
 ```
 
 ## Python Setup
@@ -55,50 +61,63 @@ uv sync
 ```
 
 `pyproject.toml` is the installable package metadata and includes the Python
-dependencies needed by the database prototype and extracted algorithm modules.
+dependencies needed by the split database tools and extracted algorithm modules.
 `uv.lock` records the resolved dependency set.
 
 Some extracted runtime paths also require non-Python solver data called out in
-the relevant `EXTRACTION.md` files, including astrometry.net index files and
-local UCAC4/UCAC5 catalogs.
+`docs/extraction.md`, including astrometry.net index files and local
+UCAC4/UCAC5 catalogs.
 
 ## Python Entry Points
 
-The database prototype can be called directly:
+ADS queries require `ADS_DEV_KEY`. The optional Anthropic runner exposed by
+`tools.runner` requires `ANTHROPIC_API_KEY`.
+
+The plain Python tools live under `tools`:
 
 ```python
-from database_tools import AstroQueryTool
-
-tool = AstroQueryTool()
-result = tool.execute({
-    "database": "SIMBAD",
-    "query_type": "object_name",
-    "target": "M31",
-})
+from tools.astrometry import describe_image_wcs
+from tools.catalogs import list_photometric_catalogs, resolve_reference_band
+from tools.calibration import solve_zeropoint_from_measurements
+from tools.simbad import search_simbad
+from tools.vizier import search_vizier
+from tools.ned import search_ned
+from tools.ads import search_ads, build_literature_review
+from tools.mast import search_mast
+from tools.mpc import search_mpc
+from tools.atnf import search_atnf
+from tools.casda import search_casda
+from tools.workspace import describe_artifact, list_artifacts
 ```
 
-ADS queries require `ADS_DEV_KEY`. The interactive Anthropic runner in
-`database_tools.py` requires `ANTHROPIC_API_KEY` and is still prototype code.
+An optional agentic runner is available for wiring these tools into an
+Anthropic tool-use loop:
 
-The extracted Python domains expose callable algorithm entry points:
+```bash
+ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
+```
+
+Advanced callers can still import the extracted algorithm packages directly:
 
 ```python
-from wcs.wcs import solve_wcs
-from photometry.pipeline.photometry import run_photometry, perform_photometry
-from photometry.pipeline.source_extraction import run_source_extraction
-from fieldcal import perform_field_calibration, calc_solution
-from query.runner import query_catalogs
-from query.simbad import resolve_simbad
+from algorithms.wcs.wcs import solve_wcs
+from algorithms.photometry.photometry import run_photometry, perform_photometry
+from algorithms.photometry.source_extraction import run_source_extraction
+from algorithms.fieldcal import perform_field_calibration, calc_solution
+from algorithms.query.runner import query_catalogs
+from algorithms.query.simbad import resolve_simbad
 ```
 
 `fieldcal` deliberately does not own WCS, photometry, or catalogs. Before using
-`perform_field_calibration`, wire the cross-domain callables in `fieldcal.deps`
-to the implementations from `wcs/` and `photometry/`. Catalogs are the
-exception: `fieldcal.deps.query_catalogs` already defaults to `query/`.
+`perform_field_calibration`, wire the cross-domain callables in
+`algorithms.fieldcal.deps` to the implementations from `algorithms.wcs` and
+`algorithms.photometry`. Catalogs are the exception:
+`algorithms.fieldcal.deps.query_catalogs` already defaults to `algorithms.query`.
 
-Catalog metadata and catalog access are separate on purpose. Import `catalogs`
-for band tables and colour transforms — it is pure data and pulls in no network
-stack. Import `query.registry` when you need to actually fetch sources.
+Catalog metadata and catalog access are separate on purpose. Import
+`algorithms.catalogs` for band tables, colour transforms, and provider
+vocabularies; it is pure data and pulls in no network stack. Import
+`algorithms.query.registry` when you need to actually fetch sources.
 
 ## Catalog Query Configuration
 
@@ -110,7 +129,7 @@ The remote catalog backends read settings from environment variables:
 
 With the cache enabled, query regions are snapped to a fixed grid so that
 near-identical fields share a cache entry. This is observable near a field edge —
-see `query/EXTRACTION.md` §5.1.
+see `docs/extraction.md`, Query §5.1.
 
 ## WCS Configuration
 
@@ -122,24 +141,40 @@ The WCS solver reads backend settings from environment variables:
 - `ATLAS_TIMEOUT_S`: ATLAS matcher timeout in seconds.
 
 The astrometry.net backend also needs a `solve-field` binary on `PATH` or via
-the supported `SKYLIB_*` environment overrides documented in `wcs/EXTRACTION.md`.
+the supported `SKYLIB_*` environment overrides documented in
+`docs/extraction.md`, WCS.
 If neither backend is configured, the package can still import, but end-to-end
 plate solving will not produce a solution.
 
 ## TypeScript Extracts
 
-`lightcurve/`, `periodogram/`, and `hrdiagram/` contain framework-free
-TypeScript source extracted from Astromancer. There is currently no
-`package.json`, `tsconfig.json`, build command, or generated bundle in this
-repository. Treat these folders as algorithm source modules ready to be wired
-into a future TypeScript package or application.
+`algorithms/lightcurve/`, `algorithms/periodogram/`, and `algorithms/hrdiagram/` contain
+framework-free TypeScript source extracted from Astromancer. The root
+`package.json` and `tsconfig.json` provide a compiler-only setup for these
+modules; there are no runtime npm dependencies.
+
+Install the TypeScript toolchain with npm:
+
+```bash
+npm install
+```
+
+Run the TypeScript smoke check:
+
+```bash
+npm run typecheck
+```
+
+The compiler target is ES2022 and includes the DOM library because the preserved
+light-curve ingest path still uses browser globals such as `FileReader`.
 
 ## Validation
 
 Current CI is intentionally small:
 
 ```bash
-python3 -m py_compile database_tools.py
+python3 -m compileall tools algorithms
+npm run typecheck
 git diff --check
 ```
 

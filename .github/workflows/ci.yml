@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python files
-        run: python -m py_compile database_tools.py
+        run: python -m compileall -q tools algorithms
 
   repository-shape:
     name: repository shape
@@ -42,8 +42,9 @@ jobs:
           test -f README.md
           test -f pyproject.toml
           test -f uv.lock
-          test -f database_tools.py
-          test -f docs/architecture-brainstorm.md
+          test -f docs/tool-architecture.md
+          test -f tools/registry.py
+          test -f tools/runner.py
 
   required:
     name: "required: ci"

@@ -1,0 +1,2642 @@
+{
+  "metadata": {
+    "report_name": "ocl_filter_report",
+    "repo_root": "/Users/archon/skynet/skynet",
+    "input_dir": "pipeline_data/test_subjects/ocl",
+    "output_file": "pipeline_data/zp-fits/ocl_fits/ocl_filter_report.json",
+    "trial_filters": [
+      "V",
+      "rprime",
+      "R"
+    ],
+    "pipeline_stages": [
+      "wcs",
+      "photometry",
+      "field_calibration"
+    ],
+    "selection_rule": "lowest numeric field_calibration slop among successful full-pipeline trial attempts",
+    "total_files": 10,
+    "successful_files": 9,
+    "failed_files": 1
+  },
+  "summary": {
+    "best_filter_counts": {
+      "V": 6,
+      "rprime": 3,
+      "R": 0,
+      "failed": 1
+    },
+    "trial_filter_statistics": {
+      "V": {
+        "attempted": 10,
+        "successful": 9,
+        "failed": 1,
+        "usable_for_selection": 9,
+        "missing_slop": 0,
+        "mean_slop": 0.09300033798673858,
+        "median_slop": 0.0952610614691648,
+        "min_slop": 0.07452362452276283,
+        "max_slop": 0.10447981481162848,
+        "mean_zero_point": 20.10046233719059,
+        "median_zero_point": 20.14404425167074,
+        "mean_zero_point_error": 0.019519489778056388,
+        "median_zero_point_error": 0.01879438280687162,
+        "mean_num_detected_sources": 510.77777777777777,
+        "median_num_detected_sources": 492.0,
+        "mean_num_matched_sources": null,
+        "median_num_matched_sources": null,
+        "mean_num_calibration_sources": 44.0,
+        "median_num_calibration_sources": 45.0
+      },
+      "rprime": {
+        "attempted": 10,
+        "successful": 9,
+        "failed": 1,
+        "usable_for_selection": 9,
+        "missing_slop": 0,
+        "mean_slop": 0.1044251697518734,
+        "median_slop": 0.11864005617541538,
+        "min_slop": 0.06707993091082343,
+        "max_slop": 0.13198133175259277,
+        "mean_zero_point": 19.78117988235346,
+        "median_zero_point": 19.838160282503228,
+        "mean_zero_point_error": 0.020932103635609708,
+        "median_zero_point_error": 0.020268623908566465,
+        "mean_num_detected_sources": 510.77777777777777,
+        "median_num_detected_sources": 492.0,
+        "mean_num_matched_sources": null,
+        "median_num_matched_sources": null,
+        "mean_num_calibration_sources": 43.0,
+        "median_num_calibration_sources": 45.0
+      },
+      "R": {
+        "attempted": 10,
+        "successful": 9,
+        "failed": 1,
+        "usable_for_selection": 9,
+        "missing_slop": 0,
+        "mean_slop": 0.13217288042056718,
+        "median_slop": 0.14691319049708548,
+        "min_slop": 0.08352856989756353,
+        "max_slop": 0.16261697637799172,
+        "mean_zero_point": 19.51794522254889,
+        "median_zero_point": 19.571366474098284,
+        "mean_zero_point_error": 0.025063319389251562,
+        "median_zero_point_error": 0.025391996695043766,
+        "mean_num_detected_sources": 510.77777777777777,
+        "median_num_detected_sources": 492.0,
+        "mean_num_matched_sources": null,
+        "median_num_matched_sources": null,
+        "mean_num_calibration_sources": 40.77777777777778,
+        "median_num_calibration_sources": 43.0
+      }
+    }
+  },
+  "results": [
+    {
+      "input_file": "messier 15_14111493_Lum_005.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Lum_005.fits",
+      "original_filter": "Lum",
+      "best_filter": "V",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.08764289113616638,
+      "selection_reason": "V had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "V",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 20.141497332382436,
+          "zero_point_error": 0.015928588541736913,
+          "slop": 0.08764289113616638,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 643,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 51,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 17.647058823529417,
+          "rejection_reasons": null,
+          "limmag5": 15.921759879900902
+        },
+        "errors": [],
+        "elapsed_seconds": 3.903
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.141497332382436,
+            "zero_point_error": 0.015928588541736913,
+            "slop": 0.08764289113616638,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 643,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 51,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 17.647058823529417,
+            "rejection_reasons": null,
+            "limmag5": 15.921759879900902
+          },
+          "errors": [],
+          "elapsed_seconds": 3.903
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.838160282503228,
+            "zero_point_error": 0.020463622667273734,
+            "slop": 0.11864005617541538,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 643,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 49,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 16.326530612244895,
+            "rejection_reasons": null,
+            "limmag5": 15.621410472013428
+          },
+          "errors": [],
+          "elapsed_seconds": 3.809
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.571366474098284,
+            "zero_point_error": 0.025728132619847344,
+            "slop": 0.1546484095731682,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 643,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 46,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 10.869565217391308,
+            "rejection_reasons": null,
+            "limmag5": 15.354243016564247
+          },
+          "errors": [],
+          "elapsed_seconds": 3.54
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Lum_006.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Lum_006.fits",
+      "original_filter": "Lum",
+      "best_filter": "V",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.10447981481162848,
+      "selection_reason": "V had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "V",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 19.845279806984674,
+          "zero_point_error": 0.01976234153859856,
+          "slop": 0.10447981481162848,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 492,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 45,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 15.555555555555555,
+          "rejection_reasons": null,
+          "limmag5": 15.578083157191212
+        },
+        "errors": [],
+        "elapsed_seconds": 3.588
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.845279806984674,
+            "zero_point_error": 0.01976234153859856,
+            "slop": 0.10447981481162848,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 492,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 45,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 15.555555555555555,
+            "rejection_reasons": null,
+            "limmag5": 15.578083157191212
+          },
+          "errors": [],
+          "elapsed_seconds": 3.588
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.53246806736896,
+            "zero_point_error": 0.02385996334948896,
+            "slop": 0.13198133175259277,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 492,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 45,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 15.555555555555555,
+            "rejection_reasons": null,
+            "limmag5": 15.26527141757548
+          },
+          "errors": [],
+          "elapsed_seconds": 3.226
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.268265681695283,
+            "zero_point_error": 0.028441316347727136,
+            "slop": 0.16261697637799172,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 492,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 43,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 11.627906976744185,
+            "rejection_reasons": null,
+            "limmag5": 15.001288255409682
+          },
+          "errors": [],
+          "elapsed_seconds": 3.453
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Lum_007.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Lum_007.fits",
+      "original_filter": "Lum",
+      "best_filter": "V",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.10356844684776136,
+      "selection_reason": "V had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "V",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 20.165504502348497,
+          "zero_point_error": 0.017668669993789462,
+          "slop": 0.10356844684776136,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 637,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 52,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 13.461538461538458,
+          "rejection_reasons": null,
+          "limmag5": 15.940640113244314
+        },
+        "errors": [],
+        "elapsed_seconds": 3.397
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.165504502348497,
+            "zero_point_error": 0.017668669993789462,
+            "slop": 0.10356844684776136,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 637,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 52,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 13.461538461538458,
+            "rejection_reasons": null,
+            "limmag5": 15.940640113244314
+          },
+          "errors": [],
+          "elapsed_seconds": 3.397
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.862808560343147,
+            "zero_point_error": 0.020268623908566465,
+            "slop": 0.12012281650524101,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 637,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 50,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 14.000000000000002,
+            "rejection_reasons": null,
+            "limmag5": 15.641366261112765
+          },
+          "errors": [],
+          "elapsed_seconds": 3.023
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.600404012853566,
+            "zero_point_error": 0.025137014840915482,
+            "slop": 0.15420499601794802,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 637,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 48,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 10.416666666666663,
+            "rejection_reasons": null,
+            "limmag5": 15.37886627417336
+          },
+          "errors": [],
+          "elapsed_seconds": 3.309
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Lum_008.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Lum_008.fits",
+      "original_filter": "Lum",
+      "best_filter": "V",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.09430941076867837,
+      "selection_reason": "V had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "V",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 20.339475872173598,
+          "zero_point_error": 0.016048377506661805,
+          "slop": 0.09430941076867837,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 731,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 58,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 20.68965517241379,
+          "rejection_reasons": null,
+          "limmag5": 16.15556261031629
+        },
+        "errors": [],
+        "elapsed_seconds": 3.448
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.339475872173598,
+            "zero_point_error": 0.016048377506661805,
+            "slop": 0.09430941076867837,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 731,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 58,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 20.68965517241379,
+            "rejection_reasons": null,
+            "limmag5": 16.15556261031629
+          },
+          "errors": [],
+          "elapsed_seconds": 3.448
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.034478430554064,
+            "zero_point_error": 0.0200674027623018,
+            "slop": 0.1230539725178016,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 731,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 56,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 19.64285714285714,
+            "rejection_reasons": null,
+            "limmag5": 15.852286927249745
+          },
+          "errors": [],
+          "elapsed_seconds": 3.793
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.784355118508522,
+            "zero_point_error": 0.024247941822807692,
+            "slop": 0.152308231970913,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 731,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 52,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 13.461538461538458,
+            "rejection_reasons": null,
+            "limmag5": 15.599571465516082
+          },
+          "errors": [],
+          "elapsed_seconds": 3.577
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Lum_009.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Lum_009.fits",
+      "original_filter": "Lum",
+      "best_filter": "V",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.0952610614691648,
+      "selection_reason": "V had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "V",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 20.444922606408166,
+          "zero_point_error": 0.015972395595187292,
+          "slop": 0.0952610614691648,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 764,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 60,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 23.33333333333333,
+          "rejection_reasons": null,
+          "limmag5": 16.28558342106481
+        },
+        "errors": [],
+        "elapsed_seconds": 4.183
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.444922606408166,
+            "zero_point_error": 0.015972395595187292,
+            "slop": 0.0952610614691648,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 764,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 60,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 23.33333333333333,
+            "rejection_reasons": null,
+            "limmag5": 16.28558342106481
+          },
+          "errors": [],
+          "elapsed_seconds": 4.183
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.134161190489678,
+            "zero_point_error": 0.019865904218415668,
+            "slop": 0.12402675883967912,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 764,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 57,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 19.298245614035093,
+            "rejection_reasons": null,
+            "limmag5": 15.973971932699191
+          },
+          "errors": [],
+          "elapsed_seconds": 3.613
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.87868043745894,
+            "zero_point_error": 0.023302090845635306,
+            "slop": 0.14691319049708548,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 764,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 53,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 15.094339622641506,
+            "rejection_reasons": null,
+            "limmag5": 15.718358826430121
+          },
+          "errors": [],
+          "elapsed_seconds": 3.794
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Open_000.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Open_000.fits",
+      "original_filter": "Open",
+      "best_filter": null,
+      "selection_metric": "slop",
+      "selection_metric_value": null,
+      "selection_reason": "all trial filters failed or lacked field-calibration slop",
+      "winning_trial": null,
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": false,
+          "usable_for_selection": false,
+          "status": "failed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": false,
+              "failure_reason": "no WCS solution found in FITS header"
+            },
+            "photometry": {
+              "attempted": false,
+              "success": false,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": false,
+              "success": false,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": null,
+            "catalogs_used": null,
+            "zero_point": null,
+            "zero_point_error": null,
+            "slop": null,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": null,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": null,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": null,
+            "rejection_reasons": null,
+            "limmag5": null
+          },
+          "errors": [],
+          "elapsed_seconds": 0.05
+        },
+        {
+          "trial_filter": "rprime",
+          "success": false,
+          "usable_for_selection": false,
+          "status": "failed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": false,
+              "failure_reason": "no WCS solution found in FITS header"
+            },
+            "photometry": {
+              "attempted": false,
+              "success": false,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": false,
+              "success": false,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": null,
+            "catalogs_used": null,
+            "zero_point": null,
+            "zero_point_error": null,
+            "slop": null,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": null,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": null,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": null,
+            "rejection_reasons": null,
+            "limmag5": null
+          },
+          "errors": [],
+          "elapsed_seconds": 0.048
+        },
+        {
+          "trial_filter": "R",
+          "success": false,
+          "usable_for_selection": false,
+          "status": "failed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": false,
+              "failure_reason": "no WCS solution found in FITS header"
+            },
+            "photometry": {
+              "attempted": false,
+              "success": false,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": false,
+              "success": false,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": null,
+            "catalogs_used": null,
+            "zero_point": null,
+            "zero_point_error": null,
+            "slop": null,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": null,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": null,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": null,
+            "rejection_reasons": null,
+            "limmag5": null
+          },
+          "errors": [],
+          "elapsed_seconds": 0.05
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Open_001.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Open_001.fits",
+      "original_filter": "Open",
+      "best_filter": "rprime",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.06707993091082343,
+      "selection_reason": "rprime had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "rprime",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 19.275765472632408,
+          "zero_point_error": 0.02467623697241095,
+          "slop": 0.06707993091082343,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 241,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 21,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 23.809523809523814,
+          "rejection_reasons": null,
+          "limmag5": 14.376793496215088
+        },
+        "errors": [],
+        "elapsed_seconds": 3.19
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.61617544101324,
+            "zero_point_error": 0.03159200226029117,
+            "slop": 0.09945245976444857,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 241,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 21,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 23.809523809523814,
+            "rejection_reasons": null,
+            "limmag5": 14.717203464595928
+          },
+          "errors": [],
+          "elapsed_seconds": 3.364
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.275765472632408,
+            "zero_point_error": 0.02467623697241095,
+            "slop": 0.06707993091082343,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 241,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 21,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 23.809523809523814,
+            "rejection_reasons": null,
+            "limmag5": 14.376793496215088
+          },
+          "errors": [],
+          "elapsed_seconds": 3.19
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.00851892530204,
+            "zero_point_error": 0.027834695326953922,
+            "slop": 0.08352856989756353,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 241,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 20,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 19.999999999999996,
+            "rejection_reasons": null,
+            "limmag5": 14.109546948884729
+          },
+          "errors": [],
+          "elapsed_seconds": 2.891
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Open_002.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Open_002.fits",
+      "original_filter": "Open",
+      "best_filter": "V",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.07452362452276283,
+      "selection_reason": "V had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "V",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 20.025353230439265,
+          "zero_point_error": 0.019879344296005356,
+          "slop": 0.07452362452276283,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 342,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 30,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 16.666666666666664,
+          "rejection_reasons": null,
+          "limmag5": 15.153389147979246
+        },
+        "errors": [],
+        "elapsed_seconds": 3.418
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.025353230439265,
+            "zero_point_error": 0.019879344296005356,
+            "slop": 0.07452362452276283,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 342,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 30,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 16.666666666666664,
+            "rejection_reasons": null,
+            "limmag5": 15.153389147979246
+          },
+          "errors": [],
+          "elapsed_seconds": 3.418
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.687309672023922,
+            "zero_point_error": 0.022220751692500505,
+            "slop": 0.09049322397481725,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 342,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 30,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 13.33333333333333,
+            "rejection_reasons": null,
+            "limmag5": 14.816115422347053
+          },
+          "errors": [],
+          "elapsed_seconds": 3.389
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.4233334779182,
+            "zero_point_error": 0.025391996695043766,
+            "slop": 0.1097364851471441,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 342,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 29,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 10.344827586206895,
+            "rejection_reasons": null,
+            "limmag5": 14.55213922824132
+          },
+          "errors": [],
+          "elapsed_seconds": 3.47
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Open_003.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Open_003.fits",
+      "original_filter": "Open",
+      "best_filter": "rprime",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.07210761405909025,
+      "selection_reason": "rprime had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "rprime",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 19.813930360438853,
+          "zero_point_error": 0.017352191198493825,
+          "slop": 0.07210761405909025,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 361,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 37,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 16.216216216216218,
+          "rejection_reasons": null,
+          "limmag5": 14.965027978124755
+        },
+        "errors": [],
+        "elapsed_seconds": 3.252
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.14404425167074,
+            "zero_point_error": 0.01879438280687162,
+            "slop": 0.08181522388546451,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 361,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 37,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 16.216216216216218,
+            "rejection_reasons": null,
+            "limmag5": 15.295141869356634
+          },
+          "errors": [],
+          "elapsed_seconds": 3.306
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.813930360438853,
+            "zero_point_error": 0.017352191198493825,
+            "slop": 0.07210761405909025,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 361,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 37,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 16.216216216216218,
+            "rejection_reasons": null,
+            "limmag5": 14.965027978124755
+          },
+          "errors": [],
+          "elapsed_seconds": 3.252
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.54840700213843,
+            "zero_point_error": 0.02007050321812111,
+            "slop": 0.09103490453841855,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 361,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 36,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 13.888888888888884,
+            "rejection_reasons": null,
+            "limmag5": 14.699504619824326
+          },
+          "errors": [],
+          "elapsed_seconds": 3.749
+        }
+      ]
+    },
+    {
+      "input_file": "messier 15_14111493_Open_004.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Open_004.fits",
+      "original_filter": "Open",
+      "best_filter": "rprime",
+      "selection_metric": "slop",
+      "selection_metric_value": 0.09232082303139973,
+      "selection_reason": "rprime had the lowest field-calibration slop among successful full-pipeline trial filters.",
+      "winning_trial": {
+        "trial_filter": "rprime",
+        "success": true,
+        "usable_for_selection": true,
+        "status": "completed",
+        "pipeline": {
+          "wcs": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "photometry": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          },
+          "field_calibration": {
+            "attempted": true,
+            "success": true,
+            "failure_reason": null
+          }
+        },
+        "metrics": {
+          "catalog_name": "APASS",
+          "catalogs_used": [
+            "APASS"
+          ],
+          "zero_point": 19.85153690482688,
+          "zero_point_error": 0.019614235951035456,
+          "slop": 0.09232082303139973,
+          "slope": null,
+          "fit": null,
+          "fit_error": null,
+          "rms": null,
+          "scatter": null,
+          "num_detected_sources": 386,
+          "num_catalog_sources": null,
+          "num_matched_sources": null,
+          "num_calibration_sources": 42,
+          "num_accepted_sources": null,
+          "num_rejected_sources": null,
+          "rejection_percent": 19.047619047619047,
+          "rejection_reasons": null,
+          "limmag5": 15.01161061863433
+        },
+        "errors": [],
+        "elapsed_seconds": 3.303
+      },
+      "trials": [
+        {
+          "trial_filter": "V",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 20.181907991294697,
+            "zero_point_error": 0.020029305463365305,
+            "slop": 0.095950108674572,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 386,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 42,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 16.666666666666664,
+            "rejection_reasons": null,
+            "limmag5": 15.342423435768948
+          },
+          "errors": [],
+          "elapsed_seconds": 2.922
+        },
+        {
+          "trial_filter": "rprime",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.85153690482688,
+            "zero_point_error": 0.019614235951035456,
+            "slop": 0.09232082303139973,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 386,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 42,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 19.047619047619047,
+            "rejection_reasons": null,
+            "limmag5": 15.01161061863433
+          },
+          "errors": [],
+          "elapsed_seconds": 3.303
+        },
+        {
+          "trial_filter": "R",
+          "success": true,
+          "usable_for_selection": true,
+          "status": "completed",
+          "pipeline": {
+            "wcs": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "photometry": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            },
+            "field_calibration": {
+              "attempted": true,
+              "success": true,
+              "failure_reason": null
+            }
+          },
+          "metrics": {
+            "catalog_name": "APASS",
+            "catalogs_used": [
+              "APASS"
+            ],
+            "zero_point": 19.578175872966735,
+            "zero_point_error": 0.02541618278621231,
+            "slop": 0.13456415976487215,
+            "slope": null,
+            "fit": null,
+            "fit_error": null,
+            "rms": null,
+            "scatter": null,
+            "num_detected_sources": 386,
+            "num_catalog_sources": null,
+            "num_matched_sources": null,
+            "num_calibration_sources": 40,
+            "num_accepted_sources": null,
+            "num_rejected_sources": null,
+            "rejection_percent": 9.999999999999998,
+            "rejection_reasons": null,
+            "limmag5": 14.736943692027449
+          },
+          "errors": [],
+          "elapsed_seconds": 3.492
+        }
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "input_file": "messier 15_14111493_Open_000.fits",
+      "input_path": "pipeline_data/test_subjects/ocl/messier 15_14111493_Open_000.fits",
+      "original_filter": "Open",
+      "best_filter": null,
+      "reason": "all trial filters failed or lacked field-calibration slop",
+      "trial_failures": [
+        {
+          "trial_filter": "V",
+          "failed_stage": "wcs",
+          "failure_reason": "no WCS solution found in FITS header"
+        },
+        {
+          "trial_filter": "rprime",
+          "failed_stage": "wcs",
+          "failure_reason": "no WCS solution found in FITS header"
+        },
+        {
+          "trial_filter": "R",
+          "failed_stage": "wcs",
+          "failure_reason": "no WCS solution found in FITS header"
+        }
+      ]
+    }
+  ],
+  "diagnostic_log": [
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_005.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_005.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_005.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_005.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.08764289113616638
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_005.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_005.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_005.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_005.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.11864005617541538
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_005.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_005.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_005.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_005.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.1546484095731682
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_006.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_006.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_006.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_006.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.10447981481162848
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_006.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_006.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_006.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_006.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.13198133175259277
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_006.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_006.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_006.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_006.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.16261697637799172
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_007.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_007.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_007.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_007.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.10356844684776136
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_007.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_007.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_007.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_007.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.12012281650524101
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_007.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_007.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_007.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_007.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.15420499601794802
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_008.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_008.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_008.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_008.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.09430941076867837
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_008.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_008.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_008.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_008.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.1230539725178016
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_008.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_008.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_008.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_008.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.152308231970913
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_009.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_009.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_009.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_009.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.0952610614691648
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_009.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_009.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_009.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_009.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.12402675883967912
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Lum_009.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_009.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Lum_009.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Lum_009.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.14691319049708548
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_000.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_000.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_000.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_000.fits",
+        "trial_filter": "V",
+        "status": "failed",
+        "slop": null
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_000.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_000.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_000.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_000.fits",
+        "trial_filter": "rprime",
+        "status": "failed",
+        "slop": null
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_000.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_000.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_000.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_000.fits",
+        "trial_filter": "R",
+        "status": "failed",
+        "slop": null
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_001.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_001.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_001.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_001.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.09945245976444857
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_001.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_001.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_001.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_001.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.06707993091082343
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_001.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_001.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_001.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_001.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.08352856989756353
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_002.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_002.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_002.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_002.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.07452362452276283
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_002.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_002.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_002.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_002.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.09049322397481725
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_002.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_002.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_002.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_002.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.1097364851471441
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_003.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_003.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_003.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_003.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.08181522388546451
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_003.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_003.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_003.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_003.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.07210761405909025
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_003.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_003.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_003.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_003.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.09103490453841855
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_004.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_004.fits",
+        "trial_filter": "V"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_004.fits with trial filter V",
+      "context": {
+        "input_file": "messier 15_14111493_Open_004.fits",
+        "trial_filter": "V",
+        "status": "completed",
+        "slop": 0.095950108674572
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_004.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_004.fits",
+        "trial_filter": "rprime"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_004.fits with trial filter rprime",
+      "context": {
+        "input_file": "messier 15_14111493_Open_004.fits",
+        "trial_filter": "rprime",
+        "status": "completed",
+        "slop": 0.09232082303139973
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processing messier 15_14111493_Open_004.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_004.fits",
+        "trial_filter": "R"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Processed messier 15_14111493_Open_004.fits with trial filter R",
+      "context": {
+        "input_file": "messier 15_14111493_Open_004.fits",
+        "trial_filter": "R",
+        "status": "completed",
+        "slop": 0.13456415976487215
+      }
+    }
+  ]
+}
