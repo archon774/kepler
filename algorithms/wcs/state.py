@@ -26,7 +26,7 @@ Two upstream behaviours worth recording:
   correspondingly named *columns* are left holding their previous values after a
   failed solve. This class is a plain (non-``slots``) dataclass precisely so
   that behaviour is reproduced exactly rather than turned into an
-  ``AttributeError``. The mismatch is preserved, not fixed — see EXTRACTION.md.
+  ``AttributeError``. The mismatch is preserved, not fixed — see docs/extraction.md, WCS.
 """
 
 from __future__ import annotations

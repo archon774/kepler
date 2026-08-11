@@ -89,14 +89,15 @@ Important files:
 - `<name>_catalog.py`: one module per catalog.
 - `catalog_options.py`: the second, smaller registry (`CATALOG_OPTIONS`) that
   reference-magnitude resolution reads. It is *not* redundant with `CATALOGS`;
-  see `EXTRACTION.md` §4.
+  see [extraction.md](extraction.md), Catalogs §4.
 - `schemas.py`: `CatalogSource` and friends — the data contract between
   `algorithms.catalogs` and `algorithms.query`.
 - `simbad.py`: the 206-entry SIMBAD object-type vocabulary.
 - `ads.py`: ADS field lists and citation formatting helpers for `tools.ads`.
 - `atnf.py`: ATNF pulsar-parameter vocabulary for `tools.atnf`.
 - `ned.py`: NED table-name and photometry-format vocabulary for `tools.ned`.
-- `EXTRACTION.md`: provenance, renames, preserved behaviours, verification.
+- [extraction.md](extraction.md), Catalogs: provenance, renames, preserved
+  behaviours, verification.
 
 Current caveats:
 
@@ -110,6 +111,8 @@ Project documentation and planning material.
 - `tool-architecture.md` is the master package architecture document: public
   tools, algorithm ownership, future services, runtime policy, and
   `skylib_lite` consolidation.
+- `extraction.md` is the master extraction record for every algorithm package
+  under `algorithms/`.
 - `repository-folders.md` is this current-state folder guide.
 
 Docs in this folder should distinguish clearly between the repository's current
@@ -137,8 +140,8 @@ Important files and subfolders:
 - `deps.py`: seam for cross-domain dependencies owned by `algorithms.wcs`,
   `algorithms.photometry`, and `algorithms.query`.
 - `algorithms.skylib_lite`: shared vendored utility subset used by calibration.
-- `EXTRACTION.md`: provenance, severed Skynet dependencies, known parity
-  behavior, dependency notes, and verification.
+- [extraction.md](extraction.md), Field Calibration: provenance, severed Skynet
+  dependencies, known parity behavior, dependency notes, and verification.
 
 Current caveats:
 
@@ -173,7 +176,8 @@ Important files and subfolders:
 - `result/`: cluster-summary and projection calculations.
 - `shared/`: angle conversion helpers.
 - `storage/`: storage-shape interfaces retained from Astromancer.
-- `EXTRACTION.md`: extraction boundaries, framework seams, and dropped UI code.
+- [extraction.md](extraction.md), HR Diagram / Isochrone Matching: extraction
+  boundaries, framework seams, and dropped UI code.
 
 Current caveats:
 
@@ -203,7 +207,8 @@ Important files and subfolders:
   and period-folding functions.
 - `shared/`: small shared helpers such as `floatMod` and the common data
   interface.
-- `EXTRACTION.md`: source provenance and Angular/RxJS/Highcharts seams.
+- [extraction.md](extraction.md), Light Curve: source provenance and
+  Angular/RxJS/Highcharts seams.
 
 Current caveats:
 
@@ -231,8 +236,8 @@ Important files and subfolders:
 - `pulsar/`: pulsar periodogram models, compute wrapper, range defaults, and
   folding link.
 - `variable/`: variable-star periodogram model and compute wrapper.
-- `EXTRACTION.md`: source provenance, algorithm notes, and recent bug-fix
-  context.
+- [extraction.md](extraction.md), Periodogram: source provenance, algorithm
+  notes, and recent bug-fix context.
 
 Current caveats:
 
@@ -283,8 +288,8 @@ Important files:
 - `schemas.py`: Pydantic settings and data models.
 - `algorithms.skylib_lite`: vendored algorithmic core for aperture photometry,
   exact aperture overlap, centroiding, background estimation, and statistics.
-- `EXTRACTION.md`: source provenance, dependency requirements, parity behaviors,
-  and verification.
+- [extraction.md](extraction.md), Photometry: source provenance, dependency
+  requirements, parity behaviors, and verification.
 
 Current caveats:
 
@@ -323,7 +328,8 @@ Important files:
 - `geometry.py`: sky and image geometry — pure, no network.
 - `cache.py`, `config.py`: astroquery cache policy and settings seam.
 - `simbad.py`: identifier resolution.
-- `EXTRACTION.md`: provenance, seams cut, preserved behaviours, verification.
+- [extraction.md](extraction.md), Query: provenance, seams cut, preserved
+  behaviours, verification.
 
 Current caveats:
 
@@ -354,7 +360,8 @@ Important files and subfolders:
 - `state.py`: dataclass stand-ins for the Skynet ORM rows touched by WCS.
 - `algorithms.skylib_lite`: vendored astrometry stack, including astrometry.net and
   ATLAS backends.
-- `EXTRACTION.md`: full provenance, backend requirements, and validation notes.
+- [extraction.md](extraction.md), WCS: full provenance, backend requirements,
+  and validation notes.
 
 Current caveats:
 

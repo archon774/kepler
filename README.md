@@ -21,10 +21,11 @@ those pieces into a coherent tool surface.
 | `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
 | `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
 | `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
+| `docs/extraction.md` | Provenance | Consolidated extraction records for every algorithm package under `algorithms/`. |
 
-Each extracted domain folder has an `EXTRACTION.md` file with provenance,
+The consolidated extraction record in `docs/extraction.md` captures provenance,
 severed framework dependencies, known parity behaviors, dependency notes, and
-verification already performed.
+verification already performed for every extracted algorithm package.
 
 ## Repository Shape
 
@@ -35,6 +36,7 @@ Kepler/
   package.json                   # TypeScript toolchain metadata
   tsconfig.json                  # TypeScript compiler smoke-check config
   docs/
+    extraction.md                # master algorithm extraction record
     tool-architecture.md         # master package architecture
   tools/                         # public Python tool wrappers, runner, shared models
   algorithms/
@@ -63,8 +65,8 @@ dependencies needed by the split database tools and extracted algorithm modules.
 `uv.lock` records the resolved dependency set.
 
 Some extracted runtime paths also require non-Python solver data called out in
-the relevant `EXTRACTION.md` files, including astrometry.net index files and
-local UCAC4/UCAC5 catalogs.
+`docs/extraction.md`, including astrometry.net index files and local
+UCAC4/UCAC5 catalogs.
 
 ## Python Entry Points
 
@@ -127,7 +129,7 @@ The remote catalog backends read settings from environment variables:
 
 With the cache enabled, query regions are snapped to a fixed grid so that
 near-identical fields share a cache entry. This is observable near a field edge —
-see `algorithms/query/EXTRACTION.md` §5.1.
+see `docs/extraction.md`, Query §5.1.
 
 ## WCS Configuration
 
@@ -140,7 +142,7 @@ The WCS solver reads backend settings from environment variables:
 
 The astrometry.net backend also needs a `solve-field` binary on `PATH` or via
 the supported `SKYLIB_*` environment overrides documented in
-`algorithms/wcs/EXTRACTION.md`.
+`docs/extraction.md`, WCS.
 If neither backend is configured, the package can still import, but end-to-end
 plate solving will not produce a solution.
 

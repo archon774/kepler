@@ -1,6 +1,6 @@
 """Photometry algorithms and data models.
 
-Extracted from the Skynet codebase; see EXTRACTION.md for exact provenance,
+Extracted from the Skynet codebase; see docs/extraction.md, Photometry for exact provenance,
 the infrastructure seams that were cut, and required dependencies.
 
 Modules:

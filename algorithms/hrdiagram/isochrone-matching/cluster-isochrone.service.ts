@@ -40,7 +40,7 @@ import {IsochroneStorageObject} from "../storage/cluster-storage.service.util";
 //            (src/app/tools/cluster/storage/cluster-storage.service.ts:152-193).
 //            These are the values a fresh session starts from. The UI slider
 //            domains that bound them (isochrone-plotting-controls.component.html)
-//            are recorded in ../EXTRACTION.md, not enforced here — astromancer
+//            are recorded in docs/extraction.md, HR Diagram / Isochrone Matching, not enforced here — astromancer
 //            did not enforce them in code either.
 export const DEFAULT_ISOCHRONE_STORAGE: IsochroneStorageObject = {
     plotConfigs: [],

@@ -7,7 +7,7 @@
 //
 // NOTE (periodogram overlap): the same source file also holds `lombScargle`,
 // `lombScargleWithError` and the private `ArrMath` object. Those are
-// periodogram math and are NOT reproduced here — see ../EXTRACTION.md.
+// periodogram math and are NOT reproduced here — see docs/extraction.md, Light Curve.
 //
 // Also left behind from that file: `rad`, `deg`, `d2HMS`, `d2DMS` (celestial
 // coordinate conversion, unused anywhere in pulsar/ or variable/), and

@@ -62,7 +62,7 @@
 //     -> { data: number[][], iSkip: number }
 // with `data` already in [colour, absolute magnitude] pairs for the requested
 // filter triple. Nothing to copy; the grid lives server-side. See
-// ../EXTRACTION.md.
+// docs/extraction.md, HR Diagram / Isochrone Matching.
 
 import {
   ClusterPlotType,
