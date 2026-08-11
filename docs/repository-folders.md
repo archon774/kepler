@@ -280,12 +280,12 @@ Primary responsibilities:
 - Preserve legacy Afterglow numeric behavior around WCS application, centroided
   positions, and aperture-correction settings.
 
-Important files and subfolders:
+Important files:
 
-- `pipeline/source_extraction.py`: FITS-header WCS construction and source
+- `source_extraction.py`: FITS-header WCS construction and source
   extraction entry points.
-- `pipeline/photometry.py`: `run_photometry` and `perform_photometry`.
-- `pipeline/schemas.py`: Pydantic settings and data models.
+- `photometry.py`: `run_photometry` and `perform_photometry`.
+- `schemas.py`: Pydantic settings and data models.
 - `algorithms.skylib_lite`: vendored algorithmic core for aperture photometry,
   exact aperture overlap, centroiding, background estimation, and statistics.
 - [extraction.md](extraction.md), Photometry: source provenance, dependency
