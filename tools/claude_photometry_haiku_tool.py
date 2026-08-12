@@ -516,8 +516,13 @@ def plot_photometry(
     mag = np.array([float(r.mag) for r in valid_results], dtype=float)
     flux = np.array([float(r.flux) for r in valid_results], dtype=float)
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    img = axes[0].imshow(
+    # A single panel now -- this used to be the leftmost third of a 1x3 figure
+    # alongside a magnitude histogram and a mag/flux scatter, both dropped as
+    # redundant with the per-source data already in the tool result. Sized and
+    # scaled up (figure, markers, dpi) for its new role as the only plot,
+    # rather than just stretching the old one-third-width panel.
+    fig, ax = plt.subplots(figsize=(10, 8.5))
+    img = ax.imshow(
         data,
         origin="lower",
         cmap="gray",
@@ -525,65 +530,53 @@ def plot_photometry(
         vmax=np.nanpercentile(data, 98),
         interpolation="nearest",
     )
-    fig.colorbar(img, ax=axes[0], label="counts")
-    scatter = axes[0].scatter(
+    fig.colorbar(img, ax=ax, label="counts", fraction=0.046, pad=0.04)
+    scatter = ax.scatter(
         x,
         y,
         c=mag,
         cmap="viridis_r",
-        s=30,
+        s=40,
         edgecolors="white",
-        linewidths=0.5,
+        linewidths=0.6,
         alpha=0.9,
     )
-    axes[0].set_title("FITS image with photometry sources")
-    axes[0].set_xlabel("x")
-    axes[0].set_ylabel("y")
-    fig.colorbar(scatter, ax=axes[0], label=magnitude_label)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    fig.colorbar(scatter, ax=ax, label=magnitude_label, fraction=0.046, pad=0.08)
 
     bright_idx = np.argsort(mag)[: min(8, len(mag))]
     if len(bright_idx) > 0:
-        axes[0].scatter(
+        ax.scatter(
             x[bright_idx],
             y[bright_idx],
             c="red",
-            s=70,
+            s=90,
             edgecolors="white",
-            linewidths=0.8,
+            linewidths=0.9,
             alpha=0.95,
         )
         for idx, label in enumerate(bright_idx, start=1):
-            axes[0].text(
+            ax.text(
                 x[label],
                 y[label],
                 str(idx),
                 color="white",
-                fontsize=8,
+                fontsize=9,
                 ha="center",
                 va="center",
                 bbox={"boxstyle": "round,pad=0.2", "facecolor": "black", "alpha": 0.55},
             )
 
-    axes[1].hist(mag, bins=25, color="steelblue", edgecolor="black", alpha=0.9)
-    axes[1].set_title(f"{magnitude_label} histogram")
-    axes[1].set_xlabel(magnitude_label)
-    axes[1].set_ylabel("number of sources")
-    axes[1].grid(True, alpha=0.3)
-
-    axes[2].scatter(mag, flux, c=flux, cmap="plasma", edgecolors="k", alpha=0.8)
-    axes[2].invert_xaxis()
-    axes[2].set_title("Photometry results")
-    axes[2].set_xlabel(magnitude_label)
-    axes[2].set_ylabel("flux")
-    axes[2].grid(True, alpha=0.3)
-
-    fig.suptitle(
-        f"Detected {len(valid_results)} sources | median mag {np.median(mag):.3f} | median flux {np.median(flux):.1f}",
-        y=0.98,
+    ax.set_title(
+        "FITS image with photometry sources\n"
+        f"{len(valid_results)} sources | median {magnitude_label} {np.median(mag):.3f} "
+        f"| median flux {np.median(flux):.1f}",
+        fontsize=11,
     )
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=220)
     plt.close(fig)
 
 
