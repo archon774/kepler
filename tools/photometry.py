@@ -145,10 +145,17 @@ def run_photometry_on_target(
     brightest = min(valid_results, key=lambda r: r.mag) if valid_results else None
     faintest = max(valid_results, key=lambda r: r.mag) if valid_results else None
 
+    # Same exp_length for every source in a frame (it's read once from the FITS
+    # header, not per-source) -- one result[0] lookup is enough. See
+    # PhotometryRunResult.exposure_seconds: without this, flux and mag look
+    # mutually inconsistent by several magnitudes to anyone checking the math.
+    exposure_seconds = getattr(results[0], "exp_length", None) if results else None
+
     return PhotometryRunResult(
         file=describe_file(fits_path),
         source_count=len(results),
         magnitude_label=magnitude_label,
+        exposure_seconds=exposure_seconds,
         zero_point_source=zero_point.source,
         zero_point=zero_point_model,
         brightest=_source_summary(brightest),

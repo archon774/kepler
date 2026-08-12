@@ -1023,21 +1023,51 @@ def build_claude_prompt(
     stats = compute_magnitude_stats(results)
     outliers = find_magnitude_outliers(results, stats)
 
+    # Confirmed live: flux and mag looked mutually inconsistent by several
+    # magnitudes on a real bundled frame until this was accounted for --
+    # `mag` is never the bare `-2.5*log10(flux) + zero_point` a reader would
+    # otherwise assume; `flux` is a raw per-exposure aperture sum, not a
+    # per-second rate. Stated once here (it's one FITS-header value per
+    # frame, not per-source) rather than repeated in each mag_basis branch.
+    exposure_seconds = getattr(results[0], "exp_length", None) if results else None
+    exposure_note = (
+        f"Exposure time: {exposure_seconds:.3f} seconds. Every mag below is "
+        f"-2.5*log10(flux / {exposure_seconds:.3f}) + zero_point, never the bare "
+        "-2.5*log10(flux) + zero_point -- dividing by exposure time first is what "
+        "makes flux and mag mutually consistent; skipping it will look like a "
+        f"multi-magnitude discrepancy that isn't actually there. Whenever you state or "
+        f"use {exposure_seconds:.3f} in your answer, label it explicitly as the exposure "
+        "time in seconds -- never present it as a bare, unexplained number or "
+        "'normalization factor' in a formula."
+        if exposure_seconds
+        else "Exposure time unavailable for this frame -- flux and mag cannot be "
+        "cross-checked against each other with the formula above."
+    )
+
     if zero_point.value is None:
         mag_basis = (
-            "Instrumental magnitudes only (mag = -2.5*log10(flux)). No photometric "
-            "zero point was available, so these are NOT on a standard magnitude "
-            "scale and cannot be compared to catalog or literature magnitudes."
+            f"Instrumental magnitudes only. {exposure_note} No photometric zero "
+            "point was available, so these are NOT on a standard magnitude scale "
+            "and cannot be compared to catalog or literature magnitudes."
         )
     elif zero_point.verified:
         diag = zero_point.diagnostics or {}
         mag_basis = (
             f"Calibrated magnitudes: a zero point of {zero_point.value:.4f} was solved "
             f"by this tool cross-matching detected sources against reference catalog(s) "
-            f"({diag.get('catalogs_queried', 'unknown')}). Solve diagnostics: "
+            f"({diag.get('catalogs_queried', 'unknown')}), on the same aperture-correction "
+            f"scale applied here, so mag = -2.5*log10(flux / exposure_seconds) + zero_point "
+            f"holds exactly for these results -- no separate unreported correction term. "
+            f"{exposure_note} Solve diagnostics: "
             f"zero-point error={diag.get('zero_point_error_mag')} mag, "
             f"{diag.get('num_calibration_stars')} calibration stars used, "
-            f"{diag.get('rejection_percent')}% rejected during the solve."
+            f"{diag.get('rejection_percent')}% rejected during the solve. That "
+            "zero-point error is the solve's own formal/statistical uncertainty "
+            "(scatter among the calibration stars used) -- it is NOT an overall "
+            "accuracy figure for these magnitudes. Do not describe magnitudes as "
+            "'accurate to' this value; unmodeled systematic error (flat-fielding, "
+            "color terms, atmospheric variation) is not included in it and can "
+            "exceed it."
         )
     else:
         origin = "a manual --zero-point override" if zero_point.source == "cli" else "the FITS header"
@@ -1045,7 +1075,11 @@ def build_claude_prompt(
             f"A zero point of {zero_point.value:.4f} was applied from {origin}, but this "
             "tool did not independently verify it against a catalog. Do not describe "
             "these magnitudes as 'calibrated' — describe them as magnitudes with an "
-            "unverified zero point applied."
+            f"unverified zero point applied. {exposure_note} These magnitudes also carry "
+            "a small per-frame aperture-correction constant (typically a few hundredths "
+            "to a few tenths of a mag) that this tool does not separately report, so "
+            "expect mag to be slightly off from the formula above even after accounting "
+            "for exposure time -- that residual is expected, not an error."
         )
 
     lines = [
@@ -1068,10 +1102,14 @@ def build_claude_prompt(
         "analysis, so there is no membership evidence available.",
         "5. When discussing unusually bright or faint sources, use only the "
         "full-dataset statistics and outlier list below — computed from all "
-        f"{stats.get('count', 0)} sources with valid photometry, not a sample.",
+        f"{stats.get('count', 0)} sources with an obtained photometric measurement, "
+        "not a sample. 'Obtained a measurement' means a finite mag/flux was computed --"
+        " it does NOT mean reliable. A source can have an obtained measurement with a "
+        "poor signal-to-noise ratio; do not call a count of measurements a count of "
+        "'valid' or 'good' sources.",
         "",
         f"FITS file: {fits_path.name}",
-        f"Total sources with valid photometry: {len(results)}",
+        f"Sources with an obtained photometric measurement: {len(results)}",
     ]
 
     if zero_point.verified:

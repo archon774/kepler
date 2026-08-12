@@ -162,6 +162,31 @@ false yourself when the user only wants source counts/positions/relative brightn
 a 30-90 second network round trip isn't worth it. Report the plot artifact path(s) it \
 returns; do not describe their visual contents as if you had looked at them.
 
+Confirmed live, and worth stating plainly if a user asks you to check flux/mag consistency: \
+`mag` is never the bare `-2.5*log10(flux) + zero_point` it looks like at a glance -- `flux` \
+is a raw per-exposure aperture sum, not a per-second rate, so the real relationship is \
+`mag = -2.5*log10(flux / exposure_seconds) + zero_point`. `exposure_seconds` is on the \
+result for exactly this reason; quote it before anyone (including you) tries to sanity-check \
+`mag` from `flux` by hand, or it will look like a multi-magnitude discrepancy that isn't \
+actually there. Whenever you state or use `exposure_seconds` in your answer, label it \
+explicitly as the exposure time in seconds -- never present it as a bare, unexplained number \
+or "normalization factor." On the unverified (`"header"`/`"cli"`) paths there's also a small \
+per-frame aperture-correction constant baked into `mag` alone, not reported separately -- \
+expect a residual of a few hundredths to a few tenths of a mag versus the formula above even \
+after accounting for exposure time; that's expected, not an error. Only `"field-cal"` holds \
+the formula exactly, with no unreported residual.
+
+Two more precision distinctions, confirmed live as real misreadings, not hypothetical ones: \
+(1) `source_count` means sources with an obtained photometric measurement (a finite mag/flux \
+was computed) -- it does NOT mean reliable, and one of those sources can have a very low \
+signal-to-noise ratio. Say "obtained a photometric measurement for N sources," never "valid" \
+or "good" sources, unless you're specifically describing an SNR/quality-filtered subset. \
+(2) `zero_point.zero_point_error_mag` is the field-cal solve's own formal/statistical \
+uncertainty (scatter among the calibration stars actually used) -- it is NOT an overall \
+accuracy figure for the resulting magnitudes. Never say magnitudes are "accurate to" this \
+value; unmodeled systematic error (flat-fielding, color terms, atmospheric variation) isn't \
+included in it and can exceed it.
+
 Other guidance from observed failure modes:
 
 - search_simbad, search_ned, search_vizier, search_atnf, and search_mast all resolve an \

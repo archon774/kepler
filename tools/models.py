@@ -170,11 +170,20 @@ class PhotometryRunResult(KeplerToolModel):
     -- a CLI override or FITS-header value is applied to ``magnitude_label``'s
     magnitudes but was never independently checked against a catalog, so
     there is no ``ZeropointSolution`` to report for those paths.
+
+    ``exposure_seconds``, confirmed live: every ``mag`` here is
+    ``-2.5*log10(flux / exposure_seconds) + zero_point`` -- never the bare
+    ``-2.5*log10(flux) + zero_point`` a reader would otherwise assume. Without
+    this field, ``flux`` and ``mag`` looked mutually inconsistent by several
+    magnitudes on a real bundled frame (the reader has no way to know ``flux``
+    is a raw per-exposure sum, not a per-second rate) -- report this alongside
+    ``flux``/``mag`` whenever discussing either.
     """
 
     file: FileMetadata
     source_count: int = 0
     magnitude_label: str = "instrumental magnitude"
+    exposure_seconds: float | None = None
     zero_point_source: str = "none"  # "cli" | "header" | "field-cal" | "none"
     zero_point: ZeropointSolution | None = None
     brightest: SourceSummary | None = None
