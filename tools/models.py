@@ -17,7 +17,6 @@ __all__ = [
     "TableSummary",
     "WcsSummary",
     "TargetPixelLocation",
-    "PulsarSonificationResult",
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
@@ -133,21 +132,6 @@ class TargetPixelLocation(KeplerToolModel):
     pixel_y: float | None = None
     in_bounds: bool | None = None
     image_shape: tuple[int, int] | None = None
-    warnings: list[ToolWarning] = Field(default_factory=list)
-    errors: list[ToolError] = Field(default_factory=list)
-
-
-class PulsarSonificationResult(KeplerToolModel):
-    """An audio rendering of a pulsar's rotation, from its ATNF period (P0)."""
-
-    name: str
-    period_s: float | None = None
-    frequency_hz: float | None = None
-    mode: str = "click"
-    speed_factor: float = 1.0
-    duration_s: float | None = None
-    n_pulses: int | None = None
-    audio: ArtifactMetadata | None = None
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 
