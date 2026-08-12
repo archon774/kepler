@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from algorithms.hrdiagram.fit import fit_and_compare as _fit_and_compare
 from algorithms.hrdiagram.fit import plot_observed_cmd as _plot_observed_cmd
 from tools.artifacts import describe_artifact_file, describe_file
 from tools.astrometry import locate_target_in_image
-from tools.config import artifact_directory
+from tools.config import ARTIFACT_DIR_ENV, artifact_directory
 from tools.models import (
     ArtifactMetadata,
     ClusterLiteratureParams,
@@ -32,6 +33,26 @@ from tools.models import (
 
 def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_")
+
+
+_ISOCHRONE_CACHE_DIR = (Path(__file__).resolve().parent.parent / "isochrone_cache")
+
+
+def _hr_output_dir(directory: str | Path | None) -> Path:
+    """Where every HR-diagram output (plots, members/photometry CSVs) gets
+    written.
+
+    An explicit `directory` argument always wins. Otherwise -- unless
+    KEPLER_ARTIFACT_DIR was set deliberately -- this defaults to
+    isochrone_cache/ next to the repo root, not tools.config's generic
+    ./artifacts default, so an HR diagram lands in the same predictable,
+    already-gitignored place no matter which entry point produced it
+    (hr_agent.py, ask_hr_diagram.py, a standalone script, or calling this
+    module directly).
+    """
+    if directory is not None or os.environ.get(ARTIFACT_DIR_ENV):
+        return artifact_directory(directory)
+    return _ISOCHRONE_CACHE_DIR.resolve()
 
 
 def _table_summary(df: pd.DataFrame) -> TableSummary:
@@ -53,7 +74,7 @@ def extract_photometry_from_fits(
             errors=[ToolError(code="invalid_input", message=str(exc))],
         )
 
-    out_path = artifact_directory(directory) / f"{Path(fits_path).stem}_photometry.csv"
+    out_path = _hr_output_dir(directory) / f"{Path(fits_path).stem}_photometry.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
     return PhotometryTableSummary(
@@ -83,7 +104,7 @@ def load_photometry_table(
         )
 
     filters = [c for c in df.columns if c not in ("id", "ra_deg", "dec_deg") and not c.endswith("_err")]
-    out_path = artifact_directory(directory) / f"{Path(csv_path).stem}_wide.csv"
+    out_path = _hr_output_dir(directory) / f"{Path(csv_path).stem}_wide.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
     return PhotometryTableSummary(
@@ -114,7 +135,7 @@ def crossmatch_gaia(
             errors=[ToolError(code="provider_unavailable", message=str(exc))],
         )
 
-    out_path = artifact_directory(directory) / f"{Path(csv_path).stem}_gaia.csv"
+    out_path = _hr_output_dir(directory) / f"{Path(csv_path).stem}_gaia.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     matched.to_csv(out_path, index=False)
     return GaiaCrossmatchSummary(
@@ -172,7 +193,7 @@ def select_cluster_members(
             errors=[ToolError(code="no_solution", message=str(exc))],
         )
 
-    out_path = artifact_directory(directory) / f"{Path(csv_path).stem}_members.csv"
+    out_path = _hr_output_dir(directory) / f"{Path(csv_path).stem}_members.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     members.to_csv(out_path, index=False)
     return ClusterMembershipResult(
@@ -200,7 +221,7 @@ def fit_hr_diagram(
     if literature.errors:
         return HrDiagramFitResult(cluster=cluster_name, isochrone_source=isochrone_source, errors=literature.errors)
 
-    out_dir = artifact_directory(directory)
+    out_dir = _hr_output_dir(directory)
     # Filter combo is part of the filename, not just the cluster name -- two
     # fits of the same cluster in different bands (e.g. B-R vs V and V-I vs
     # V) are different results worth keeping side by side, not one silently
@@ -256,7 +277,7 @@ def plot_observed_cmd(
     """Plot a plain observed CMD (blue - red vs lum) with no distance/reddening
     correction -- use when there's no literature match to fit against."""
     df = pd.read_csv(csv_path)
-    out_dir = artifact_directory(directory)
+    out_dir = _hr_output_dir(directory)
     stem = _slug(Path(csv_path).stem)
     input_csv_path = out_dir / f"_observed_cmd_input_{stem}.csv"
     out_png_path = out_dir / f"_observed_cmd_{stem}.png"
