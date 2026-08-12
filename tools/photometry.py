@@ -75,35 +75,32 @@ def list_photometry_targets() -> PhotometryTargetLibrary:
     )
 
 
+def _source_row(result: object) -> dict:
+    # Same column names algorithms.hrdiagram_py.observations.extract_photometry_from_fits
+    # uses (ra_deg/dec_deg, not the underlying result's ra_hours/dec_degs) -- so both
+    # _source_summary and _write_source_table's output drop straight into
+    # tools.hr_diagram.crossmatch_gaia / select_cluster_members without renaming.
+    ra_hours = getattr(result, "ra_hours", None)
+    return {
+        "x": getattr(result, "x", None),
+        "y": getattr(result, "y", None),
+        "ra_deg": (ra_hours * 15.0) if ra_hours is not None else None,
+        "dec_deg": getattr(result, "dec_degs", None),
+        "mag": getattr(result, "mag", None),
+        "mag_error": getattr(result, "mag_error", None),
+        "flux": getattr(result, "flux", None),
+        "flux_error": getattr(result, "flux_error", None),
+    }
+
+
 def _source_summary(result: object) -> SourceSummary | None:
     if result is None:
         return None
-    ra_hours = getattr(result, "ra_hours", None)
-    return SourceSummary(
-        x=getattr(result, "x", None),
-        y=getattr(result, "y", None),
-        ra_deg=(ra_hours * 15.0) if ra_hours is not None else None,
-        dec_deg=getattr(result, "dec_degs", None),
-        mag=getattr(result, "mag", None),
-        flux=getattr(result, "flux", None),
-    )
+    return SourceSummary(**_source_row(result))
 
 
 def _write_source_table(results: list[object], path: Path) -> None:
-    # Same column names algorithms.hrdiagram_py.observations.extract_photometry_from_fits
-    # uses (ra_deg/dec_deg, not ra_hours/dec_degs) -- so this CSV drops straight into
-    # tools.hr_diagram.crossmatch_gaia / select_cluster_members without renaming.
-    rows = [
-        {
-            "x": getattr(r, "x", None),
-            "y": getattr(r, "y", None),
-            "ra_deg": (r.ra_hours * 15.0) if getattr(r, "ra_hours", None) is not None else None,
-            "dec_deg": getattr(r, "dec_degs", None),
-            "mag": getattr(r, "mag", None),
-            "flux": getattr(r, "flux", None),
-        }
-        for r in results
-    ]
+    rows = [_source_row(r) for r in results]
     pd.DataFrame(rows).dropna(subset=["ra_deg", "dec_deg"]).to_csv(path, index=False)
 
 

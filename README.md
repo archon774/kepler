@@ -68,7 +68,11 @@ Python functions in `tools/`:
   nothing but a cluster name (fetches Gaia DR3 directly around the cluster's
   own resolved position) and a FITS-frame one for a user who has their own
   plate-solved frame and wants that frame's own photometry driving the fit —
-  both end at the same literature comparison, isochrone fit, and plot. Its
+  both end at the same literature comparison, isochrone fit, and plot — and a
+  radio-source pipeline (`tools.radio_sources.plot_field_sed`): identify
+  sources in a processed radio FITS frame against VizieR's radio catalogs,
+  then plot every identified source's spectral energy distribution from NED
+  together on one labeled plot, each with its own fitted spectral index. Its
   system prompt encodes per-database quirks confirmed by direct testing
   (NED's resolver fails on colloquial names where SIMBAD's succeeds; MPC and
   ATNF do zero name resolution and require formal designations; ADS needs
@@ -153,6 +157,7 @@ identical function any other caller would import and run.
 | `algorithms/catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations, SIMBAD object-type vocabulary, and provider lookup tables used by ADS/NED/ATNF tools. Declaration only — no network code. |
 | `algorithms/query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
 | `algorithms/hrdiagram_py/` | Python parity port + new capability | Star-cluster CMD/HR-diagram fitting: CM↔HR transform, extinction, isochrone loading, a distance/E(B-V)/age optimizer Astromancer's own tool never had, field-star removal, and geometric catalog matching. Not a byte-preserving extraction — see `docs/extraction.md`, "HR Diagram (Python)". |
+| `algorithms/radio/` | New Python capability | Radio spectral-index/log-parabola flux-vs-frequency fitting and generic RA/Dec-column-guessing catalog cross-matching. No upstream Skynet/Astromancer equivalent. |
 | `algorithms/pulsar/` | Ported Python algorithm | The four-stage pulsar chain: file ingest and background subtraction, Lomb-Scargle periodogram, phase folding and binning, and light-curve sonification. A **port** of the Astromancer TypeScript, not an extraction — see `docs/pulsar-tool-pipeline.md`. |
 | `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, period-folding, and sonification logic with Angular/RxJS/Highcharts removed. |
 | `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |

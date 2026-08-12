@@ -41,6 +41,11 @@ from tools.pulsar import (
     sonify_pulsar,
 )
 from tools.photometry import list_photometry_targets, run_photometry_on_target
+from tools.radio_sources import (
+    analyze_source_spectrum,
+    identify_radio_sources,
+    plot_field_sed,
+)
 from tools.resolve import resolve_target
 from tools.simbad import (
     get_paper_abstract,
@@ -484,9 +489,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "select_cluster_members",
         "description": (
             "Remove field-star contamination from Gaia-matched sources by cutting on "
-            "parallax and proper motion relative to the cluster's published values. "
-            "A simplified stand-in for full elliptical field-star removal -- widen "
-            "plx_sigma / pm_tol_mas_yr if too few (or too many) stars survive."
+            "parallax (per-source error-scaled) and proper motion (Astromancer's real "
+            "elliptical acceptance region, ported from its field-star-removal module) "
+            "relative to the cluster's published values. Widen plx_sigma / pm_sigma / "
+            "pm_dispersion_km_s if too few (or too many) stars survive -- a nearby "
+            "cluster needs a larger pm_dispersion_km_s floor for the same physical "
+            "velocity dispersion than a distant one does."
         ),
         "input_schema": {
             "type": "object",
@@ -494,7 +502,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "csv_path": {"type": "string", "description": "CSV artifact path from crossmatch_gaia (or crossmatch_gaia_by_position, or a run_photometry_on_target source table)."},
                 "cluster_name": {"type": "string", "description": "Cluster name, for its literature parallax/PM."},
                 "plx_sigma": {"type": "number", "description": "Parallax cut width in units of each star's own parallax error (default 3.0)."},
-                "pm_tol_mas_yr": {"type": "number", "description": "Proper-motion cut radius in mas/yr around the cluster's mean PM (default 1.0)."},
+                "pm_sigma": {"type": "number", "description": "Proper-motion cut width in units of each star's own proper-motion error (default 3.0)."},
+                "pm_dispersion_km_s": {"type": "number", "description": "Assumed cluster internal velocity dispersion (km/s), converted through the cluster's own literature distance to a distance-aware angular floor beneath the per-star error scaling (default 3.0)."},
             },
             "required": ["csv_path", "cluster_name"],
         },
@@ -541,8 +550,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168'."},
                 "gaia_match_radius_arcsec": {"type": "number", "description": "Gaia cross-match radius in arcsec (default 2.0)."},
                 "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 20.0)."},
-                "plx_sigma": {"type": "number", "description": "Membership parallax cut width (default 3.0)."},
-                "pm_tol_mas_yr": {"type": "number", "description": "Membership proper-motion cut radius, mas/yr (default 1.0)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width, in units of each star's own parallax error (default 3.0)."},
+                "pm_sigma": {"type": "number", "description": "Membership proper-motion cut width, in units of each star's own proper-motion error (default 3.0)."},
+                "pm_dispersion_km_s": {"type": "number", "description": "Assumed cluster internal velocity dispersion (km/s), set a distance-aware angular floor beneath the per-star error scaling (default 3.0)."},
             },
             "required": ["fits_path", "cluster_name"],
         },
@@ -569,8 +579,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 6124' or 'M35'."},
                 "radius_arcmin": {"type": "number", "description": "Gaia cone-search radius around the cluster (default 20.0)."},
                 "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 17.0)."},
-                "plx_sigma": {"type": "number", "description": "Membership parallax cut width (default 3.0)."},
-                "pm_tol_mas_yr": {"type": "number", "description": "Membership proper-motion cut radius, mas/yr (default 1.5)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width, in units of each star's own parallax error (default 3.0)."},
+                "pm_sigma": {"type": "number", "description": "Membership proper-motion cut width, in units of each star's own proper-motion error (default 3.0)."},
+                "pm_dispersion_km_s": {"type": "number", "description": "Assumed cluster internal velocity dispersion (km/s), sets a distance-aware angular floor beneath the per-star error scaling (default 3.0)."},
                 "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default)."},
                 "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.2)."},
                 "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.4)."},
@@ -983,6 +994,131 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["target"],
         },
     },
+    {
+        "name": "plot_field_sed",
+        "description": (
+            "THE MAIN RADIO TOOL: identify sources in a processed radio FITS frame by "
+            "comparing them against VizieR radio catalogs, then plot every identified "
+            "source's spectral energy distribution (flux vs. frequency, from NED) "
+            "together on one labeled plot, each with its own fitted spectral-index "
+            "curve. Use this for a plain 'what's in this radio image' or 'plot the "
+            "SED for this field' request -- it chains identify_radio_sources and "
+            "analyze_source_spectrum for you. A source with no catalogued name, or no "
+            "usable NED photometry, is skipped and reported in warnings rather than "
+            "failing the whole call -- that's an ordinary outcome, not an error. Only "
+            "reach for identify_radio_sources or analyze_source_spectrum directly if "
+            "you need just the source table, or a spectrum for one already-named "
+            "source, without the combined plot."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to a plate-solved radio FITS map."},
+                "threshold": {"type": "number", "description": "Detection threshold in background sigma (default 3.0)."},
+                "radius_arcsec": {
+                    "type": ["number", "null"],
+                    "description": "Catalog cross-match radius per source. Defaults (null) to "
+                    "max(15.0, 1.5x the frame's own pixel scale in arcsec) -- a coarse single-dish "
+                    "map needs a wider radius than a fine-pixel optical one or it can never match "
+                    "anything. Pass an explicit number to override.",
+                },
+                "category": {"type": "string", "description": "VizieR spectrum category to search (default 'radio')."},
+                "max_catalogs": {
+                    "type": ["integer", "null"],
+                    "description": "How many matched VizieR catalogs to cross-match against (default 5). "
+                    "Pass null for no cap.",
+                },
+                "max_sources": {
+                    "type": "integer",
+                    "description": "How many identified sources (brightest first) to build an SED for (default 5).",
+                },
+                "max_frequency_hz": {
+                    "type": "number",
+                    "description": "Upper frequency cutoff for each source's NED photometry (default 3e11, "
+                    "the conventional radio-continuum limit).",
+                },
+                "max_field_radius_arcmin": {
+                    "type": ["number", "null"],
+                    "description": "Caps the cone-search radius computed from the detected sources' own "
+                    "angular spread (default 60.0). A wide single-dish map can compute a many-degree "
+                    "radius that makes the VizieR query impractically slow; when capped, coverage is "
+                    "centred on the field but limited to this radius (reported in warnings). Pass null "
+                    "to search the true full extent regardless of how long that takes.",
+                },
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "identify_radio_sources",
+        "description": (
+            "Detect sources in a processed radio FITS map and identify which ones have "
+            "a known counterpart in VizieR's radio catalogs (NVSS, TGSS, VLSSr, SUMSS, "
+            "GLEAM, whatever else is tagged 'radio' and covers the field), by sky "
+            "position. A source matching no catalog is an ordinary outcome -- a field "
+            "can genuinely contain uncatalogued sources -- not an error. Usually you "
+            "want plot_field_sed instead, which calls this and then plots the "
+            "identified sources' spectra; use this directly only when you just need "
+            "the source table (positions, flux, match counts) without a plot."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to a plate-solved radio FITS map."},
+                "threshold": {"type": "number", "description": "Detection threshold in background sigma (default 3.0)."},
+                "radius_arcsec": {
+                    "type": ["number", "null"],
+                    "description": "Catalog cross-match radius per source. Defaults (null) to "
+                    "max(15.0, 1.5x the frame's own pixel scale in arcsec) -- a coarse single-dish "
+                    "map needs a wider radius than a fine-pixel optical one or it can never match "
+                    "anything. Pass an explicit number to override.",
+                },
+                "category": {"type": "string", "description": "VizieR spectrum category to search (default 'radio')."},
+                "max_catalogs": {
+                    "type": ["integer", "null"],
+                    "description": "How many matched VizieR catalogs to cross-match against (default 5). "
+                    "Pass null for no cap.",
+                },
+                "max_field_radius_arcmin": {
+                    "type": ["number", "null"],
+                    "description": "Caps the cone-search radius computed from the detected sources' own "
+                    "angular spread (default 60.0). A wide single-dish map can compute a many-degree "
+                    "radius that makes the VizieR query impractically slow; when capped, coverage is "
+                    "centred on the field but limited to this radius (reported in warnings). Pass null "
+                    "to search the true full extent regardless of how long that takes.",
+                },
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "analyze_source_spectrum",
+        "description": (
+            "Fit and plot ONE source's flux-vs-frequency spectrum: a pure power law "
+            "(spectral index) and a log-parabola (curvature), reporting whichever the "
+            "data actually supports. Input is exactly one of: frequencies_hz+fluxes_jy "
+            "(explicit arrays), csv_path (columns: frequency, flux[, flux error]), or "
+            "name (looked up via NED's photometry table, homogenized units, filtered "
+            "to max_frequency_hz). Usually you want plot_field_sed instead, which finds "
+            "sources in a FITS frame and calls this for each one automatically; use "
+            "this directly only for a single already-identified/named source, or "
+            "your own frequency/flux data with no FITS frame involved."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Object name to resolve via NED's photometry table."},
+                "csv_path": {"type": "string", "description": "CSV path with frequency, flux[, flux error] columns."},
+                "frequencies_hz": {"type": "array", "items": {"type": "number"}, "description": "Explicit frequencies in Hz."},
+                "fluxes_jy": {"type": "array", "items": {"type": "number"}, "description": "Explicit flux densities, paired with frequencies_hz."},
+                "max_frequency_hz": {
+                    "type": "number",
+                    "description": "Upper frequency cutoff for the name-based NED lookup (default 3e11, "
+                    "the conventional radio-continuum limit). Ignored for csv_path/explicit arrays.",
+                },
+            },
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -1012,6 +1148,9 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "search_casda": search_casda,
     "list_photometry_targets": list_photometry_targets,
     "run_photometry_on_target": run_photometry_on_target,
+    "plot_field_sed": plot_field_sed,
+    "identify_radio_sources": identify_radio_sources,
+    "analyze_source_spectrum": analyze_source_spectrum,
     "list_pulsar_scans": list_pulsar_scans,
     "resolve_pulsar_scan": resolve_pulsar_scan,
     "load_pulsar_lightcurve": load_pulsar_lightcurve,

@@ -1,3 +1,6 @@
+# Local-only demo script, never for the public repo
+dan_demo.py
+
 # Local astronomy data, downloads, and generated artifacts
 fits_downloads/
 downloads/

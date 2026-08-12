@@ -38,6 +38,9 @@ Important files and subfolders:
 - `hr_diagram.py`: FITS-to-HR-diagram pipeline orchestration, backed by
   `algorithms.hrdiagram_py` plus `tools.vizier.search_vizier` for the Gaia
   DR3 and cluster-literature catalog lookups.
+- `radio_sources.py`: radio FITS -> catalog-identified sources -> labeled SED
+  plot, backed by `algorithms.radio` plus `tools.vizier.search_vizier` and
+  `tools.ned.search_ned`.
 - `registry.py`, `runner.py`: optional agent schema registry and Anthropic
   runner over the same ordinary Python tool functions.
 - `sessions.py`: `AgentSession` and `make_cache_key` -- per-run manifest
@@ -91,6 +94,13 @@ Current tools:
   fetched directly around the cluster's own resolved position instead of
   matched against a frame's detected sources. Prefer this path whenever the
   user has not supplied a FITS file.
+- `radio_sources.plot_field_sed(fits_path, ...)`: the main radio entry point --
+  identifies sources in a radio FITS frame against VizieR's radio catalogs
+  (`identify_radio_sources`), then plots every identified source's spectral
+  energy distribution from NED on one labeled plot, each with its own fitted
+  spectral index (`analyze_source_spectrum`, callable standalone for one
+  already-named source). Replaces the non-functional `Spectral_Plot.py` /
+  `Best_Fit_Analysis.py` scratch scripts.
 
 ## `algorithms/`
 
@@ -248,8 +258,13 @@ Important files:
   sky position (mutual nearest-neighbour).
 - `literature.py`: a fetched cluster-catalog row (Cantat-Gaudin & Anders 2020)
   -> age/distance/E(B-V). Open clusters only.
-- `membership.py`: field-star removal (parallax + proper-motion cut) -- a
-  simplified stand-in for `algorithms/hrdiagram/fsr/`'s elliptical version.
+- `membership.py`: field-star removal -- a per-source error-scaled parallax
+  window, and Astromancer's own elliptical proper-motion acceptance region
+  (ported from `algorithms/hrdiagram/photometry/cluster-data.service.util.ts::updateClusterFieldSources`,
+  with each source's own ellipse semi-axes sized from its proper-motion error
+  and a distance-aware velocity-dispersion floor -- the ellipse's *shape*
+  alone doesn't help without that, since a circle and a fixed-radius ellipse
+  reject the same points).
 - `isochrones.py`: the one module here with its own network call -- fetches
   PARSEC isochrones from stev.oapd.inaf.it directly, since no existing tool
   wraps that service.
@@ -257,6 +272,32 @@ Important files:
 `algorithms/hrdiagram_py/` never imports `tools.*`; all network I/O besides
 the PARSEC fetch above (Gaia DR3, cluster-literature lookups) lives one layer
 up in `tools/hr_diagram.py`, via `tools.vizier.search_vizier`.
+
+## `algorithms/radio/`
+
+New first-party capability -- no upstream Skynet/Astromancer equivalent, so
+there is no parity to preserve here.
+
+Important files:
+
+- `spectral_fitting.py`: pure-numpy flux-vs-frequency model fitting --
+  `fit_power_law` (log-log OLS, the standard `S_nu ~ nu**spectral_index`
+  radio spectral index), `fit_log_parabola` (quadratic in log-log space, for
+  spectral curvature/turnover), and `analyze_spectrum`, which fits both and
+  reports whichever the data actually supports. Every candidate model is fit
+  against the same target (`log10(flux)`), so their R^2 values are directly
+  comparable -- unlike an earlier draft of this fit, which compared R^2
+  across models fit to different targets and was fixed here, not preserved.
+- `matching.py`: `guess_radec_columns` (tries common VizieR RA/Dec
+  column-name conventions, since a `category="radio"` catalog search returns
+  one differently-shaped table per matched survey) and
+  `match_sources_to_catalog` (flat-sky KD-tree nearest-neighbour, not
+  mutual -- catalog density varies too much between radio surveys for a
+  mutual-nearest-neighbour requirement to be appropriate the way it is for
+  `algorithms/hrdiagram_py/matching.py`'s Gaia-specific version).
+
+`algorithms/radio/` never imports `tools.*`; VizieR/NED network I/O lives one
+layer up in `tools/radio_sources.py`.
 
 ## `algorithms/lightcurve/`
 

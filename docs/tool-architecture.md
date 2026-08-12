@@ -35,6 +35,7 @@ tools/
   pulsar.py           # pulsar pipeline: scan resolution, light curve, periodogram, fold, sonify, plot
   photometry.py       # local aperture photometry over the bundled FITS library
   hr_diagram.py       # FITS-to-HR-diagram pipeline orchestration (plus a catalog-only entry point)
+  radio_sources.py    # radio FITS -> catalog-identified sources -> labeled SED plot
   ads.py              # ADS literature search/review tools
   mast.py             # MAST archive/product tools
   mpc.py              # Minor Planet Center observation tools
@@ -57,6 +58,7 @@ algorithms/
   catalogs/             # Python catalog/provider declarations, no network calls
   query/                # Python remote catalog access
   hrdiagram_py/         # Python HR-diagram pipeline: parity port + optimizer, not an extraction
+  radio/                # Python radio spectral-index fitting + catalog cross-matching, new capability
 
   pulsar/               # Python pulsar pipeline: ingest, periodogram, folding,
                         #   sonification (a PORT, not an extraction)
@@ -148,6 +150,21 @@ write_source_table=True)` writes a CSV in the `ra_deg`/`dec_deg` column shape
 `tools.hr_diagram.crossmatch_gaia` expects, as the one deliberate bridge
 between the two.
 
+`tools.radio_sources` composes `algorithms.photometry` (source extraction, its
+own settings again -- neither a Gaia handoff nor an optical zero point apply
+to a radio map), `algorithms.radio` (spectral fitting, catalog cross-match),
+`tools.vizier.search_vizier(category="radio")`, and `tools.ned.search_ned`:
+
+- `tools.radio_sources.plot_field_sed(fits_path, ...)` -- the main entry point:
+  identify sources in a radio FITS frame against VizieR's radio catalogs, then
+  plot every identified source's spectral energy distribution (from NED)
+  together on one labeled plot, each with its own fitted spectral index.
+- `tools.radio_sources.identify_radio_sources(fits_path, ...)` -- the spatial
+  half alone: detected sources cross-matched against radio catalogs by
+  position, with no plot.
+- `tools.radio_sources.analyze_source_spectrum(name=..., csv_path=..., frequencies_hz=..., fluxes_jy=...)`
+  -- the spectral half alone, for one already-identified/named source.
+
 Next Python tools should follow the same pattern before adding new layers:
 
 - `solve_astrometry(path, settings=None)`
@@ -181,6 +198,7 @@ Current algorithm ownership:
 | `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
 | `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of `algorithms.hrdiagram` (TypeScript) plus a new optimizer, not a byte-preserving extraction -- deliberately not named `hrdiagram` since that folder is TypeScript-owned. Performs no *catalog* network I/O -- Gaia/VizieR catalog fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`. Its `isochrones.py` still calls the PARSEC isochrone service (stev.oapd.inaf.it) directly; no existing tool wraps it. |
+| `algorithms.radio` | Radio spectral-index/log-parabola fitting (`spectral_fitting.py`) and generic RA/Dec-column-guessing catalog cross-match (`matching.py`) | New first-party capability, no upstream Skynet/Astromancer equivalent. Performs no network I/O -- VizieR/NED fetching lives in `tools.radio_sources`. |
 | `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | The one **port** rather than extraction under `algorithms/`; marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
 | `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding, and pulsar sonification | Typechecked by the root `tsconfig.json`. |
 | `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |

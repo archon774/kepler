@@ -99,6 +99,17 @@ class TableSummary(KeplerToolModel):
 
 
 class WcsSummary(KeplerToolModel):
+    """Celestial WCS read straight from a FITS header -- no fitting involved.
+
+    This has no fitted residual to report: it is not a plate solve.
+    ``algorithms.wcs.state.WcsSolution`` (produced by
+    ``algorithms.wcs.wcs.solve_wcs``, a separate and heavier path) carries a
+    real solve's ``pointing_error_arcsec``/``n_field``; nothing here does.
+    Report ``center_ra_deg``/``center_dec_deg``/``pixel_scale_arcsec``/
+    ``rotation_deg`` as read from the header as-is, with no uncertainty
+    attached -- there isn't one to attach.
+    """
+
     file: FileMetadata
     has_wcs: bool
     image_shape: tuple[int, int] | None = None
@@ -167,6 +178,14 @@ class SourceSummary(KeplerToolModel):
     WCS -- the same sky position the HR-diagram pipeline's own
     ``extract_photometry_from_fits`` reports, so a source found here can be
     looked up against Gaia or any other catalog the same way.
+
+    ``mag_error``/``flux_error`` are the extraction's own per-source formal
+    errors (background/Poisson-noise based, from
+    ``algorithms.skylib_lite.photometry.aperture``) -- report them alongside
+    ``mag``/``flux`` whenever quoting either, and say plainly that no
+    uncertainty was reported when either is ``None`` rather than omitting the
+    caveat. Like ``ZeropointSolution.zero_point_error_mag``, this is a formal/
+    statistical error only -- it does not include unmodeled systematics.
     """
 
     x: float | None = None
@@ -174,7 +193,9 @@ class SourceSummary(KeplerToolModel):
     ra_deg: float | None = None
     dec_deg: float | None = None
     mag: float | None = None
+    mag_error: float | None = None
     flux: float | None = None
+    flux_error: float | None = None
 
 
 class PhotometryRunResult(KeplerToolModel):
