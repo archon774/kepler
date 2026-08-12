@@ -6,8 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from tools.claude_photometry_haiku_tool import (
+    ZeroPointResolution,
+    _replicate_zero_point_rejection,
     list_bundled_targets,
     magnitude_label_for,
+    plot_zero_point_solution,
+    render_credits_card,
     resolve_fits_path,
     resolve_zero_point_mag,
     summarize_results,
@@ -16,6 +20,19 @@ from tools.claude_photometry_haiku_tool import (
 
 class DummyHeader(dict):
     pass
+
+
+class DummyCalSource:
+    """Stands in for `algorithms.photometry.schemas.PhotometryData` in the
+    zero-point solve test below -- only the four attributes `calc_solution`
+    (and its mirror, `_replicate_zero_point_rejection`) actually reads."""
+
+    def __init__(self, mag, ref_mag, mag_error=0.0, ref_mag_error=0.0, catalog_name="TEST"):
+        self.mag = mag
+        self.ref_mag = ref_mag
+        self.mag_error = mag_error
+        self.ref_mag_error = ref_mag_error
+        self.catalog_name = catalog_name
 
 
 def test_resolve_zero_point_mag_from_header() -> None:
@@ -80,3 +97,37 @@ def test_check_only_cli_resolves_bundled_subject() -> None:
     assert completed.returncode == 0, completed.stderr
     assert "FOUND " in completed.stdout
     assert "ngc1846_cluster_r_000.fits" in completed.stdout
+
+
+def test_replicate_zero_point_rejection_flags_planted_outlier() -> None:
+    # A clean zero_point=20 relation with small, fixed (non-zero, so the
+    # solve's variance step doesn't divide by zero on a perfect line) per-star
+    # scatter, plus one star whose ref_mag is 5 mag off the rest.
+    zero_point = 20.0
+    good_mags = [-10.0, -9.5, -9.0, -8.5, -8.0, -7.5, -7.0, -6.5, -6.0, -5.5]
+    jitter = [0.01, -0.02, 0.015, -0.01, 0.02, -0.015, 0.01, -0.02, 0.015, -0.01]
+    sources = [
+        DummyCalSource(mag=m, ref_mag=m + zero_point + j)
+        for m, j in zip(good_mags, jitter)
+    ]
+    sources.append(DummyCalSource(mag=-9.2, ref_mag=-9.2 + zero_point + 5.0))
+
+    kept = _replicate_zero_point_rejection(sources)
+
+    assert len(kept) == len(sources)
+    assert kept[:-1].all()
+    assert not kept[-1]
+
+
+def test_plot_zero_point_solution_skips_unverified_zero_point() -> None:
+    # A CLI override or header value was never checked against a catalog, so
+    # there is no per-star calibration data to plot.
+    zero_point = ZeroPointResolution(value=20.0, source="header", verified=False)
+    assert plot_zero_point_solution(zero_point, Path("unused.png")) is None
+
+
+def test_render_credits_card_skips_image_when_photo_missing() -> None:
+    # The mentor's photo isn't bundled with the repo -- this is an easter
+    # egg, not something worth crashing over when the asset isn't there.
+    result = render_credits_card(Path("unused.png"), asset_path=Path("does_not_exist.jpg"))
+    assert result is None

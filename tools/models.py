@@ -19,6 +19,9 @@ __all__ = [
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
+    "PhotometryTargetLibrary",
+    "SourceSummary",
+    "PhotometryRunResult",
     "coerce_optional_int",
 ]
 
@@ -133,6 +136,50 @@ class ZeropointSolution(KeplerToolModel):
     limmag5: float | None = None
     rej_percent: float | None = None
     source_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PhotometryTargetLibrary(KeplerToolModel):
+    """The local FITS library ``run_photometry_on_target`` can actually run on.
+
+    There is no live image archive behind photometry -- ``categories`` is
+    exactly ``tools.claude_photometry_haiku_tool.list_bundled_targets()``'s
+    output (bundled ``test_data/optical/`` stems grouped by the category
+    embedded in each filename), not a query result.
+    """
+
+    categories: dict[str, list[str]] = Field(default_factory=dict)
+    total_count: int = 0
+
+
+class SourceSummary(KeplerToolModel):
+    """One detected source's position, magnitude, and flux."""
+
+    x: float | None = None
+    y: float | None = None
+    mag: float | None = None
+    flux: float | None = None
+
+
+class PhotometryRunResult(KeplerToolModel):
+    """Result of running source extraction (and optionally a verified
+    zero-point solve) on one bundled FITS target.
+
+    ``zero_point`` is only populated when ``zero_point_source == "field-cal"``
+    -- a CLI override or FITS-header value is applied to ``magnitude_label``'s
+    magnitudes but was never independently checked against a catalog, so
+    there is no ``ZeropointSolution`` to report for those paths.
+    """
+
+    file: FileMetadata
+    source_count: int = 0
+    magnitude_label: str = "instrumental magnitude"
+    zero_point_source: str = "none"  # "cli" | "header" | "field-cal" | "none"
+    zero_point: ZeropointSolution | None = None
+    brightest: SourceSummary | None = None
+    faintest: SourceSummary | None = None
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

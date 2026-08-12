@@ -224,6 +224,82 @@ def list_bundled_targets() -> dict[str, list[str]]:
     return targets
 
 
+#: Where --credits looks for the mentor's photo. Not bundled by default --
+#: see docs/assets/README.md (or the tool's own message) for how to add one.
+CREDITS_ASSET_PATH = ROOT / "docs" / "assets" / "danny_boi.png"
+
+#: Full joke text for the terminal. Deliberately fixed rather than randomized,
+#: to keep --credits output (and any test of it) deterministic. No meta-
+#: commentary calling out the slang as invented -- deliver it straight.
+CREDITS_LINES = [
+    "Dan Reichart once graded a problem set so fast that NASA called UNC to "
+    "ask if he'd discovered a new form of faster-than-light causality. He "
+    "said he'd get back to them after office hours.",
+    "He teaches the UNC gen-ed known as \"the class that changes your life,\" "
+    "which is just tenure-track phrasing for a recruitment pipeline with a "
+    "syllabus and a curve nobody has ever seen the bottom of.",
+    "Morehead Planetarium once tried to project the full night sky onto its "
+    "dome while he was standing under it. The dome gave up halfway through "
+    "and just displayed his aura instead -- no visible spectral lines, still "
+    "hasn't been peer-reviewed, still brighter than Vega.",
+    "He named a robotic telescope network Skynet, pointed it at galaxies "
+    "billions of light-years away, and it is, to this day, not the most "
+    "self-aware thing he has ever built. That title belongs to his email "
+    "signature.",
+    "A PROMPT telescope in Chile once tried to measure his parallax. It "
+    "returned a division-by-zero error, because you cannot triangulate a "
+    "baseline against a man with no opposite side.",
+    "On the magnitude scale, brighter is a lower number. His number went "
+    "negative so many times the IAU quietly stopped inviting him to vote on "
+    "how the scale gets defined.",
+    "Asked once whether he's a 6 or a 7, the universe returned both, then "
+    "stopped returning numbers of any kind, permanently, out of respect.",
+    "He is not measured in astronomical units. Astronomical units are "
+    "measured in him, and the error bars are just everyone else's problem "
+    "now.",
+]
+
+#: Short version for the rendered image card -- CREDITS_LINES is sized for a
+#: terminal, not a caption under a photo.
+CREDITS_CAPTION = "6-7 god. Uncalibratable. The IAU has given up."
+
+
+def render_credits_card(output_path: Path, asset_path: Path = CREDITS_ASSET_PATH) -> Path | None:
+    """Print the credits bit for this project's mentor, and render a photo card.
+
+    Easter egg, not a pipeline feature -- always prints ``CREDITS_LINES`` to
+    stdout. If ``asset_path`` (the mentor's photo) exists, also renders it into
+    a captioned PNG at ``output_path`` and returns that path; if the photo
+    hasn't been added yet, prints where to put it and returns ``None`` rather
+    than failing -- this is a joke, not something worth crashing over.
+    """
+    print("=" * 60)
+    for line in CREDITS_LINES:
+        print(line)
+    print("=" * 60)
+
+    if not asset_path.exists():
+        print(
+            f"No photo found at {asset_path} -- skipping the image card. "
+            "Save one there (mentor in a hard hat in front of a radio dish "
+            "is the canon choice) to render it.",
+            file=sys.stderr,
+        )
+        return None
+
+    image = plt.imread(asset_path)
+    fig, ax = plt.subplots(figsize=(7, 8.5))
+    ax.imshow(image)
+    ax.axis("off")
+    ax.set_title("Dan Reichart", fontsize=18, fontweight="bold")
+    fig.text(0.5, 0.03, CREDITS_CAPTION, ha="center", va="bottom", fontsize=11)
+    fig.tight_layout(rect=(0, 0.1, 1, 1))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    return output_path
+
+
 def select_zero_point_mag(
     explicit_zero_point_mag: float | None,
     header: object,
@@ -350,6 +426,19 @@ def parse_args() -> argparse.Namespace:
         help="List the FITS targets bundled under test_data/optical, grouped by "
         "category, and exit. There is no live archive query behind this tool — a "
         "target only resolves if it's in this list.",
+    )
+    parser.add_argument(
+        "--credits",
+        action="store_true",
+        help="Print a credits card for the mentor behind this project and exit. "
+        "Easter egg; does not touch a FITS file.",
+    )
+    parser.add_argument(
+        "--credits-output",
+        type=Path,
+        default=None,
+        help="Output PNG path for --credits. Defaults to "
+        f"{DEFAULT_OUTPUT_DIR / 'dan_reichart_credits.png'}",
     )
     return parser.parse_args()
 
@@ -953,6 +1042,18 @@ def summarize_results(results: Sequence[object], magnitude_label: str) -> str:
 
 def main() -> int:
     args = parse_args()
+
+    if args.credits:
+        output_path = args.credits_output or DEFAULT_OUTPUT_DIR / "dan_reichart_credits.png"
+        saved = render_credits_card(output_path)
+        if saved is not None:
+            print(f"Saved credits card to: {saved}")
+        # --credits alone is a pure easter egg and exits here. Paired with a
+        # FITS target (e.g. `... ngc1846_cluster_r_000 --credits`), it's a
+        # garnish on top of a real run -- fall through to actually do the
+        # photometry rather than short-circuiting it.
+        if args.fits_path is None:
+            return 0
 
     if args.list_targets:
         targets = list_bundled_targets()
