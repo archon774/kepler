@@ -14,9 +14,11 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
-from algorithms.hrdiagram import hrfit
+from algorithms.hrdiagram import hrfit, multiband
 from algorithms.hrdiagram.isochrones import (
+    MIST_FILTER_MAP,
     PARSEC_PHOTSYS,
+    SPOTS_FILTER_MAP,
     SPOTS_FSPOTS,
     fetch_mist_isochrone,
     fetch_parsec_isochrone_grid,
@@ -24,6 +26,73 @@ from algorithms.hrdiagram.isochrones import (
     mist_iso_cols,
     spots_iso_cols,
 )
+from algorithms.hrdiagram.phases import isochrone_cmd_with_breaks
+
+
+def _full_filter_map(isochrone_source: str, photsys: str) -> dict[str, str]:
+    """Observed-band-name -> isochrone-column-name for every band the source
+    has, not just the caller's blue/red/lum three -- what the multi-band fit
+    (algorithms.hrdiagram.multiband) matches against. A Gaia-crossmatched
+    member CSV carries G/BP/RP alongside whatever the original photometry
+    was (e.g. B/V/R/I); every one of those is a real constraint on each
+    star's fit, not just the two the plot happens to use as its axes.
+    """
+    if isochrone_source == "mist":
+        return dict(MIST_FILTER_MAP)
+    if isochrone_source == "spots":
+        return dict(SPOTS_FILTER_MAP)
+    if isochrone_source == "parsec":
+        p = PARSEC_PHOTSYS[photsys]
+        return {"BP": p["blue"], "RP": p["red"], "G": p["lum"]}
+    raise ValueError(f"Unknown isochrone_source {isochrone_source!r}; use 'mist', 'parsec', or 'spots'")
+
+
+def _filter_members_to_isochrone_coverage(
+    csv_path: Path, iso_path: Path, filter_map: Mapping[str, str],
+    literature: Mapping[str, Any], max_error: float,
+) -> tuple[Path, int]:
+    """Drop members whose absolute magnitude, in every band they have, falls
+    outside the isochrone's own tabulated range at the literature age (padded
+    by 0.5 mag). Matters most for isochrone_source='spots': that grid only
+    covers up to ~1.3 Msun (pre-main-sequence only), so a young cluster's
+    upper main sequence/OB members are often simply not representable by it
+    at all. Left in, each such star still finds *some* nearest candidate
+    point (however poor the match) and contributes an uncapped chi2 term
+    (see multiband.multiband_cost) that can dominate every well-matched
+    member and drag distance/E(B-V) toward whatever minimizes THEIR
+    mismatch instead -- exactly what happened fitting NGC 1893 to SPOTS
+    before this filter existed (fit collapsed to ~0.19 kpc vs. a literature
+    3.22 kpc). Returns the (possibly rewritten) csv_path and the number of
+    members dropped.
+    """
+    iso_all = hrfit.load_isochrone(iso_path)
+    nearest_logage = iso_all["logAge"].values[
+        np.argmin(np.abs(iso_all["logAge"].values - literature["log_age"]))
+    ]
+    iso_sel = hrfit.select_isochrone(iso_all, nearest_logage)
+    candidate_points = multiband.build_candidate_points(iso_sel, filter_map)
+
+    df = multiband.load_photometry_multiband(csv_path, filter_map, max_error=max_error)
+    obs_by_band, _err_by_band = multiband.observed_bands_absolute(
+        df, filter_map, literature["distance_kpc"], literature["ebv"], "_err", 3.1,
+    )
+
+    pad = 0.5  # mag, generous slack around the grid's own tabulated range
+    in_range = np.zeros(len(df), dtype=bool)
+    for band, obs in obs_by_band.items():
+        model = candidate_points.get(band)
+        if model is None or not np.isfinite(model).any():
+            continue
+        lo, hi = np.nanmin(model) - pad, np.nanmax(model) + pad
+        in_range |= np.isfinite(obs) & (obs >= lo) & (obs <= hi)
+
+    n_excluded = int((~in_range).sum())
+    if n_excluded == 0:
+        return csv_path, 0
+
+    filtered_path = csv_path.with_name(csv_path.stem + "_isochrone_coverage" + csv_path.suffix)
+    df[in_range].to_csv(filtered_path, index=False)
+    return filtered_path, n_excluded
 
 
 def _age_grid_for_isochrone(
@@ -54,20 +123,20 @@ def _age_grid_for_isochrone(
 
 
 def _fit_against_isochrone(
-    csv_path: Path, iso_path: Path, iso_cols: dict[str, str],
-    blue: str, red: str, lum: str,
+    csv_path: Path, iso_path: Path, filter_map: Mapping[str, str],
     literature: Mapping[str, Any], max_error: float, logage_half_width: float,
 ) -> dict[str, Any]:
-    """Run hrfit.fit_cluster() against one isochrone file, scanning whichever
-    ages _age_grid_for_isochrone picks. Shared by the single-file sources
-    (mist, parsec) and, looped once per starspot covering fraction, by spots.
+    """Run multiband.fit_cluster_multiband() against one isochrone file,
+    scanning whichever ages _age_grid_for_isochrone picks and matching every
+    band a member actually has (not just blue/red/lum) -- see
+    algorithms.hrdiagram.multiband. Shared by the single-file sources (mist,
+    parsec) and, looped once per starspot covering fraction, by spots.
     """
     iso_all = hrfit.load_isochrone(iso_path)
     logages = _age_grid_for_isochrone(iso_all["logAge"].values, literature, logage_half_width)
-    return hrfit.fit_cluster(
-        csv_path, iso_path, blue, red, lum,
-        iso_cols["blue"], iso_cols["red"], iso_cols["lum"],
-        logages=logages, max_error=max_error,
+    return multiband.fit_cluster_multiband(
+        csv_path, iso_path, filter_map, logages,
+        max_error=max_error,
         x0=(literature["distance_kpc"], literature["ebv"]),
     )
 
@@ -93,6 +162,17 @@ def fit_and_compare(
     """Fit distance/E(B-V)/age to `members` against an isochrone grid centred
     on the literature age, and compare the fit to the literature.
 
+    The fit itself (see algorithms.hrdiagram.multiband) matches every band a
+    member actually has -- not just blue/red/lum -- against a mass-densified
+    isochrone (smoother than the raw tabulated rows), and, for MIST, keeps
+    the main sequence/giant-branch/horizontal-branch phases as separate
+    groups rather than one polyline through evolutionary phases that aren't
+    physically continuous with each other (see algorithms.hrdiagram.phases;
+    that's also what makes the plotted isochrone line break at those
+    transitions instead of drawing a straight, misleading jump across them).
+    `blue`/`red`/`lum` still pick the plot's two axes and the isochrone's
+    literature-comparison band, but the fit is not limited to them.
+
     `csv_path` / `out_png_path` are where the (re-saved) members table and the
     plot get written -- the caller decides the location (see
     tools.hr_diagram, which uses tools.config.artifact_directory()).
@@ -114,7 +194,12 @@ def fit_and_compare(
         stars. Fspot isn't known ahead of time -- it's scanned the same way
         age is, and the winning value is reported in fitted["fspot"] as a fit
         result, not a literature-sourced property. The grid is single (solar)
-        metallicity only, so `mh` has no effect for this source.
+        metallicity only, so `mh` has no effect for this source. It also only
+        covers up to ~1.3 Msun (pre-main-sequence stars); members brighter
+        than that in every band they have are automatically excluded from
+        the fit (see _filter_members_to_isochrone_coverage) and reported in
+        the returned "warnings" list, rather than being left in to dominate
+        the cost with an unmatchable comparison.
 
     `mh` is the isochrone grid's metallicity ([M/H], solar=0.0). If left as
     None (the default), it's read from `literature["feh"]` when present
@@ -157,14 +242,16 @@ def fit_and_compare(
     members.to_csv(csv_path, index=False)
 
     fitted_fspot: float | None = None
+    warnings: list[str] = []
+    filter_map = _full_filter_map(isochrone_source, photsys)
+    fit_csv_path = csv_path
 
     if iso_path is None:
         if isochrone_source == "mist":
             iso_path = fetch_mist_isochrone(mh=mh)
             iso_cols = mist_iso_cols(blue, red, lum)
             result = _fit_against_isochrone(
-                csv_path, iso_path, iso_cols, blue, red, lum,
-                literature, max_error, logage_half_width,
+                fit_csv_path, iso_path, filter_map, literature, max_error, logage_half_width,
             )
         elif isochrone_source == "parsec":
             iso_path = fetch_parsec_isochrone_grid(
@@ -176,10 +263,24 @@ def fit_and_compare(
             )
             iso_cols = PARSEC_PHOTSYS[photsys]
             result = _fit_against_isochrone(
-                csv_path, iso_path, iso_cols, blue, red, lum,
-                literature, max_error, logage_half_width,
+                fit_csv_path, iso_path, filter_map, literature, max_error, logage_half_width,
             )
         elif isochrone_source == "spots":
+            # The grid only covers up to ~1.3 Msun -- check coverage once
+            # (same mass grid in every Fspot file) before the Fspot scan, not
+            # once per Fspot, so all six trials fit the same member set.
+            coverage_iso_path = fetch_spots_isochrone(SPOTS_FSPOTS[0])
+            fit_csv_path, n_excluded = _filter_members_to_isochrone_coverage(
+                csv_path, coverage_iso_path, filter_map, literature, max_error,
+            )
+            if n_excluded:
+                warnings.append(
+                    f"{n_excluded} member(s) fell outside the SPOTS grid's magnitude/mass "
+                    "coverage (it only models up to ~1.3 Msun pre-main-sequence stars) and "
+                    "were excluded from this fit -- they would otherwise have dominated the "
+                    "cost with an unmatchable, out-of-grid comparison."
+                )
+
             # Fspot isn't known ahead of time the way age at least has a
             # literature-derived starting point -- scan every covering
             # fraction the grid offers (one isochrone file each) and keep
@@ -187,13 +288,10 @@ def fit_and_compare(
             best_result = None
             best_fspot = None
             best_iso_path = None
-            best_iso_cols = None
             for fspot in SPOTS_FSPOTS:
                 candidate_iso_path = fetch_spots_isochrone(fspot)
-                candidate_iso_cols = spots_iso_cols(blue, red, lum)
                 candidate_result = _fit_against_isochrone(
-                    csv_path, candidate_iso_path, candidate_iso_cols, blue, red, lum,
-                    literature, max_error, logage_half_width,
+                    fit_csv_path, candidate_iso_path, filter_map, literature, max_error, logage_half_width,
                 )
                 if (
                     best_result is None
@@ -202,11 +300,10 @@ def fit_and_compare(
                     best_result = candidate_result
                     best_fspot = fspot
                     best_iso_path = candidate_iso_path
-                    best_iso_cols = candidate_iso_cols
             result = best_result
             fitted_fspot = best_fspot
             iso_path = best_iso_path
-            iso_cols = best_iso_cols
+            iso_cols = spots_iso_cols(blue, red, lum)
         else:
             raise ValueError(
                 f"Unknown isochrone_source {isochrone_source!r}; use 'mist', 'parsec', or 'spots'"
@@ -216,11 +313,19 @@ def fit_and_compare(
             iso_cols = mist_iso_cols(blue, red, lum)
         elif isochrone_source == "spots":
             iso_cols = spots_iso_cols(blue, red, lum)
+            fit_csv_path, n_excluded = _filter_members_to_isochrone_coverage(
+                csv_path, Path(iso_path), filter_map, literature, max_error,
+            )
+            if n_excluded:
+                warnings.append(
+                    f"{n_excluded} member(s) fell outside the SPOTS grid's magnitude/mass "
+                    "coverage (it only models up to ~1.3 Msun pre-main-sequence stars) and "
+                    "were excluded from this fit."
+                )
         else:
             iso_cols = PARSEC_PHOTSYS[photsys]
         result = _fit_against_isochrone(
-            csv_path, iso_path, iso_cols, blue, red, lum,
-            literature, max_error, logage_half_width,
+            fit_csv_path, iso_path, filter_map, literature, max_error, logage_half_width,
         )
 
     best = result["best"]
@@ -242,13 +347,16 @@ def fit_and_compare(
         "age_pct_diff": 100.0 * (fitted["age_myr"] - literature["age_myr"]) / literature["age_myr"],
     }
 
+    # Plotting still uses the original (unfiltered) csv_path -- excluded-from-
+    # fit stars are still real detections, worth showing on the diagram even
+    # though the isochrone they're plotted against can't represent them.
     df = hrfit.load_photometry(csv_path, blue, red, lum, max_error=max_error)
     # members' magnitudes already have pre_dereddened_ebv removed, so only the
     # residual belongs in this shift -- fitted["ebv"] (the total) would double-count it.
     colour, mag = hrfit.to_absolute_cmd(df, blue, red, lum, fitted["distance_kpc"], fitted["ebv_residual"])
     iso_all = hrfit.load_isochrone(iso_path)
     iso_sel = hrfit.select_isochrone(iso_all, fitted["log_age"])
-    iso_colour, iso_mag = hrfit.isochrone_cmd(iso_sel, iso_cols["blue"], iso_cols["red"], iso_cols["lum"])
+    iso_colour, iso_mag = isochrone_cmd_with_breaks(iso_sel, iso_cols["blue"], iso_cols["red"], iso_cols["lum"])
 
     out_png_path = Path(out_png_path)
     out_png_path.parent.mkdir(parents=True, exist_ok=True)
@@ -281,6 +389,7 @@ def fit_and_compare(
         "png_path": str(out_png_path),
         "isochrone_path": str(iso_path),
         "members_csv_path": str(csv_path),
+        "warnings": warnings,
     }
 
 

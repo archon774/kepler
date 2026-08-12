@@ -25,6 +25,7 @@ from tools.models import (
     PhotometryTableSummary,
     TableSummary,
     ToolError,
+    ToolWarning,
 )
 
 
@@ -216,6 +217,10 @@ def fit_hr_diagram(
         )
 
     fitted, comparison = report["fitted"], report["comparison"]
+    warnings = [
+        ToolWarning(code="isochrone_coverage", message=message)
+        for message in report.get("warnings", [])
+    ]
     return HrDiagramFitResult(
         cluster=cluster_name,
         distance_kpc=fitted["distance_kpc"], ebv=fitted["ebv"], ebv_residual=fitted["ebv_residual"],
@@ -228,6 +233,7 @@ def fit_hr_diagram(
         isochrone_path=report["isochrone_path"],
         png=describe_artifact_file(report["png_path"]),
         members_csv=describe_file(report["members_csv_path"]),
+        warnings=warnings,
     )
 
 

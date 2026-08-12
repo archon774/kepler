@@ -9,7 +9,7 @@ This pipeline (`tools.hr_diagram`, the thin tool layer; `hr_agent.py`,
 the conversational front end; `algorithms.hrdiagram`, the algorithm package
 underneath both) pulls numbers from several external catalogues and fits them
 with an optimizer that has known, demonstrated failure modes (see
-`kepler/hrdiagram/isochrones.py`'s MIST_FILTER_MAP comment and the
+`algorithms/hrdiagram/isochrones.py`'s MIST_FILTER_MAP comment and the
 `age_is_literature_default` handling — both exist because a real fit went
 wrong in ways that looked plausible until checked). Every report built from
 this pipeline's output must therefore do two things, every time, not just
@@ -82,7 +82,7 @@ not optional.
   or re-running when precision matters.
 - **`select_cluster_members` is a simplified circular PM cut + parallax
   window**, not Astromancer's fitted elliptical field-star-removal region
-  (see its docstring in `kepler/hrdiagram/membership.py`). If field
+  (see its docstring in `algorithms/hrdiagram/membership.py`). If field
   contamination looks likely given the diagram, name this as a methodological
   simplification, not treat the membership list as ground truth.
 - **`isochrone_source == "spots"`**: `fitted["fspot"]` is a *fit result*, not a
@@ -92,7 +92,27 @@ not optional.
   independently measured quantity. Report it as "the fit preferred a covering
   fraction of ~X%", not as a known property of the cluster. The SPOTS grid is
   also single (solar) metallicity only — for a cluster with a literature [Fe/H]
-  far from solar, say that the metallicity match is approximate.
+  far from solar, say that the metallicity match is approximate. It also only
+  models stars up to ~1.3 Msun; check the result's `warnings` list for how
+  many members were excluded for falling outside that coverage before this
+  fit (see `algorithms/hrdiagram/fit.py::_filter_members_to_isochrone_coverage`)
+  — say plainly that the fit describes only the cluster's lower-mass members,
+  not the full photometric catalogue, when this fires. On real NGC 1893 data
+  this excluded 69 of 195 crossmatched members (a young, massive cluster with
+  members well above the grid's mass ceiling) and reduced the distance error
+  from ~94% to ~35% — better, but still not a clean fit; don't overstate it.
+- **A globular-cluster fit's isochrone includes the horizontal branch**, but a
+  single isochrone traces exactly one deterministic track through it (fixed
+  by the grid's assumed red-giant-branch mass loss). Real horizontal-branch
+  stars scatter across a *range* of colours at roughly constant magnitude,
+  driven by star-to-star differences in that mass loss — something no single
+  isochrone line can reproduce (it would take a synthetic-HB population
+  model, a Monte Carlo over a mass-loss distribution, which this pipeline
+  doesn't do). Members landing near the horizontal branch can validly pull
+  the fit, but don't cite tight agreement there as strong confirmation the
+  way main-sequence agreement would be, and don't be surprised by real HB
+  stars sitting off the plotted line — that is the expected, documented
+  limitation, not a bug.
 - **Large `comparison["distance_pct_diff"]` / `ebv_diff` / `age_pct_diff`**:
   don't silently report a big literature discrepancy as if the fit is simply
   wrong. Check whether it's consistent with an independent estimate (another

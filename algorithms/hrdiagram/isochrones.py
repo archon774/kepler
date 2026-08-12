@@ -24,6 +24,7 @@ import numpy as np
 import requests
 
 from algorithms.hrdiagram import hrfit
+from algorithms.hrdiagram.phases import filter_excluded_phases
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +301,15 @@ def fetch_mist_isochrone(mh: float = 0.0) -> Path:
     renamed copy once and caches it; hrfit.fit_cluster() re-reads iso_path
     from disk internally, so the renamed copy is what needs to exist on disk,
     not just an in-memory DataFrame.
+
+    Also drops EAGB/TPAGB/post-AGB/WR rows here (see phases.PHASE_EXCLUDED):
+    short-lived, sparsely sampled evolutionary phases that real cluster
+    members essentially never populate, and that otherwise get drawn/fit as
+    part of one continuous polyline through phases that aren't physically
+    continuous with each other (see algorithms.hrdiagram.phases). MS, giant
+    branch, and horizontal-branch (CHeB) rows are kept -- see
+    phases.isochrone_cmd_with_breaks for how the plot avoids connecting those
+    with a straight line across the real, physical jump at the He flash.
     """
     grid_dir = _ensure_mist_grid()
     feh = min(MIST_FEHS, key=lambda f: abs(f - mh))
@@ -307,10 +317,13 @@ def fetch_mist_isochrone(mh: float = 0.0) -> Path:
     if not raw_path.exists():
         raise RuntimeError(f"Expected MIST isochrone file not found: {raw_path}")
 
-    normalized_path = isochrone_cache_dir() / f"mist_feh{feh:+.2f}_hrfit.dat"
+    # v2: filters excluded phases (see docstring) -- distinct filename so a
+    # cache written before that filter existed doesn't get silently reused.
+    normalized_path = isochrone_cache_dir() / f"mist_feh{feh:+.2f}_v2_hrfit.dat"
     if not normalized_path.exists():
         df = hrfit.load_isochrone(raw_path)
         df = df.rename(columns={"log10_isochrone_age_yr": "logAge", "[Fe/H]": "MH"})
+        df = filter_excluded_phases(df)
         with open(normalized_path, "w") as f:
             f.write("# " + " ".join(df.columns) + "\n")
             df.to_csv(f, sep=" ", index=False, header=False)
