@@ -8,6 +8,7 @@ data/
 work/
 staging/
 *.manifest.json
+isochrone_cache/
 
 # Local credentials and environment overrides
 .env
