@@ -2,7 +2,7 @@
 """Claude photometry plotting tool using this repo's photometry pipeline.
 
 This script loads a FITS image, runs source extraction and photometry using the
-repository's `photometry.pipeline` modules, saves a plot, and optionally
+repository's `algorithms.photometry` modules, saves a plot, and optionally
 summarizes the results with Claude.
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -50,6 +51,12 @@ class ZeroPointResolution:
     source: str  # "cli" | "header" | "field-cal" | "none"
     verified: bool
     diagnostics: dict[str, float | int] | None = None
+    # The per-star calibration sources fed into the field-cal solve (each an
+    # `algorithms.photometry.schemas.PhotometryData` with `.mag`, `.ref_mag`,
+    # and `.catalog_name`). Populated only for the field-cal path -- this is
+    # what `plot_zero_point_solution` needs to draw the fit and mark outliers;
+    # nothing else in this tool reads it.
+    calibration_sources: list[object] | None = None
 
 
 def resolve_zero_point_mag(fits_path: Path, header: object) -> float | None:
@@ -70,16 +77,19 @@ def compute_field_cal_zero_point(
     header: object,
     data: "np.ndarray",
     catalogs: Sequence[str] | None = None,
-) -> tuple[float | None, dict[str, float | int] | None, str | None]:
+) -> tuple[float | None, dict[str, float | int] | None, str | None, object | None]:
     """Solve for a real photometric zero point via ``fieldcal.perform_field_calibration``.
 
     Queries a reference catalog (over the network, via ``query.runner.query_catalogs``)
     for stars in the field, cross-matches them against detected sources, and solves
-    for the zero point. Returns ``(zero_point_mag, diagnostics, error_message)`` —
-    on success ``error_message`` is ``None`` and ``diagnostics`` carries the solve's
-    own verification evidence (zero-point error, rejection rate, number of
-    calibration stars used); on any failure ``zero_point_mag`` and ``diagnostics``
-    are ``None`` and ``error_message`` explains why, so callers can fall back to
+    for the zero point. Returns ``(zero_point_mag, diagnostics, error_message,
+    field_cal_result)`` — on success ``error_message`` is ``None``, ``diagnostics``
+    carries the solve's own verification evidence (zero-point error, rejection
+    rate, number of calibration stars used), and ``field_cal_result`` is the raw
+    ``algorithms.fieldcal.schemas.FieldCalResult`` (its ``phot_results`` is the
+    per-star data ``plot_zero_point_solution`` needs); on any failure
+    ``zero_point_mag``, ``diagnostics``, and ``field_cal_result`` are all
+    ``None`` and ``error_message`` explains why, so callers can fall back to
     instrumental magnitudes instead of crashing the whole run.
     """
     # Imported lazily: `fieldcal`/`catalogs`/`query` pull in the (optional) network
@@ -105,14 +115,14 @@ def compute_field_cal_zero_point(
 
     wcs = build_wcs_from_header(header)
     if wcs is None:
-        return None, None, "image header has no celestial WCS; cannot query a reference catalog"
+        return None, None, "image header has no celestial WCS; cannot query a reference catalog", None
 
     image_filter = header.get("FILTER") if hasattr(header, "get") else None
     selected_catalogs = list(catalogs) if catalogs else select_catalogs_for_filter(
         list(CATALOGS), image_filter
     )
     if not selected_catalogs:
-        return None, None, f"no calibration catalog supports filter {image_filter!r}"
+        return None, None, f"no calibration catalog supports filter {image_filter!r}", None
 
     field_cal_settings = PhotometricCalibrationSettings(catalogs=selected_catalogs)
     extraction_settings = SourceExtractionSettings()
@@ -128,21 +138,22 @@ def compute_field_cal_zero_point(
             extraction_settings=extraction_settings,
         )
     except Exception as exc:  # network failures, no catalog matches, etc.
-        return None, None, f"field calibration failed: {exc}"
+        return None, None, f"field calibration failed: {exc}", None
 
     if outcome is None:
-        return None, None, "field calibration returned no solution"
+        return None, None, "field calibration returned no solution", None
     zero_point_mag, result = outcome
     if zero_point_mag is None or not np.isfinite(zero_point_mag):
-        return None, None, "field calibration did not converge on a finite zero point"
+        return None, None, "field calibration did not converge on a finite zero point", None
 
     diagnostics = {
         "zero_point_error_mag": result.zero_point_error_mag,
+        "zero_point_slop": result.zero_point_slop,
         "rejection_percent": result.rej_percent,
         "num_calibration_stars": len(result.phot_results),
         "catalogs_queried": ", ".join(selected_catalogs),
     }
-    return float(zero_point_mag), diagnostics, None
+    return float(zero_point_mag), diagnostics, None, result
 
 
 def resolve_fits_path(query: str | Path) -> Path:
@@ -237,11 +248,17 @@ def select_zero_point_mag(
         return ZeroPointResolution(header_zero_point, "header", verified=False)
 
     if use_field_cal and data is not None:
-        zero_point_mag, diagnostics, error = compute_field_cal_zero_point(
+        zero_point_mag, diagnostics, error, field_cal_result = compute_field_cal_zero_point(
             header, data, catalogs=catalogs
         )
         if zero_point_mag is not None:
-            return ZeroPointResolution(zero_point_mag, "field-cal", verified=True, diagnostics=diagnostics)
+            return ZeroPointResolution(
+                zero_point_mag,
+                "field-cal",
+                verified=True,
+                diagnostics=diagnostics,
+                calibration_sources=field_cal_result.phot_results if field_cal_result else None,
+            )
         print(f"Field calibration could not solve a zero point: {error}", file=sys.stderr)
 
     return ZeroPointResolution(None, "none", verified=False)
@@ -302,6 +319,20 @@ def parse_args() -> argparse.Namespace:
         metavar="CATALOG",
         help="Reference catalogs to query for field calibration (e.g. APASS PanSTARRS). "
         "Defaults to catalogs that support the image's FILTER keyword.",
+    )
+    parser.add_argument(
+        "--no-zp-plot",
+        action="store_true",
+        help="Skip saving the zero-point calibration diagnostic plot (fit line, "
+        "residuals, kept/rejected calibration stars) even when a verified "
+        "field-calibration solve is available.",
+    )
+    parser.add_argument(
+        "--zp-plot-output",
+        type=Path,
+        default=None,
+        help="Output PNG path for the zero-point calibration plot. Defaults to "
+        "'<output>_zeropoint.png' next to the main photometry plot.",
     )
     parser.add_argument(
         "--no-claude",
@@ -465,6 +496,237 @@ def plot_photometry(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
+
+
+def _replicate_zero_point_rejection(sources: Sequence[object]) -> np.ndarray:
+    """Recover which calibration sources the zero-point solve's Chauvenet loop kept.
+
+    ``algorithms.fieldcal.solution.calc_solution`` is a byte-preserved
+    extraction from Skynet (see CLAUDE.md, "The extraction contract") and its
+    public return is aggregate-only -- zero point, its error, scatter, limiting
+    magnitude, and an overall rejection percentage. It never reports *which*
+    sources survived, so there is nothing to read off for per-star plotting.
+
+    Rather than change that extracted function's signature, this mirrors its
+    iterative weighted-mean-plus-Chauvenet-rejection loop line for line (down
+    to reusing its private `_sigma_eq` helper), adding only index bookkeeping
+    to track which sources survive each round. Keep this in sync by hand if
+    `calc_solution` ever changes.
+
+    Returns a boolean array the same length as ``sources``, True where the
+    source survived to the final solution.
+    """
+    from math import sqrt
+
+    from scipy.optimize import brenth
+
+    from algorithms.fieldcal.solution import _sigma_eq
+    from algorithms.skylib_lite.util.stats import chauvenet
+
+    n_total = len(sources)
+    kept = np.ones(n_total, dtype=bool)
+    if n_total == 0:
+        return kept
+
+    mag_arr, mag_error_arr, ref_mag_arr, ref_mag_error_arr = np.transpose([
+        (
+            source.mag,
+            getattr(source, "mag_error", None) or 0,
+            source.ref_mag,
+            getattr(source, "ref_mag_error", None) or 0,
+        )
+        for source in sources
+    ])
+    orig_idx = np.arange(n_total)
+
+    if mag_error_arr.any():
+        good = mag_error_arr > 0
+        mag_error_arr, ref_mag_error_arr = mag_error_arr[good], ref_mag_error_arr[good]
+        ref_mag_arr = ref_mag_arr[good]
+        orig_idx = orig_idx[good]
+        b = ref_mag_arr - mag_arr[good]
+    else:
+        b = ref_mag_arr - mag_arr
+
+    sigmas2 = mag_error_arr**2 + ref_mag_error_arr**2
+    no_errors = not sigmas2.any()
+    if no_errors:
+        sigmas2 = 0
+    sigma2 = 0
+    weights = None
+
+    while True:
+        for _ in range(100):
+            if no_errors:
+                m0 = b.mean()
+            else:
+                m0 = (b / (sigmas2 + sigma2)).sum() / (1 / (sigmas2 + sigma2)).sum()
+
+            prev_sigma2 = sigma2
+            sigma2 = ((b - m0) ** 2).sum() / len(b)
+            left, right = 0.9 * sigma2, 1.1 * sigma2
+            for __ in range(100):
+                if _sigma_eq(left, sigmas2, b, m0) * _sigma_eq(right, sigmas2, b, m0) < 0:
+                    break
+                left *= 0.9
+                right *= 1.1
+            try:
+                sigma2 = brenth(_sigma_eq, left, right, (sigmas2, b, m0))
+            except Exception:
+                pass
+
+            if len(b) < 2 or abs(sigma2 - prev_sigma2) < 1e-8:
+                break
+
+        if no_errors:
+            denom = len(b) - 1
+            sigma_override = sqrt(((b - m0) ** 2).sum() / denom) if denom > 0 else float("inf")
+            rejected = chauvenet(b, mean_override=m0, sigma_override=sigma_override, max_iter=1)[0]
+        else:
+            weights = 1 / (sigmas2 + sigma2)
+            sum_weights = weights.sum()
+            sigma_override = sqrt(
+                (weights * (b - m0) ** 2).sum() / (sum_weights - (weights**2).sum() / sum_weights)
+            )
+            rejected = chauvenet(b, mean_override=m0, sigma_override=sigma_override, max_iter=1)[0]
+
+        if not rejected.any():
+            break
+
+        good = ~rejected
+        b = b[good]
+        orig_idx = orig_idx[good]
+        if weights is not None:
+            weights = weights[good]
+        if not no_errors:
+            sigmas2 = sigmas2[good]
+
+    kept[:] = False
+    kept[orig_idx] = True
+    return kept
+
+
+def plot_zero_point_solution(
+    zero_point: ZeroPointResolution,
+    output_path: Path,
+) -> Path | None:
+    """Save a zero-point calibration diagnostic plot.
+
+    Two panels, both built from the calibration sources the field-cal solve
+    actually used (``zero_point.calibration_sources``):
+
+    - left: instrumental magnitude vs. catalog reference magnitude, with the
+      solved zero-point line (``ref_mag = mag + zero_point``) overlaid. This
+      is the interpolation the solve fit -- a fixed unit slope offset by the
+      zero point, not a free two-parameter regression (see
+      ``algorithms/fieldcal/solution.py::calc_solution``).
+    - right: each star's residual from that fit (``ref_mag - mag -
+      zero_point``) vs. instrumental magnitude, with the solved scatter
+      (+/-1 sigma) shaded.
+
+    In both panels, stars the solve's Chauvenet-rejection loop kept are blue;
+    stars it rejected as outliers are red crosses (see
+    ``_replicate_zero_point_rejection`` for how "rejected" is recovered, since
+    ``calc_solution`` itself reports only an aggregate rejection percentage).
+
+    Returns ``None`` (after a stderr message) if ``zero_point`` was not a
+    verified field-cal solve, or carries fewer than 2 usable calibration
+    sources -- there is nothing meaningful to plot from an unverified
+    zero point (CLI override / FITS header) or an empty solve.
+    """
+    if not zero_point.verified or not zero_point.calibration_sources:
+        print(
+            "No field-calibration solve to plot a zero point for "
+            f"(zero point source: {zero_point.source}).",
+            file=sys.stderr,
+        )
+        return None
+
+    sources = [
+        s for s in zero_point.calibration_sources
+        if s.mag is not None and s.ref_mag is not None
+    ]
+    if len(sources) < 2:
+        print(
+            "Fewer than 2 calibration sources with both an instrumental and "
+            "reference magnitude; skipping the zero-point plot.",
+            file=sys.stderr,
+        )
+        return None
+
+    mag = np.array([float(s.mag) for s in sources])
+    ref_mag = np.array([float(s.ref_mag) for s in sources])
+    catalog_names = [getattr(s, "catalog_name", None) or "unknown" for s in sources]
+    m0 = float(zero_point.value)
+    diagnostics = zero_point.diagnostics or {}
+    m0_error = diagnostics.get("zero_point_error_mag")
+    sigma = diagnostics.get("zero_point_slop")
+
+    kept = _replicate_zero_point_rejection(sources)
+    resid = ref_mag - mag - m0
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    axes[0].scatter(
+        mag[kept], ref_mag[kept],
+        c="steelblue", s=35, edgecolors="k", linewidths=0.4, alpha=0.85,
+        label=f"good fit ({int(kept.sum())})",
+    )
+    if (~kept).any():
+        axes[0].scatter(
+            mag[~kept], ref_mag[~kept],
+            c="crimson", s=55, marker="x", linewidths=1.6,
+            label=f"rejected outlier ({int((~kept).sum())})",
+        )
+    mag_range = np.array([mag.min(), mag.max()])
+    axes[0].plot(
+        mag_range, mag_range + m0,
+        color="black", linestyle="--", linewidth=1.2,
+        label=f"fit: ref_mag = mag + {m0:.3f}",
+    )
+    axes[0].set_xlabel("instrumental magnitude")
+    axes[0].set_ylabel("catalog reference magnitude")
+    axes[0].set_title("Zero-point interpolation")
+    axes[0].legend(loc="best", fontsize=8)
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].axhline(0.0, color="black", linewidth=1.0)
+    if sigma:
+        axes[1].axhspan(-sigma, sigma, color="gray", alpha=0.15, label=f"±1σ ({sigma:.3f} mag)")
+    axes[1].scatter(
+        mag[kept], resid[kept],
+        c="steelblue", s=35, edgecolors="k", linewidths=0.4, alpha=0.85,
+        label="good fit",
+    )
+    if (~kept).any():
+        axes[1].scatter(
+            mag[~kept], resid[~kept],
+            c="crimson", s=55, marker="x", linewidths=1.6,
+            label="rejected outlier",
+        )
+    axes[1].set_xlabel("instrumental magnitude")
+    axes[1].set_ylabel("residual (ref_mag − mag − zero_point)")
+    axes[1].set_title("Zero-point residuals")
+    axes[1].legend(loc="best", fontsize=8)
+    axes[1].grid(True, alpha=0.3)
+
+    catalog_counts = Counter(catalog_names)
+    catalog_summary = ", ".join(
+        f"{name} ({count})" for name, count in sorted(catalog_counts.items(), key=lambda kv: -kv[1])
+    )
+    title = f"zero point = {m0:.4f}"
+    if m0_error is not None:
+        title += f" ± {m0_error:.4f}"
+    title += (
+        f" mag  |  {len(sources)} calibration stars "
+        f"({int(kept.sum())} kept, {int((~kept).sum())} rejected)  |  catalogs: {catalog_summary}"
+    )
+    fig.suptitle(title, fontsize=10, y=0.99)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    return output_path
 
 
 def magnitude_label_for(zero_point: ZeroPointResolution) -> str:
@@ -768,6 +1030,12 @@ def main() -> int:
     plot_photometry(data, results, output_path, magnitude_label=magnitude_label)
     print(summarize_results(results, magnitude_label))
     print(f"For a visual check, see the saved plot: {output_path}")
+
+    if not args.no_zp_plot:
+        zp_output_path = args.zp_plot_output or output_path.with_name(f"{output_path.stem}_zeropoint.png")
+        zp_plot_saved = plot_zero_point_solution(zero_point, zp_output_path)
+        if zp_plot_saved is not None:
+            print(f"Saved zero-point calibration plot to: {zp_plot_saved}")
 
     if not args.no_claude:
         try:
