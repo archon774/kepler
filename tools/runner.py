@@ -14,9 +14,7 @@ import json
 import os
 import sys
 
-from tools import artifacts
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
-from tools.sessions import AgentSession, make_cache_key
 
 __all__ = ["run", "main"]
 
@@ -44,35 +42,8 @@ __all__ = ["run", "main"]
 #: service. Treat it as documentation-grounded, not empirically confirmed,
 #: until it has been run against the real API.
 SYSTEM_PROMPT = """You are an astronomy research assistant with tools over SIMBAD, NED, \
-VizieR, ATNF, MAST, MPC, CASDA, and ADS (tools), plus a local pulsar analysis \
-pipeline.
-
-PULSAR PIPELINE. To hear or analyse a pulsar from local observational data, run \
-the stages in order -- each one produces what the next needs:
-
-  0. resolve_pulsar_scan / list_pulsar_scans -- find the scan file. There is no \
-     archive behind these tools; a path only resolves if the data is already on \
-     this machine. Never invent a path.
-  1. load_pulsar_lightcurve -- ingest and background-subtract. Pass its \
-     artifact path to every later stage.
-  2. compute_pulsar_periodogram -- find the period. Check peak_fold_snr, not \
-     peak_confidence: the confidence threshold assumes white noise, so mains \
-     interference and baseline drift routinely read "99.73% Confidence" while \
-     folding to nothing. If it warns peak_does_not_fold, the period is wrong.
-  3. fold_pulsar_lightcurve -- stack the rotations into a pulse profile. \
-     pulse_snr above ~8 is a detection; folding at a wrong period returns a \
-     FLAT PROFILE, not an error.
-  4. sonify_pulsar -- render audio. ALWAYS pass period_s when you have one: it \
-     folds first and loops the profile at the true rate, which is what actually \
-     sounds like a pulsar. Without it you get the raw scan played once.
-
-plot_pulsar renders any of these artifacts as a PNG. Reach for it when a \
-period looks wrong: the periodogram plot shows interference spikes and harmonic \
-combs at a glance, where the numbers alone do not.
-
-For a catalogued source, search_atnf gives a period more accurate than a short \
-scan can measure -- prefer it over step 2's result when the two disagree, and \
-use it when step 2 warns that its peak does not fold.
+VizieR, ATNF, MAST, MPC, CASDA, and ADS (tools), plus local aperture photometry \
+(list_photometry_targets, run_photometry_on_target).
 
 BEFORE calling any tool, work out the correct search term for that specific database from \
 the user's request -- do not pass the user's wording through unchanged by default. Each \
@@ -177,6 +148,45 @@ know about from training data -- it searches ADS for real matches and writes a M
 file with full citations and abstracts to disk, which is what makes the review verifiable \
 rather than recalled. Report the artifact path(s) it returns.
 
+PHOTOMETRY: unlike every other tool here, this is entirely local -- there is no live \
+image archive behind it. It only runs on a small, fixed set of bundled test frames. \
+Always call list_photometry_targets first if you are not already certain the requested \
+object is one of those bundled stems; do not assume a plausible-sounding real object \
+name is actually available, and never claim to have run photometry on a file that isn't \
+in that list. run_photometry_on_target's use_field_cal defaults to true, which \
+independently verifies the zero point against a reference catalog over the network and \
+can take 30-90 seconds -- it is also the only path whose magnitudes may be called \
+"calibrated"; without it (or if it fails to find a catalog match), magnitudes are \
+instrumental-only and must be reported as such, not as calibrated. Set use_field_cal to \
+false yourself when the user only wants source counts/positions/relative brightness and \
+a 30-90 second network round trip isn't worth it. Report the plot artifact path(s) it \
+returns; do not describe their visual contents as if you had looked at them.
+
+Confirmed live, and worth stating plainly if a user asks you to check flux/mag consistency: \
+`mag` is never the bare `-2.5*log10(flux) + zero_point` it looks like at a glance -- `flux` \
+is a raw per-exposure aperture sum, not a per-second rate, so the real relationship is \
+`mag = -2.5*log10(flux / exposure_seconds) + zero_point`. `exposure_seconds` is on the \
+result for exactly this reason; quote it before anyone (including you) tries to sanity-check \
+`mag` from `flux` by hand, or it will look like a multi-magnitude discrepancy that isn't \
+actually there. Whenever you state or use `exposure_seconds` in your answer, label it \
+explicitly as the exposure time in seconds -- never present it as a bare, unexplained number \
+or "normalization factor." On the unverified (`"header"`/`"cli"`) paths there's also a small \
+per-frame aperture-correction constant baked into `mag` alone, not reported separately -- \
+expect a residual of a few hundredths to a few tenths of a mag versus the formula above even \
+after accounting for exposure time; that's expected, not an error. Only `"field-cal"` holds \
+the formula exactly, with no unreported residual.
+
+Two more precision distinctions, confirmed live as real misreadings, not hypothetical ones: \
+(1) `source_count` means sources with an obtained photometric measurement (a finite mag/flux \
+was computed) -- it does NOT mean reliable, and one of those sources can have a very low \
+signal-to-noise ratio. Say "obtained a photometric measurement for N sources," never "valid" \
+or "good" sources, unless you're specifically describing an SNR/quality-filtered subset. \
+(2) `zero_point.zero_point_error_mag` is the field-cal solve's own formal/statistical \
+uncertainty (scatter among the calibration stars actually used) -- it is NOT an overall \
+accuracy figure for the resulting magnitudes. Never say magnitudes are "accurate to" this \
+value; unmodeled systematic error (flat-fielding, color terms, atmospheric variation) isn't \
+included in it and can exceed it.
+
 Other guidance from observed failure modes:
 
 - search_simbad, search_ned, search_vizier, search_atnf, and search_mast all resolve an \
@@ -199,14 +209,9 @@ def run(
     max_turns: int = 20,
     model: str = "claude-sonnet-5",
     system: str = SYSTEM_PROMPT,
-) -> str | None:
+) -> None:
     """Run a bounded agentic loop answering ``user_message`` with the
-    ``tools`` schemas.
-
-    Returns the session manifest path when a session runs. The CLI ignores the
-    return value, but tests and Python callers can use it to inspect the saved
-    tool-call trace.
-    """
+    ``tools`` schemas."""
     import anthropic
 
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -218,12 +223,6 @@ def run(
 
     print(f"User: {user_message}\n" + "=" * 50)
     messages = [{"role": "user", "content": user_message}]
-    session = AgentSession(
-        user_message=user_message,
-        model=model,
-        max_turns=max_turns,
-        system=system,
-    )
 
     # Confirmed live: the model can re-issue an exactly identical tool call
     # (same name, same arguments) across turns, presumably not recognizing a
@@ -232,127 +231,74 @@ def run(
     # possibly differently-paginated one.
     call_cache: dict[str, dict] = {}
 
-    try:
-        with artifacts.scoped_artifacts(session.artifact_subdir):
-            session.save()
+    for turn in range(max_turns):
+        with client.messages.stream(
+            model=model,
+            max_tokens=128000,
+            system=system,
+            tools=TOOL_SCHEMAS,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                print(text, end="", flush=True)
 
-            for turn in range(max_turns):
-                with client.messages.stream(
-                    model=model,
-                    max_tokens=128000,
-                    system=system,
-                    tools=TOOL_SCHEMAS,
-                    messages=messages,
-                ) as stream:
-                    text_parts: list[str] = []
-                    for text in stream.text_stream:
-                        text_parts.append(text)
-                        print(text, end="", flush=True)
+            response = stream.get_final_message()
 
-                    response = stream.get_final_message()
-                    assistant_text = "".join(text_parts)
+            if response.stop_reason == "end_turn":
+                print("\n\n[Task Complete]")
+                return
 
-                if response.stop_reason == "end_turn":
-                    session.record_turn(
-                        turn=turn + 1,
-                        stop_reason=response.stop_reason,
-                        assistant_text=assistant_text,
-                        tool_call_sequences=[],
+            if response.stop_reason == "tool_use":
+                messages.append({"role": "assistant", "content": response.content})
+                tool_results = []
+
+                for content_block in response.content:
+                    if content_block.type != "tool_use":
+                        continue
+
+                    tool_name = content_block.name
+                    tool_args = content_block.input
+                    tool_use_id = content_block.id
+                    cache_key = tool_name + json.dumps(tool_args, sort_keys=True, default=str)
+
+                    print(
+                        f"\n\n[*] [Turn {turn + 1}] Executing {tool_name} "
+                        f"with {tool_args}"
                     )
-                    manifest_path = session.save(
-                        outcome="end_turn", current_turn=turn + 1
-                    )
-                    print("\n\n[Task Complete]")
-                    print(f"[Session Manifest] {manifest_path}")
-                    return str(manifest_path)
 
-                if response.stop_reason == "tool_use":
-                    messages.append({"role": "assistant", "content": response.content})
-                    tool_results = []
-                    tool_call_sequences: list[int] = []
-
-                    for content_block in response.content:
-                        if content_block.type != "tool_use":
-                            continue
-
-                        tool_name = content_block.name
-                        tool_args = content_block.input
-                        tool_use_id = content_block.id
-                        cache_key = make_cache_key(tool_name, tool_args)
-
-                        print(
-                            f"\n\n[*] [Turn {turn + 1}] Executing {tool_name} "
-                            f"with {tool_args}"
-                        )
-
-                        cache_hit = cache_key in call_cache
-                        if cache_hit:
-                            result = call_cache[cache_key]
-                            print("(repeated call -- returning cached result)")
-                        else:
-                            func = TOOL_FUNCTIONS.get(tool_name)
-                            if func is None:
-                                result = {
-                                    "status": "error",
-                                    "errors": [
-                                        {
-                                            "code": "invalid_input",
-                                            "message": f"Unknown tool: {tool_name}",
-                                        }
-                                    ],
-                                }
-                            else:
-                                result = func(**tool_args).model_dump()
-                            call_cache[cache_key] = result
-
-                        sequence = session.record_tool_call(
-                            turn=turn + 1,
-                            tool_use_id=tool_use_id,
-                            tool_name=tool_name,
-                            arguments=tool_args,
-                            cache_key=cache_key,
-                            cache_hit=cache_hit,
-                            result=result,
-                        )
-                        tool_call_sequences.append(sequence)
-                        session.save(current_turn=turn + 1)
-
-                        print("Tool Output JSON Preview:")
-                        print(json.dumps(result, indent=2, default=str)[:400] + "...\n")
-
-                        tool_results.append(
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_use_id,
-                                "content": json.dumps(result, default=str),
+                    if cache_key in call_cache:
+                        result = call_cache[cache_key]
+                        print("(repeated call -- returning cached result)")
+                    else:
+                        func = TOOL_FUNCTIONS.get(tool_name)
+                        if func is None:
+                            result = {
+                                "status": "error",
+                                "errors": [
+                                    {
+                                        "code": "invalid_input",
+                                        "message": f"Unknown tool: {tool_name}",
+                                    }
+                                ],
                             }
-                        )
+                        else:
+                            result = func(**tool_args).model_dump()
+                        call_cache[cache_key] = result
 
-                    session.record_turn(
-                        turn=turn + 1,
-                        stop_reason=response.stop_reason,
-                        assistant_text=assistant_text,
-                        tool_call_sequences=tool_call_sequences,
-                    )
-                    session.save(current_turn=turn + 1)
-                    messages.append({"role": "user", "content": tool_results})
-                else:
-                    session.record_turn(
-                        turn=turn + 1,
-                        stop_reason=response.stop_reason,
-                        assistant_text=assistant_text,
-                        tool_call_sequences=[],
-                    )
-                    session.save(current_turn=turn + 1)
+                    print("Tool Output JSON Preview:")
+                    print(json.dumps(result, indent=2, default=str)[:400] + "...\n")
 
-            print("\n\n[Max turns reached]")
-            manifest_path = session.save(outcome="max_turns", current_turn=max_turns)
-            print(f"[Session Manifest] {manifest_path}")
-            return str(manifest_path)
-    except Exception:
-        manifest_path = session.save(outcome="error")
-        print(f"\n\n[Session Manifest] {manifest_path}", file=sys.stderr)
-        raise
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": json.dumps(result, default=str),
+                        }
+                    )
+
+                messages.append({"role": "user", "content": tool_results})
+
+    print("\n\n[Max turns reached]")
 
 
 def main() -> None:

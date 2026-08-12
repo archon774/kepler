@@ -30,6 +30,7 @@ from tools.pulsar import (
     load_pulsar_lightcurve,
     sonify_pulsar,
 )
+from tools.photometry import list_photometry_targets, run_photometry_on_target
 from tools.resolve import resolve_target
 from tools.simbad import (
     get_paper_abstract,
@@ -721,6 +722,73 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["path"],
         },
     },
+    {
+        "name": "list_photometry_targets",
+        "description": "List the local FITS image library photometry can actually "
+        "run on. IMPORTANT: there is no live image archive behind photometry -- "
+        "unlike every other tool here, `run_photometry_on_target` cannot fetch or "
+        "download anything. It only works on a small, fixed set of bundled test "
+        "frames (grouped here by category: e.g. 'cluster', 'galaxy', 'nebula', "
+        "'globular', 'pn' for planetary nebula, 'star', 'planet'). ALWAYS call this "
+        "first if you are not already certain the user's requested object is one of "
+        "these bundled stems -- never assume a plausible-sounding target (e.g. a "
+        "real astronomical object name) is actually available, and never claim to "
+        "have run photometry on something that isn't in this list. No parameters.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "run_photometry_on_target",
+        "description": "Run aperture photometry (source extraction plus, by "
+        "default, a verified zero-point solve) on one bundled FITS target. `target` "
+        "must be a stem from `list_photometry_targets` (e.g. "
+        "'ngc1846_cluster_r_000') or an explicit local path -- call "
+        "list_photometry_targets first if you have not already confirmed the name "
+        "is bundled; a target that isn't returns an ordinary error result, not an "
+        "exception. `use_field_cal` (default true) independently verifies the zero "
+        "point by querying a reference catalog over the network and cross-matching "
+        "it against detected sources -- this is the ONLY path that populates the "
+        "returned `zero_point`, is the only magnitude basis that may be described as "
+        "'calibrated', and can take 30-90 seconds; it can also legitimately fail to "
+        "find a solution (no catalog match in the field, no network) and fall back "
+        "to instrumental-only magnitudes, which is an ordinary outcome, not an "
+        "error. Set `use_field_cal` to false for a fast, offline, "
+        "instrumental-magnitude-only run when the user only wants source counts/"
+        "positions/relative brightness and does not need a verified zero point. "
+        "Always writes a photometry plot (and a zero-point fit/residuals plot too "
+        "when `use_field_cal` succeeded) to local artifact files -- report their "
+        "paths, do not describe their contents as if you had visually inspected "
+        "them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "A bundled target stem (see "
+                    "list_photometry_targets) or an explicit local FITS path.",
+                },
+                "use_field_cal": {
+                    "type": "boolean",
+                    "description": "Defaults to true. Set false to skip the "
+                    "network catalog zero-point solve.",
+                },
+                "catalogs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Reference catalogs to query for field "
+                    "calibration (e.g. ['APASS', 'PanSTARRS']). Defaults to "
+                    "catalogs that support the image's FITS FILTER keyword.",
+                },
+                "zero_point_mag": {
+                    "type": "number",
+                    "description": "An explicit photometric zero point to apply "
+                    "instead of solving for one. Overrides both the FITS header "
+                    "and field calibration; magnitudes from this path are "
+                    "unverified, never describe them as calibrated.",
+                },
+            },
+            "required": ["target"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -740,6 +808,8 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "search_mast": search_mast,
     "search_mpc": search_mpc,
     "search_casda": search_casda,
+    "list_photometry_targets": list_photometry_targets,
+    "run_photometry_on_target": run_photometry_on_target,
     "list_pulsar_scans": list_pulsar_scans,
     "resolve_pulsar_scan": resolve_pulsar_scan,
     "load_pulsar_lightcurve": load_pulsar_lightcurve,
