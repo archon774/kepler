@@ -7,7 +7,7 @@ are byte-preserving extractions from Skynet (see `CLAUDE.md`, "The extraction
 contract"), so the tests that guard them have to run on the frames and the
 recorded solver outputs the upstream pipeline actually produced.
 
-**Total size: ~169 MB**, essentially all of it the 39 FITS frames. That is large
+**Total size: ~175 MB**, essentially all of it the 39 FITS frames. That is large
 for a plain git repository; see "Repository size" at the bottom.
 
 ## Layout
@@ -23,6 +23,8 @@ test_data/
   fieldcal/
     zp_solutions/              4 recorded Skynet zero-point solves (in + out)
     ocl_filter_report.json     Open/Clear/Lum substitute-filter trials
+  pulsar/                      5 Green Bank 20 m pulsar scans (5.7 MB)
+    Curated pulsars.docx       the curation: periods + difficulty ratings
 ```
 
 ## `optical/` — 39 science frames
@@ -134,6 +136,100 @@ so paths survive a checkout on any filesystem. File contents are untouched,
 including the absolute `/Users/...` paths recorded inside the JSON — those are
 provenance, and rewriting them would make the fixture no longer the artifact
 Skynet emitted.
+
+## `pulsar/` — Green Bank 20 m pulsar scans
+
+Five Skynet radio continuum scans, `.A.cal.txt`, copied verbatim. Each is a
+~60 s track of one pulsar at 1395 MHz, two linear polarizations sampled at
+4.194 ms, with the instrument's full `#` metadata header intact.
+
+These back `tests/test_pulsar_sonification.py` and are the input format
+`tools.pulsar.sonify_pulsar` reads.
+
+| File | Source | Curated `P0` (s) | Curated difficulty | `S1400` | `DM` | Fold at `P0` | Blind search |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Skynet_60898_psr_b0329_54_…` | B0329+54 | 0.7145197 | Easy | 203 mJy | 26.8 | **316σ** | **finds it** |
+| `Skynet_60898_psr_b1133_16_…` | B1133+16 | 1.187913066 | Lightly Challenging | 20 mJy | 4.8 | 17.7σ | 60 Hz RFI |
+| `Skynet_60900_psr_b1933_16_…` | B1933+16 | 0.358738411 | More Challenging | 58 mJy | 158.6 | 7.5σ | red noise |
+| `Skynet_60901_3_Pulsar_Team_B2021+51_ERIRA_…` | B2021+51 | 0.529196918 | Lightly Challenging | 27 mJy | 22.5 | 4.9σ | red noise |
+| `Skynet_60902_psr_b2045_16_…` | B2045−16 | 1.961572304 | Most Challenging | 22 mJy | 11.5 | 5.4σ | 60 Hz RFI |
+
+Periods and difficulty come from `Curated pulsars.docx` (below); `S1400`/`DM`
+from ATNF.
+
+"Fold at `P0`" is the peak significance of a 100-bin fold at the catalogued
+period after running-median subtraction (`back_scale=3`). "Blind search" is
+what `compute_pulsar_periodogram` returns with default settings.
+
+**Only B0329+54 survives a blind search**, and that is a property of the
+sources, not a defect: at ~200 mJy it is an order of magnitude brighter than
+the rest, and 60 seconds on a 20 m dish is not much integration. The four
+failures are instructive and are pinned by
+`tests/test_pulsar_sonification.py::test_blind_search_only_succeeds_on_the_bright_source`:
+
+- **B1133+16 and B2045−16 both peak at 0.016665 s — 60.006 Hz, mains
+  interference.** Not sky signal at all.
+- **B1933+16 and B2021+51 peak near 2.1–2.2 s**, red noise left behind by the
+  baseline subtraction. That peak moves when `back_scale` changes, which is how
+  you tell it from a real periodicity.
+- **All four still report "99.73% Confidence."** The false-alarm threshold
+  assumes white noise; radio data is not white. `peak_fold_snr` is the field
+  that separates them, and it does.
+
+With a tuned `back_scale` and a search narrowed away from the artifacts, four
+of the five land within 0.5% of the catalogued period. **B1933+16 does not**,
+and the reason is physical: `DM = 158.6` smears its pulse by ~11% of its 359 ms
+period across the 80 MHz effective band, and nothing in this pipeline
+dedisperses. It is the brightest of the four faint scans and still the hardest.
+
+The curated difficulty ratings are an **independent check on the pipeline** —
+they were assigned before any of this code ran. Measured fold significance
+tracks them: the one "Easy" source is the only one above 100σ, the "Most
+Challenging" one folds near the floor, and the ordering matches for four of
+five. B2021+51 is the exception, rated "Lightly Challenging" but folding
+weakest; it is also the only scan from a different programme (`SRC_NAME` =
+`3_Pulsar_Team_B2021+51_ERIRA`), so that looks like a property of the
+observation rather than the source. Pinned by
+`tests/…::test_measured_detectability_tracks_the_curated_difficulty`.
+
+## `pulsar/Curated pulsars.docx` — the verification reference
+
+The curation shipped with these scans. Two tables: 15 pulsars with archival
+observation number, literature period and a difficulty rating, and a "Slow
+Bright Pulsar Candidates to Observe" table with B1950 coordinates. Only the
+five sources above have scans in this repository; the rest of the list is the
+observing programme they were drawn from (including B1919+21, the first pulsar
+discovered).
+
+**This document, not ATNF, is the reference the tests compare against** —
+`tests/conftest.py::PULSAR_PERIODS_S` is its "Period(Literature)" column.
+
+**The periods are not in the scan files.** They carry no `P_topo` header; that
+field only appears on prefolded "standard" files, and none ship here. So the
+period always comes from outside the data, which is what makes a successful
+fold an independent check rather than a self-consistency one.
+
+ATNF's live `P0` is carried alongside in `PULSAR_ATNF` as a cross-check. The
+two agree to 4e-10 for B0329+54 and B2021+51 and differ by 4e-6 to 2e-5 for
+the other three — different epochs or source references. **Neither is "more
+correct" for this data**, and the choice cannot change a result here: across a
+56 s scan the difference smears a fold by at most 3e-3 of a period, and it is
+itself 10–25× smaller than the topocentric-vs-barycentric shift (v/c = 1e-4)
+that neither value corrects for.
+
+Each scan's own `RA(deg)`/`DEC(deg)` header agrees with the catalogue position
+to within arcseconds — the check that confirms which pulsar each file actually
+points at, since `SRC_NAME` renders both B1133**+**16 and B2045**−**16 as
+`_16`.
+
+Two structural details the ingest depends on, both visible in any of the files:
+
+- Every scan opens with a **noise-diode calibration block** — ~124 rows at
+  0.1 s cadence before the 4.2 ms science data. It is dropped by the last
+  column being zero, not by the `Cal` flag column.
+- The column header line reads `... El(deg)  YY1  XX1  Cal  Sweeps` (9 names)
+  while the rows carry **10** fields. Upstream reads the first 9 by position
+  and ignores the last, which is the run flag the filter above keys on.
 
 ## `fieldcal/ocl_filter_report.json`
 

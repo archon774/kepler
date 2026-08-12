@@ -23,6 +23,7 @@ __all__ = [
     "list_artifact_files",
     "write_table",
     "write_text",
+    "reserve_artifact_path",
     "describe_artifact",
     "list_artifacts",
     "preview_rows",
@@ -33,6 +34,7 @@ __all__ = [
 _FITS_SUFFIXES = {".fit", ".fits", ".fts"}
 _TABLE_SUFFIXES = {".csv", ".ecsv", ".parquet", ".tsv"}
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+_AUDIO_SUFFIXES = {".aiff", ".flac", ".mp3", ".ogg", ".wav"}
 _TEXT_SUFFIXES = {".json", ".log", ".md", ".txt", ".yaml", ".yml"}
 _WRITE_SUFFIXES = {"ecsv": ".ecsv", "csv": ".csv", "fits": ".fits"}
 _ACTIVE_ARTIFACT_SUBDIR: ContextVar[str | None] = ContextVar(
@@ -95,6 +97,8 @@ def artifact_type_for_path(path: str | Path) -> str:
         return "table"
     if suffix in _IMAGE_SUFFIXES:
         return "image"
+    if suffix in _AUDIO_SUFFIXES:
+        return "audio"
     if suffix in _TEXT_SUFFIXES:
         return "text"
     return "file"
@@ -186,6 +190,22 @@ def _write_directory(subdir: Optional[str]) -> Path:
     if subdir:
         directory = directory / subdir
     return directory
+
+
+def reserve_artifact_path(
+    name: str, *, subdir: Optional[str] = None, ext: str = "bin"
+) -> Path:
+    """Reserve a non-colliding artifact path for a caller that writes its own file.
+
+    ``write_table``/``write_text`` cover the cases where this module can do the
+    writing. Binary formats with their own encoder -- WAV, for instance -- need
+    the path resolution and collision handling without the write.
+
+    Routed through ``_write_directory`` so a reserved path lands inside an
+    active ``scoped_artifacts`` session like every other write does; resolving
+    against ``ARTIFACT_DIR`` directly would drop files outside the session.
+    """
+    return _reserve_path(_write_directory(subdir), _safe_stem(name), f".{ext.lstrip('.')}")
 
 
 def write_table(

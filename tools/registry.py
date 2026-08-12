@@ -21,6 +21,14 @@ from tools.casda import search_casda
 from tools.mast import search_mast
 from tools.mpc import search_mpc
 from tools.ned import search_ned
+from tools.pulsar import (
+    compute_pulsar_periodogram,
+    list_pulsar_scans,
+    resolve_pulsar_scan,
+    fold_pulsar_lightcurve,
+    load_pulsar_lightcurve,
+    sonify_pulsar,
+)
 from tools.resolve import resolve_target
 from tools.simbad import (
     get_paper_abstract,
@@ -432,6 +440,249 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "list_pulsar_scans",
+        "description": "PULSAR PIPELINE STAGE 0 of 4. List the pulsar observations "
+        "available on local disk. There is NO archive query behind the pulsar "
+        "tools -- every stage takes a file path, and a path only resolves if the "
+        "scan is already on this machine. Call this (or resolve_pulsar_scan) "
+        "first when asked to work on a pulsar, instead of guessing a path. "
+        "Returns each scan's path, source name, pointing and receiver, read from "
+        "the file header.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "resolve_pulsar_scan",
+        "description": "PULSAR PIPELINE STAGE 0 of 4. Find the local scan file for a "
+        "pulsar name. Accepts any usual spelling ('B0329+54', 'PSR B0329+54', "
+        "'psr_b0329_54'), a bare filename, or a full path; matching ignores "
+        "punctuation and the declination sign, which Skynet filenames do not "
+        "preserve. Use the returned 'path' as the input to "
+        "load_pulsar_lightcurve, compute_pulsar_periodogram, "
+        "fold_pulsar_lightcurve and sonify_pulsar. An unmatched or ambiguous "
+        "name comes back with the available scans listed, so pick from those "
+        "rather than inventing a path.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Pulsar designation, filename, or path.",
+                }
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "load_pulsar_lightcurve",
+        "description": "PULSAR PIPELINE STAGE 1 of 4. Read a Green Bank / Skynet "
+        "pulsar scan from local disk into a light curve: drop the leading "
+        "noise-diode calibration block, rebase the time axis, and subtract the "
+        "running-median baseline. Handles both file flavours (a '.cal.txt' "
+        "continuum scan with two polarizations, or a prefolded 'standard' file "
+        "with one). Local only -- no network. Start here: the artifact this "
+        "writes is the input to compute_pulsar_periodogram, "
+        "fold_pulsar_lightcurve and sonify_pulsar, and passing it on is cheaper "
+        "and more consistent than re-reading the raw scan at each stage.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Local path to a pulsar text file.",
+                },
+                "back_scale": {
+                    "type": "number",
+                    "description": "Running-median baseline window in seconds, "
+                    "default 3.0. Values under ~2.2x the sample spacing subtract "
+                    "the signal along with the baseline.",
+                },
+                "subtract_background": {
+                    "type": "boolean",
+                    "description": "Default true, and should stay on -- the "
+                    "later stages are far less sensitive without it.",
+                },
+                "output_name": {"type": "string", "description": "Artifact filename stem."},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "compute_pulsar_periodogram",
+        "description": "PULSAR PIPELINE STAGE 2 of 4. Lomb-Scargle a pulsar light "
+        "curve to FIND ITS PERIOD. This is the only tool that produces a period "
+        "from data, so it comes before folding and before folded sonification. "
+        "Defaults search the observation's own Nyquist bounds (twice the mean "
+        "sample interval, up to 3 s). Local only -- no network. "
+        "IMPORTANT: check 'peak_fold_snr' before using 'peak_period_s'. It folds "
+        "the data at the peak and measures the resulting pulse -- above ~8 the "
+        "peak is real, near 1 it is not. Do NOT rely on 'peak_confidence' for "
+        "this: its false-alarm threshold assumes white noise, so mains "
+        "interference and baseline red noise routinely read '99.73% Confidence' "
+        "while folding to nothing. Also check 'top_peaks': pulsars produce "
+        "strong harmonics, so a peak at an integer multiple or fraction of the "
+        "reported period may be the real fundamental. A blind search on a single "
+        "60-second scan only succeeds for a bright source; if it fails, vary "
+        "back_scale, narrow start/stop away from the artifact, or -- for any "
+        "known source -- just use search_atnf, which is more accurate than "
+        "anything a short scan can measure.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "A load_pulsar_lightcurve artifact (.ecsv), or "
+                    "a raw pulsar file to ingest first.",
+                },
+                "start": {
+                    "type": "number",
+                    "description": "Shortest trial period in seconds (or lowest "
+                    "frequency in Hz when freq_mode). Defaults to the Nyquist limit.",
+                },
+                "stop": {
+                    "type": "number",
+                    "description": "Longest trial period in seconds. Defaults to 3.0.",
+                },
+                "steps": {
+                    "type": "integer",
+                    "description": "Grid step count, default 1000. Raise it to "
+                    "refine a period once you know roughly where it is -- a "
+                    "narrower start/stop with more steps is the accurate way.",
+                },
+                "freq_mode": {
+                    "type": "boolean",
+                    "description": "Search a linear frequency grid instead of a "
+                    "logarithmic period grid. Default false.",
+                },
+                "channel": {
+                    "type": "string",
+                    "description": "'sum' (default, both polarizations added and "
+                    "usually most sensitive), 'source1', or 'source2'.",
+                },
+                "output_name": {"type": "string", "description": "Artifact filename stem."},
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "fold_pulsar_lightcurve",
+        "description": "PULSAR PIPELINE STAGE 3 of 4. Fold a pulsar light curve at "
+        "a period into a pulse profile: every rotation is stacked on the others, "
+        "so a real pulse adds up while noise averages down. This is what makes a "
+        "pulsar that is invisible in the raw scan clearly visible. Needs a period "
+        "-- get it from compute_pulsar_periodogram, or search_atnf for a known "
+        "source. Local only -- no network. "
+        "IMPORTANT: folding at the WRONG period returns a flat profile, not an "
+        "error. Read 'pulse_snr' to judge: above ~8 is a real detection, near 1 "
+        "means the period is wrong or the source is too faint in this scan.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "A load_pulsar_lightcurve artifact (.ecsv), or "
+                    "a raw pulsar file to ingest first.",
+                },
+                "period_s": {
+                    "type": "number",
+                    "description": "Fold period in seconds.",
+                },
+                "bins": {
+                    "type": "integer",
+                    "description": "Phase bins per period, default 100. Fewer bins "
+                    "raise the per-bin signal-to-noise on a faint source; more "
+                    "resolve the pulse shape.",
+                },
+                "phase": {
+                    "type": "number",
+                    "description": "Shift the profile by this fraction of a period, "
+                    "default 0. Useful when the pulse straddles the wrap point.",
+                },
+                "display_period": {
+                    "type": "integer",
+                    "description": "1 (default) or 2 -- emit two cycles side by side.",
+                },
+                "output_name": {"type": "string", "description": "Artifact filename stem."},
+            },
+            "required": ["path", "period_s"],
+        },
+    },
+    {
+        "name": "sonify_pulsar",
+        "description": "PULSAR PIPELINE STAGE 4 of 4. Render a pulsar as audio you "
+        "can listen to: the light curve becomes the amplitude envelope on white "
+        "noise, so pulses arrive as bursts of static, and the two polarizations "
+        "become the two stereo channels. Local only -- no network. "
+        "PASS 'period_s' WHENEVER YOU HAVE ONE (from compute_pulsar_periodogram "
+        "or search_atnf). With it, the scan is folded into a pulse profile and "
+        "looped at the true rotation rate -- that is the rendering that actually "
+        "sounds like a pulsar, because every rotation reinforces the same pulse. "
+        "Without it the raw scan plays through once, which leaves a faint pulsar "
+        "buried in noise and drifts a few percent from sky time (reported as "
+        "'playback_stretch'). Never read a period off the audio; the synthesis "
+        "ignores sample timestamps. Returns the WAV path plus observation "
+        "metadata; the audio is never inlined.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "A load_pulsar_lightcurve artifact (.ecsv), or "
+                    "a raw pulsar file to ingest first.",
+                },
+                "period_s": {
+                    "type": "number",
+                    "description": "Fold at this period before rendering, so the "
+                    "pulse repeats at its true rate. Strongly preferred.",
+                },
+                "bins": {
+                    "type": "integer",
+                    "description": "Phase bins when folding, default 100. Ignored "
+                    "without period_s.",
+                },
+                "speed": {
+                    "type": "number",
+                    "description": "Playback rate. 1.0 (default) is real time; 2.0 "
+                    "plays the observation twice as fast, so it passes twice within "
+                    "the same output length.",
+                },
+                "subtract_background": {
+                    "type": "boolean",
+                    "description": "Remove the running-median baseline before "
+                    "rendering. Defaults to true, and should stay on -- it is what "
+                    "makes the pulses stand out against the receiver's drifting "
+                    "continuum level.",
+                },
+                "back_scale": {
+                    "type": "number",
+                    "description": "Background window width in seconds. Defaults to "
+                    "3.0. Values below ~2.2x the sample spacing degenerate and "
+                    "subtract the signal along with the baseline.",
+                },
+                "stereo": {
+                    "type": "boolean",
+                    "description": "Put the second polarization on the right channel. "
+                    "Defaults to true; false renders the first polarization alone.",
+                },
+                "audio_seconds": {
+                    "type": "number",
+                    "description": "Length of the rendered file, default 60. Shorter "
+                    "data loops to fill it. A minute of stereo audio is ~10 MB.",
+                },
+                "seed": {
+                    "type": "integer",
+                    "description": "Seeds the noise carrier, so repeat calls produce "
+                    "byte-identical audio. Defaults to 0.",
+                },
+                "output_name": {
+                    "type": "string",
+                    "description": "Filename stem for the WAV. Defaults to the "
+                    "observation's source name.",
+                },
+            },
+            "required": ["path"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -451,4 +702,10 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "search_mast": search_mast,
     "search_mpc": search_mpc,
     "search_casda": search_casda,
+    "list_pulsar_scans": list_pulsar_scans,
+    "resolve_pulsar_scan": resolve_pulsar_scan,
+    "load_pulsar_lightcurve": load_pulsar_lightcurve,
+    "compute_pulsar_periodogram": compute_pulsar_periodogram,
+    "fold_pulsar_lightcurve": fold_pulsar_lightcurve,
+    "sonify_pulsar": sonify_pulsar,
 }

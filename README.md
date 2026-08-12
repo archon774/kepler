@@ -130,13 +130,16 @@ identical function any other caller would import and run.
 | `algorithms/skylib_lite/` | Shared Python support | Consolidated local Skylib subset used by WCS, photometry, and field calibration: astrometry, SEP extraction, background estimation, aperture photometry, FITS helpers, angle math, and statistics. |
 | `algorithms/catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations, SIMBAD object-type vocabulary, and provider lookup tables used by ADS/NED/ATNF tools. Declaration only — no network code. |
 | `algorithms/query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
-| `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, and period-folding logic with Angular/RxJS/Highcharts removed. |
+| `algorithms/pulsar/` | Ported Python algorithm | The four-stage pulsar chain: file ingest and background subtraction, Lomb-Scargle periodogram, phase folding and binning, and light-curve sonification. A **port** of the Astromancer TypeScript, not an extraction — see `docs/pulsar-tool-pipeline.md`. |
+| `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, period-folding, and sonification logic with Angular/RxJS/Highcharts removed. |
 | `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
 | `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
 | `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
 | `tests/` | Python test suite | Algorithm-preservation and tool-smoke tests: bit-exact parity against recorded Skynet output, real FITS fixtures, and no-network coverage of the public `tools/` surface. See `tests/README.md`. |
 | `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
 | `docs/extraction.md` | Provenance | Consolidated extraction records for every algorithm package under `algorithms/`. |
+| `docs/pulsar-tool-pipeline.md` | Architecture | The pulsar tool chain — light curve, periodogram, fold, sonify — and the extracted Astromancer code behind each stage. |
+| `docs/examples/` | Sample output | One committed pulsar sonification (`psr_b0329_54_sonification.wav`), produced by the agent loop. The only generated file in the repository. |
 | `docs/repository-folders.md` | Folder guide | Per-folder responsibilities, important files, and current caveats for every source folder. |
 | `docs/algorithm-remediation-plan.md` | Planning | Plan for addressing the known algorithm defects pinned by the test suite. |
 

@@ -31,6 +31,71 @@ TEST_DATA = REPO_ROOT / "test_data"
 OPTICAL = TEST_DATA / "optical"
 ZP_SOLUTIONS = TEST_DATA / "fieldcal" / "zp_solutions"
 AFTERGLOW = TEST_DATA / "afterglow"
+PULSAR = TEST_DATA / "pulsar"
+
+#: Short aliases for the pulsar scans, keyed by the source they point at.
+#: ``b0329`` is the loud one — the brightest pulsar in the northern sky, and
+#: the only fixture where a single 60 s scan gives an unmistakable pulse train.
+PULSAR_SCANS: dict[str, str] = {
+    "b0329": "Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt",
+    "b1133": "Skynet_60898_psr_b1133_16_138335_88262.A.cal.txt",
+    "b1933": "Skynet_60900_psr_b1933_16_138461_88378.A.cal.txt",
+    "b2021": "Skynet_60901_3_Pulsar_Team_B2021+51_ERIRA_138497_88413.A.cal.txt",
+    "b2045": "Skynet_60902_psr_b2045_16_138488_88426.A.cal.txt",
+}
+
+#: Reference periods (s), from ``test_data/pulsar/Curated pulsars.docx`` — the
+#: curation shipped alongside the scans, column "Period(Literature)". That
+#: document is the intended verification reference for this data set, so it is
+#: what the tests compare against.
+#:
+#: Independent of anything in the code: the scans carry no period in-file, so a
+#: successful fold is a real detection rather than a fit to a known answer.
+PULSAR_PERIODS_S: dict[str, float] = {
+    "b0329": 0.7145197,
+    "b1133": 1.187913066,
+    "b1933": 0.358738411,
+    "b2021": 0.529196918,
+    "b2045": 1.961572304,
+}
+
+#: The live ATNF Pulsar Catalogue values, retrieved 2026-08-11 via
+#: ``tools.atnf.search_atnf`` (psrqpy 1.3.2). Kept as a cross-check on the
+#: curated periods above, and because ``DM``/``S1400`` explain the
+#: detectability spread across the five scans.
+#:
+#: ``p0`` agrees with the curated value to 4e-10 for B0329+54 and B2021+51, and
+#: differs by 4e-6 to 2e-5 relative for the other three — different epochs or
+#: source references. **That difference does not matter here**: across a 56 s
+#: scan it moves the fold by at most 3e-3 of a period, and it is itself 10-25x
+#: smaller than the topocentric-vs-barycentric shift (v/c = 1e-4) that neither
+#: value corrects for. ``test_curated_and_atnf_periods_agree_where_it_matters``
+#: pins that.
+#:
+#: The identifications were confirmed against each scan's own
+#: ``RA(deg)``/``DEC(deg)`` header, which agrees with the catalogue position to
+#: within arcseconds. That check matters here: Skynet's ``SRC_NAME`` renders
+#: both B1133**+**16 and B2045**−**16 as ``_16``, so the declination sign
+#: cannot be read off the filename.
+PULSAR_ATNF: dict[str, dict[str, float]] = {
+    "b0329": {"p0": 0.714519699725801, "dm": 26.7641, "s1400": 203.0},
+    "b1133": {"p0": 1.1879172746306204, "dm": 4.8407, "s1400": 20.0},
+    "b1933": {"p0": 0.3587451401989297, "dm": 158.6394, "s1400": 58.0},
+    "b2021": {"p0": 0.5291969178083342, "dm": 22.5497, "s1400": 27.0},
+    "b2045": {"p0": 1.9615846233291023, "dm": 11.456, "s1400": 22.0},
+}
+
+#: Difficulty rating and archival observation number, from the same curated
+#: document. The rating is the curator's judgement of how hard each source is
+#: to detect, and it is an independent check on the pipeline: what the code
+#: measures should track what the curator expected.
+PULSAR_DIFFICULTY: dict[str, dict[str, object]] = {
+    "b0329": {"obs": 81239, "rank": 0, "label": "Easy"},
+    "b2021": {"obs": 63183, "rank": 1, "label": "Lightly Challenging"},
+    "b1133": {"obs": 79294, "rank": 1, "label": "Lightly Challenging"},
+    "b1933": {"obs": 74403, "rank": 3, "label": "More Challenging"},
+    "b2045": {"obs": 71350, "rank": 4, "label": "Most Challenging"},
+}
 
 #: Short aliases for the frames individual tests single out, each chosen for a
 #: specific header or geometry property. See ``test_data/README.md``.
@@ -268,6 +333,36 @@ def ocl_filter_report(test_data_dir) -> dict:
     """Skynet's Open/Clear/Lum substitute-filter trial report."""
     with open(_require(test_data_dir / "fieldcal" / "ocl_filter_report.json")) as fh:
         return json.load(fh)
+
+
+# ---------------------------------------------------------------------------
+# Pulsar scans
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def pulsar_path():
+    """Return the path of a pulsar scan, by short alias or bare filename."""
+
+    def _get(name: str) -> Path:
+        filename = PULSAR_SCANS.get(name, name)
+        if not filename.endswith(".txt"):  # pragma: no cover - test typo
+            raise KeyError(f"unknown scan {name!r}; aliases: {sorted(PULSAR_SCANS)}")
+        return _require(PULSAR / filename)
+
+    return _get
+
+
+@pytest.fixture
+def artifact_dir(tmp_path, monkeypatch):
+    """Point ``tools.artifacts`` at a temp directory for one test.
+
+    ``ARTIFACT_DIR`` is bound at import time, so the patch has to land on the
+    ``tools.artifacts`` name rather than on ``tools.config``.
+    """
+    import tools.artifacts as artifacts_module
+
+    monkeypatch.setattr(artifacts_module, "ARTIFACT_DIR", tmp_path)
+    return tmp_path
 
 
 # ---------------------------------------------------------------------------

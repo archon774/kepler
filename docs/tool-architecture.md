@@ -32,6 +32,7 @@ tools/
   ned.py              # NED historical table tools
   vizier.py           # broad VizieR catalog search tools
   atnf.py             # ATNF pulsar catalog tools
+  pulsar.py           # 4-stage pulsar pipeline: light curve, periodogram, fold, sonify
   ads.py              # ADS literature search/review tools
   mast.py             # MAST archive/product tools
   mpc.py              # Minor Planet Center observation tools
@@ -52,6 +53,9 @@ algorithms/
   skylib_lite/          # shared vendored Skylib subset
   catalogs/             # Python catalog/provider declarations, no network calls
   query/                # Python remote catalog access
+
+  pulsar/               # Python pulsar pipeline: ingest, periodogram, folding,
+                        #   sonification (a PORT, not an extraction)
 
   lightcurve/           # TypeScript light-curve algorithms
   periodogram/          # TypeScript periodogram algorithms
@@ -82,6 +86,10 @@ The first local, no-network tools are:
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`
 - `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `tools.pulsar.load_pulsar_lightcurve(path, ...)`
+- `tools.pulsar.compute_pulsar_periodogram(path, ...)`
+- `tools.pulsar.fold_pulsar_lightcurve(path, period_s, ...)`
+- `tools.pulsar.sonify_pulsar(path, period_s=None, ...)`
 - `tools.workspace.list_artifacts(directory=None)`
 - `tools.workspace.describe_artifact(path)`
 
@@ -135,7 +143,8 @@ Current algorithm ownership:
 | `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
 | `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
-| `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding | No `package.json` or `tsconfig.json` yet. |
+| `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | The one **port** rather than extraction under `algorithms/`; marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
+| `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding, and pulsar sonification | Typechecked by the root `tsconfig.json`. |
 | `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
 | `algorithms.hrdiagram` | Framework-free TypeScript cluster/HR-diagram transforms | No runtime wrapper yet. |
 

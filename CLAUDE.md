@@ -35,24 +35,41 @@ follow from this:
   `algorithms/hrdiagram/` preserves several flagged upstream bugs. Do not "fix"
   these unless the task is explicitly to diverge from Skynet/Astromancer.
 
-Each domain folder has an `EXTRACTION.md` with exact provenance (source path, line ranges,
-per-file diff fidelity), the list of seams, dependency requirements, and what verification
-was actually performed. **Read the relevant `EXTRACTION.md` before touching a domain
-folder** — it is the only place the upstream mapping is recorded.
+`docs/extraction.md` carries one section per domain with exact provenance (source path,
+line ranges, per-file diff fidelity), the list of seams, dependency requirements, and what
+verification was actually performed. It consolidates what used to be a per-folder
+`EXTRACTION.md`; those files are gone, and references to them elsewhere are stale.
+**Read the relevant section before touching a domain folder** — it is the only place the
+upstream mapping is recorded.
+
+One folder is an exception to the contract above. `algorithms/pulsar/` is a **port** of
+Astromancer TypeScript into Python, not an extraction, because the upstream sonifier is
+welded to browser APIs and cannot run headless. It is marked `# PORTED:` rather than
+`# EXTRACTED:` so the extraction-marker index stays meaningful, and its divergences are
+enumerated in `docs/extraction.md` (Pulsar Sonification §6).
 
 ## Commands
 
 ```bash
 uv sync                                  # create .venv and install pinned deps
+uv run pytest                            # the test suite (no network by default)
 python3 -m compileall tools algorithms   # local package syntax smoke
+npm run typecheck                        # tsc --noEmit over the TypeScript folders
 git diff --check                         # whitespace check
 ```
 
-There is **no test suite, linter, or type-checker configured** in this repository. Do not
-claim tests pass; there are none to run. CI (`.github/workflows/ci.yml`) runs only the
-`compileall` above plus a `repository-shape` job asserting that `README.md`,
-`pyproject.toml`, `uv.lock`, `tools/registry.py`, `tools/runner.py`, and
-`docs/tool-architecture.md` exist.
+CI (`.github/workflows/ci.yml`) gates three jobs: `compileall` over `tools algorithms
+tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
+`README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`, `tools/runner.py`, and
+`docs/tool-architecture.md` exist. **The TypeScript typecheck is not a CI job** — run it
+by hand when touching a `.ts` file.
+
+The suite is algorithm-preservation testing, not correctness testing: it pins bit-exact
+parity against recorded Skynet output and pins known bugs rather than fixing them. See
+`tests/README.md`. Nothing in it opens a socket unless marked `network`, which also
+requires `KEPLER_TEST_NETWORK=1`.
+
+There is **no linter or formatter configured**. Match the surrounding file's style.
 
 Other workflows: `secret-scan.yml` (gitleaks over tree and full history) and
 `workflow-safety.yml` (actionlint + zizmor). The `.gitleaks.toml` allowlist for env-var
@@ -62,9 +79,13 @@ from a file outside that path list may need a new allowlist entry.
 `pyproject.toml` pins every dependency with `==`. Adding one means editing the pin and
 re-running `uv lock`.
 
-The TypeScript folders have **no `package.json`, `tsconfig.json`, or build step**. They are
-source modules awaiting a future TS package; there is currently no way to compile or test
-them in-repo.
+The TypeScript folders have a root `package.json` and `tsconfig.json` carrying a
+`typecheck` script (`tsc --noEmit`, `lib: ["ES2022", "DOM"]`) but **no build, bundle, or
+test step**, and no runtime — nothing executes the TypeScript. They are source modules
+plus a syntax and type gate. A tool that needs TypeScript behaviour at runtime today has
+to go through a Python port; `algorithms/pulsar/` is the one instance, and
+`docs/extraction.md` (Pulsar Sonification §5) records why that was allowed there and why
+it is not a general licence.
 
 ## Python domain boundaries
 
@@ -88,6 +109,23 @@ see below. Ownership is strict:
 - `algorithms/query/` owns remote catalog access — the VizieR engine, SDSS SkyServer SQL,
   SIMBAD resolution, the astroquery cache layer, filter-aware catalog selection,
   WCS-footprint geometry, and the query orchestration entry points.
+- `algorithms/pulsar/` owns the whole radio-pulsar chain, one module per stage:
+  `ingest.py` (read + background subtraction), `periodogram.py` (Lomb-Scargle +
+  peak + confidence), `folding.py` (phase fold + bin), `sonification.py`
+  (synthesis + WAV). It imports nothing from the other algorithm folders and is
+  imported only by `tools/pulsar.py`.
+
+  **The stage order is a dependency, not a convention:** light curve ->
+  periodogram -> period -> fold -> sonify. Only the periodogram produces a
+  period, and folding at a wrong period returns a *flat profile, not an error*.
+  That silent failure is why each stage reports a quality number
+  (`peak_confidence`, `pulse_snr`) and why the tools are four rather than one.
+  See `docs/pulsar-tool-pipeline.md`.
+
+  Never read a period off rendered audio: the synthesis ignores sample
+  timestamps (`docs/extraction.md`, Pulsar Sonification §7.2). Catalogued
+  periods come from `tools.atnf.search_atnf` and beat anything a 60-second scan
+  measures.
 
 `algorithms/query/` imports `algorithms/catalogs/`; never the reverse. That direction is what keeps
 filter matching and the whole zero-point solve runnable with no network stack

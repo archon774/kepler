@@ -19,6 +19,12 @@ __all__ = [
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
+    "PulsarScan",
+    "PulsarScanList",
+    "PulsarLightCurve",
+    "PulsarPeriodogram",
+    "PulsarFoldedProfile",
+    "PulsarSonification",
     "coerce_optional_int",
 ]
 
@@ -133,6 +139,187 @@ class ZeropointSolution(KeplerToolModel):
     limmag5: float | None = None
     rej_percent: float | None = None
     source_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarObservationInfo(KeplerToolModel):
+    """Fields every stage of the pulsar pipeline reports about its input."""
+
+    flavour: Literal["cal", "standard"] = "cal"
+    source_name: str | None = None
+    date_obs: str | None = None
+    samples_read: int = 0
+    samples_used: int = 0
+    time_span_s: float | None = None
+    mean_sample_interval_s: float | None = None
+    sample_cadence_s: float | None = None
+    background_subtracted: bool = False
+    back_scale_s: float | None = None
+
+
+class PulsarScan(KeplerToolModel):
+    """A pulsar scan available on local disk.
+
+    ``path`` is what every pipeline stage takes. The rest is read from the
+    file's own ``#`` header, so listing is cheap -- no sample data is parsed.
+    """
+
+    path: str
+    source_name: str | None = None
+    date_obs: str | None = None
+    receiver: str | None = None
+    obs_freq_mhz: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    duration_s: float | None = None
+    size_bytes: int | None = None
+
+
+class PulsarScanList(KeplerToolModel):
+    """Scans found locally, plus where they were looked for."""
+
+    scans: list[PulsarScan] = Field(default_factory=list)
+    search_root: str
+    count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarLightCurve(PulsarObservationInfo):
+    """Stage 1: an ingested, background-subtracted pulsar light curve.
+
+    The artifact is the handoff to every later stage -- pass its path back in
+    as ``path`` instead of re-reading the raw scan.
+    """
+
+    file: FileMetadata
+    artifact: Optional[ArtifactRef] = None
+    channels: int = 1
+    receiver: str | None = None
+    obs_freq_mhz: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    nyquist_period_s: float | None = None
+    """Twice the mean sample interval -- the shortest period resolvable, and
+    the periodogram's default lower search bound."""
+
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarPeriodogram(PulsarObservationInfo):
+    """Stage 2: a Lomb-Scargle spectrum and the period it peaks at."""
+
+    file: FileMetadata
+    artifact: Optional[ArtifactRef] = None
+
+    mode: Literal["period", "frequency"] = "period"
+    search_start: float | None = None
+    search_stop: float | None = None
+    steps: int | None = None
+    channel: str | None = None
+
+    peak_period_s: float | None = None
+    peak_power: float | None = None
+    peak_confidence: str | None = None
+    """Highest false-alarm level the peak clears, or null if it clears none.
+
+    **Not a validity check.** The threshold assumes white noise, and radio data
+    is not white: mains interference and post-subtraction red noise routinely
+    clear the 3-sigma line. On four of the five bundled scans the strongest
+    peak reads "99.73% Confidence" and is not the pulsar. Use
+    ``peak_fold_snr``, which tests the peak against the data itself."""
+
+    peak_fold_snr: float | None = None
+    """Pulse significance obtained by folding at ``peak_period_s``.
+
+    The arbiter. A periodogram peak that is a real periodicity concentrates
+    flux when folded; one that is RFI or red noise does not. Above ~8 the peak
+    is worth trusting, near 1 it is not, whatever ``peak_power`` says."""
+
+    confidence_thresholds: dict[str, float] = Field(default_factory=dict)
+    top_peaks: list[dict[str, Any]] = Field(default_factory=list)
+    """A few best-separated candidates, strongest first, for when the global
+    peak is a harmonic rather than the fundamental."""
+
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarFoldedProfile(PulsarObservationInfo):
+    """Stage 3: a light curve folded at a period into a pulse profile."""
+
+    file: FileMetadata
+    artifact: Optional[ArtifactRef] = None
+
+    period_s: float | None = None
+    bins: int | None = None
+    bins_filled: int | None = None
+    phase: float | None = None
+    display_period: int | None = None
+    cal: float | None = None
+    samples_folded: int = 0
+
+    pulse_snr: float | None = None
+    """Peak significance against the profile's own off-pulse scatter. Above
+    ~8 the fold is a real detection; near 1 the period is wrong or the source
+    is too faint in this scan."""
+
+    channels: int = 1
+    preview: list[dict[str, Any]] = Field(default_factory=list)
+
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarSonification(KeplerToolModel):
+    """A rendered pulsar audio file, plus what it was rendered from.
+
+    The observation fields describe the input light curve; the audio fields
+    describe the WAV. ``artifact`` is the only place the complete result
+    lives -- the audio itself is never inlined.
+    """
+
+    file: FileMetadata
+    artifact: Optional[ArtifactRef] = None
+
+    # What was read.
+    flavour: Literal["cal", "standard"] = "cal"
+    source_name: str | None = None
+    date_obs: str | None = None
+    samples_read: int = 0
+    samples_used: int = 0
+    time_span_s: float | None = None
+    mean_sample_interval_s: float | None = None
+    sample_cadence_s: float | None = None
+    background_subtracted: bool = False
+    back_scale_s: float | None = None
+
+    # Which rendering. "folded" is upstream's primary path -- the scan folded
+    # at a period into a profile, looped at the true pulse rate. "lightcurve"
+    # plays the scan through once and needs no period.
+    rendering: Literal["lightcurve", "folded"] = "lightcurve"
+    period_s: float | None = None
+    bins: int | None = None
+    pulse_snr: float | None = None
+
+    # What was rendered.
+    audio_seconds: float | None = None
+    sample_rate: int | None = None
+    channels: int | None = None
+    mode: Literal["burst", "waveform"] | None = None
+    pass_seconds: float | None = None
+    playback_stretch: float | None = None
+    """Audio seconds per second of observation. 1.0 is real time; 1.03 means a
+    feature recurring every 1.000 s in the sky is heard every 1.030 s. The
+    synthesis ignores sample timestamps, so this is never exactly 1.0 -- do not
+    read a pulsar period off the audio, use ``search_atnf``."""
+
+    speed: float | None = None
+    cal: float | None = None
+    noise_seed: int | None = None
+
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

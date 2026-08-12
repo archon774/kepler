@@ -13,6 +13,7 @@ Internal section references such as `§5.2` are local to the package section the
 - [Query](#query)
 - [HR Diagram / Isochrone Matching](#hr-diagram-isochrone-matching)
 - [Light Curve](#light-curve)
+- [Pulsar Sonification](#pulsar-sonification)
 - [Periodogram](#periodogram)
 
 ## WCS
@@ -2071,14 +2072,18 @@ Two smaller preserved discrepancies, both left as found:
 
 ##### Left behind as out of scope
 
-- **Sonification** — see §7.
+- **Sonification** — was left behind here; **superseded 2026-08-11**, it is now
+  extracted into `pulsar-sonification.algorithms.ts`. See
+  [Pulsar Sonification](#pulsar-sonification).
 - **Periodogram** — see §8.
 - **`rad` / `deg` / `d2HMS` / `d2DMS`** (`shared/data/utils.ts` 1-12, 264-278) —
   celestial coordinate conversion. Verified by grep to be unused anywhere under
   `tools/pulsar/` or `tools/variable/`.
 - **`Sonifier` class** (`shared/sonification/sonification.ts`, 173 lines) — a
   standalone audio class that no light-curve code imports; the pulsar tool has
-  its own copy of this logic inlined in the service.
+  its own copy of this logic inlined in the service. Still left behind after
+  the sonification extraction, and for the same reason — see
+  [Pulsar Sonification](#pulsar-sonification) §4.
 
 ##### Retained despite a plausible case for exclusion
 
@@ -2340,6 +2345,228 @@ class extracted here.
   available.
 - No test files were extracted; the 16 Astromancer spec files are TestBed stubs
   that assert only `expect(component).toBeTruthy()`.
+
+## Pulsar Sonification
+
+_New section, 2026-08-11. Supersedes the "left behind as out of scope" entry in
+[Light Curve](#light-curve) §6._
+
+Renders a pulsar light curve as audio. This is the backing algorithm for
+`tools/pulsar.py::sonify_pulsar`.
+
+- **Source repo:** `/home/claude/astromancer` (read-only; untouched)
+- **Extracted:** 2026-08-11
+- **Extracted to:** `algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts`
+- **Ported to:** `algorithms/pulsar/` (Python) — see §5
+
+### 1. Why this arrived late
+
+The original light-curve extraction listed sonification under "left behind as
+out of scope". That call is reversed here because sonification turned out to be
+the thing a caller most wants from a pulsar scan that a plot cannot give.
+
+### 2. What was copied
+
+| Upstream file | Lines | Symbols | Destination |
+| --- | --- | --- | --- |
+| `pulsar/pulsar.service.ts` | 1263 | `sonification` 889-1054, `sonificationBrowser` 1056-1224, `writeString` 1243-1247 | `pulsar-sonification.algorithms.ts` |
+| `pulsar/light-curve/pulsar-light-curve-sonifier/…component.ts` | 88 | the input-windowing block, 21-53 (identical at 60-87) | `pulsar-sonification.algorithms.ts` (`windowSonificationInput`) |
+| `pulsar/period-folding/pulsar-period-folding-form/…component.ts` | 307 | `sonification` 233-254, `sonificationBrowser` 260-280 — identical apart from dispatch | `pulsar-sonification.algorithms.ts` (`foldedSonificationInput`) |
+
+`interpolateLinear` (`pulsar.service.ts` 1227-1240) is carried a **second**
+time here. Upstream it is one method on one class, reached by both the
+light-curve and the sonification paths; the extraction splits those paths
+across two files, so the body is duplicated rather than making one extraction
+depend on the other's class instance. Both copies must stay byte-identical.
+
+### 3. What the algorithm actually is
+
+The light curve is normalized to [0,1] across both polarizations, upsampled,
+and used as the **amplitude envelope on white noise** — "TV static that
+pulses". The two polarizations become the two stereo channels.
+
+The synthesis fits nothing: it loops its input over `period` seconds. But
+**`period` means different things at the two entry points**, and that is the
+whole design of the pulsar tool:
+
+| Entry point | `period` passed | Input | Rendering |
+| --- | --- | --- | --- |
+| `pulsar-period-folding-form.component.ts` (4 sites) | `getPeriodFoldingPeriod()` — the **pulsar's period** | folded, phase-binned profile (`getPeriodFoldingBins()`, default 100) | the pulse at its true rate, looped |
+| `pulsar-light-curve-sonifier.component.ts` (2 sites) | the windowed observation **duration**, capped at 60 s | raw background-subtracted scan | the scan played through once |
+
+The folding form is the **primary** path, and it is downstream of the
+periodogram: the pulsar tool's flow is light curve → periodogram → period →
+fold → sonify. That is why `sonification()` reads `getPeriodFoldingCal()` and
+`getPeriodFoldingSpeed()` rather than light-curve parameters, why the
+`period *= 1 / speed` line carries an inline `// --- Period folding ---`
+comment, and why the `frequency < 4000` guard is a real branch — a millisecond
+pulsar lands at a few hundred Hz, where a duration of 60 s lands at 0.0167 Hz
+and the guard is trivially true.
+
+**Correction, 2026-08-11:** an earlier revision of this section claimed the
+`period` argument was the observation duration *at every call site*. That was
+wrong — it generalized from the light-curve sonifier, which is the secondary
+of the two paths. The four period-folding call sites pass the pulsar period.
+
+### 4. Seams cut
+
+| Upstream | Where | Treatment |
+| --- | --- | --- |
+| `@Injectable()` + `@angular/core` | `PulsarService` | Decorator and import removed; the two methods become free functions. |
+| `this.getPeriodFoldingCal()` / `getPeriodFoldingSpeed()` / `getChartTitle()` | both methods | Explicit `SonificationOptions` parameter, the same treatment `pulsar-periodogram.compute.ts` gave its getters. Defaults are `PulsarPeriodFolding`'s own (`pulsar.service.util.ts` 623-624). |
+| `Blob` / `URL.createObjectURL` / `document.createElement('a')` | `sonification()` 1043-1053 | Split into `downloadWav()`. The synthesis now ends by returning the WAV `ArrayBuffer`, so a headless caller can use the bytes. Same treatment `pulsar-period-folding.algorithms.ts` gave math interleaved with Highcharts calls. |
+| `AudioContext` / `AudioBufferSourceNode` | `sonificationBrowser()` | Not extracted. The function returns the per-channel `Float32Array`s; playback handles belong to the caller. |
+| `isPlaying` / `audioCtx` / `audioSource` + the play/stop toggle | `sonificationBrowser()` 1062-1075 | Not extracted — service state, not math. |
+
+**`Sonifier` (`shared/sonification/sonification.ts`, 173 lines) was not
+extracted.** Nothing in astromancer imports it: it is dead code superseded by
+the two service methods. It differs in ways that would matter if it were ever
+revived — a 440 Hz sine carrier instead of noise, 88200 Hz, mono only, a fixed
+`interpolationFactor` of 4, and data repeated `ceil(60 / period)` times rather
+than looped on a sample index.
+
+### 5. The Python port — `algorithms/pulsar/`
+
+Every other Python folder under `algorithms/` is a byte-preserving extraction
+from Skynet. **`algorithms/pulsar/` is not**: it is a language port of the
+TypeScript above, and it is marked `# PORTED:` rather than `# EXTRACTED:` so
+the extraction-marker index stays meaningful.
+
+The port exists because the upstream sonifier cannot be executed headless — it
+is welded to `Blob`, `document` and `AudioContext` — and Kepler's tool surface
+is Python. Note this is a **narrower** case than the one
+`docs/tool-architecture.md` rejected when it said "TypeScript stays
+TypeScript": that rejection was about `lomb-scargle.ts`, which is byte-identical
+to upstream and where a port would make future divergence undetectable. Here
+the TypeScript is extracted *and* kept under `tsc --noEmit`, so the two can be
+diffed against each other.
+
+| Python | Ported from |
+| --- | --- |
+| `ingest.py` | `pulsar-lightcurve.ingest.ts` (`uploadHandler`), `pulsar-lightcurve.algorithms.ts` (`median`, `backgroundSubtraction`) |
+| `sonification.py` | `pulsar-sonification.algorithms.ts` (`sonification`, `interpolateLinear`, `windowSonificationInput`) |
+
+`sonificationBrowser` is **not** ported — it exists to drive an `AudioContext`.
+
+`foldedSonificationInput` **is** ported, so both renderings are available.
+Reaching it required porting the two stages above it, which is why
+`algorithms/pulsar/` now also holds:
+
+| Python | Ported from | Upstream |
+| --- | --- | --- |
+| `periodogram.py` | `periodogram/core/lomb-scargle.ts`, `core/peak-detection.ts`, `pulsar/pulsar-periodogram-range.ts` | `lombScargle`, `findLocalMax`, `addConfidenceLines`, `nyquistPeriodogramRange` |
+| `folding.py` | `lightcurve/pulsar/pulsar-period-folding.algorithms.ts`, `…lightcurve.algorithms.ts`, `shared/numeric-utils.ts` | `getPeriodFoldingChartData`, `binData`, `foldAndBin`, `duplicateIfNeeded`, `differenceAndSum`, `applyCalibration`, `floatMod` |
+
+The four tools that sit on these are documented in
+`docs/pulsar-tool-pipeline.md`.
+
+### 6. Deliberate divergences in the port (do not "fix")
+
+1. **The noise carrier is seeded.** Upstream calls `Math.random()`, which is
+   unseedable. Kepler's default checks must be deterministic (`CLAUDE.md`), so
+   the carrier comes from `numpy.random.default_rng(seed)`, defaulting to 0.
+   Same distribution, reproducible draw. Pass `seed=None` for upstream's
+   behaviour.
+2. **`wave` writes the RIFF header** instead of the hand-assembled 44-byte
+   `DataView`. The canonical 16-bit PCM header `wave` emits is byte-identical
+   to what upstream builds.
+3. **`ingest.py` keeps the whole `#` header block** as a dict. Upstream reads
+   only `P_topo`, `SRC_NAME`, `UTC` and `DATE_OBS`; the rest is real
+   observation metadata worth reporting. The four upstream fields are still
+   parsed by the upstream regexes, not from that dict.
+4. **`sample_cadence_s`** (median sample spacing) is new. Nothing upstream
+   needs it; it exists so `tools/pulsar.py` can quantify §7.2 below.
+
+### 7. Preserved upstream behaviours (do not "fix")
+
+1. **The polarization labels are transposed.** Skynet cal files write
+   `... El(deg)  YY1  XX1  Cal  Sweeps`, but `uploadHandler`'s fixed header
+   list names index 5 `XX1` and index 6 `YY1`, then reads `row['YY1']` into
+   `source1`. Net effect: `source1` carries the file's *XX1* column and
+   `source2` its *YY1*. This decides which polarization reaches which stereo
+   channel; correcting it would swap the channels of every rendered file.
+   Pinned by `tests/test_pulsar_sonification.py::test_polarization_columns_are_read_in_upstream_order`.
+
+2. **The synthesis never reads the time axis.** Upstream's first parameter is
+   `_xValues` and goes unused — samples are played at a uniform rate in
+   *index*, not in time. So dropped samples are compressed away rather than
+   played as silence, and audio time runs slow by the ratio of the mean sample
+   spacing to the instrument cadence. On the B0329+54 fixture, which has 1.44 s
+   of gaps across 56 s, that is **2.5%**; `floor()` on `samplesPerPoint` adds
+   a further 0.7%. Measured on the rendered WAV: the 0.71452 s pulse arrives
+   every 0.7376 s, against 0.7379 s predicted.
+
+   Consequence for callers: **a period measured off the audio is not the
+   pulsar's period.** `tools/pulsar.py` reports this as `playback_stretch` and
+   warns `playback_not_real_time` when it exceeds 1%.
+
+3. **The leading noise-diode block is dropped by the last-column filter**, not
+   by reading the `Cal` flag — `lastValue !== 0`. On the fixtures that removes
+   exactly 124 of 13,178 rows, the 0.1 s-cadence calibration block ahead of the
+   4.2 ms science data.
+
+4. **Burst mode always wins.** The `frequency < 4000` guard carries the
+   upstream comment "Set to 4000 to deprecate burst mode" — the threshold was
+   raised until waveform mode became unreachable (it needs a pass shorter than
+   0.25 ms). Both branches are carried; only burst mode runs.
+
+5. **`Math.floor`, not rounding, in the PCM conversion.** Truncating toward
+   negative infinity biases every sample down by up to one LSB, and makes the
+   int16 bounds asymmetric: +0.95 lands on 31128, -0.95 on -31129.
+
+6. **The two upstream paths disagree**, and both are carried as found:
+   `sonification()` sizes one interpolation factor off channel 1 and applies it
+   to both, while `sonificationBrowser()` sizes one per channel (equal whenever
+   the channels are the same length, which is always true for a cal file);
+   `sonificationBrowser()` applies an extra `gain = 0.7` so playback is quieter
+   than the saved WAV; and waveform mode clamps its index in one and wraps it
+   with `%` in the other.
+
+### 8. Verification performed
+
+- `npx tsc -p tsconfig.json --noEmit` — clean, with the new file in the
+  include set (confirmed via `--listFiles`).
+- `tests/test_pulsar_sonification.py` — 47 tests, all local and deterministic.
+  Arithmetic identity with the TypeScript is checked where the TypeScript is
+  short enough to work out by hand (`interpolateLinear` weights and length,
+  `median`'s even/odd rule, the `Math.floor` asymmetry); each preserved quirk
+  in §7 is pinned with its reason.
+- **The output is a pulsar, not just a file.** Folding the ingested B0329+54
+  scan at its curated literature period (0.7145197 s, from
+  `test_data/pulsar/Curated pulsars.docx` — the scans carry no period in-file)
+  gives a **316 sigma** pulse confined to a few percent of the period. Folding the *rendered WAV's*
+  amplitude envelope at that period times the reported `playback_stretch`
+  recovers the pulse train from the audio itself. B1133+16 folds at 20 sigma;
+  the remaining three scans are marginal (3.7-7.6 sigma) in a single 60 s
+  pass, which is a property of those sources and that dish, not of this code.
+- Not verified: byte-for-byte equality against a WAV produced by the upstream
+  TypeScript. `Math.random()` makes upstream's output irreproducible, so no
+  reference render exists to compare against; the seeded carrier is what makes
+  the Python side checkable at all.
+
+### 9. Remaining gaps
+
+Both entry points are extracted and both are ported; the pipeline in
+`docs/pulsar-tool-pipeline.md` is complete end to end. What is still missing is
+narrower:
+
+- **`sonificationBrowser` is not ported.** It exists to drive an
+  `AudioContext`, which a file-writing tool has no use for. It remains
+  extracted in TypeScript, including its three documented divergences from the
+  saved-WAV path (§7.6).
+- **No period uncertainty.** `compute_pulsar_periodogram` reports a grid peak,
+  not a fitted period with an error bar. Upstream has none either. Refine by
+  re-running with narrow bounds and more steps.
+- **No barycentric correction**, so periods are topocentric and differ from an
+  ATNF `P0` in the fourth decimal. Upstream has none either.
+
+Note the time-axis caveat in §7.2 is specific to the light-curve rendering. A
+binned phase profile is uniform in phase by construction, so the folded
+rendering does not inherit the gap-compression term — but it is still subject
+to the `samplesPerPoint` floor, so its `playback_stretch` is near 1.0 (~0.4%
+on the B0329+54 fixture) rather than exactly 1.0.
+
+---
 
 ## Periodogram
 
