@@ -18,6 +18,16 @@ from tools.ads import (
 )
 from tools.atnf import search_atnf
 from tools.casda import search_casda
+from tools.hr_diagram import (
+    crossmatch_gaia,
+    crossmatch_gaia_by_position,
+    extract_photometry_from_fits,
+    fit_and_compare_hr_diagram,
+    get_literature_cluster_params,
+    run_full_hr_pipeline,
+    run_full_hr_pipeline_from_catalog,
+    select_cluster_members,
+)
 from tools.mast import search_mast
 from tools.mpc import search_mpc
 from tools.ned import search_ned
@@ -396,6 +406,179 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "extract_photometry_from_fits",
+        "description": (
+            "Detect sources in a plate-solved FITS frame and measure their instrumental "
+            "photometry (position, magnitude). The frame must already have a WCS in its "
+            "header. Returns a summary + an artifact CSV path for the next step. This is "
+            "the HR-diagram pipeline's own extraction step (Kron-like auto apertures, no "
+            "zero-point calibration -- the frame's own magnitude is discarded once Gaia's "
+            "is fetched). For a scientifically calibrated photometry report of a frame on "
+            "its own (not toward an HR diagram), use run_photometry_on_target instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the FITS file."},
+                "threshold": {"type": "number", "description": "Detection threshold in background sigma (default 2.5)."},
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "crossmatch_gaia",
+        "description": (
+            "Match detected sources (from extract_photometry_from_fits) to Gaia DR3 by sky "
+            "position, attaching Gaia's G/BP/RP magnitudes, parallax and proper motion -- "
+            "this is what supplies the colour for the HR diagram, since a single FITS frame "
+            "is only one filter. Requires a FITS frame to have been detected first -- if the "
+            "user has no FITS file, use crossmatch_gaia_by_position instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "CSV artifact path from extract_photometry_from_fits."},
+                "radius_arcsec": {"type": "number", "description": "Match radius in arcsec (default 2.0). Widen if n_matched comes back 0 or low."},
+                "mag_limit": {"type": "number", "description": "Only consider Gaia sources brighter than this G magnitude (default 20)."},
+            },
+            "required": ["csv_path"],
+        },
+    },
+    {
+        "name": "crossmatch_gaia_by_position",
+        "description": (
+            "Fetch Gaia DR3 photometry directly around a named cluster's own resolved "
+            "position -- no FITS frame needed. Use this (instead of "
+            "extract_photometry_from_fits + crossmatch_gaia) whenever the user asks about "
+            "a cluster's HR diagram without supplying their own FITS file: Gaia's own "
+            "G/BP/RP photometry stands in for a frame's instrumental photometry, so there "
+            "is nothing to detect first. Returns the same column shape crossmatch_gaia "
+            "does, so its artifact feeds directly into select_cluster_members and "
+            "fit_and_compare_hr_diagram."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168' or 'M35'."},
+                "radius_arcmin": {"type": "number", "description": "Cone-search radius around the cluster (default 20.0)."},
+                "mag_limit": {"type": "number", "description": "Only consider Gaia sources brighter than this G magnitude (default 17.0)."},
+            },
+            "required": ["cluster_name"],
+        },
+    },
+    {
+        "name": "get_literature_cluster_params",
+        "description": (
+            "Look up a named open cluster's published age, distance and E(B-V) "
+            "(Cantat-Gaudin & Anders 2020, Gaia-DR2-based, via VizieR). Resolves common "
+            "aliases (e.g. 'M35' -> NGC 2168) through VizieR's own name resolver "
+            "automatically, the same way target= does for search_vizier."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168' or 'M35'."}},
+            "required": ["cluster_name"],
+        },
+    },
+    {
+        "name": "select_cluster_members",
+        "description": (
+            "Remove field-star contamination from Gaia-matched sources by cutting on "
+            "parallax and proper motion relative to the cluster's published values. "
+            "A simplified stand-in for full elliptical field-star removal -- widen "
+            "plx_sigma / pm_tol_mas_yr if too few (or too many) stars survive."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "CSV artifact path from crossmatch_gaia (or crossmatch_gaia_by_position, or a run_photometry_on_target source table)."},
+                "cluster_name": {"type": "string", "description": "Cluster name, for its literature parallax/PM."},
+                "plx_sigma": {"type": "number", "description": "Parallax cut width in units of each star's own parallax error (default 3.0)."},
+                "pm_tol_mas_yr": {"type": "number", "description": "Proper-motion cut radius in mas/yr around the cluster's mean PM (default 1.0)."},
+            },
+            "required": ["csv_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "fit_and_compare_hr_diagram",
+        "description": (
+            "Fetch a PARSEC isochrone near the cluster's published age, fit distance and "
+            "E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with "
+            "the fitted isochrone overlaid. Returns the fitted values, the literature "
+            "values, and their percent/absolute differences, plus the saved PNG artifact."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "members_csv_path": {"type": "string", "description": "CSV artifact path from select_cluster_members."},
+                "cluster_name": {"type": "string", "description": "Cluster name, for its literature comparison values."},
+                "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default; the literature source doesn't publish per-cluster metallicity)."},
+                "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.1)."},
+                "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.3)."},
+            },
+            "required": ["members_csv_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "run_full_hr_pipeline",
+        "description": (
+            "Run the entire HR-diagram pipeline in one call FROM AN EXISTING FITS FRAME: "
+            "extract photometry from it, cross-match to Gaia, look up literature cluster "
+            "parameters, remove field stars, fit an isochrone, and plot the HR diagram "
+            "against the literature values. Requires the user to have already supplied a "
+            "plate-solved FITS file -- if they have not, and just asked for a cluster's HR "
+            "diagram by name, use run_full_hr_pipeline_from_catalog instead; do not ask the "
+            "user for a FITS file when a catalog-only answer already covers the request. "
+            "Fall back to the individual tools only if this needs tuning or diagnosing. If "
+            "the user also wants citations or a literature review for the cluster, pair "
+            "this with build_literature_review rather than reciting the Cantat-Gaudin "
+            "numbers as if they were the whole literature."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the plate-solved FITS file."},
+                "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168'."},
+                "gaia_match_radius_arcsec": {"type": "number", "description": "Gaia cross-match radius in arcsec (default 2.0)."},
+                "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 20.0)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width (default 3.0)."},
+                "pm_tol_mas_yr": {"type": "number", "description": "Membership proper-motion cut radius, mas/yr (default 1.0)."},
+            },
+            "required": ["fits_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "run_full_hr_pipeline_from_catalog",
+        "description": (
+            "Build an HR diagram for a named cluster in one call, straight from Gaia DR3 "
+            "and literature catalogs -- NO FITS FRAME NEEDED. Looks up the cluster's own "
+            "published position/age/distance/E(B-V) (Cantat-Gaudin & Anders 2020, open "
+            "clusters only), pulls Gaia DR3 sources around it, removes field stars, and "
+            "fits/plots the isochrone. Use this for a plain 'give me information about X "
+            "and produce an HR diagram' or 'show me the HR diagram for X' request -- this "
+            "is the common case and should be tried before assuming a FITS file is "
+            "required. Only fall back to run_full_hr_pipeline if the user has explicitly "
+            "supplied their own FITS frame and wants that frame's own photometry used. If "
+            "the cluster does not resolve (e.g. it is a globular rather than open cluster, "
+            "which this literature source does not cover), this returns not_found rather "
+            "than silently substituting a different cluster."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 6124' or 'M35'."},
+                "radius_arcmin": {"type": "number", "description": "Gaia cone-search radius around the cluster (default 20.0)."},
+                "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 17.0)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width (default 3.0)."},
+                "pm_tol_mas_yr": {"type": "number", "description": "Membership proper-motion cut radius, mas/yr (default 1.5)."},
+                "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default)."},
+                "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.2)."},
+                "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.4)."},
+            },
+            "required": ["cluster_name"],
+        },
+    },
+    {
         "name": "search_mpc",
         "description": "Return the full reported observation history for one minor "
         "planet from the Minor Planet Center. Confirmed live: this API does zero "
@@ -757,7 +940,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "Always writes a photometry plot (and a zero-point fit/residuals plot too "
         "when `use_field_cal` succeeded) to local artifact files -- report their "
         "paths, do not describe their contents as if you had visually inspected "
-        "them.",
+        "them. Set `write_source_table` true to also get a CSV of every detected "
+        "source's sky position -- if the target is a star cluster and the user "
+        "wants an HR diagram, that CSV feeds directly into "
+        "tools.hr_diagram.crossmatch_gaia/select_cluster_members with no renaming; "
+        "for that goal, though, prefer run_full_hr_pipeline(_from_catalog) directly "
+        "since it also plots the isochrone fit, which this tool does not.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -785,6 +973,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "and field calibration; magnitudes from this path are "
                     "unverified, never describe them as calibrated.",
                 },
+                "write_source_table": {
+                    "type": "boolean",
+                    "description": "Defaults to false. Set true to additionally "
+                    "write a CSV of every detected source's x/y, ra_deg/dec_deg, "
+                    "mag, and flux -- e.g. to feed into the HR-diagram pipeline.",
+                },
             },
             "required": ["target"],
         },
@@ -806,6 +1000,14 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "search_vizier": search_vizier,
     "search_atnf": search_atnf,
     "search_mast": search_mast,
+    "extract_photometry_from_fits": extract_photometry_from_fits,
+    "crossmatch_gaia": crossmatch_gaia,
+    "crossmatch_gaia_by_position": crossmatch_gaia_by_position,
+    "get_literature_cluster_params": get_literature_cluster_params,
+    "select_cluster_members": select_cluster_members,
+    "fit_and_compare_hr_diagram": fit_and_compare_hr_diagram,
+    "run_full_hr_pipeline": run_full_hr_pipeline,
+    "run_full_hr_pipeline_from_catalog": run_full_hr_pipeline_from_catalog,
     "search_mpc": search_mpc,
     "search_casda": search_casda,
     "list_photometry_targets": list_photometry_targets,

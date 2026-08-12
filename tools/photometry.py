@@ -13,11 +13,29 @@ There is no live image archive behind photometry -- see
 ``list_photometry_targets``. That fixed, local library is the reason a
 caller (human or Claude, via ``tools.runner``) should always check what's
 bundled before claiming to have analyzed something that isn't.
+
+Not the same job as ``tools.hr_diagram``, despite both running source
+extraction over a FITS frame. This module reports one frame's own calibrated
+photometry (a verified zero point, a photometry plot) and stops there --
+``algorithms.hrdiagram_py.observations`` (behind
+``tools.hr_diagram.extract_photometry_from_fits``) runs a cheaper,
+uncalibrated extraction whose only job is handing sky positions to a Gaia
+cross-match, since Gaia's own magnitudes -- not the frame's -- are what an HR
+diagram is fit against. The two intentionally use different
+``algorithms.photometry`` settings (fixed aperture + zero point here, "auto"
+Kron-like apertures with no zero point there) for that reason; this is not
+duplicated logic to consolidate. What IS shared: ``run_photometry_on_target``'s
+``write_source_table=True`` writes the same ``ra_deg``/``dec_deg`` columns
+``extract_photometry_from_fits`` does, so its CSV can be handed straight to
+``tools.hr_diagram.crossmatch_gaia`` if a bundled target turns out to be a
+cluster worth an HR diagram.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pandas as pd
 
 from tools.artifacts import describe_file
 from tools.claude_photometry_haiku_tool import (
@@ -60,12 +78,33 @@ def list_photometry_targets() -> PhotometryTargetLibrary:
 def _source_summary(result: object) -> SourceSummary | None:
     if result is None:
         return None
+    ra_hours = getattr(result, "ra_hours", None)
     return SourceSummary(
         x=getattr(result, "x", None),
         y=getattr(result, "y", None),
+        ra_deg=(ra_hours * 15.0) if ra_hours is not None else None,
+        dec_deg=getattr(result, "dec_degs", None),
         mag=getattr(result, "mag", None),
         flux=getattr(result, "flux", None),
     )
+
+
+def _write_source_table(results: list[object], path: Path) -> None:
+    # Same column names algorithms.hrdiagram_py.observations.extract_photometry_from_fits
+    # uses (ra_deg/dec_deg, not ra_hours/dec_degs) -- so this CSV drops straight into
+    # tools.hr_diagram.crossmatch_gaia / select_cluster_members without renaming.
+    rows = [
+        {
+            "x": getattr(r, "x", None),
+            "y": getattr(r, "y", None),
+            "ra_deg": (r.ra_hours * 15.0) if getattr(r, "ra_hours", None) is not None else None,
+            "dec_deg": getattr(r, "dec_degs", None),
+            "mag": getattr(r, "mag", None),
+            "flux": getattr(r, "flux", None),
+        }
+        for r in results
+    ]
+    pd.DataFrame(rows).dropna(subset=["ra_deg", "dec_deg"]).to_csv(path, index=False)
 
 
 def run_photometry_on_target(
@@ -75,6 +114,7 @@ def run_photometry_on_target(
     catalogs: list[str] | None = None,
     zero_point_mag: float | None = None,
     output_dir: str | Path | None = None,
+    write_source_table: bool = False,
 ) -> PhotometryRunResult:
     """Run source extraction, and optionally a verified zero-point solve, on
     a bundled FITS target.
@@ -89,6 +129,16 @@ def run_photometry_on_target(
     that populates ``zero_point`` and can take 30-90 seconds. Pass ``False``
     for a fast, offline, instrumental-magnitude-only run when a verified
     zero point isn't needed.
+
+    ``write_source_table`` (default ``False``, opt-in so the artifact count
+    stays stable for existing callers) additionally writes every detected
+    source's position and photometry to a CSV artifact, columns ``x, y,
+    ra_deg, dec_deg, mag, flux`` -- the same ``ra_deg``/``dec_deg`` naming
+    ``algorithms.hrdiagram_py.observations.extract_photometry_from_fits``
+    uses, so the artifact can be handed straight to
+    ``tools.hr_diagram.crossmatch_gaia`` or ``select_cluster_members`` without
+    renaming, if the frame this ran on happens to be a star cluster and the
+    caller wants an HR diagram next.
 
     Always writes the photometry plot, and the zero-point plot too when the
     zero point was independently verified, to ``output_dir`` (default: the
@@ -140,6 +190,11 @@ def run_photometry_on_target(
         zp_plot_path = artifact_dir / f"{fits_path.stem}_photometry_zeropoint.png"
         if plot_zero_point_solution(zero_point, zp_plot_path) is not None:
             artifacts.append(ArtifactRef(path=str(zp_plot_path), format="png"))
+
+    if write_source_table and results:
+        table_path = artifact_dir / f"{fits_path.stem}_photometry_sources.csv"
+        _write_source_table(results, table_path)
+        artifacts.append(ArtifactRef(path=str(table_path), format="csv", row_count=len(results)))
 
     valid_results = [r for r in results if r.mag is not None]
     brightest = min(valid_results, key=lambda r: r.mag) if valid_results else None
