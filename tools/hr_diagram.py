@@ -201,8 +201,14 @@ def fit_hr_diagram(
         return HrDiagramFitResult(cluster=cluster_name, isochrone_source=isochrone_source, errors=literature.errors)
 
     out_dir = artifact_directory(directory)
-    csv_path = out_dir / f"_members_{_slug(cluster_name)}.csv"
-    out_png_path = out_dir / f"_hr_{_slug(cluster_name)}.png"
+    # Filter combo is part of the filename, not just the cluster name -- two
+    # fits of the same cluster in different bands (e.g. B-R vs V and V-I vs
+    # V) are different results worth keeping side by side, not one silently
+    # overwriting the other.
+    filters_tag = _slug(f"{blue}-{red}_{lum}")
+    stem = f"{_slug(cluster_name)}_{filters_tag}"
+    csv_path = out_dir / f"_members_{stem}.csv"
+    out_png_path = out_dir / f"_hr_{stem}.png"
 
     try:
         report = _fit_and_compare(
