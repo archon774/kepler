@@ -29,7 +29,12 @@ def env_path(name: str, default: str | Path | None = None) -> Path | None:
     return Path(value).expanduser()
 
 
-ARTIFACT_DIR = env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")
+# Resolved to an absolute path at import. Artifact paths are handed back to
+# callers who may write files, change directory, or pass the path to another
+# process, and a bare "artifacts/..." silently means something different in
+# each of those. This also keeps ArtifactRef.path consistent with
+# FileMetadata.path, which describe_file() has always resolved.
+ARTIFACT_DIR = (env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")).resolve()
 FITS_DOWNLOAD_DIR = env_path(FITS_DOWNLOAD_DIR_ENV, "fits_downloads") or Path(
     "fits_downloads"
 )
