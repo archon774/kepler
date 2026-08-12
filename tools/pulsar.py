@@ -31,12 +31,13 @@ from typing import Any, Optional
 import numpy as np
 from astropy.table import Table
 
-from algorithms.pulsar import folding, ingest, periodogram, sonification
+from algorithms.pulsar import charts, folding, ingest, periodogram, sonification
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
 from tools.models import (
     ArtifactRef,
     FileMetadata,
+    PulsarPlot,
     PulsarScan,
     PulsarScanList,
     PulsarFoldedProfile,
@@ -54,6 +55,7 @@ __all__ = [
     "compute_pulsar_periodogram",
     "fold_pulsar_lightcurve",
     "sonify_pulsar",
+    "plot_pulsar",
 ]
 
 #: Audio longer than this is refused rather than silently truncated: a minute
@@ -485,6 +487,15 @@ def compute_pulsar_periodogram(
             "power": result.power,
         }
     )
+    # Carried in the artifact so plot_pulsar can draw the peak marker and the
+    # confidence lines without recomputing the spectrum.
+    table.meta.update({k: v for k, v in lc.meta.items() if v is not None})
+    table.meta["freq_mode"] = bool(freq_mode)
+    table.meta["steps"] = int(result.steps)
+    if result.peak_x is not None:
+        table.meta["peak_x"] = float(result.peak_x)
+        table.meta["peak_power"] = float(result.peak_power)
+    table.meta["confidence"] = {k: float(v) for k, v in result.confidence.items()}
     artifact = artifacts.write_table(
         table, _label(lc, file, output_name) + "_periodogram", subdir=subdir, fmt="ecsv"
     )
@@ -1069,3 +1080,258 @@ def resolve_pulsar_scan(
         )
     )
     return listing
+
+
+# ---------------------------------------------------------------------------
+# Plotting — the front-end charts Astromancer draws
+# ---------------------------------------------------------------------------
+
+#: Which chart each artifact kind uses, from ``algorithms.pulsar.charts``.
+_CHART_FOR_KIND = {
+    "lightcurve": charts.LIGHT_CURVE_CHART,
+    "periodogram": charts.PERIODOGRAM_CHART,
+    "folded": charts.FOLDED_CHART,
+}
+
+
+def _infer_plot_kind(table: Table, file: FileMetadata) -> str:
+    """Work out which chart a table wants from the columns it carries."""
+
+    columns = set(table.colnames)
+    if {"period_s", "power"} <= columns or {"frequency_hz", "power"} <= columns:
+        return "periodogram"
+    if "phase_s" in columns:
+        return "folded"
+    if "time_s" in columns:
+        return "lightcurve"
+    raise _LoadError(
+        "invalid_input",
+        f"Cannot tell what {Path(file.path).name} is: expected time_s, phase_s, "
+        f"or period_s/power columns, got {sorted(columns)}.",
+    )
+
+
+def plot_pulsar(
+    path: str | Path,
+    *,
+    kind: str = "auto",
+    title: Optional[str] = None,
+    x_label: Optional[str] = None,
+    y_label: Optional[str] = None,
+    show_hidden_series: bool = False,
+    back_scale: float = ingest.DEFAULT_BACK_SCALE,
+    subtract_background: bool = True,
+    dpi: int = 150,
+    figsize: tuple[float, float] = (10.0, 5.0),
+    output_name: Optional[str] = None,
+    subdir: Optional[str] = "pulsar",
+) -> PulsarPlot:
+    """Plot a pulsar artifact as a PNG, the way Astromancer draws it.
+
+    ``kind`` defaults to ``"auto"``, which reads the columns and picks the
+    chart: a light curve (``time_s``), a periodogram (``period_s``/``power``)
+    or a folded profile (``phase_s``). So any stage's artifact can be passed
+    straight in, and a raw scan is ingested first and drawn as a light curve.
+
+    Axis labels, series names, the logarithmic periodogram x axis, the
+    "Global Maxima" peak marker, the dashed false-alarm lines and the folded
+    plot's x extent are all carried from upstream rather than chosen here --
+    see ``algorithms/pulsar/charts.py``.
+
+    ``show_hidden_series`` draws the folded plot's Difference and Sum series,
+    which upstream adds with ``visible: false`` -- present in the legend but
+    off until the user clicks them.
+    """
+    file = _describe(path)
+    warnings: list[ToolWarning] = []
+
+    if kind not in ("auto", *_CHART_FOR_KIND):
+        return PulsarPlot(
+            file=file,
+            errors=[ToolError(
+                code="invalid_input",
+                message=f"kind must be 'auto', 'lightcurve', 'periodogram' or "
+                f"'folded', got {kind!r}.",
+            )],
+        )
+
+    try:
+        if not file.exists:
+            raise _LoadError("file_not_found", "File does not exist.")
+        if not file.is_file:
+            raise _LoadError("not_a_file", "Path is not a regular file.")
+
+        if (file.suffix or "").lower() == ".ecsv":
+            table = Table.read(file.path, format="ascii.ecsv")
+        else:
+            # A raw scan: ingest it so there is something to draw.
+            lc = _load(
+                file,
+                back_scale=back_scale,
+                subtract_background=subtract_background,
+                warnings=warnings,
+            )
+            columns = {"time_s": lc.time_s, "source1": lc.source1}
+            if lc.source2 is not None:
+                columns["source2"] = lc.source2
+            table = Table(columns)
+            table.meta.update({k: v for k, v in lc.meta.items() if v is not None})
+
+        resolved_kind = _infer_plot_kind(table, file) if kind == "auto" else kind
+    except _LoadError as exc:
+        return PulsarPlot(
+            file=file, errors=[ToolError(code=exc.code, message=exc.message)]
+        )
+
+    spec = _CHART_FOR_KIND[resolved_kind]
+    label = output_name or (
+        f"{table.meta.get('source_name') or Path(file.path).stem}_{resolved_kind}_plot"
+    )
+    output_path = artifacts.reserve_artifact_path(label, subdir=subdir, ext="png")
+
+    try:
+        drawn = _render_plot(
+            table,
+            resolved_kind,
+            spec,
+            output_path,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            show_hidden_series=show_hidden_series,
+            dpi=dpi,
+            figsize=figsize,
+            warnings=warnings,
+        )
+    except Exception as exc:  # noqa: BLE001 - reported, not raised
+        return PulsarPlot(
+            file=file, errors=[ToolError(code="plot_failed", message=str(exc))]
+        )
+
+    return PulsarPlot(
+        file=file,
+        artifact=ArtifactRef(path=str(output_path), format="png", row_count=len(table)),
+        kind=resolved_kind,
+        title=drawn["title"],
+        x_axis_label=drawn["x_label"],
+        y_axis_label=drawn["y_label"],
+        x_axis_type=spec.x_axis_type,
+        series=drawn["series"],
+        hidden_series=drawn["hidden"],
+        source_name=table.meta.get("source_name"),
+        period_s=table.meta.get("period_s"),
+        warnings=warnings,
+    )
+
+
+def _render_plot(
+    table: Table,
+    kind: str,
+    spec,
+    output_path: Path,
+    *,
+    title: Optional[str],
+    x_label: Optional[str],
+    y_label: Optional[str],
+    show_hidden_series: bool,
+    dpi: int,
+    figsize: tuple[float, float],
+    warnings: list[ToolWarning],
+) -> dict[str, Any]:
+    """Draw ``spec`` over ``table``. Matplotlib is imported here, not at module
+    import, so the rest of the pulsar tools stay importable without it."""
+
+    import matplotlib
+
+    matplotlib.use("Agg")  # no display in an agent or CI process
+    import matplotlib.pyplot as plt
+
+    figure, axes = plt.subplots(figsize=figsize)
+    plotted: list[str] = []
+    hidden: list[str] = []
+
+    if kind == "periodogram":
+        x_column = "frequency_hz" if "frequency_hz" in table.colnames else "period_s"
+        x = np.asarray(table[x_column], dtype=float)
+        power = np.asarray(table["power"], dtype=float)
+        series = spec.series[0]
+        axes.plot(x, power, lw=1.0, label=series.name)
+        plotted.append(series.name)
+
+        peak_x = table.meta.get("peak_x")
+        peak_power = table.meta.get("peak_power")
+        if peak_x is not None and peak_power is not None:
+            marker = charts.PERIODOGRAM_PEAK_SERIES
+            axes.scatter(
+                [peak_x], [peak_power], color=marker.color, zorder=marker.z_index or 10,
+                s=40, label=f"{marker.name} ({peak_x:.6g})",
+            )
+            plotted.append(marker.name)
+
+        confidence = table.meta.get("confidence") or {}
+        for line in charts.CONFIDENCE_LINES:
+            level = confidence.get(line.column)
+            if level is None:
+                continue
+            # ShortDash, carried from the Highcharts literal.
+            axes.axhline(level, color=line.color, ls=(0, (4, 2)), lw=1.0, label=line.name)
+            plotted.append(line.name)
+
+        if spec.x_axis_type == "logarithmic":
+            axes.set_xscale("log")
+    else:
+        x_column = "phase_s" if kind == "folded" else "time_s"
+        x = np.asarray(table[x_column], dtype=float)
+        single_source = "source2" not in table.colnames
+        for series in spec.series:
+            if series.column not in table.colnames:
+                continue
+            name = series.name
+            if kind == "folded" and single_source and series.column == "source1":
+                name = charts.FOLDED_SINGLE_SOURCE_NAME
+            if not series.visible and not show_hidden_series:
+                hidden.append(name)
+                continue
+            # lineWidth 0.1 is a Highcharts hairline; below ~0.4 matplotlib
+            # renders it nearly invisible at raster DPI, so the floor keeps the
+            # upstream intent (a thin trace) legible in a PNG.
+            width = max(series.line_width or 1.0, 0.6)
+            axes.plot(x, np.asarray(table[series.column], dtype=float),
+                      lw=width, label=name)
+            plotted.append(name)
+
+        if kind == "folded":
+            period = table.meta.get("period_s")
+            if period:
+                axes.set_xlim(
+                    0, charts.folded_x_axis_maximum(float(period), int(table.meta.get("display_period", 1)))
+                )
+            else:
+                warnings.append(
+                    ToolWarning(
+                        code="no_period_in_artifact",
+                        message="Folded artifact carries no period_s, so the x axis "
+                        "is auto-scaled rather than set to upstream's extent.",
+                    )
+                )
+
+    resolved_title = title or table.meta.get("source_name") or spec.title
+    resolved_x = x_label or spec.x_axis_label
+    resolved_y = y_label or spec.y_axis_label
+    axes.set_title(resolved_title)
+    axes.set_xlabel(resolved_x)
+    axes.set_ylabel(resolved_y)
+    if spec.legend and plotted:
+        axes.legend(loc="best", fontsize="small")
+    axes.grid(alpha=0.2)
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=dpi)
+    plt.close(figure)
+
+    return {
+        "title": resolved_title,
+        "x_label": resolved_x,
+        "y_label": resolved_y,
+        "series": plotted,
+        "hidden": hidden,
+    }

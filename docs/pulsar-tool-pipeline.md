@@ -171,6 +171,37 @@ pipeline has none.
 
 ---
 
+## 4b. Plotting
+
+`plot_pulsar` renders any stage's artifact as a PNG, choosing the chart from
+the columns it finds (`time_s` → light curve, `period_s`/`power` → periodogram,
+`phase_s` → folded). It sits beside the pipeline rather than in it: nothing
+downstream consumes a plot.
+
+| Chart | Axes | Series |
+| --- | --- | --- |
+| Light curve | Time (s) / Intensity, linear | Polarization XX, Polarization YY |
+| Periodogram | Period (s) / Intensity, **logarithmic** | the spectrum, "Global Maxima" peak marker, three dashed false-alarm lines |
+| Folded | Time (s) / Intensity, linear | Polarization XX, Polarization YY, and Difference + Sum **hidden by default** |
+
+All of that — labels, series names, the log axis, the hidden series, the
+folded x extent — is Astromancer's own chart configuration, extracted into
+`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts` and ported to
+`algorithms/pulsar/charts.py`. It is not styling chosen here. The
+`docs/extraction.md` entry that listed the Highcharts components as "left
+behind as UI" is superseded for the parts that decide *what* is drawn; the
+widget plumbing (boost thresholds, tooltips, export buttons) is still left
+behind.
+
+**The periodogram plot is the diagnostic worth reaching for.** §4 explains that
+four of five bundled scans return a confident artifact rather than the pulsar;
+on the plot that is immediate — the peak sits at 0.0167 s with a forest of
+narrow interference spikes, and the false-alarm lines lie far below everything.
+For B0329+54 the same plot shows the fundamental at 0.7148 s marked as Global
+Maxima with its harmonic comb at P/2, P/3, P/4… receding to the left.
+
+---
+
 ## 5. Where the output goes
 
 Every stage writes into `<artifact dir>/pulsar/`, where the artifact directory
@@ -187,6 +218,7 @@ artifacts/pulsar/
   psr_b0329_54_folded.ecsv                # stage 3
   psr_b0329_54_sonification_folded.wav    # stage 4, with a period
   psr_b0329_54_sonification_lightcurve.wav# stage 4, without one
+  psr_b0329_54_folded_plot.png            # plot_pulsar
 ```
 
 A rendered sample is committed at

@@ -66,6 +66,10 @@ the stages in order -- each one produces what the next needs:
      folds first and loops the profile at the true rate, which is what actually \
      sounds like a pulsar. Without it you get the raw scan played once.
 
+plot_pulsar renders any of these artifacts as a PNG. Reach for it when a \
+period looks wrong: the periodogram plot shows interference spikes and harmonic \
+combs at a glance, where the numbers alone do not.
+
 For a catalogued source, search_atnf gives a period more accurate than a short \
 scan can measure -- prefer it over step 2's result when the two disagree, and \
 use it when step 2 warns that its peak does not fold.

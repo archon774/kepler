@@ -1,11 +1,60 @@
 # `docs/examples/` — committed sample output
 
-One file, kept as a reference for what the pulsar pipeline actually produces.
-**Generated output is normally not committed** (`.gitignore` covers
-`artifacts/`); this is a deliberate one-off so the result can be listened to
-without running the pipeline.
+What the pulsar pipeline produces, run end to end on PSR B0329+54. **Generated
+output is normally not committed** (`.gitignore` covers `artifacts/`); these
+are deliberate exceptions so the results can be seen and heard without running
+anything.
 
-## `psr_b0329_54_sonification.wav`
+| File | Stage | Size |
+| --- | --- | --- |
+| `psr_b0329_54_lightcurve.png` | 1 — light curve | 87 KB |
+| `psr_b0329_54_periodogram.png` | 2 — periodogram | 78 KB |
+| `psr_b0329_54_folded.png` | 3 — folded profile | 60 KB |
+| `psr_b0329_54_sonification.wav` | 4 — audio | 10.1 MB |
+
+## The three plots
+
+Rendered by `tools.pulsar.plot_pulsar`, whose labels, series names and axis
+semantics come from Astromancer's own chart configuration — see
+`algorithms/pulsar/charts.py`.
+
+**`psr_b0329_54_lightcurve.png`** — flux against time, both polarizations, after
+running-median background subtraction. B0329+54 is bright enough that the
+**individual pulses are visible in the raw scan**, roughly 78 of them across
+56 s at 0.71 s spacing; no folding needed. Most pulsars do not look like this,
+which is what makes this one "Easy" in `Curated pulsars.docx`.
+
+**`psr_b0329_54_periodogram.png`** — spectral power against period on a
+logarithmic axis, with the peak marked "Global Maxima" and the three dashed
+false-alarm lines. Two things are legible here that a number cannot convey:
+the **harmonic comb** at P/2, P/3, P/4… receding to the left, and how far
+*below* every real feature the confidence lines sit — which is why
+`peak_confidence` is not a validity check and `peak_fold_snr` is. See
+`docs/pulsar-tool-pipeline.md` §4.
+
+**`psr_b0329_54_folded.png`** — the pulse profile, 100 phase bins at the
+measured period, 293σ. The x axis runs `[0, 0.7145]`, set by upstream's
+`updateXAxisScale` ladder rather than by matplotlib. The narrow pulse occupying
+a few percent of the rotation is the shape a pulsar is supposed to have.
+
+Regenerate all three:
+
+```python
+from tools.pulsar import (
+    load_pulsar_lightcurve, compute_pulsar_periodogram,
+    fold_pulsar_lightcurve, plot_pulsar,
+)
+
+lc   = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+pg   = compute_pulsar_periodogram(lc.artifact.path)
+fold = fold_pulsar_lightcurve(lc.artifact.path, pg.peak_period_s)
+for stage in (lc, pg, fold):
+    plot_pulsar(stage.artifact.path, title="PSR B0329+54")
+```
+
+## The audio
+
+### `psr_b0329_54_sonification.wav`
 
 PSR B0329+54 rendered as audio: 60 s, stereo, 16-bit PCM, 44.1 kHz, 10.1 MB.
 Each polarization is one channel, and the pulse arrives as a burst of static
@@ -59,10 +108,10 @@ wav = sonify_pulsar(lc.artifact.path, period_s=pg.peak_period_s)
 The render is deterministic: the noise carrier is seeded (`seed=0` by default),
 so a repeat run is byte-identical.
 
-## Please don't add more
+## Adding more
 
-A 10 MB binary is permanent in git history even if deleted later, and audio is
-incompressible. `artifacts/` stays ignored for a reason — see
-`test_data/README.md`, "Repository size". If a second example ever becomes
-necessary, prefer a few seconds of audio over a full 60 s render
-(`audio_seconds=5`).
+The PNGs are cheap (~75 KB each) and compress; adding a plot for another source
+is reasonable. **The audio is not** — 10 MB, incompressible, and permanent in
+git history even if deleted later. Keep it to the one file; if a second render
+ever becomes necessary, prefer a few seconds over a full 60 s pass
+(`audio_seconds=5`). See `test_data/README.md`, "Repository size".
