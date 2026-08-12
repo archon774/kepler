@@ -161,10 +161,18 @@ class PhotometryTargetLibrary(KeplerToolModel):
 
 
 class SourceSummary(KeplerToolModel):
-    """One detected source's position, magnitude, and flux."""
+    """One detected source's position, magnitude, and flux.
+
+    ``ra_deg``/``dec_deg`` are populated whenever the frame carries a celestial
+    WCS -- the same sky position the HR-diagram pipeline's own
+    ``extract_photometry_from_fits`` reports, so a source found here can be
+    looked up against Gaia or any other catalog the same way.
+    """
 
     x: float | None = None
     y: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
     mag: float | None = None
     flux: float | None = None
 

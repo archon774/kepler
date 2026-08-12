@@ -1,11 +1,24 @@
 """
-hrfit.py - an Astromancer-faithful toolkit for turning a photometry CSV into a
-well-fitted colour-magnitude / HR diagram of a star cluster.
+algorithms.hrdiagram_py.hrfit - an Astromancer-faithful toolkit for turning a
+photometry CSV into a well-fitted colour-magnitude / HR diagram of a star
+cluster.
 
-The CM<->HR transform, the extinction model, and the sign conventions here are
-lifted from the Astromancer "cluster" tool (isochrone-plot.util.ts::computePlotDelta
-and cluster.util.ts::getExtinction). Differences from Astromancer are noted in
-comments so you can trace parity.
+This is a deliberate parity *port*, not the byte-preserving extraction
+``algorithms/hrdiagram`` (TypeScript) is -- the module lives in a separate
+``hrdiagram_py`` package specifically so it does not collide with that
+extraction's ownership of ``algorithms/hrdiagram``. The CM<->HR transform, the
+extinction model, and the sign conventions here are lifted from the
+Astromancer "cluster" tool (isochrone-plot.util.ts::computePlotDelta and
+cluster.util.ts::getExtinction). Differences from Astromancer are noted in
+comments so you can trace parity; two are permanent, deliberate deviations
+rather than upstream defects reproduced for parity:
+
+    - ``get_extinction`` uses ``rv`` throughout instead of Astromancer's
+      hard-coded 3.1 leading factor (its extraction defect #1).
+    - ``isochrone_cmd`` does not reproduce Astromancer's off-by-one isochrone
+      splice index (its extraction defect #3).
+
+See ``docs/extraction.md``, "HR Diagram (Python)" for the full record.
 
 Core transform (matches computePlotDelta exactly)
 -------------------------------------------------
@@ -175,7 +188,7 @@ def select_isochrone(iso, logage, mh=None, age_col="logAge", mh_col="MH"):
     return sub[sub[age_col] == ages[np.argmin(np.abs(ages - logage))]].reset_index(drop=True)
 
 
-def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None):
+def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None, label_col="label", max_label=7):
     """
     Colour and absolute magnitude arrays for a selected isochrone, kept in the
     file's NATIVE order (ascending initial mass) so the plotted polyline traces
@@ -184,7 +197,19 @@ def isochrone_cmd(iso, blue_col, red_col, lum_col, iskip=None):
     (My earlier version sorted by magnitude, which zig-zags a real track at the
     turnoff. Astromancer keeps native order and breaks the line at `iSkip`; pass
     that index here to insert a NaN gap for plotting.)
+
+    A raw PARSEC/COLIBRI table (unlike whatever pre-cleaned track Astromancer's
+    backend hands over) carries the evolutionary-phase `label` column, and once
+    a track enters thermally-pulsing AGB (label 8+: PARSEC's own dust/mass-loss
+    modelling breaks down there) `Mini` stops advancing while Gaia BP/RP swing
+    by tens of magnitudes pulse to pulse. Plotted or fit against verbatim, that
+    turns into a scribbled "wedge" dominating the CMD and, worse, gives
+    `_weighted_cost` a field of spurious near-main-sequence attractor points
+    that bias the distance/E(B-V) solve. Rows with `label > max_label` are
+    dropped before anything else runs; pass `max_label=None` to disable.
     """
+    if max_label is not None and label_col in iso.columns:
+        iso = iso[iso[label_col] <= max_label].reset_index(drop=True)
     colour = iso[blue_col].values - iso[red_col].values
     mag = iso[lum_col].values.astype(float)
     if iskip is not None and 0 < iskip < len(mag):
@@ -267,4 +292,3 @@ def plot_cmd(colour, mag, iso_colour=None, iso_mag=None,
         ax.set_xlim(np.nanmin(colour) - px, np.nanmax(colour) + px)
         ax.set_ylim(np.nanmax(mag) + py, np.nanmin(mag) - py)
     return ax
-
