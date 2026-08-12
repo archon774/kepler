@@ -18,6 +18,16 @@ from tools.ads import (
 )
 from tools.atnf import search_atnf
 from tools.casda import search_casda
+from tools.hr_diagram import (
+    crossmatch_gaia,
+    crossmatch_gaia_by_position,
+    extract_photometry_from_fits,
+    fit_and_compare_hr_diagram,
+    get_literature_cluster_params,
+    run_full_hr_pipeline,
+    run_full_hr_pipeline_from_catalog,
+    select_cluster_members,
+)
 from tools.mast import search_mast
 from tools.mpc import search_mpc
 from tools.ned import search_ned
@@ -29,6 +39,12 @@ from tools.pulsar import (
     fold_pulsar_lightcurve,
     load_pulsar_lightcurve,
     sonify_pulsar,
+)
+from tools.photometry import list_photometry_targets, run_photometry_on_target
+from tools.radio_sources import (
+    analyze_source_spectrum,
+    identify_radio_sources,
+    plot_field_sed,
 )
 from tools.resolve import resolve_target
 from tools.simbad import (
@@ -395,6 +411,185 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "extract_photometry_from_fits",
+        "description": (
+            "Detect sources in a plate-solved FITS frame and measure their instrumental "
+            "photometry (position, magnitude). The frame must already have a WCS in its "
+            "header. Returns a summary + an artifact CSV path for the next step. This is "
+            "the HR-diagram pipeline's own extraction step (Kron-like auto apertures, no "
+            "zero-point calibration -- the frame's own magnitude is discarded once Gaia's "
+            "is fetched). For a scientifically calibrated photometry report of a frame on "
+            "its own (not toward an HR diagram), use run_photometry_on_target instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the FITS file."},
+                "threshold": {"type": "number", "description": "Detection threshold in background sigma (default 2.5)."},
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "crossmatch_gaia",
+        "description": (
+            "Match detected sources (from extract_photometry_from_fits) to Gaia DR3 by sky "
+            "position, attaching Gaia's G/BP/RP magnitudes, parallax and proper motion -- "
+            "this is what supplies the colour for the HR diagram, since a single FITS frame "
+            "is only one filter. Requires a FITS frame to have been detected first -- if the "
+            "user has no FITS file, use crossmatch_gaia_by_position instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "CSV artifact path from extract_photometry_from_fits."},
+                "radius_arcsec": {"type": "number", "description": "Match radius in arcsec (default 2.0). Widen if n_matched comes back 0 or low."},
+                "mag_limit": {"type": "number", "description": "Only consider Gaia sources brighter than this G magnitude (default 20)."},
+            },
+            "required": ["csv_path"],
+        },
+    },
+    {
+        "name": "crossmatch_gaia_by_position",
+        "description": (
+            "Fetch Gaia DR3 photometry directly around a named cluster's own resolved "
+            "position -- no FITS frame needed. Use this (instead of "
+            "extract_photometry_from_fits + crossmatch_gaia) whenever the user asks about "
+            "a cluster's HR diagram without supplying their own FITS file: Gaia's own "
+            "G/BP/RP photometry stands in for a frame's instrumental photometry, so there "
+            "is nothing to detect first. Returns the same column shape crossmatch_gaia "
+            "does, so its artifact feeds directly into select_cluster_members and "
+            "fit_and_compare_hr_diagram."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168' or 'M35'."},
+                "radius_arcmin": {"type": "number", "description": "Cone-search radius around the cluster (default 20.0)."},
+                "mag_limit": {"type": "number", "description": "Only consider Gaia sources brighter than this G magnitude (default 17.0)."},
+            },
+            "required": ["cluster_name"],
+        },
+    },
+    {
+        "name": "get_literature_cluster_params",
+        "description": (
+            "Look up a named open cluster's published age, distance and E(B-V) "
+            "(Cantat-Gaudin & Anders 2020, Gaia-DR2-based, via VizieR). Resolves common "
+            "aliases (e.g. 'M35' -> NGC 2168) through VizieR's own name resolver "
+            "automatically, the same way target= does for search_vizier."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168' or 'M35'."}},
+            "required": ["cluster_name"],
+        },
+    },
+    {
+        "name": "select_cluster_members",
+        "description": (
+            "Remove field-star contamination from Gaia-matched sources by cutting on "
+            "parallax (per-source error-scaled) and proper motion (Astromancer's real "
+            "elliptical acceptance region, ported from its field-star-removal module) "
+            "relative to the cluster's published values. Widen plx_sigma / pm_sigma / "
+            "pm_dispersion_km_s if too few (or too many) stars survive -- a nearby "
+            "cluster needs a larger pm_dispersion_km_s floor for the same physical "
+            "velocity dispersion than a distant one does."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "CSV artifact path from crossmatch_gaia (or crossmatch_gaia_by_position, or a run_photometry_on_target source table)."},
+                "cluster_name": {"type": "string", "description": "Cluster name, for its literature parallax/PM."},
+                "plx_sigma": {"type": "number", "description": "Parallax cut width in units of each star's own parallax error (default 3.0)."},
+                "pm_sigma": {"type": "number", "description": "Proper-motion cut width in units of each star's own proper-motion error (default 3.0)."},
+                "pm_dispersion_km_s": {"type": "number", "description": "Assumed cluster internal velocity dispersion (km/s), converted through the cluster's own literature distance to a distance-aware angular floor beneath the per-star error scaling (default 3.0)."},
+            },
+            "required": ["csv_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "fit_and_compare_hr_diagram",
+        "description": (
+            "Fetch a PARSEC isochrone near the cluster's published age, fit distance and "
+            "E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with "
+            "the fitted isochrone overlaid. Returns the fitted values, the literature "
+            "values, and their percent/absolute differences, plus the saved PNG artifact."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "members_csv_path": {"type": "string", "description": "CSV artifact path from select_cluster_members."},
+                "cluster_name": {"type": "string", "description": "Cluster name, for its literature comparison values."},
+                "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default; the literature source doesn't publish per-cluster metallicity)."},
+                "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.1)."},
+                "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.3)."},
+            },
+            "required": ["members_csv_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "run_full_hr_pipeline",
+        "description": (
+            "Run the entire HR-diagram pipeline in one call FROM AN EXISTING FITS FRAME: "
+            "extract photometry from it, cross-match to Gaia, look up literature cluster "
+            "parameters, remove field stars, fit an isochrone, and plot the HR diagram "
+            "against the literature values. Requires the user to have already supplied a "
+            "plate-solved FITS file -- if they have not, and just asked for a cluster's HR "
+            "diagram by name, use run_full_hr_pipeline_from_catalog instead; do not ask the "
+            "user for a FITS file when a catalog-only answer already covers the request. "
+            "Fall back to the individual tools only if this needs tuning or diagnosing. If "
+            "the user also wants citations or a literature review for the cluster, pair "
+            "this with build_literature_review rather than reciting the Cantat-Gaudin "
+            "numbers as if they were the whole literature."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the plate-solved FITS file."},
+                "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 2168'."},
+                "gaia_match_radius_arcsec": {"type": "number", "description": "Gaia cross-match radius in arcsec (default 2.0)."},
+                "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 20.0)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width, in units of each star's own parallax error (default 3.0)."},
+                "pm_sigma": {"type": "number", "description": "Membership proper-motion cut width, in units of each star's own proper-motion error (default 3.0)."},
+                "pm_dispersion_km_s": {"type": "number", "description": "Assumed cluster internal velocity dispersion (km/s), set a distance-aware angular floor beneath the per-star error scaling (default 3.0)."},
+            },
+            "required": ["fits_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "run_full_hr_pipeline_from_catalog",
+        "description": (
+            "Build an HR diagram for a named cluster in one call, straight from Gaia DR3 "
+            "and literature catalogs -- NO FITS FRAME NEEDED. Looks up the cluster's own "
+            "published position/age/distance/E(B-V) (Cantat-Gaudin & Anders 2020, open "
+            "clusters only), pulls Gaia DR3 sources around it, removes field stars, and "
+            "fits/plots the isochrone. Use this for a plain 'give me information about X "
+            "and produce an HR diagram' or 'show me the HR diagram for X' request -- this "
+            "is the common case and should be tried before assuming a FITS file is "
+            "required. Only fall back to run_full_hr_pipeline if the user has explicitly "
+            "supplied their own FITS frame and wants that frame's own photometry used. If "
+            "the cluster does not resolve (e.g. it is a globular rather than open cluster, "
+            "which this literature source does not cover), this returns not_found rather "
+            "than silently substituting a different cluster."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cluster_name": {"type": "string", "description": "Cluster name or alias, e.g. 'NGC 6124' or 'M35'."},
+                "radius_arcmin": {"type": "number", "description": "Gaia cone-search radius around the cluster (default 20.0)."},
+                "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 17.0)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width, in units of each star's own parallax error (default 3.0)."},
+                "pm_sigma": {"type": "number", "description": "Membership proper-motion cut width, in units of each star's own proper-motion error (default 3.0)."},
+                "pm_dispersion_km_s": {"type": "number", "description": "Assumed cluster internal velocity dispersion (km/s), sets a distance-aware angular floor beneath the per-star error scaling (default 3.0)."},
+                "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default)."},
+                "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.2)."},
+                "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.4)."},
+            },
+            "required": ["cluster_name"],
+        },
+    },
+    {
         "name": "search_mpc",
         "description": "Return the full reported observation history for one minor "
         "planet from the Minor Planet Center. Confirmed live: this API does zero "
@@ -721,6 +916,209 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["path"],
         },
     },
+    {
+        "name": "list_photometry_targets",
+        "description": "List the local FITS image library photometry can actually "
+        "run on. IMPORTANT: there is no live image archive behind photometry -- "
+        "unlike every other tool here, `run_photometry_on_target` cannot fetch or "
+        "download anything. It only works on a small, fixed set of bundled test "
+        "frames (grouped here by category: e.g. 'cluster', 'galaxy', 'nebula', "
+        "'globular', 'pn' for planetary nebula, 'star', 'planet'). ALWAYS call this "
+        "first if you are not already certain the user's requested object is one of "
+        "these bundled stems -- never assume a plausible-sounding target (e.g. a "
+        "real astronomical object name) is actually available, and never claim to "
+        "have run photometry on something that isn't in this list. No parameters.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "run_photometry_on_target",
+        "description": "Run aperture photometry (source extraction plus, by "
+        "default, a verified zero-point solve) on one bundled FITS target. `target` "
+        "must be a stem from `list_photometry_targets` (e.g. "
+        "'ngc1846_cluster_r_000') or an explicit local path -- call "
+        "list_photometry_targets first if you have not already confirmed the name "
+        "is bundled; a target that isn't returns an ordinary error result, not an "
+        "exception. `use_field_cal` (default true) independently verifies the zero "
+        "point by querying a reference catalog over the network and cross-matching "
+        "it against detected sources -- this is the ONLY path that populates the "
+        "returned `zero_point`, is the only magnitude basis that may be described as "
+        "'calibrated', and can take 30-90 seconds; it can also legitimately fail to "
+        "find a solution (no catalog match in the field, no network) and fall back "
+        "to instrumental-only magnitudes, which is an ordinary outcome, not an "
+        "error. Set `use_field_cal` to false for a fast, offline, "
+        "instrumental-magnitude-only run when the user only wants source counts/"
+        "positions/relative brightness and does not need a verified zero point. "
+        "Always writes a photometry plot (and a zero-point fit/residuals plot too "
+        "when `use_field_cal` succeeded) to local artifact files -- report their "
+        "paths, do not describe their contents as if you had visually inspected "
+        "them. Set `write_source_table` true to also get a CSV of every detected "
+        "source's sky position -- if the target is a star cluster and the user "
+        "wants an HR diagram, that CSV feeds directly into "
+        "tools.hr_diagram.crossmatch_gaia/select_cluster_members with no renaming; "
+        "for that goal, though, prefer run_full_hr_pipeline(_from_catalog) directly "
+        "since it also plots the isochrone fit, which this tool does not.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "A bundled target stem (see "
+                    "list_photometry_targets) or an explicit local FITS path.",
+                },
+                "use_field_cal": {
+                    "type": "boolean",
+                    "description": "Defaults to true. Set false to skip the "
+                    "network catalog zero-point solve.",
+                },
+                "catalogs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Reference catalogs to query for field "
+                    "calibration (e.g. ['APASS', 'PanSTARRS']). Defaults to "
+                    "catalogs that support the image's FITS FILTER keyword.",
+                },
+                "zero_point_mag": {
+                    "type": "number",
+                    "description": "An explicit photometric zero point to apply "
+                    "instead of solving for one. Overrides both the FITS header "
+                    "and field calibration; magnitudes from this path are "
+                    "unverified, never describe them as calibrated.",
+                },
+                "write_source_table": {
+                    "type": "boolean",
+                    "description": "Defaults to false. Set true to additionally "
+                    "write a CSV of every detected source's x/y, ra_deg/dec_deg, "
+                    "mag, and flux -- e.g. to feed into the HR-diagram pipeline.",
+                },
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "plot_field_sed",
+        "description": (
+            "THE MAIN RADIO TOOL: identify sources in a processed radio FITS frame by "
+            "comparing them against VizieR radio catalogs, then plot every identified "
+            "source's spectral energy distribution (flux vs. frequency, from NED) "
+            "together on one labeled plot, each with its own fitted spectral-index "
+            "curve. Use this for a plain 'what's in this radio image' or 'plot the "
+            "SED for this field' request -- it chains identify_radio_sources and "
+            "analyze_source_spectrum for you. A source with no catalogued name, or no "
+            "usable NED photometry, is skipped and reported in warnings rather than "
+            "failing the whole call -- that's an ordinary outcome, not an error. Only "
+            "reach for identify_radio_sources or analyze_source_spectrum directly if "
+            "you need just the source table, or a spectrum for one already-named "
+            "source, without the combined plot."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to a plate-solved radio FITS map."},
+                "threshold": {"type": "number", "description": "Detection threshold in background sigma (default 3.0)."},
+                "radius_arcsec": {
+                    "type": ["number", "null"],
+                    "description": "Catalog cross-match radius per source. Defaults (null) to "
+                    "max(15.0, 1.5x the frame's own pixel scale in arcsec) -- a coarse single-dish "
+                    "map needs a wider radius than a fine-pixel optical one or it can never match "
+                    "anything. Pass an explicit number to override.",
+                },
+                "category": {"type": "string", "description": "VizieR spectrum category to search (default 'radio')."},
+                "max_catalogs": {
+                    "type": ["integer", "null"],
+                    "description": "How many matched VizieR catalogs to cross-match against (default 5). "
+                    "Pass null for no cap.",
+                },
+                "max_sources": {
+                    "type": "integer",
+                    "description": "How many identified sources (brightest first) to build an SED for (default 5).",
+                },
+                "max_frequency_hz": {
+                    "type": "number",
+                    "description": "Upper frequency cutoff for each source's NED photometry (default 3e11, "
+                    "the conventional radio-continuum limit).",
+                },
+                "max_field_radius_arcmin": {
+                    "type": ["number", "null"],
+                    "description": "Caps the cone-search radius computed from the detected sources' own "
+                    "angular spread (default 60.0). A wide single-dish map can compute a many-degree "
+                    "radius that makes the VizieR query impractically slow; when capped, coverage is "
+                    "centred on the field but limited to this radius (reported in warnings). Pass null "
+                    "to search the true full extent regardless of how long that takes.",
+                },
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "identify_radio_sources",
+        "description": (
+            "Detect sources in a processed radio FITS map and identify which ones have "
+            "a known counterpart in VizieR's radio catalogs (NVSS, TGSS, VLSSr, SUMSS, "
+            "GLEAM, whatever else is tagged 'radio' and covers the field), by sky "
+            "position. A source matching no catalog is an ordinary outcome -- a field "
+            "can genuinely contain uncatalogued sources -- not an error. Usually you "
+            "want plot_field_sed instead, which calls this and then plots the "
+            "identified sources' spectra; use this directly only when you just need "
+            "the source table (positions, flux, match counts) without a plot."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to a plate-solved radio FITS map."},
+                "threshold": {"type": "number", "description": "Detection threshold in background sigma (default 3.0)."},
+                "radius_arcsec": {
+                    "type": ["number", "null"],
+                    "description": "Catalog cross-match radius per source. Defaults (null) to "
+                    "max(15.0, 1.5x the frame's own pixel scale in arcsec) -- a coarse single-dish "
+                    "map needs a wider radius than a fine-pixel optical one or it can never match "
+                    "anything. Pass an explicit number to override.",
+                },
+                "category": {"type": "string", "description": "VizieR spectrum category to search (default 'radio')."},
+                "max_catalogs": {
+                    "type": ["integer", "null"],
+                    "description": "How many matched VizieR catalogs to cross-match against (default 5). "
+                    "Pass null for no cap.",
+                },
+                "max_field_radius_arcmin": {
+                    "type": ["number", "null"],
+                    "description": "Caps the cone-search radius computed from the detected sources' own "
+                    "angular spread (default 60.0). A wide single-dish map can compute a many-degree "
+                    "radius that makes the VizieR query impractically slow; when capped, coverage is "
+                    "centred on the field but limited to this radius (reported in warnings). Pass null "
+                    "to search the true full extent regardless of how long that takes.",
+                },
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "analyze_source_spectrum",
+        "description": (
+            "Fit and plot ONE source's flux-vs-frequency spectrum: a pure power law "
+            "(spectral index) and a log-parabola (curvature), reporting whichever the "
+            "data actually supports. Input is exactly one of: frequencies_hz+fluxes_jy "
+            "(explicit arrays), csv_path (columns: frequency, flux[, flux error]), or "
+            "name (looked up via NED's photometry table, homogenized units, filtered "
+            "to max_frequency_hz). Usually you want plot_field_sed instead, which finds "
+            "sources in a FITS frame and calls this for each one automatically; use "
+            "this directly only for a single already-identified/named source, or "
+            "your own frequency/flux data with no FITS frame involved."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Object name to resolve via NED's photometry table."},
+                "csv_path": {"type": "string", "description": "CSV path with frequency, flux[, flux error] columns."},
+                "frequencies_hz": {"type": "array", "items": {"type": "number"}, "description": "Explicit frequencies in Hz."},
+                "fluxes_jy": {"type": "array", "items": {"type": "number"}, "description": "Explicit flux densities, paired with frequencies_hz."},
+                "max_frequency_hz": {
+                    "type": "number",
+                    "description": "Upper frequency cutoff for the name-based NED lookup (default 3e11, "
+                    "the conventional radio-continuum limit). Ignored for csv_path/explicit arrays.",
+                },
+            },
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -738,8 +1136,21 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "search_vizier": search_vizier,
     "search_atnf": search_atnf,
     "search_mast": search_mast,
+    "extract_photometry_from_fits": extract_photometry_from_fits,
+    "crossmatch_gaia": crossmatch_gaia,
+    "crossmatch_gaia_by_position": crossmatch_gaia_by_position,
+    "get_literature_cluster_params": get_literature_cluster_params,
+    "select_cluster_members": select_cluster_members,
+    "fit_and_compare_hr_diagram": fit_and_compare_hr_diagram,
+    "run_full_hr_pipeline": run_full_hr_pipeline,
+    "run_full_hr_pipeline_from_catalog": run_full_hr_pipeline_from_catalog,
     "search_mpc": search_mpc,
     "search_casda": search_casda,
+    "list_photometry_targets": list_photometry_targets,
+    "run_photometry_on_target": run_photometry_on_target,
+    "plot_field_sed": plot_field_sed,
+    "identify_radio_sources": identify_radio_sources,
+    "analyze_source_spectrum": analyze_source_spectrum,
     "list_pulsar_scans": list_pulsar_scans,
     "resolve_pulsar_scan": resolve_pulsar_scan,
     "load_pulsar_lightcurve": load_pulsar_lightcurve,

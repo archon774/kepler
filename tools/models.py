@@ -19,6 +19,9 @@ __all__ = [
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
+    "PhotometryTargetLibrary",
+    "SourceSummary",
+    "PhotometryRunResult",
     "PulsarScan",
     "PulsarScanList",
     "PulsarLightCurve",
@@ -96,6 +99,17 @@ class TableSummary(KeplerToolModel):
 
 
 class WcsSummary(KeplerToolModel):
+    """Celestial WCS read straight from a FITS header -- no fitting involved.
+
+    This has no fitted residual to report: it is not a plate solve.
+    ``algorithms.wcs.state.WcsSolution`` (produced by
+    ``algorithms.wcs.wcs.solve_wcs``, a separate and heavier path) carries a
+    real solve's ``pointing_error_arcsec``/``n_field``; nothing here does.
+    Report ``center_ra_deg``/``center_dec_deg``/``pixel_scale_arcsec``/
+    ``rotation_deg`` as read from the header as-is, with no uncertainty
+    attached -- there isn't one to attach.
+    """
+
     file: FileMetadata
     has_wcs: bool
     image_shape: tuple[int, int] | None = None
@@ -140,6 +154,77 @@ class ZeropointSolution(KeplerToolModel):
     limmag5: float | None = None
     rej_percent: float | None = None
     source_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PhotometryTargetLibrary(KeplerToolModel):
+    """The local FITS library ``run_photometry_on_target`` can actually run on.
+
+    There is no live image archive behind photometry -- ``categories`` is
+    exactly ``tools.claude_photometry_haiku_tool.list_bundled_targets()``'s
+    output (bundled ``test_data/optical/`` stems grouped by the category
+    embedded in each filename), not a query result.
+    """
+
+    categories: dict[str, list[str]] = Field(default_factory=dict)
+    total_count: int = 0
+
+
+class SourceSummary(KeplerToolModel):
+    """One detected source's position, magnitude, and flux.
+
+    ``ra_deg``/``dec_deg`` are populated whenever the frame carries a celestial
+    WCS -- the same sky position the HR-diagram pipeline's own
+    ``extract_photometry_from_fits`` reports, so a source found here can be
+    looked up against Gaia or any other catalog the same way.
+
+    ``mag_error``/``flux_error`` are the extraction's own per-source formal
+    errors (background/Poisson-noise based, from
+    ``algorithms.skylib_lite.photometry.aperture``) -- report them alongside
+    ``mag``/``flux`` whenever quoting either, and say plainly that no
+    uncertainty was reported when either is ``None`` rather than omitting the
+    caveat. Like ``ZeropointSolution.zero_point_error_mag``, this is a formal/
+    statistical error only -- it does not include unmodeled systematics.
+    """
+
+    x: float | None = None
+    y: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    mag: float | None = None
+    mag_error: float | None = None
+    flux: float | None = None
+    flux_error: float | None = None
+
+
+class PhotometryRunResult(KeplerToolModel):
+    """Result of running source extraction (and optionally a verified
+    zero-point solve) on one bundled FITS target.
+
+    ``zero_point`` is only populated when ``zero_point_source == "field-cal"``
+    -- a CLI override or FITS-header value is applied to ``magnitude_label``'s
+    magnitudes but was never independently checked against a catalog, so
+    there is no ``ZeropointSolution`` to report for those paths.
+
+    ``exposure_seconds``, confirmed live: every ``mag`` here is
+    ``-2.5*log10(flux / exposure_seconds) + zero_point`` -- never the bare
+    ``-2.5*log10(flux) + zero_point`` a reader would otherwise assume. Without
+    this field, ``flux`` and ``mag`` looked mutually inconsistent by several
+    magnitudes on a real bundled frame (the reader has no way to know ``flux``
+    is a raw per-exposure sum, not a per-second rate) -- report this alongside
+    ``flux``/``mag`` whenever discussing either.
+    """
+
+    file: FileMetadata
+    source_count: int = 0
+    magnitude_label: str = "instrumental magnitude"
+    exposure_seconds: float | None = None
+    zero_point_source: str = "none"  # "cli" | "header" | "field-cal" | "none"
+    zero_point: ZeropointSolution | None = None
+    brightest: SourceSummary | None = None
+    faintest: SourceSummary | None = None
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

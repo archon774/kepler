@@ -100,7 +100,7 @@ verifying it) fails on.
 
 1. Promote `ToolError.code` from `str` to `Literal["invalid_input", "provider_unavailable", "dependency_missing"]` now, while the vocabulary is genuinely closed at three values. This is a same-day, non-behavior-changing type tightening — every existing call site already uses one of the three.
 2. Change `ToolResult.warnings` from `list[str]` to `list[ToolWarning]`, matching every other result model in the same file. One call site (`tools/simbad.py`) needs updating.
-3. Do not invent new codes speculatively. Add one only when a tool needs to distinguish a case a caller would act on differently — the same discipline `CATALOGS` vs `CATALOG_OPTIONS` already follows (two registries, kept apart, because merging them "silently changes which reference band a narrowband or unfiltered image calibrates against," `algorithms/catalogs/EXTRACTION.md` §4).
+3. Do not invent new codes speculatively. Add one only when a tool needs to distinguish a case a caller would act on differently — the same discipline `CATALOGS` vs `CATALOG_OPTIONS` already follows (two registries, kept apart, because merging them "silently changes which reference band a narrowband or unfiltered image calibrates against," `docs/extraction.md`, "Catalogs" §4, "The two registries are not redundant").
 
 This is the highest-leverage, lowest-risk item in this document: it costs a few hours, touches no algorithm code, and is the direct precondition for §4 below.
 

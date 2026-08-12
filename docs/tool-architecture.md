@@ -32,7 +32,10 @@ tools/
   ned.py              # NED historical table tools
   vizier.py           # broad VizieR catalog search tools
   atnf.py             # ATNF pulsar catalog tools
-  pulsar.py           # 4-stage pulsar pipeline: light curve, periodogram, fold, sonify
+  pulsar.py           # pulsar pipeline: scan resolution, light curve, periodogram, fold, sonify, plot
+  photometry.py       # local aperture photometry over the bundled FITS library
+  hr_diagram.py       # FITS-to-HR-diagram pipeline orchestration (plus a catalog-only entry point)
+  radio_sources.py    # radio FITS -> catalog-identified sources -> labeled SED plot
   ads.py              # ADS literature search/review tools
   mast.py             # MAST archive/product tools
   mpc.py              # Minor Planet Center observation tools
@@ -40,6 +43,7 @@ tools/
   resolve.py          # SIMBAD-backed target resolution
   registry.py         # optional agent/tool schema registry
   runner.py           # optional Anthropic agent loop
+  sessions.py         # per-run session manifest recording + the runner's cache-key helper
   workspace.py        # local artifact helpers
   models.py           # shared result, warning/error, WCS, catalog, artifact models
   config.py           # small environment-backed settings helpers
@@ -53,6 +57,8 @@ algorithms/
   skylib_lite/          # shared vendored Skylib subset
   catalogs/             # Python catalog/provider declarations, no network calls
   query/                # Python remote catalog access
+  hrdiagram_py/         # Python HR-diagram pipeline: parity port + optimizer, not an extraction
+  radio/                # Python radio spectral-index fitting + catalog cross-matching, new capability
 
   pulsar/               # Python pulsar pipeline: ingest, periodogram, folding,
                         #   sonification (a PORT, not an extraction)
@@ -86,10 +92,14 @@ The first local, no-network tools are:
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`
 - `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`
 - `tools.pulsar.fold_pulsar_lightcurve(path, period_s, ...)`
 - `tools.pulsar.sonify_pulsar(path, period_s=None, ...)`
+- `tools.pulsar.plot_pulsar(...)`
+- `tools.photometry.list_photometry_targets()`
+- `tools.photometry.run_photometry_on_target(target, ...)`
 - `tools.workspace.list_artifacts(directory=None)`
 - `tools.workspace.describe_artifact(path)`
 
@@ -110,6 +120,50 @@ live calls in default validation:
 - `tools.mast.search_mast(name, ...)`
 - `tools.mpc.search_mpc(designation)`
 - `tools.casda.search_casda(...)`
+
+`tools.hr_diagram` composes several of the above (`tools.vizier.search_vizier`
+for both Gaia DR3 and cluster-literature lookups) with the pure
+`algorithms.hrdiagram_py` package rather than adding a new query layer:
+
+- `tools.hr_diagram.extract_photometry_from_fits(fits_path)`
+- `tools.hr_diagram.crossmatch_gaia(csv_path, ...)`
+- `tools.hr_diagram.crossmatch_gaia_by_position(cluster_name, ...)` -- no FITS frame; fetches
+  Gaia DR3 directly around the cluster's own resolved position
+- `tools.hr_diagram.get_literature_cluster_params(cluster_name)`
+- `tools.hr_diagram.select_cluster_members(csv_path, cluster_name, ...)`
+- `tools.hr_diagram.fit_and_compare_hr_diagram(members_csv_path, cluster_name, ...)`
+- `tools.hr_diagram.run_full_hr_pipeline(fits_path, cluster_name, ...)`
+- `tools.hr_diagram.run_full_hr_pipeline_from_catalog(cluster_name, ...)` -- the
+  `run_full_hr_pipeline` composite with `extract_photometry_from_fits` +
+  `crossmatch_gaia` swapped for `crossmatch_gaia_by_position`, so a plain "HR
+  diagram for cluster X" request needs no FITS file at all
+
+`tools.photometry` is a thin wrapper reusing `tools.claude_photometry_haiku_tool`'s
+already-tested pipeline directly (not a reimplementation), so a tool-use call
+produces exactly what the standalone CLI script produces. It intentionally
+does not share extraction settings with `tools.hr_diagram.extract_photometry_from_fits`:
+the two need different things from `algorithms.photometry` (a calibrated
+zero point and fixed apertures here; cheap "auto" Kron-like apertures and no
+zero point there, since the HR-diagram pipeline discards the frame's own
+magnitude once Gaia's is fetched). `run_photometry_on_target(...,
+write_source_table=True)` writes a CSV in the `ra_deg`/`dec_deg` column shape
+`tools.hr_diagram.crossmatch_gaia` expects, as the one deliberate bridge
+between the two.
+
+`tools.radio_sources` composes `algorithms.photometry` (source extraction, its
+own settings again -- neither a Gaia handoff nor an optical zero point apply
+to a radio map), `algorithms.radio` (spectral fitting, catalog cross-match),
+`tools.vizier.search_vizier(category="radio")`, and `tools.ned.search_ned`:
+
+- `tools.radio_sources.plot_field_sed(fits_path, ...)` -- the main entry point:
+  identify sources in a radio FITS frame against VizieR's radio catalogs, then
+  plot every identified source's spectral energy distribution (from NED)
+  together on one labeled plot, each with its own fitted spectral index.
+- `tools.radio_sources.identify_radio_sources(fits_path, ...)` -- the spatial
+  half alone: detected sources cross-matched against radio catalogs by
+  position, with no plot.
+- `tools.radio_sources.analyze_source_spectrum(name=..., csv_path=..., frequencies_hz=..., fluxes_jy=...)`
+  -- the spectral half alone, for one already-identified/named source.
 
 Next Python tools should follow the same pattern before adding new layers:
 
@@ -143,6 +197,8 @@ Current algorithm ownership:
 | `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
 | `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
+| `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of `algorithms.hrdiagram` (TypeScript) plus a new optimizer, not a byte-preserving extraction -- deliberately not named `hrdiagram` since that folder is TypeScript-owned. Performs no *catalog* network I/O -- Gaia/VizieR catalog fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`. Its `isochrones.py` still calls the PARSEC isochrone service (stev.oapd.inaf.it) directly; no existing tool wraps it. |
+| `algorithms.radio` | Radio spectral-index/log-parabola fitting (`spectral_fitting.py`) and generic RA/Dec-column-guessing catalog cross-match (`matching.py`) | New first-party capability, no upstream Skynet/Astromancer equivalent. Performs no network I/O -- VizieR/NED fetching lives in `tools.radio_sources`. |
 | `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | The one **port** rather than extraction under `algorithms/`; marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
 | `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding, and pulsar sonification | Typechecked by the root `tsconfig.json`. |
 | `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
