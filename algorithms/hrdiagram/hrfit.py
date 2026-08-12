@@ -267,4 +267,3 @@ def plot_cmd(colour, mag, iso_colour=None, iso_mag=None,
         ax.set_xlim(np.nanmin(colour) - px, np.nanmax(colour) + px)
         ax.set_ylim(np.nanmax(mag) + py, np.nanmin(mag) - py)
     return ax
-

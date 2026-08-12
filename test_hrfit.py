@@ -6,7 +6,7 @@ line is drawn in native order (no zig-zag at the turnoff).
 import numpy as np, pandas as pd
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import hrfit
+from algorithms.hrdiagram import hrfit
 
 import os
 from anthropic import Anthropic

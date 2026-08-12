@@ -1,15 +1,28 @@
 """
-hr_agent.py - conversational front end for hr_pipeline.py.
+hr_agent.py - conversational front end for tools.hr_diagram.
 
 Lets you ask things like:
 
     "Given ngc2168_R.fits, of NGC 2168, create an HR diagram and compare to
     literature values."
 
+    "Using afterglow_photometry_ngc1851.csv, create an HR diagram for NGC 1851
+    in B-R vs V and compare to literature."
+
 and have Claude call the pipeline stages itself, in order, retrying with wider
-match radii / looser membership cuts if a step comes back empty. Same
-tool-calling shape as gaia_pulsars.py (system prompt, TOOLS schema,
-TOOL_DISPATCH, a run_agent loop) -- extended with the HR-diagram pipeline.
+match radii / looser membership cuts if a step comes back empty. Works for
+open clusters (Cantat-Gaudin & Anders 2020) and globular clusters (Harris 2010
++ Vasiliev & Baumgardt 2021) alike, and for either a FITS frame or an existing
+photometry table as the starting point. Same tool-calling shape as
+gaia_pulsars.py (system prompt, TOOLS schema, TOOL_DISPATCH, a run_agent loop)
+-- extended with the HR-diagram pipeline.
+
+The actual algorithm/tool logic lives in algorithms.hrdiagram (algorithm package)
+and tools.hr_diagram (thin wrappers returning Pydantic models from
+tools.models) -- this file is only the conversational wiring around it, per
+the design doc's "no orchestration framework" stance (docs/tool-architecture.md
+SS6): a serving/agent surface should be generated from the same plain
+functions and models, not hand-duplicate their logic.
 
 Every stage function returns compact JSON (counts, paths, a few example rows)
 rather than a full source table, so a frame with thousands of detections
@@ -21,12 +34,10 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
-import pandas as pd
 from anthropic import Anthropic
 
-import hr_pipeline as hp
+from tools import hr_diagram as hp
 
 logger = logging.getLogger(__name__)
 
@@ -34,130 +45,143 @@ client = Anthropic()  # reads ANTHROPIC_API_KEY from the environment
 
 MODEL = "claude-haiku-4-5-20251001"
 
-WORK_DIR = Path(__file__).parent / "isochrone_cache"
-WORK_DIR.mkdir(exist_ok=True)
-
 SYSTEM_PROMPT = (
-    "You build HR (colour-magnitude) diagrams from FITS photometry and compare "
-    "them to published star-cluster parameters. The pipeline is: "
-    "extract_photometry_from_fits -> crossmatch_gaia -> get_literature_cluster_params "
-    "-> select_cluster_members -> fit_and_compare_hr_diagram. run_full_hr_pipeline "
-    "does all five steps in one call and is the right choice for a plain request "
-    "like 'build the HR diagram for <cluster> from <file>'. Fall back to the "
-    "individual steps when something needs diagnosing or tuning: zero Gaia matches "
-    "means widen radius_arcsec or check the frame's WCS; zero cluster members "
-    "means widen plx_sigma / pm_tol_mas_yr, or double check "
-    "get_literature_cluster_params resolved the intended cluster (aliases like "
-    "'M35' are resolved automatically, but say so if you had to guess one); a "
-    "failed isochrone fetch means the external PARSEC service "
-    "(stev.oapd.inaf.it) is unreachable right now -- report that plainly rather "
-    "than inventing numbers. Always state the fitted distance/E(B-V)/age "
-    "alongside the literature values and by how much they differ, and give the "
-    "path to the saved HR-diagram PNG. Base every number on tool output, not "
-    "prior knowledge of the cluster."
+    "You are a general-purpose assistant. You also have tools for building HR "
+    "(colour-magnitude) diagrams from photometry -- either measured yourself "
+    "from a FITS frame, or an existing photometry table -- and comparing them "
+    "to published star-cluster parameters, for open OR globular clusters. Use "
+    "those tools when a question actually calls for them; for anything else, "
+    "just answer normally, the way you would with no tools at all -- don't "
+    "preface an unrelated answer with a note about what you're specialized in "
+    "or redirect back to HR diagrams unless the person's actual question is "
+    "about one. "
+    "Two parallel pipelines depending on the input: "
+    "(1) FITS frame: extract_photometry_from_fits -> crossmatch_gaia -> "
+    "get_literature_cluster_params -> select_cluster_members -> "
+    "fit_and_compare_hr_diagram, or run_full_hr_pipeline in one call. "
+    "(2) Existing photometry table (e.g. an Afterglow export): "
+    "load_photometry_table -> crossmatch_gaia -> get_literature_cluster_params -> "
+    "select_cluster_members -> fit_and_compare_hr_diagram (with blue/red/lum set "
+    "to the table's own filters, e.g. B/R/V), or "
+    "run_full_hr_pipeline_from_photometry_table in one call. In both cases, "
+    "crossmatch_gaia is what makes select_cluster_members' field-star removal "
+    "possible -- it's the only thing that attaches parallax/proper motion, "
+    "whether or not you end up using Gaia's own G/BP/RP magnitudes for the "
+    "diagram itself. get_literature_cluster_params tries the open-cluster catalog "
+    "first, then the globular-cluster catalogs; check 'cluster_type' in what it "
+    "returns, since globular results carry a real 'feh' metallicity (used "
+    "automatically by fit_and_compare_hr_diagram unless you override mh) and "
+    "typically 'age_is_literature_default': true (Harris doesn't publish "
+    "per-cluster ages for globulars, so a ~12.6 Gyr default is used -- say so "
+    "when reporting a globular-cluster age comparison, since the 'literature' "
+    "age isn't really cluster-specific). When starting from an existing "
+    "photometry table (path 2), ask whether its magnitudes already had "
+    "interstellar reddening (E(B-V)) removed as part of an earlier calibration "
+    "step, before running fit_and_compare_hr_diagram -- don't assume they "
+    "haven't. If they have, pass that value as pre_dereddened_ebv; otherwise "
+    "the fitted E(B-V) only reflects the residual left in the magnitudes you "
+    "were given, not the true total, and comparing it directly to literature "
+    "(always a total, foreground value) understates it. "
+    "Fall back to the individual steps when something needs diagnosing or "
+    "tuning: zero Gaia matches means widen radius_arcsec or check the frame's "
+    "WCS; zero cluster members means widen plx_sigma / pm_tol_mas_yr, or double "
+    "check get_literature_cluster_params resolved the intended cluster (aliases "
+    "like 'M35' -> NGC 2168 or '47 Tuc' -> NGC 104 are resolved automatically, "
+    "but say so if you had to guess one); if get_literature_cluster_params fails "
+    "entirely (name not in either catalog) but a diagram is still wanted, use "
+    "plot_observed_cmd for a plain (uncorrected, unfitted) CMD instead of giving "
+    "up. If the cluster is very young (roughly under a few hundred Myr, still "
+    "on or near the pre-main-sequence) or the person mentions starspots/spot "
+    "coverage, consider isochrone_source='spots' (Somers, Pinsonneault & Cao "
+    "2019) instead of the default 'mist' -- standard spot-free grids (MIST, "
+    "PARSEC) are known to systematically mismatch active, spotted pre-main-"
+    "sequence stars, which 'spots' models via a starspot covering-fraction "
+    "axis (Fspot) that's scanned alongside age/distance/E(B-V) and reported as "
+    "fitted['fspot'] in the result -- a fit result, not a literature-known "
+    "property, so phrase it that way ('the fit preferred a covering fraction "
+    "of ~X%'), and note it's solar-metallicity only. An isochrone fetch "
+    "failure with isochrone_source='mist' (the default) means the one-time "
+    "~150MB grid download from mist.science failed -- likely a network issue, "
+    "retry. With isochrone_source='parsec' it means stev.oapd.inaf.it is "
+    "unreachable or rate-limiting; try 'mist' instead, which downloads once "
+    "and runs off a local cache from then on. With isochrone_source='spots' "
+    "it means the one-time download from Zenodo (zenodo.org) failed -- also "
+    "likely a network issue, retry. Either way, "
+    "report the failure plainly rather than inventing numbers. When a fit "
+    "succeeds, always state the fitted distance/E(B-V)/age alongside the "
+    "literature values and by how much they differ, and give the path to the "
+    "saved HR-diagram PNG. Base every number on tool output, not prior "
+    "knowledge of the cluster.\n\n"
+    "Two things are required in every final answer that reports HR-diagram "
+    "results, not just when something looks wrong:\n"
+    "1. Name every catalogue a number came from: literature['source'] for "
+    "cluster parameters (say 'Cantat-Gaudin & Anders 2020' for open clusters; "
+    "for globulars say BOTH 'Harris 2010' for distance/E(B-V)/[Fe/H] AND "
+    "'Vasiliev & Baumgardt 2021' for parallax/proper motion -- they're "
+    "different catalogues, don't collapse them into one name), and which "
+    "isochrone grid produced the plot (MIST v1.2, PARSEC, or the SPOTS grid -- "
+    "Somers, Pinsonneault & Cao 2019 -- from isochrone_source). If a cluster "
+    "name was resolved through a SIMBAD alias, say what it resolved to.\n"
+    "2. Flag uncertainty and phrase unresolved numbers as a working estimate, "
+    "not a settled fact, whenever any of: age_is_literature_default is true "
+    "(the globular-cluster 'literature' age is a fabricated placeholder, not a "
+    "measurement -- never treat a fit's agreement or disagreement with it as "
+    "meaningful); n_stars_fitted is small (rough guide: under ~50-100); the "
+    "photometry has no main-sequence turnoff (giant-branch-only data barely "
+    "constrains age at all, regardless of what number the fit returns); "
+    "isochrone_source is 'spots' (fitted['fspot'] is a fit result scanned over "
+    "6 discrete grid values, not a literature-known cluster property, and the "
+    "grid is solar-metallicity only); pre_dereddened_ebv might be nonzero but "
+    "wasn't confirmed; n_gaia_matched "
+    "is much smaller than n_detected or membership cuts are loose (crowded-"
+    "field fits are known to land on visibly different numbers run to run); "
+    "or a literature comparison shows a large percent difference. In those "
+    "cases use language like 'the fit suggests', 'consistent with', 'not well "
+    "constrained by this data' -- not a bare 'the distance is X kpc'."
 )
 
 
 # ---------------------------------------------------------------------------
-# Tool implementations (thin wrappers around hr_pipeline.py)
+# Tool dispatch -- direct calls into tools.hr_diagram; each function
+# already returns the right (Pydantic-model) shape, so no local wrapping is
+# needed beyond pulling arguments out of the tool_use input dict.
 # ---------------------------------------------------------------------------
-def _save_csv(df: pd.DataFrame, stem: str) -> str:
-    path = WORK_DIR / f"{stem}.csv"
-    df.to_csv(path, index=False)
-    return str(path)
-
-
-def tool_extract_photometry(fits_path: str, threshold: float = 2.5) -> dict:
-    df = hp.extract_photometry_from_fits(fits_path, threshold=threshold)
-    csv_path = _save_csv(df, f"{Path(fits_path).stem}_photometry")
-    return {
-        "n_sources": len(df),
-        "csv_path": csv_path,
-        "ra_center_deg": round(float(df["ra_deg"].mean()), 5),
-        "dec_center_deg": round(float(df["dec_deg"].mean()), 5),
-        "filter": (df["filter"].dropna().iloc[0] if df["filter"].notna().any() else None),
-    }
-
-
-def tool_crossmatch_gaia(csv_path: str, radius_arcsec: float = 2.0, mag_limit: float = 20.0) -> dict:
-    df = pd.read_csv(csv_path)
-    matched = hp.crossmatch_gaia(df, radius_arcsec=radius_arcsec, mag_limit=mag_limit)
-    out_path = _save_csv(matched, f"{Path(csv_path).stem}_gaia")
-    return {
-        "n_matched": len(matched),
-        "n_input": len(df),
-        "csv_path": out_path,
-        "median_separation_arcsec": round(float(matched["sep_arcsec"].median()), 3),
-    }
-
-
-def tool_get_literature_params(cluster_name: str) -> dict:
-    return hp.get_literature_cluster_params(cluster_name)
-
-
-def tool_select_members(
-    csv_path: str, cluster_name: str, plx_sigma: float = 3.0, pm_tol_mas_yr: float = 1.0
-) -> dict:
-    df = pd.read_csv(csv_path)
-    literature = hp.get_literature_cluster_params(cluster_name)
-    members = hp.select_cluster_members(df, literature, plx_sigma=plx_sigma, pm_tol_mas_yr=pm_tol_mas_yr)
-    out_path = _save_csv(members, f"{Path(csv_path).stem}_members")
-    return {"n_members": len(members), "n_input": len(df), "csv_path": out_path}
-
-
-def tool_fit_and_compare(
-    members_csv_path: str,
-    cluster_name: str,
-    mh: float = 0.0,
-    max_error: float = 0.1,
-    logage_half_width: float = 0.3,
-    out_png: str | None = None,
-) -> dict:
-    members = pd.read_csv(members_csv_path)
-    literature = hp.get_literature_cluster_params(cluster_name)
-    return hp.fit_and_compare(
-        members, literature, cluster_name,
-        mh=mh, max_error=max_error, logage_half_width=logage_half_width, out_png=out_png,
-    )
-
-
-def tool_run_full_pipeline(
-    fits_path: str,
-    cluster_name: str,
-    gaia_match_radius_arcsec: float = 2.0,
-    gaia_mag_limit: float = 20.0,
-    plx_sigma: float = 3.0,
-    pm_tol_mas_yr: float = 1.0,
-) -> dict:
-    return hp.run_hr_diagram_pipeline(
-        fits_path, cluster_name,
-        gaia_match_radius_arcsec=gaia_match_radius_arcsec,
-        gaia_mag_limit=gaia_mag_limit,
-        plx_sigma=plx_sigma,
-        pm_tol_mas_yr=pm_tol_mas_yr,
-    )
-
-
 TOOL_DISPATCH = {
-    "extract_photometry_from_fits": lambda i: tool_extract_photometry(
+    "extract_photometry_from_fits": lambda i: hp.extract_photometry_from_fits(
         i["fits_path"], i.get("threshold", 2.5)
     ),
-    "crossmatch_gaia": lambda i: tool_crossmatch_gaia(
+    "load_photometry_table": lambda i: hp.load_photometry_table(
+        i["csv_path"], i.get("mag_col", "calibrated_mag"), i.get("err_col", "mag_error")
+    ),
+    "crossmatch_gaia": lambda i: hp.crossmatch_gaia(
         i["csv_path"], i.get("radius_arcsec", 2.0), i.get("mag_limit", 20.0)
     ),
-    "get_literature_cluster_params": lambda i: tool_get_literature_params(i["cluster_name"]),
-    "select_cluster_members": lambda i: tool_select_members(
+    "get_literature_cluster_params": lambda i: hp.get_literature_cluster_params(i["cluster_name"]),
+    "select_cluster_members": lambda i: hp.select_cluster_members(
         i["csv_path"], i["cluster_name"], i.get("plx_sigma", 3.0), i.get("pm_tol_mas_yr", 1.0)
     ),
-    "fit_and_compare_hr_diagram": lambda i: tool_fit_and_compare(
+    "fit_and_compare_hr_diagram": lambda i: hp.fit_hr_diagram(
         i["members_csv_path"], i["cluster_name"],
-        i.get("mh", 0.0), i.get("max_error", 0.1), i.get("logage_half_width", 0.3),
-        i.get("out_png"),
+        i.get("blue", "BP"), i.get("red", "RP"), i.get("lum", "G"),
+        i.get("mh"), i.get("max_error", 0.1), i.get("logage_half_width", 0.3),
+        i.get("isochrone_source", "mist"), i.get("pre_dereddened_ebv", 0.0),
     ),
-    "run_full_hr_pipeline": lambda i: tool_run_full_pipeline(
+    "plot_observed_cmd": lambda i: hp.plot_observed_cmd(
+        i["csv_path"], i["blue"], i["red"], i["lum"], i.get("max_error"), i.get("title"),
+    ),
+    "run_full_hr_pipeline": lambda i: hp.run_hr_diagram_pipeline(
         i["fits_path"], i["cluster_name"],
         i.get("gaia_match_radius_arcsec", 2.0), i.get("gaia_mag_limit", 20.0),
         i.get("plx_sigma", 3.0), i.get("pm_tol_mas_yr", 1.0),
+        i.get("isochrone_source", "mist"),
+    ),
+    "run_full_hr_pipeline_from_photometry_table": lambda i: hp.run_hr_diagram_pipeline_from_photometry(
+        i["csv_path"], i["cluster_name"],
+        i.get("blue", "B"), i.get("red", "R"), i.get("lum", "V"),
+        i.get("mag_col", "calibrated_mag"), i.get("err_col", "mag_error"),
+        i.get("gaia_match_radius_arcsec", 2.0), i.get("gaia_mag_limit", 21.0),
+        i.get("plx_sigma", 3.0), i.get("pm_tol_mas_yr", 1.0),
+        i.get("isochrone_source", "mist"), i.get("pre_dereddened_ebv", 0.0),
     ),
 }
 
@@ -180,17 +204,39 @@ TOOLS = [
         },
     },
     {
-        "name": "crossmatch_gaia",
+        "name": "load_photometry_table",
         "description": (
-            "Match detected sources (from extract_photometry_from_fits) to Gaia DR3 by sky "
-            "position, attaching Gaia's G/BP/RP magnitudes, parallax and proper motion -- "
-            "this is what supplies the colour for the HR diagram, since a single FITS frame "
-            "is only one filter."
+            "Load an existing calibrated photometry table (e.g. an Afterglow export) instead "
+            "of measuring photometry from a FITS frame. Afterglow exports are long-format: one "
+            "row per source per filter. This reshapes it to one row per source with a magnitude "
+            "(+ error) column per filter, ready for crossmatch_gaia(). Use this as the first "
+            "step whenever you already have a photometry CSV rather than a raw FITS frame."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "csv_path": {"type": "string", "description": "CSV path from extract_photometry_from_fits."},
+                "csv_path": {"type": "string", "description": "Path to the photometry CSV."},
+                "mag_col": {"type": "string", "description": "Column holding the calibrated magnitude (default 'calibrated_mag', i.e. mag + zero_point_correction -- not the raw 'mag' column)."},
+                "err_col": {"type": "string", "description": "Column holding the magnitude error (default 'mag_error')."},
+            },
+            "required": ["csv_path"],
+        },
+    },
+    {
+        "name": "crossmatch_gaia",
+        "description": (
+            "Match sources (from extract_photometry_from_fits OR load_photometry_table) to "
+            "Gaia DR3 by sky position, attaching Gaia's G/BP/RP magnitudes, parallax and proper "
+            "motion. For FITS-frame input this is what supplies the colour for the HR diagram, "
+            "since a single frame is only one filter. For an existing photometry table (which "
+            "already has its own filters), this is instead how you get parallax/proper motion "
+            "onto sources that didn't have any -- i.e. it's the field-star-removal prerequisite; "
+            "the table's own magnitude columns pass through unchanged."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "CSV path from extract_photometry_from_fits or load_photometry_table."},
                 "radius_arcsec": {"type": "number", "description": "Match radius in arcsec (default 2.0). Widen if n_matched comes back 0 or low."},
                 "mag_limit": {"type": "number", "description": "Only consider Gaia sources brighter than this G magnitude (default 20)."},
             },
@@ -200,9 +246,15 @@ TOOLS = [
     {
         "name": "get_literature_cluster_params",
         "description": (
-            "Look up a named open cluster's published age, distance and E(B-V) "
-            "(Cantat-Gaudin & Anders 2020, Gaia-DR2-based, via VizieR). Resolves common "
-            "aliases (e.g. 'M35' -> NGC 2168) through SIMBAD automatically."
+            "Look up a named cluster's published age (or a typical old-cluster default for "
+            "globulars), distance, E(B-V), and metallicity. Tries the open-cluster catalog "
+            "first (Cantat-Gaudin & Anders 2020, Gaia-DR2-based), then falls back to globular-"
+            "cluster catalogs (Harris 2010 + Vasiliev & Baumgardt 2021 for Gaia astrometry) if "
+            "not found there. Resolves common aliases (e.g. 'M35' -> NGC 2168, '47 Tuc' -> "
+            "NGC 104) through SIMBAD automatically. Check the returned 'cluster_type' ('open' "
+            "or 'globular'); globular results carry a 'feh' metallicity and may have "
+            "'age_is_literature_default': true (Harris doesn't publish per-cluster ages, so a "
+            "typical ~12.6 Gyr default is used unless you know better for this specific cluster)."
         ),
         "input_schema": {
             "type": "object",
@@ -232,8 +284,8 @@ TOOLS = [
     {
         "name": "fit_and_compare_hr_diagram",
         "description": (
-            "Fetch a PARSEC isochrone near the cluster's published age, fit distance and "
-            "E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with "
+            "Fetch an isochrone near the cluster's published age, fit distance and "
+            "E(B-V) to the cluster members' photometry, and plot the HR diagram with "
             "the fitted isochrone overlaid. Returns the fitted values, the literature "
             "values, and their percent/absolute differences, plus the saved PNG path."
         ),
@@ -242,9 +294,42 @@ TOOLS = [
             "properties": {
                 "members_csv_path": {"type": "string", "description": "CSV path from select_cluster_members."},
                 "cluster_name": {"type": "string", "description": "Cluster name, for its literature comparison values."},
-                "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0 (default; the literature source doesn't publish per-cluster metallicity)."},
+                "blue": {"type": "string", "description": "Blue-band column name in members_csv_path (default 'BP', the Gaia band; use e.g. 'B' for a B/V/R/I photometry table)."},
+                "red": {"type": "string", "description": "Red-band column name (default 'RP'; e.g. 'R')."},
+                "lum": {"type": "string", "description": "Magnitude/luminosity column name for the y-axis (default 'G'; e.g. 'V')."},
+                "mh": {"type": "number", "description": "Isochrone metallicity [M/H], solar=0.0. Leave unset to auto-use the literature value: globular clusters carry a real 'feh' from Harris; open clusters have none, so solar is used."},
                 "max_error": {"type": "number", "description": "Drop stars with photometric error above this many mag (default 0.1)."},
                 "logage_half_width": {"type": "number", "description": "Half-width in log10(age/yr) of the isochrone age grid to scan around the literature age (default 0.3)."},
+                "isochrone_source": {
+                    "type": "string",
+                    "enum": ["mist", "parsec", "spots"],
+                    "description": (
+                        "Where the isochrone grid comes from. 'mist' (default): downloaded whole and "
+                        "cached locally, so it doesn't depend on a live per-request service. 'parsec': "
+                        "stev.oapd.inaf.it's web form, fetched per request -- try this as a cross-check, "
+                        "or if you specifically need a PARSEC-based comparison; that service has been "
+                        "observed to rate-limit or reset connections under repeated automated use. "
+                        "'spots': the Somers/Pinsonneault/Cao (2019) SPOTS grid of pre-main-sequence "
+                        "isochrones with a starspot covering-fraction axis (Fspot) -- use this for young "
+                        "clusters (roughly under a few hundred Myr, pre-main-sequence) where standard "
+                        "spot-free grids like MIST/PARSEC are known to mismatch active, spotted stars. "
+                        "The fit also scans Fspot and reports the winning covering fraction as "
+                        "fitted['fspot'] -- a fit result, not a literature-known property, and the grid "
+                        "is solar-metallicity only so 'mh' has no effect with this source."
+                    ),
+                },
+                "pre_dereddened_ebv": {
+                    "type": "number",
+                    "description": (
+                        "Set this if members_csv_path's magnitudes already had E(B-V) removed "
+                        "upstream (e.g. baked into a photometric calibration/zero-point step before "
+                        "this file was produced). The fit itself always solves for whatever residual "
+                        "colour excess remains in the magnitudes it's given; this value gets added to "
+                        "that residual to report a *total* E(B-V) comparable to literature (which is "
+                        "always a total, foreground value) -- leaving it at 0 when it shouldn't be "
+                        "makes the fitted E(B-V) look artificially small next to the literature number."
+                    ),
+                },
             },
             "required": ["members_csv_path", "cluster_name"],
         },
@@ -267,8 +352,79 @@ TOOLS = [
                 "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 20.0)."},
                 "plx_sigma": {"type": "number", "description": "Membership parallax cut width (default 3.0)."},
                 "pm_tol_mas_yr": {"type": "number", "description": "Membership proper-motion cut radius, mas/yr (default 1.0)."},
+                "isochrone_source": {
+                    "type": "string",
+                    "enum": ["mist", "parsec", "spots"],
+                    "description": "Isochrone grid source; 'mist' (default) is cached locally after a one-time download, 'parsec' fetches per-request from stev.oapd.inaf.it, 'spots' is the Somers/Pinsonneault/Cao (2019) starspot-inflated pre-main-sequence grid for young clusters (also scans starspot covering fraction Fspot, reported as fitted['fspot']).",
+                },
             },
             "required": ["fits_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "run_full_hr_pipeline_from_photometry_table",
+        "description": (
+            "Run the entire pipeline in one call starting from an existing photometry table "
+            "(e.g. an Afterglow export) instead of a FITS frame: load it, cross-match to Gaia "
+            "for parallax/proper motion, look up literature cluster parameters (open or "
+            "globular), remove field stars, fit an isochrone, and plot the HR diagram against "
+            "the literature values. Use this for a plain 'build the HR diagram for X from "
+            "<photometry CSV>' request; fall back to load_photometry_table / crossmatch_gaia / "
+            "select_cluster_members / fit_and_compare_hr_diagram individually if this needs "
+            "tuning or diagnosing (e.g. n_gaia_matched or n_members coming back very low)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "Path to the photometry CSV (Afterglow-style long format)."},
+                "cluster_name": {"type": "string", "description": "Cluster name or alias -- open or globular, e.g. 'NGC 2168' or 'NGC 1851'."},
+                "blue": {"type": "string", "description": "Blue-band column name (default 'B')."},
+                "red": {"type": "string", "description": "Red-band column name (default 'R')."},
+                "lum": {"type": "string", "description": "Magnitude column name for the y-axis (default 'V')."},
+                "mag_col": {"type": "string", "description": "Calibrated-magnitude column in the source CSV (default 'calibrated_mag')."},
+                "err_col": {"type": "string", "description": "Magnitude-error column in the source CSV (default 'mag_error')."},
+                "gaia_match_radius_arcsec": {"type": "number", "description": "Gaia cross-match radius in arcsec (default 2.0)."},
+                "gaia_mag_limit": {"type": "number", "description": "Gaia G magnitude limit (default 21.0 -- looser than the FITS pipeline's 20.0, since globular-cluster members are often fainter/farther)."},
+                "plx_sigma": {"type": "number", "description": "Membership parallax cut width (default 3.0)."},
+                "pm_tol_mas_yr": {"type": "number", "description": "Membership proper-motion cut radius, mas/yr (default 1.0)."},
+                "isochrone_source": {
+                    "type": "string",
+                    "enum": ["mist", "parsec", "spots"],
+                    "description": "Isochrone grid source; 'mist' (default) is cached locally after a one-time download, 'parsec' fetches per-request from stev.oapd.inaf.it, 'spots' is the Somers/Pinsonneault/Cao (2019) starspot-inflated pre-main-sequence grid for young clusters (also scans starspot covering fraction Fspot, reported as fitted['fspot']).",
+                },
+                "pre_dereddened_ebv": {
+                    "type": "number",
+                    "description": (
+                        "Set this if mag_col's magnitudes already had E(B-V) removed as part of an "
+                        "earlier calibration step, so the reported E(B-V) is a true total comparable "
+                        "to literature rather than understating it. Ask the user if they applied a "
+                        "reddening/extinction correction before producing this file -- don't assume 0."
+                    ),
+                },
+            },
+            "required": ["csv_path", "cluster_name"],
+        },
+    },
+    {
+        "name": "plot_observed_cmd",
+        "description": (
+            "Plot a plain observed colour-magnitude diagram (blue - red vs lum) with no "
+            "distance-modulus or reddening correction -- apparent magnitudes as measured, not "
+            "an absolute-magnitude HR diagram. Use this when get_literature_cluster_params "
+            "can't resolve the cluster at all (so there's nothing to fit against), or when the "
+            "goal is just the raw diagram rather than a literature comparison."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "csv_path": {"type": "string", "description": "CSV path with blue/red/lum magnitude columns (e.g. from load_photometry_table)."},
+                "blue": {"type": "string", "description": "Blue-band column name, e.g. 'B'."},
+                "red": {"type": "string", "description": "Red-band column name, e.g. 'R'."},
+                "lum": {"type": "string", "description": "Magnitude column name for the y-axis, e.g. 'V'."},
+                "max_error": {"type": "number", "description": "Optional: drop stars with photometric error above this many mag."},
+                "title": {"type": "string", "description": "Optional plot title."},
+            },
+            "required": ["csv_path", "blue", "red", "lum"],
         },
     },
 ]
@@ -279,7 +435,12 @@ def _run_one_tool(block):
     so the agent can see what failed and adjust, instead of crashing the run."""
     try:
         result = TOOL_DISPATCH[block.name](block.input)
-        return {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result, default=str)}
+        # tools.hr_diagram functions return KeplerToolModel instances,
+        # not dicts -- most failures surface as a populated `errors` field on
+        # the model rather than a raised exception (see docs/tool-architecture.md),
+        # so this still needs to serialize cleanly even on the "expected failure" path.
+        payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+        return {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(payload)}
     except Exception as exc:
         return {
             "type": "tool_result", "tool_use_id": block.id,
@@ -321,7 +482,7 @@ def run_agent(question: str, max_turns: int = 10, verbose: bool = True) -> str:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     answer = run_agent(
-        "Given _pipeline_test/ngc2168_test.fits, of NGC 2168, create an HR diagram "
+        "Given ngc2168_test.fits, of NGC 2168, create an HR diagram "
         "and compare it to literature values."
     )
     print("\n=== FINAL ANSWER ===\n" + answer)

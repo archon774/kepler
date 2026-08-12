@@ -27,6 +27,12 @@ __all__ = [
     "PulsarSonification",
     "PulsarPlot",
     "coerce_optional_int",
+    "ClusterLiteratureParams",
+    "PhotometryTableSummary",
+    "GaiaCrossmatchSummary",
+    "ClusterMembershipResult",
+    "HrDiagramFitResult",
+    "ObservedCmdResult",
 ]
 
 
@@ -373,3 +379,91 @@ def coerce_optional_int(value: Union[int, str, None]) -> Optional[int]:
         except ValueError:
             pass
     raise ValueError(f"expected an integer or null, got {value!r}")
+
+
+class ClusterLiteratureParams(KeplerToolModel):
+    cluster: str
+    resolved_name: str | None = None
+    cluster_type: Literal["open", "globular"] | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    parallax_mas: float | None = None
+    pmra_mas_yr: float | None = None
+    pmdec_mas_yr: float | None = None
+    log_age: float | None = None
+    age_myr: float | None = None
+    age_is_literature_default: bool = False
+    av: float | None = None
+    ebv: float | None = None
+    feh: float | None = None
+    distance_pc: float | None = None
+    distance_kpc: float | None = None
+    distance_modulus: float | None = None
+    source: str | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PhotometryTableSummary(KeplerToolModel):
+    file: FileMetadata
+    table: TableSummary
+    n_sources: int = 0
+    filters: list[str] = Field(default_factory=list)
+    ra_center_deg: float | None = None
+    dec_center_deg: float | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class GaiaCrossmatchSummary(KeplerToolModel):
+    file: FileMetadata
+    table: TableSummary
+    n_input: int = 0
+    n_matched: int = 0
+    median_separation_arcsec: float | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class ClusterMembershipResult(KeplerToolModel):
+    file: FileMetadata
+    n_input: int = 0
+    n_members: int = 0
+    plx_sigma: float = 3.0
+    pm_tol_mas_yr: float = 1.0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class HrDiagramFitResult(KeplerToolModel):
+    cluster: str
+    distance_kpc: float | None = None
+    ebv: float | None = None
+    ebv_residual: float | None = None
+    pre_dereddened_ebv: float = 0.0
+    log_age: float | None = None
+    age_myr: float | None = None
+    fspot: float | None = None
+    n_stars_fitted: int = 0
+    reduced_cost: float | None = None
+    literature: ClusterLiteratureParams | None = None
+    distance_pct_diff: float | None = None
+    ebv_diff: float | None = None
+    age_pct_diff: float | None = None
+    isochrone_source: str = "mist"
+    isochrone_path: str | None = None
+    png: ArtifactMetadata | None = None
+    members_csv: FileMetadata | None = None
+    n_detected: int | None = None
+    n_gaia_matched: int | None = None
+    n_members: int | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class ObservedCmdResult(KeplerToolModel):
+    n_stars: int = 0
+    n_input: int = 0
+    png: ArtifactMetadata | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)

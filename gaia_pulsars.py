@@ -276,9 +276,3 @@ if __name__ == "__main__":
     )
     print("\n=== FINAL ANSWER ===\n" + answer)
 
-####
-# questions to ask about pulsars
-# HR Diagrams and periodograms
-# Teach fourier transformations for pulsars
-# Astromancer code / libraries used as tools
-# setup repository
