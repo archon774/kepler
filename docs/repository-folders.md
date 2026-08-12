@@ -30,8 +30,8 @@ Important files and subfolders:
   remote query, and artifact summary models.
 - `config.py`: small environment-backed settings helpers for the tool layer.
 - `artifacts.py`: local artifact description and listing helpers.
-- `astrometry.py`, `calibration.py`, `catalogs.py`, `workspace.py`: local
-  plain Python user-facing tool wrappers.
+- `astrometry.py`, `calibration.py`, `catalogs.py`, `pulsar.py`,
+  `workspace.py`: local plain Python user-facing tool wrappers.
 - `simbad.py`, `ned.py`, `vizier.py`, `atnf.py`, `ads.py`, `mast.py`,
   `mpc.py`, `casda.py`, `resolve.py`: split remote database/archive tools.
 - `registry.py`, `runner.py`: optional agent schema registry and Anthropic
@@ -47,6 +47,11 @@ Current tools:
   filter-to-reference-band mapping Kepler would use.
 - `calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`:
   solve a zero point from local measurement and catalog-source records.
+- `pulsar.load_pulsar_lightcurve(path)`, `pulsar.compute_pulsar_periodogram(path)`,
+  `pulsar.fold_pulsar_lightcurve(path, period_s)` and
+  `pulsar.sonify_pulsar(path, period_s=None)`: the four-stage pulsar pipeline,
+  local only, each stage's artifact feeding the next. See
+  [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md).
 - `workspace.list_artifacts(directory=None)` and
   `workspace.describe_artifact(path)`: inspect local artifact files.
 - `resolve.resolve_target(name)`: resolve a target through SIMBAD.
@@ -201,8 +206,8 @@ Primary responsibilities:
 
 Important files and subfolders:
 
-- `pulsar/`: pulsar data types, ingest logic, light-curve algorithms, and
-  period-folding functions.
+- `pulsar/`: pulsar data types, ingest logic, light-curve algorithms,
+  period-folding functions, and sonification.
 - `variable/`: variable-star data types, ingest logic, light-curve algorithms,
   and period-folding functions.
 - `shared/`: small shared helpers such as `floatMod` and the common data
@@ -212,10 +217,65 @@ Important files and subfolders:
 
 Current caveats:
 
-- There is no TypeScript package manifest or build config in this repository.
+- Typechecked by the root `tsconfig.json` (`npm run typecheck`), but there is
+  no build, bundle, or runtime — nothing executes this TypeScript.
 - Browser/UI concerns were removed except where browser APIs carried the
   original ingest algorithm.
 - Periodogram logic lives separately in `algorithms/periodogram/`.
+- The runnable sonification is the Python port in `algorithms/pulsar/`; the
+  TypeScript here is the provenance record it was ported from.
+
+## `algorithms/pulsar/`
+
+Python pulsar time-series ingest and sonification. **The one folder under
+`algorithms/` that is a port rather than an extraction** — it carries the
+Astromancer TypeScript sonifier into Python because that code is welded to
+`Blob`, `document` and `AudioContext` and cannot run headless. Seams are marked
+`# PORTED:`, not `# EXTRACTED:`.
+
+One module per pipeline stage, in the order they must run.
+
+Primary responsibilities:
+
+- Parse Green Bank / Skynet pulsar files, both flavours (two-polarization
+  `.cal.txt` continuum scans and prefolded single-column "standard" files),
+  drop the leading noise-diode calibration block, rebase the time axis, and
+  subtract a running-median background.
+- Compute the Lomb-Scargle periodogram, locate its peak, and give the peak a
+  false-alarm confidence level.
+- Fold the light curve at a period and bin it into a pulse profile.
+- Render either the profile or the raw scan as amplitude-modulated noise, and
+  encode 16-bit PCM WAV.
+
+Important files and subfolders:
+
+- `ingest.py`: file parsing, header extraction, `median` /
+  `background_subtraction`.
+- `periodogram.py`: `lomb_scargle`, `find_global_max`, `confidence_threshold`,
+  `nyquist_periodogram_range`, `compute_periodogram`.
+- `folding.py`: `float_mod`, `fold_to_phase`, `bin_data`, `fold_and_bin`,
+  `duplicate_if_needed`, `difference_and_sum`, `fold_lightcurve`.
+- `sonification.py`: `interpolate_linear`, `window_sonification_input`,
+  `folded_sonification_input`, `sonify`, `write_wav`.
+- [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md): the stage-by-stage
+  architecture and the extracted Astromancer code behind each stage.
+- [extraction.md](extraction.md), Pulsar Sonification: provenance, the seams
+  cut, the port's deliberate divergences, and the preserved upstream quirks.
+
+Current caveats:
+
+- **Stage order is a dependency, not a convention.** Only the periodogram
+  produces a period, and folding at a wrong period returns a flat profile
+  rather than an error — which is why each stage reports a quality number.
+- The rendered audio is not real-time: the synthesis ignores sample timestamps,
+  so a period measured off it is wrong by a few tenths of a percent (folded) to
+  a few percent (unfolded). `tools/pulsar.py` reports it as `playback_stretch`.
+  Catalogued periods come from `tools.atnf.search_atnf`.
+- The noise carrier is seeded for determinism; upstream's `Math.random()` is
+  not reproducible, so no byte-for-byte reference render exists to diff against.
+- `sonificationBrowser` is not ported — it exists to drive an `AudioContext`.
+- No dedispersion, no barycentric correction, no period uncertainty. Upstream
+  has none of these either.
 
 ## `algorithms/periodogram/`
 
@@ -241,7 +301,8 @@ Important files and subfolders:
 
 Current caveats:
 
-- There is no TypeScript package manifest or build config in this repository.
+- Typechecked by the root `tsconfig.json` (`npm run typecheck`), but there is
+  no build, bundle, or runtime — nothing executes this TypeScript.
 - Highcharts rendering fixes and UI storage paths are documented but not
   extracted.
 - Period folding itself is owned by `algorithms/lightcurve/`.
