@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import requests
 from astropy.io import fits
+from matplotlib.patches import FancyBboxPatch, Polygon
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -227,6 +228,12 @@ def list_bundled_targets() -> dict[str, list[str]]:
 #: Where --credits looks for the mentor's photo. Not bundled by default --
 #: see docs/assets/README.md (or the tool's own message) for how to add one.
 CREDITS_ASSET_PATH = ROOT / "docs" / "assets" / "danny_boi.png"
+
+#: A second, purely decorative mentor photo -- a small corner easter egg on the
+#: photometry plot itself, not the --credits card. Same as CREDITS_ASSET_PATH:
+#: untracked by design, so its absence in another checkout is ordinary, not an
+#: error -- _add_mentor_sidebar skips silently rather than raising.
+SALAD_ASSET_PATH = ROOT / "docs" / "assets" / "salad.png"
 
 #: Full joke text for the terminal. Deliberately fixed rather than randomized,
 #: to keep --credits output (and any test of it) deterministic. No meta-
@@ -498,6 +505,95 @@ def compute_photometry(
     return data, results, zero_point
 
 
+#: Fraction of figure height _add_mentor_sidebar's footer strip needs.
+#: Callers reserve this via fig.tight_layout(rect=(0, MENTOR_SIDEBAR_HEIGHT,
+#: 1, ...)) themselves -- see mentor_sidebar_rect below -- rather than this
+#: module fighting an already-computed tight_layout with a later
+#: subplots_adjust (which, with colorbars and an equal-aspect image axes
+#: involved, was observed to reflow enough to clip a two-line title).
+MENTOR_SIDEBAR_HEIGHT = 0.24
+
+
+def mentor_sidebar_rect(asset_path: Path = SALAD_ASSET_PATH) -> tuple[float, float, float, float]:
+    """The ``rect`` to pass ``fig.tight_layout()`` so its layout leaves room
+    for ``_add_mentor_sidebar`` -- or the full figure, unchanged, when
+    ``asset_path`` isn't present and no footer will be added.
+
+    0.97 on top rather than 1.0 in both cases: a two-line plot title was
+    observed to clip against the literal figure edge at 1.0 once colorbars
+    were in the mix, regardless of the footer -- cheap, harmless headroom
+    either way.
+    """
+    bottom = MENTOR_SIDEBAR_HEIGHT if asset_path.exists() else 0.0
+    return (0.0, bottom, 1.0, 0.97)
+
+
+def _add_mentor_sidebar(
+    fig,
+    asset_path: Path = SALAD_ASSET_PATH,
+    caption: str = CREDITS_CAPTION,
+) -> None:
+    """Easter egg: the mentor's photo plus a speech-bubble caption, in a
+    footer strip outside every plot axes on the figure -- never overlaid on
+    the data itself.
+
+    Call this only after laying out the figure's real content via
+    ``fig.tight_layout(rect=mentor_sidebar_rect())`` -- that reserves the
+    footer band this draws into; this function only fills it, and does not
+    itself adjust any other axes' position.
+
+    Silently does nothing if ``asset_path`` isn't present in this checkout --
+    it's untracked by design (see SALAD_ASSET_PATH), so most clones won't
+    have it, and that's an ordinary case, not something worth a warning on
+    every photometry run.
+    """
+    if not asset_path.exists():
+        return
+
+    photo_ax = fig.add_axes((0.04, 0.03, 0.15, 0.17))
+    photo_ax.imshow(plt.imread(asset_path))
+    photo_ax.axis("off")
+    for spine in photo_ax.spines.values():
+        spine.set_visible(True)
+        spine.set_edgecolor("black")
+        spine.set_linewidth(1.0)
+
+    bubble_ax = fig.add_axes((0.205, 0.03, 0.34, 0.17))
+    bubble_ax.set_xlim(0, 1)
+    bubble_ax.set_ylim(0, 1)
+    bubble_ax.axis("off")
+    # Tail first, so the bubble body draws over the seam where it meets the
+    # photo -- clip_on=False lets it reach left of this axes' own bounds,
+    # into the gap toward photo_ax.
+    bubble_ax.add_patch(
+        Polygon(
+            [(0.08, 0.62), (0.08, 0.40), (-0.12, 0.50)],
+            closed=True,
+            linewidth=1.1,
+            edgecolor="black",
+            facecolor="white",
+            clip_on=False,
+            zorder=1,
+        )
+    )
+    bubble_ax.add_patch(
+        FancyBboxPatch(
+            (0.06, 0.12),
+            0.88,
+            0.76,
+            boxstyle="round,pad=0.02,rounding_size=0.10",
+            linewidth=1.1,
+            edgecolor="black",
+            facecolor="white",
+            zorder=2,
+        )
+    )
+    bubble_ax.text(
+        0.5, 0.5, caption,
+        ha="center", va="center", fontsize=9.5, wrap=True, zorder=3,
+    )
+
+
 def plot_photometry(
     data: np.ndarray,
     results: Sequence[object],
@@ -574,7 +670,8 @@ def plot_photometry(
         f"| median flux {np.median(flux):.1f}",
         fontsize=11,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=mentor_sidebar_rect())
+    _add_mentor_sidebar(fig, caption="Mmmm salad so yummers! :3")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220)
     plt.close(fig)
@@ -804,7 +901,8 @@ def plot_zero_point_solution(
         f"({int(kept.sum())} kept, {int((~kept).sum())} rejected)  |  catalogs: {catalog_summary}"
     )
     fig.suptitle(title, fontsize=10, y=0.99)
-    fig.tight_layout()
+    fig.tight_layout(rect=mentor_sidebar_rect())
+    _add_mentor_sidebar(fig, caption="OMG girl love this cyclospora lettuce")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=200)
     plt.close(fig)

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from tools.claude_photometry_haiku_tool import (
     ZeroPointResolution,
+    _add_mentor_sidebar,
     _replicate_zero_point_rejection,
     list_bundled_targets,
     magnitude_label_for,
@@ -131,3 +132,17 @@ def test_render_credits_card_skips_image_when_photo_missing() -> None:
     # egg, not something worth crashing over when the asset isn't there.
     result = render_credits_card(Path("unused.png"), asset_path=Path("does_not_exist.jpg"))
     assert result is None
+
+
+def test_add_mentor_sidebar_skips_silently_when_asset_missing() -> None:
+    # docs/assets/salad.png is untracked by design (same as the credits-card
+    # photo) -- a fresh clone won't have it, so this must add nothing rather
+    # than raise.
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    try:
+        _add_mentor_sidebar(fig, asset_path=Path("does_not_exist.jpg"))
+        assert len(fig.axes) == 1
+    finally:
+        plt.close(fig)
