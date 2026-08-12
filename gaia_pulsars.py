@@ -96,10 +96,16 @@ client = Anthropic(
 ########################
 
 
+from concurrent.futures import ThreadPoolExecutor
+
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
+
+from tools.astrometry import describe_image_wcs, locate_target_in_image
+from tools.atnf import search_atnf
+from tools.sonify import sonify_pulsar
 
 MODEL = "claude-haiku-4-5-20251001"
 
@@ -109,7 +115,22 @@ SYSTEM_PROMPT = (
     "sky coordinates and to query the Gaia DR3 and SIMBAD databases. When a question "
     "involves several objects, call the relevant tools for ALL of them in the same turn "
     "so they run in parallel. Base every factual claim on tool results rather than prior "
-    "knowledge, and state the numbers you used."
+    "knowledge, and state the numbers you used.\n\n"
+    "Pulsar-specific tools: search_atnf returns a pulsar's full ATNF Pulsar Catalogue "
+    "record (position, period P0, DM, and whatever else ATNF has for it) -- use the "
+    "formal designation (e.g. 'J0534+2200' or 'B0531+21'), not a common nickname. "
+    "describe_image_wcs and locate_target_in_image read a FITS frame's WCS (field "
+    "center, pixel scale, or where a specific target/RA-Dec falls in the frame and "
+    "whether it's actually in bounds) -- use locate_target_in_image before assuming an "
+    "optical follow-up frame covers a pulsar's position, especially since SIMBAD "
+    "sometimes doesn't resolve a pulsar under the same name ATNF uses (pass ra_deg/"
+    "dec_deg from search_atnf directly in that case rather than target_name). "
+    "sonify_pulsar renders a pulsar's rotation as an audio .wav file from its ATNF "
+    "period -- mode='click' (default) plays an audible click once per rotation at any "
+    "period; mode='tone' plays a continuous pitch at the rotation frequency, which "
+    "needs speed_factor raised well above 1.0 for most pulsars to be audible at all "
+    "(most real rotation periods are far below audible pitch) -- check the result's "
+    "frequency_hz and warnings before claiming a tone rendering is audible."
 )
 
 def resolve_object(name):
@@ -170,6 +191,15 @@ TOOL_DISPATCH = {
         i.get("radius_deg", 0.1), i.get("mag_limit", 21.0),
     ),
     "query_simbad": lambda i: query_simbad(i["name"]),
+    "search_atnf": lambda i: search_atnf(i["name"]),
+    "describe_image_wcs": lambda i: describe_image_wcs(i["fits_path"]),
+    "locate_target_in_image": lambda i: locate_target_in_image(
+        i["fits_path"], i.get("target_name"), i.get("ra_deg"), i.get("dec_deg"),
+    ),
+    "sonify_pulsar": lambda i: sonify_pulsar(
+        i["name"], i.get("mode", "click"), i.get("duration_s", 5.0),
+        i.get("sample_rate", 44100), i.get("speed_factor", 1.0),
+    ),
 }
 
 
@@ -214,6 +244,75 @@ TOOLS = [
             "required": ["name"],
         },
     },
+    {
+        "name": "search_atnf",
+        "description": "Return every ATNF Pulsar Catalogue parameter available for a named "
+                       "pulsar (position, rotation period P0, DM, and whatever else ATNF has "
+                       "on file). Requires the formal designation -- J2000 form preferred "
+                       "(e.g. 'J0534+2200'), B1950 also accepted (e.g. 'B0531+21') -- ATNF "
+                       "does zero name resolution, so translate a common nickname yourself "
+                       "first. A name that isn't a pulsar returns not_found, not an error.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Formal pulsar designation, e.g. 'J0534+2200'."}
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "describe_image_wcs",
+        "description": "Read a FITS frame's WCS: whether it has a celestial solution, image "
+                       "shape, field center RA/Dec, pixel scale, and rotation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the FITS file."}
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "locate_target_in_image",
+        "description": "Find where a named target or a fixed RA/Dec falls in one FITS "
+                       "frame's pixel grid, and whether that pixel is actually inside the "
+                       "image. Pass target_name to resolve via SIMBAD, or ra_deg+dec_deg "
+                       "directly -- prefer coordinates from search_atnf for a pulsar, since "
+                       "SIMBAD sometimes doesn't resolve it under the same designation. Use "
+                       "this before assuming an optical follow-up frame actually covers a "
+                       "pulsar's position, rather than searching the whole frame blind.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the FITS file."},
+                "target_name": {"type": "string", "description": "Object name to resolve via SIMBAD."},
+                "ra_deg": {"type": "number", "description": "Right ascension in degrees (use with dec_deg instead of target_name)."},
+                "dec_deg": {"type": "number", "description": "Declination in degrees (use with ra_deg instead of target_name)."},
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "sonify_pulsar",
+        "description": "Render a pulsar's rotation as an audio .wav file, from its ATNF "
+                       "period (P0, looked up automatically). mode='click' (default) plays "
+                       "an audible click once per rotation, recognizable as a pulse train at "
+                       "any period. mode='tone' plays a continuous pitch at the rotation "
+                       "frequency instead -- most real pulsar periods are far too slow for "
+                       "this to be audible without raising speed_factor well above 1.0; check "
+                       "the result's frequency_hz and warnings before claiming it's audible.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Formal pulsar designation, e.g. 'J0534+2200'."},
+                "mode": {"type": "string", "enum": ["click", "tone"], "description": "Defaults to 'click'."},
+                "duration_s": {"type": "number", "description": "Length of the rendered audio in seconds (default 5.0)."},
+                "sample_rate": {"type": "integer", "description": "Audio sample rate in Hz (default 44100)."},
+                "speed_factor": {"type": "number", "description": "Time-compression factor; effective frequency = speed_factor / P0 (default 1.0, the pulsar's real rate)."},
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 # Loop 
@@ -226,8 +325,14 @@ def _run_one_tool(block):
     """
     try:
         result = TOOL_DISPATCH[block.name](block.input)
+        # search_atnf/describe_image_wcs/locate_target_in_image/sonify_pulsar
+        # return tools.models Pydantic instances (KeplerToolModel), not plain
+        # dicts like this file's original functions -- model_dump(mode="json")
+        # first or json.dumps would fall back to str() on them via default=str,
+        # producing an unstructured repr instead of real JSON.
+        payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
         return {"type": "tool_result", "tool_use_id": block.id,
-                "content": json.dumps(result, default=str)}
+                "content": json.dumps(payload, default=str)}
     except Exception as exc:
         return {"type": "tool_result", "tool_use_id": block.id,
                 "content": f"ERROR running {block.name}: {exc}", "is_error": True}

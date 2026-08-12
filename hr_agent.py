@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 from anthropic import Anthropic
 
 from tools import hr_diagram as hp
+from tools.astrometry import describe_image_wcs, locate_target_in_image
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,14 @@ SYSTEM_PROMPT = (
     "the fitted E(B-V) only reflects the residual left in the magnitudes you "
     "were given, not the true total, and comparing it directly to literature "
     "(always a total, foreground value) understates it. "
+    "run_full_hr_pipeline already checks the cluster's literature sky position "
+    "falls inside the FITS frame before running extraction, and fails fast "
+    "with a clear error instead of quietly returning zero members if it "
+    "doesn't -- but if you're unsure what a frame is even pointed at, or want "
+    "to check a target before running anything, call describe_image_wcs "
+    "(field center, pixel scale, rotation) or locate_target_in_image (where "
+    "one named target or RA/Dec falls in the frame, and whether it's in "
+    "bounds) directly. "
     "Fall back to the individual steps when something needs diagnosing or "
     "tuning: zero Gaia matches means widen radius_arcsec or check the frame's "
     "WCS; zero cluster members means widen plx_sigma / pm_tol_mas_yr, or double "
@@ -199,6 +208,10 @@ TOOL_DISPATCH = {
         i.get("gaia_match_radius_arcsec", 2.0), i.get("gaia_mag_limit", 21.0),
         i.get("plx_sigma", 3.0), i.get("pm_tol_mas_yr", 1.0),
         i.get("isochrone_source", "mist"), i.get("pre_dereddened_ebv", 0.0),
+    ),
+    "describe_image_wcs": lambda i: describe_image_wcs(i["fits_path"]),
+    "locate_target_in_image": lambda i: locate_target_in_image(
+        i["fits_path"], i.get("target_name"), i.get("ra_deg"), i.get("dec_deg"),
     ),
 }
 
@@ -442,6 +455,47 @@ TOOLS = [
                 "title": {"type": "string", "description": "Optional plot title."},
             },
             "required": ["csv_path", "blue", "red", "lum"],
+        },
+    },
+    {
+        "name": "describe_image_wcs",
+        "description": (
+            "Read a FITS frame's WCS (via astropy.wcs / WCSLIB): whether it has a celestial "
+            "solution, image shape, field center RA/Dec, pixel scale, and rotation. Use this "
+            "to check a frame is plate-solved before extract_photometry_from_fits, or to "
+            "answer a plain question about a frame's pointing/scale without running the "
+            "photometry pipeline."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the FITS file."},
+            },
+            "required": ["fits_path"],
+        },
+    },
+    {
+        "name": "locate_target_in_image",
+        "description": (
+            "Find where a named target or a fixed RA/Dec falls in one FITS frame's pixel "
+            "grid, using the frame's own WCS -- and whether that pixel is actually inside the "
+            "image. Pass target_name to resolve via SIMBAD, or ra_deg+dec_deg directly (e.g. "
+            "an ATNF pulsar position, which SIMBAD sometimes doesn't carry under the same "
+            "name -- call search_atnf or a pulsar catalogue lookup first for those). Use this "
+            "before run_full_hr_pipeline on a frame you're unsure covers the cluster (a quick "
+            "check that avoids running the full extraction/crossmatch/fit pipeline only to "
+            "find zero members), or to locate a pulsar's optical counterpart for targeted "
+            "photometry rather than searching the whole frame."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fits_path": {"type": "string", "description": "Path to the FITS file."},
+                "target_name": {"type": "string", "description": "Object name to resolve via SIMBAD, e.g. 'NGC 2168'."},
+                "ra_deg": {"type": "number", "description": "Right ascension in degrees (use with dec_deg instead of target_name)."},
+                "dec_deg": {"type": "number", "description": "Declination in degrees (use with ra_deg instead of target_name)."},
+            },
+            "required": ["fits_path"],
         },
     },
 ]

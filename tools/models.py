@@ -16,6 +16,8 @@ __all__ = [
     "ArtifactMetadata",
     "TableSummary",
     "WcsSummary",
+    "TargetPixelLocation",
+    "PulsarSonificationResult",
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
@@ -111,6 +113,41 @@ class WcsSummary(KeplerToolModel):
     center_ra_hours: float | None = None
     pixel_scale_arcsec: tuple[float, float] | None = None
     rotation_deg: float | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class TargetPixelLocation(KeplerToolModel):
+    """Where a named/coordinate target falls in one FITS frame's pixel grid,
+    via the frame's own WCS (astropy.wcs, i.e. WCSLIB) -- not a new solve.
+    Used both to sanity-check that a cluster is actually in-frame before an
+    HR-diagram extraction run, and to locate a pulsar's optical counterpart
+    for targeted photometry."""
+
+    file: FileMetadata
+    target_name: str | None = None
+    resolved_name: str | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    pixel_x: float | None = None
+    pixel_y: float | None = None
+    in_bounds: bool | None = None
+    image_shape: tuple[int, int] | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PulsarSonificationResult(KeplerToolModel):
+    """An audio rendering of a pulsar's rotation, from its ATNF period (P0)."""
+
+    name: str
+    period_s: float | None = None
+    frequency_hz: float | None = None
+    mode: str = "click"
+    speed_factor: float = 1.0
+    duration_s: float | None = None
+    n_pulses: int | None = None
+    audio: ArtifactMetadata | None = None
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

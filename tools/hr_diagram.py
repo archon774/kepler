@@ -14,6 +14,7 @@ from algorithms.hrdiagram import observations as _observations
 from algorithms.hrdiagram.fit import fit_and_compare as _fit_and_compare
 from algorithms.hrdiagram.fit import plot_observed_cmd as _plot_observed_cmd
 from tools.artifacts import describe_artifact_file, describe_file
+from tools.astrometry import locate_target_in_image
 from tools.config import artifact_directory
 from tools.models import (
     ArtifactMetadata,
@@ -282,10 +283,40 @@ def run_hr_diagram_pipeline(
 ) -> HrDiagramFitResult:
     """FITS frame + cluster name -> HR diagram, fitted vs. literature.
 
-    Chains extract_photometry_from_fits -> crossmatch_gaia ->
-    select_cluster_members -> fit_hr_diagram, short-circuiting to an error
-    result (rather than raising) on the first failed stage.
+    Checks the cluster's literature sky position actually falls inside the
+    frame (via its WCS -- see tools.astrometry.locate_target_in_image)
+    before running anything else: extract_photometry_from_fits on a frame
+    pointed elsewhere would otherwise just silently produce zero matching
+    members several stages later, after the (slow) extraction and Gaia
+    crossmatch already ran. Then chains extract_photometry_from_fits ->
+    crossmatch_gaia -> select_cluster_members -> fit_hr_diagram,
+    short-circuiting to an error result (rather than raising) on the first
+    failed stage.
     """
+    literature = get_literature_cluster_params(cluster_name)
+    if literature.errors:
+        return HrDiagramFitResult(cluster=cluster_name, isochrone_source=isochrone_source, errors=literature.errors)
+
+    location = locate_target_in_image(fits_path, ra_deg=literature.ra_deg, dec_deg=literature.dec_deg)
+    if location.errors:
+        return HrDiagramFitResult(cluster=cluster_name, literature=literature, isochrone_source=isochrone_source, errors=location.errors)
+    if location.in_bounds is False:
+        detail = ""
+        if location.image_shape is not None and location.pixel_x is not None:
+            height, width = location.image_shape
+            detail = f" (pixel {location.pixel_x:.1f}, {location.pixel_y:.1f} vs. a {width}x{height} image)"
+        return HrDiagramFitResult(
+            cluster=cluster_name, literature=literature, isochrone_source=isochrone_source,
+            errors=[ToolError(
+                code="target_not_in_frame",
+                message=(
+                    f"{cluster_name}'s literature position (RA={literature.ra_deg:.4f}, "
+                    f"Dec={literature.dec_deg:.4f}) falls outside {fits_path!r}'s image{detail}. "
+                    "Check this is the right frame for this cluster before running photometry on it."
+                ),
+            )],
+        )
+
     detected = extract_photometry_from_fits(fits_path, threshold=2.5, directory=directory)
     if detected.errors:
         return HrDiagramFitResult(cluster=cluster_name, isochrone_source=isochrone_source, errors=detected.errors)

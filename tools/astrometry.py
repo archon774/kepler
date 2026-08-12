@@ -10,7 +10,8 @@ from astropy.io import fits
 from astropy.wcs.utils import proj_plane_pixel_scales
 
 from tools.artifacts import describe_file
-from tools.models import ToolError, ToolWarning, WcsSummary
+from tools.models import TargetPixelLocation, ToolError, ToolWarning, WcsSummary
+from tools.resolve import resolve_target_coords
 from algorithms.wcs.source_extraction import build_wcs_from_header
 
 
@@ -97,7 +98,10 @@ def describe_image_wcs(path: str | Path) -> WcsSummary:
 
     center_ra_deg, center_dec_deg = _center_from_wcs(wcs, image_shape)
     center_ra_hours = center_ra_deg / 15.0 if center_ra_deg is not None else None
-    ctype = tuple(str(value) for value in wcs.wcs.ctype[:2])
+    # wcs.wcs.ctype is a StrListProxy, not a plain list -- list() first;
+    # astropy 8.x's StrListProxy.__getitem__ rejects slice indices directly
+    # (list(...)[:2] works since list()'s __iter__ path is unaffected).
+    ctype = tuple(str(value) for value in list(wcs.wcs.ctype)[:2])
 
     return WcsSummary(
         file=file,
@@ -110,4 +114,100 @@ def describe_image_wcs(path: str | Path) -> WcsSummary:
         pixel_scale_arcsec=_pixel_scale_arcsec(wcs),
         rotation_deg=_rotation_deg(wcs),
         warnings=warnings,
+    )
+
+
+def locate_target_in_image(
+    path: str | Path,
+    target_name: str | None = None,
+    ra_deg: float | None = None,
+    dec_deg: float | None = None,
+) -> TargetPixelLocation:
+    """Where a target falls in one FITS frame's pixel grid, via the frame's
+    own WCS (astropy.wcs -- i.e. WCSLIB, already the engine behind every
+    sky<->pixel transform in this repo; there is no separate WCSLIB
+    integration to add).
+
+    Pass either `target_name` (resolved via SIMBAD, see tools.resolve) or
+    `ra_deg`/`dec_deg` directly -- e.g. an ATNF pulsar position, which SIMBAD
+    sometimes doesn't carry under the same name. Two uses this exists for:
+    confirming a cluster is actually in-frame before running the (slow) HR-
+    diagram extraction pipeline on it (see
+    tools.hr_diagram.run_hr_diagram_pipeline), and locating a pulsar's sky
+    position within an optical follow-up frame for targeted photometry of
+    its counterpart, rather than searching the whole frame blind.
+    """
+    file = describe_file(path)
+    errors: list[ToolError] = []
+    warnings: list[ToolWarning] = []
+
+    if not file.exists:
+        errors.append(ToolError(code="file_not_found", message="FITS file does not exist."))
+        return TargetPixelLocation(file=file, target_name=target_name, errors=errors)
+    if not file.is_file:
+        errors.append(ToolError(code="not_a_file", message="Path is not a regular file."))
+        return TargetPixelLocation(file=file, target_name=target_name, errors=errors)
+
+    resolved_name = target_name
+    if ra_deg is None or dec_deg is None:
+        if not target_name:
+            errors.append(
+                ToolError(code="invalid_input", message="Pass target_name, or both ra_deg and dec_deg.")
+            )
+            return TargetPixelLocation(file=file, target_name=target_name, errors=errors)
+        resolved = resolve_target_coords(target_name)
+        if resolved is None:
+            errors.append(ToolError(code="not_found", message=f"{target_name!r} did not resolve via SIMBAD."))
+            return TargetPixelLocation(file=file, target_name=target_name, errors=errors)
+        ra_deg, dec_deg = resolved.ra_deg, resolved.dec_deg
+        resolved_name = resolved.object_name
+
+    try:
+        header = fits.getheader(file.path)
+    except Exception as exc:
+        errors.append(ToolError(code="fits_header_error", message=str(exc)))
+        return TargetPixelLocation(
+            file=file, target_name=target_name, resolved_name=resolved_name,
+            ra_deg=ra_deg, dec_deg=dec_deg, errors=errors,
+        )
+
+    image_shape = _image_shape_from_header(header)
+    wcs = build_wcs_from_header(header)
+    if wcs is None:
+        errors.append(ToolError(code="no_celestial_wcs", message="FITS header does not contain a celestial WCS."))
+        return TargetPixelLocation(
+            file=file, target_name=target_name, resolved_name=resolved_name,
+            ra_deg=ra_deg, dec_deg=dec_deg, image_shape=image_shape, errors=errors,
+        )
+
+    try:
+        pixel_x, pixel_y = wcs.all_world2pix(ra_deg, dec_deg, 1)
+        pixel_x, pixel_y = float(pixel_x), float(pixel_y)
+    except Exception as exc:
+        errors.append(ToolError(code="wcs_projection_error", message=str(exc)))
+        return TargetPixelLocation(
+            file=file, target_name=target_name, resolved_name=resolved_name,
+            ra_deg=ra_deg, dec_deg=dec_deg, image_shape=image_shape, errors=errors,
+        )
+
+    in_bounds = None
+    if image_shape is not None:
+        height, width = image_shape
+        in_bounds = (1.0 <= pixel_x <= width) and (1.0 <= pixel_y <= height)
+        if not in_bounds:
+            warnings.append(
+                ToolWarning(
+                    code="target_out_of_bounds",
+                    message=f"({pixel_x:.1f}, {pixel_y:.1f}) falls outside the {width}x{height} image.",
+                )
+            )
+    else:
+        warnings.append(
+            ToolWarning(code="missing_image_shape", message="No NAXIS1/NAXIS2 in header; in_bounds not determined.")
+        )
+
+    return TargetPixelLocation(
+        file=file, target_name=target_name, resolved_name=resolved_name,
+        ra_deg=ra_deg, dec_deg=dec_deg, pixel_x=pixel_x, pixel_y=pixel_y,
+        in_bounds=in_bounds, image_shape=image_shape, warnings=warnings,
     )
