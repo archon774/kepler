@@ -492,6 +492,20 @@ def compute_photometry(
         a_in_px=8.0,
         a_out_px=12.0,
         zero_point_mag=effective_zero_point_mag if effective_zero_point_mag is not None else 0.0,
+        # PARITY WITH THE SOLVE, NOT JUST THE UPSTREAM DEFAULT -- field_cal.py
+        # forces apcorr_tol=0 (aperture correction off) for its own internal
+        # photometry pass when solving `zero_point` against catalog stars (see
+        # docs/extraction.md's apcorr_tol note and field_cal.py's own "LEGACY
+        # AFTERGLOW PARITY -- DO NOT CLEAN UP" comment). A field-cal zero point
+        # is therefore only valid on that same apcorr_tol=0 magnitude scale --
+        # applying it here with the class default (apcorr_tol=1e-4, aperture
+        # correction on) would silently bias every "calibrated" magnitude in
+        # this run by the frame's own aperture-correction constant (confirmed
+        # up to ~0.25 mag on bundled test frames -- far bigger than the
+        # zero-point solve's own reported uncertainty). Only the field-cal
+        # path needs this: a CLI override or header value was never solved
+        # against a catalog in the first place, so there's no scale to match.
+        apcorr_tol=0.0 if zero_point.source == "field-cal" else PhotometrySettings().apcorr_tol,
     )
 
     results = run_photometry(
