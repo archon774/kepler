@@ -1,7 +1,11 @@
 # Model Backends and Benchmarking
 
 Date: 2026-09-04
-Status: proposed design — no code written
+Status: design approved 2026-09-04; implementation planned, no code written
+Plan: `docs/model-port-plan.md` covers phases -1--3
+(the model port). Phases 4--5 (the benchmark harness) get their own plan,
+written once the port lands and the fault taxonomy is real rather than
+predicted.
 Branch: `agent/model-backends` (off `main`, at the maintainer's instruction;
 `CLAUDE.md` otherwise defaults to `dev`)
 
@@ -716,25 +720,56 @@ visible in all four dialects.
 
 ## 11. Open Questions
 
-1. **Which local models are the reference set?** The suite needs a named
-   baseline — a `qwen3`/`llama3.1` tier for "does tool calling work at all" and
-   a frontier tier for the ceiling. Undecided, and it determines how much the
-   `null` probe actually discriminates.
-2. **Does the Ollama OpenAI-compatibility endpoint faithfully carry union types
-   and parallel tool calls?** Assumed yes; must be verified in Phase 2 against a
-   live daemon before the native `/api/chat` fallback is discarded.
-3. **Is the price table maintainable?** A stale `prices.json` produces confident
-   wrong cost numbers. Alternative: report tokens only and let the reader price
-   them. Leaning toward keeping estimated USD but printing the `retrieved_on`
-   date in every report header.
-4. **How large should the seed suite be?** Roughly 15–25 tasks covers the
-   documented failure modes without making a full four-backend sweep expensive.
-   Not yet enumerated.
-5. **Should trajectory grading tolerate reasonable alternate paths?** A model
-   that answers correctly via a different but valid tool sequence currently
-   scores poorly. Options: multiple accepted trajectories per task, or grade
-   trajectory only on `must_not_call` violations. Unresolved, and it is the
-   most likely source of unfair grades.
+Reviewed at the implementation design gate, 2026-09-04. Two are resolved
+outright, one provisionally, and two remain open — each named against the plan
+that will close it.
+
+**1. Which local models are the reference set?** *Provisionally resolved.*
+`qwen3:8b` is the small tier — reliable tool calling at 8B, which is the tier
+the `null` probe most needs to discriminate. It is named once, in
+`tests/test_llm_ollama_backend.py::OLLAMA_REFERENCE_MODEL`, so the harness
+imports a name rather than a literal. The frontier tier is chosen when the
+harness plan lands and there is something to compare against.
+
+**2. Does the Ollama OpenAI-compatibility endpoint faithfully carry union types
+and parallel tool calls?** *Open — resolved by measurement.* Model-port plan
+Task 10 Step 4 runs a live `qwen3:8b` loop and records three findings: what the
+model emits for a union-typed `max_catalogs`, whether arguments arrive as a JSON
+string or an object, and whether parallel calls return in one message. If the
+compatibility layer proves lossy, the native `/api/chat` endpoint is the
+documented fallback and taking it is a decision, not a silent implementation
+choice.
+
+**3. Is the price table maintainable?** *Open — belongs to the harness plan.*
+A stale `prices.json` produces confident wrong cost numbers. Leaning toward
+keeping estimated USD but printing the `retrieved_on` date in every report
+header, so a reader can discount a stale figure rather than trust it.
+
+**4. How large should the seed suite be?** *Resolved: eight tasks, one per
+confirmed-live failure mode `SYSTEM_PROMPT` already documents.* Smallest suite
+that discriminates, and a four-backend sweep stays cheap. It grows from
+evidence, not from a target count.
+
+| # | Failure mode | Probes |
+| --- | --- | --- |
+| 1 | Probing VizieR catalogs one at a time instead of using `category=` | `must_not_call: list_vizier_catalogs` |
+| 2 | Re-issuing an identical failing call | duplicate-call rate |
+| 3 | Passing a colloquial name to NED | argument predicate on `search_ned` |
+| 4 | Passing a colloquial name to ATNF (`"Crab"` matches nothing) | argument predicate on `search_atnf` |
+| 5 | Reading a period off rendered audio | ordered subsequence over the pulsar chain |
+| 6 | Presenting an inline preview as the complete answer | `must_not_match` on the answer |
+| 7 | Attributing a figure to a named paper without fetching its abstract | `must_call: get_paper_abstract` |
+| 8 | The `null`-argument probe (`registry.py:339`, `:380`) | `null_argument_fidelity` |
+
+**5. Should trajectory grading tolerate reasonable alternate paths?**
+*Resolved: asymmetrically.* `must_not_call` and per-argument predicates are hard
+failures. `must_call` and ordering produce a reported **trajectory deviation**
+count — visible in the matrix, not a failure. This grades the documented failure
+modes the seed suite is built from, which are all things a model should *not*
+do, without punishing a model that reaches a correct answer by a different valid
+route. Enumerating accepted alternate trajectories per task was rejected: every
+alternate would have to be written by hand, and the suite would age badly as
+model strategies change.
 
 ---
 
