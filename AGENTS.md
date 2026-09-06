@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Kepler is an early-stage astronomy tooling workspace with independent extracted modules. Public Python tools live in `tools/`, including one thin tool per astronomy database/archive (SIMBAD, NED, VizieR, ATNF, ADS, MAST, MPC, CASDA). Extracted Python algorithms live in `algorithms/wcs/`, `algorithms/photometry/`, `algorithms/fieldcal/`, `algorithms/catalogs/`, and `algorithms/query/`, each with an `EXTRACTION.md` describing provenance, dependencies, and parity notes. Framework-free TypeScript algorithms live in `algorithms/lightcurve/`, `algorithms/periodogram/`, and `algorithms/hrdiagram/`; these currently have no `package.json` or `tsconfig.json`. Root files include `pyproject.toml`, `uv.lock`, `README.md`, `CONTRIBUTING.md`, and planning docs under `docs/`.
+Kepler is an early-stage astronomy tooling workspace with independent extracted modules. Public Python tools live in `tools/`, including one thin tool per astronomy database/archive (SIMBAD, NED, VizieR, ATNF, ADS, MAST, MPC, CASDA). Extracted Python algorithms live in `algorithms/wcs/`, `algorithms/photometry/`, `algorithms/fieldcal/`, `algorithms/catalogs/`, and `algorithms/query/`, with provenance, dependencies, and parity notes recorded per package in `docs/extraction.md`. Framework-free TypeScript algorithms live in `algorithms/lightcurve/`, `algorithms/periodogram/`, and `algorithms/hrdiagram/`. Root files include `pyproject.toml`, `uv.lock`, `README.md`, `CONTRIBUTING.md`, and documentation under `docs/` — reference docs (`tool-architecture.md`, `extraction.md`, `repository-folders.md`, `pulsar-tool-pipeline.md`) at the top level, `docs/analysis/` for review output, `docs/working/` for in-progress plans; `docs/README.md` is the map.
 
 ## Build, Test, and Development Commands
 
@@ -11,7 +11,7 @@ Kepler is an early-stage astronomy tooling workspace with independent extracted 
 - `python3 -m compileall tools algorithms`: current CI syntax smoke test.
 - `git diff --check`: catch trailing whitespace and patch formatting issues before review.
 
-End-to-end WCS, photometry, and field calibration runs require external FITS data, native astronomy dependencies, solver binaries, and local catalog data documented in each module's `EXTRACTION.md`.
+End-to-end WCS, photometry, and field calibration runs require external FITS data, native astronomy dependencies, solver binaries, and local catalog data documented per package in `docs/extraction.md`.
 
 ## Coding Style & Naming Conventions
 
