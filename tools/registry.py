@@ -16,8 +16,11 @@ from tools.ads import (
     get_referenced_papers,
     search_ads,
 )
+from tools.astrometry import describe_image_wcs
 from tools.atnf import search_atnf
+from tools.calibration import solve_zeropoint_from_measurements
 from tools.casda import search_casda
+from tools.catalogs import list_photometric_catalogs, resolve_reference_band
 from tools.hr_diagram import (
     crossmatch_gaia,
     crossmatch_gaia_by_position,
@@ -54,6 +57,7 @@ from tools.simbad import (
     search_simbad_measurements,
 )
 from tools.vizier import list_vizier_catalogs, search_vizier
+from tools.workspace import describe_artifact, list_artifacts
 
 __all__ = ["TOOL_SCHEMAS", "TOOL_FUNCTIONS"]
 
@@ -1119,6 +1123,101 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "describe_image_wcs",
+        "description": "Summarize the celestial WCS of a local FITS image: "
+        "CTYPE, field centre in degrees and hours, pixel scale in arcseconds, "
+        "and rotation. Reads the header only. A frame with no WCS returns "
+        "has_wcs=false with a warning, not an error -- one bundled frame "
+        "(m15_globular_open_000.fits) is deliberately in that state.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to a local FITS file. Get one from "
+                    "resolve_optical_frame rather than guessing.",
+                }
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "list_photometric_catalogs",
+        "description": "List the photometric catalogs this repository can "
+        "resolve a reference band from, with their bands. Declaration only -- "
+        "no network call.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "resolve_reference_band",
+        "description": "Given a catalog and an image FILTER, report which "
+        "catalog band calibration would use and how it was reached (direct "
+        "band, lookup, or colour transform). Unfiltered passes (Open/Clear/"
+        "Lum) resolve through a substitute band, which is why an unfiltered "
+        "frame has no published zero point of its own.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "catalog": {"type": "string", "description": "Catalog name, e.g. 'APASS'."},
+                "image_filter": {
+                    "type": "string",
+                    "description": "The frame's FILTER keyword, e.g. 'B', 'Lum', 'Halpha'.",
+                },
+            },
+            "required": ["catalog", "image_filter"],
+        },
+    },
+    {
+        "name": "solve_zeropoint_from_measurements",
+        "description": "Solve a photometric zero point from instrumental "
+        "magnitudes paired with catalog reference magnitudes. Returns the "
+        "ABSOLUTE zero point in magnitudes -- Afterglow's API instead reports "
+        "20.0 plus a correction, so never compare the two without adding "
+        "Afterglow's base first.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "measurements": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Per-source measurements with mag, mag_error, "
+                    "and either ref_mag/ref_mag_error or an id matching a catalog source.",
+                },
+                "catalog_sources": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Catalog rows to resolve reference magnitudes from. "
+                    "May be empty when the measurements already carry ref_mag.",
+                },
+            },
+            "required": ["measurements", "catalog_sources"],
+        },
+    },
+    {
+        "name": "list_artifacts",
+        "description": "List artifact files this tool set has written to the "
+        "local artifact directory.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "directory": {
+                    "type": "string",
+                    "description": "Directory to list. Defaults to KEPLER_ARTIFACT_DIR.",
+                }
+            },
+        },
+    },
+    {
+        "name": "describe_artifact",
+        "description": "Describe one local artifact file: type, size, and "
+        "creation time.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Artifact path."}},
+            "required": ["path"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -1158,4 +1257,10 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "fold_pulsar_lightcurve": fold_pulsar_lightcurve,
     "plot_pulsar": plot_pulsar,
     "sonify_pulsar": sonify_pulsar,
+    "describe_image_wcs": describe_image_wcs,
+    "list_photometric_catalogs": list_photometric_catalogs,
+    "resolve_reference_band": resolve_reference_band,
+    "solve_zeropoint_from_measurements": solve_zeropoint_from_measurements,
+    "list_artifacts": list_artifacts,
+    "describe_artifact": describe_artifact,
 }
