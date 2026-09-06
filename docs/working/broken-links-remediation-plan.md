@@ -8,8 +8,8 @@ Date: 2026-09-04
 Status: proposed
 Scope: the seam between the public `tools/` surface and the local data in
 `test_data/` — not algorithm correctness (that is
-[`algorithm-remediation-plan.md`](../research/algorithm-remediation-plan.md)) and not file
-organization (that is [`tool-architecture.md`](../architecture/tool-architecture.md)).
+[`algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md)) and not file
+organization (that is [`tool-architecture.md`](../tool-architecture.md)).
 
 **Goal:** Make every tool that *should* run against the data bundled in this
 repository actually run against it, and make the recorded ground truth in

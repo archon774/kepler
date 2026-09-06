@@ -8,7 +8,7 @@ Scope: correctness of the algorithms in `algorithms/wcs/`, `algorithms/photometr
 
 This document is the output of a four-part algorithm review and the plan for
 rolling out fixes. It is deliberately **separate from**
-[`tool-architecture.md`](../architecture/tool-architecture.md), which owns file organization and
+[`tool-architecture.md`](../tool-architecture.md), which owns file organization and
 tool wiring and asserts nothing about correctness.
 
 ---

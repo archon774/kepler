@@ -10,8 +10,8 @@ it exists to turn outside practice into specific, file-level changes, or to expl
 where Kepler already does the thing and no change is needed.
 
 Every claim about Kepler below was checked against the current repository state on
-2026-08-11, not against `docs/tool-architecture-migration.md`'s original (2026-08-10, design-only)
-plan. Some things the original design intended have since shipped differently than planned —
+2026-08-11, not against the original 2026-08-10 design-only migration plan. Some
+things the original design intended have since shipped differently than planned —
 that is noted where it matters.
 
 ---
@@ -66,7 +66,7 @@ No change needed here — listed so the rest of this document doesn't re-argue s
 | Astro MCP's per-source plugin isolation (new survey doesn't touch core logic) | `algorithms/query/` imports `algorithms/catalogs/`, never the reverse (`CLAUDE.md`, "Python domain boundaries"). Adding a catalog means adding a declaration plus a query binding, not touching `fieldcal`. |
 | Cmbagent's "human-guided beats fully autonomous" finding | `tools.runner`'s agent loop is explicitly optional (`docs/tool-architecture.md` §7: "Serving is optional. A Python caller must be able to import and call every tool without running a server.") — the tools are designed to be called by a human, a script, or an agent equally. |
 | AI Cosplaying's "verification is real labor, make it cheap" | `tools/runner.py`'s `SYSTEM_PROMPT` already encodes a specific, previously observed failure (an agent attributing a fabricated decline-rate figure to a real paper by name) and a structural mitigation: quote `get_paper_abstract`/`search_ads` text before stating a number, or say explicitly the figure is unverified. This is the single closest thing in Kepler to Kosmos-style grounding discipline, and it is already shipped, not proposed. |
-| Preserving rather than silently "fixing" known-wrong behavior | The entire extraction contract (`CLAUDE.md`, "The extraction contract"): documented parity quirks like `_clear_wcs_solution_fields`'s silent no-op are deliberate and must not be "fixed" outside an explicit divergence task. `docs/algorithm-remediation-plan.md` treats every finding as "provenance, not permission" (§4) before touching it. |
+| Preserving rather than silently "fixing" known-wrong behavior | The entire extraction contract (`CLAUDE.md`, "The extraction contract"): documented parity quirks like `_clear_wcs_solution_fields`'s silent no-op are deliberate and must not be "fixed" outside an explicit divergence task. `docs/analysis/algorithm-remediation-plan.md` treats every finding as "provenance, not permission" (§4) before touching it. |
 
 ---
 
@@ -114,18 +114,18 @@ contract but is silently wrong by the domain's contract. AI Cosplaying's finding
 thing from the human side: verifying agent output is expensive, so anything that can be
 surfaced automatically should be.
 
-**Current state in Kepler.** `docs/algorithm-remediation-plan.md` already does the hard part:
+**Current state in Kepler.** `docs/analysis/algorithm-remediation-plan.md` already does the hard part:
 it classifies every one of 110 findings across `wcs/`, `photometry/`+`fieldcal/`,
 `catalogs/`+`query/`, and the TypeScript algorithms into finding classes, and separates
 **"Silent — wrong science, no signal"** from **"Loud — but catastrophic"** (§5). That
 classification is exactly the information a calling agent needs at the moment it calls the
 tool that has the defect — but today it lives only in a document, not in the tool's return
-value. An agent (or a human) has to already know to go read `docs/algorithm-remediation-plan.md`
+value. An agent (or a human) has to already know to go read `docs/analysis/algorithm-remediation-plan.md`
 before calling `describe_image_wcs` to learn that `_clear_wcs_solution_fields` can leave stale
 `ra`/`dec`/`pixel_scale`/`rotation` values on a failed solve.
 
 **Recommendation.** For every "Silent — wrong science, no signal" finding in
-`docs/algorithm-remediation-plan.md` §5 that is reachable from a public `tools/` function
+`docs/analysis/algorithm-remediation-plan.md` §5 that is reachable from a public `tools/` function
 (not every algorithms-level finding needs this — only the ones a tool caller can actually
 trigger), add a `ToolWarning` with a stable `code` at the point in the relevant `tools/*.py`
 wrapper where the condition is detectable, even before the underlying algorithm bug is fixed.
@@ -138,7 +138,7 @@ Two concrete examples already named in the remediation plan and the wiki-page pr
   `H_alpha` vs `Halpha` divergence named in the wiki-page provenance) should return both
   candidate resolutions plus a warning, not silently pick one.
 
-This turns `docs/algorithm-remediation-plan.md` from a document a human must separately
+This turns `docs/analysis/algorithm-remediation-plan.md` from a document a human must separately
 consult into runtime signal a calling agent gets for free on the call that matters, without
 requiring the underlying fix (which stays gated behind the plan's own "every fix needs a
 targeted test" rule, §2).
@@ -231,7 +231,7 @@ and `tools/astrometry.py` returns nothing — this was named as the wiki-page sn
 `tools/astrometry.py` as of this reading.
 
 **Recommendation.** Before spending effort on the Afterglow-parity numeric validation run
-that both `CLAUDE.md` and `docs/algorithm-remediation-plan.md` list as outstanding, ship this
+that both `CLAUDE.md` and `docs/analysis/algorithm-remediation-plan.md` list as outstanding, ship this
 distinction first — it is a precondition for that validation being trustworthy. A parity run
 against reference FITS that silently treats "backend not configured" and "genuinely no
 solution" as the same outcome cannot tell you which one it validated. Concretely: probe
