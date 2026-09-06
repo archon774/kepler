@@ -21,6 +21,11 @@ from tools.atnf import search_atnf
 from tools.calibration import solve_zeropoint_from_measurements
 from tools.casda import search_casda
 from tools.catalogs import list_photometric_catalogs, resolve_reference_band
+from tools.fieldcal_reference import (
+    compare_zeropoint_to_reference,
+    list_zeropoint_references,
+    load_zeropoint_reference,
+)
 from tools.hr_diagram import (
     crossmatch_gaia,
     crossmatch_gaia_by_position,
@@ -1265,6 +1270,60 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["path"],
         },
     },
+    {
+        "name": "list_zeropoint_references",
+        "description": "List the recorded photometric zero-point solves bundled "
+        "as ground truth (test_data/fieldcal/). Each is a real Skynet "
+        "calc_solution result -- and for NGC 5128 B, Afterglow's API response "
+        "and published web-table value too. Zero points are ABSOLUTE "
+        "magnitudes; Afterglow's own API reports 20.0 plus a correction "
+        "instead, and the reference carries both. No network.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "load_zeropoint_reference",
+        "description": "Load one recorded zero-point solve by field name (e.g. "
+        "'ngc5128_b_002'). Returns the ABSOLUTE zero point calc_solution "
+        "recorded, the calibration rows it used, the bundled frame it "
+        "describes (only ngc5128_b_002 has one), and -- for NGC 5128 B -- "
+        "Afterglow's base (20.0), correction, calibrated zero point and web "
+        "value. An unknown field returns the candidate list, not an error.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "description": "Recorded-solve name, e.g. 'ngc5128_b_002'. "
+                    "Call list_zeropoint_references to see them.",
+                }
+            },
+            "required": ["field"],
+        },
+    },
+    {
+        "name": "compare_zeropoint_to_reference",
+        "description": "Place a computed zero point against a recorded solve: "
+        "report its offset from Skynet's and (for NGC 5128 B) Afterglow's "
+        "recorded values and whether it lands inside the recorded parity "
+        "tolerance. `zero_point` must be ABSOLUTE (as "
+        "solve_zeropoint_from_measurements returns it); hand in Afterglow's "
+        "bare base-20 correction and this warns rather than reporting a silent "
+        "20-magnitude miss.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "zero_point": {
+                    "type": "number",
+                    "description": "The absolute zero point in magnitudes to check.",
+                },
+                "field": {
+                    "type": "string",
+                    "description": "Recorded-solve name, e.g. 'ngc5128_b_002'.",
+                },
+            },
+            "required": ["zero_point", "field"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -1312,4 +1371,7 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "solve_zeropoint_from_measurements": solve_zeropoint_from_measurements,
     "list_artifacts": list_artifacts,
     "describe_artifact": describe_artifact,
+    "list_zeropoint_references": list_zeropoint_references,
+    "load_zeropoint_reference": load_zeropoint_reference,
+    "compare_zeropoint_to_reference": compare_zeropoint_to_reference,
 }

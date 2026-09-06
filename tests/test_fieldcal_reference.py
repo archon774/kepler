@@ -1,0 +1,108 @@
+"""The recorded ground truth, reachable as a tool result.
+
+BL-4: test_data/fieldcal/ and test_data/afterglow/ carry a complete
+cross-implementation parity chain for NGC 5128 B, and before this module
+nothing outside tests/ could read any of it.
+
+The chain, all offline (test_data/README.md):
+
+    Kepler calc_solution        21.147659857998637   (bit-exact)
+    Skynet recorded local fit   21.147659857998637
+    Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
+    Afterglow web table         21.147                (3 dp, recorded by hand)
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from tools.fieldcal_reference import (
+    compare_zeropoint_to_reference,
+    list_zeropoint_references,
+    load_zeropoint_reference,
+    solve_zeropoint_from_reference,
+)
+
+#: The upstream diagnostic's own declared agreement threshold, in magnitudes.
+PARITY_ZP_TOLERANCE = 0.0005
+
+#: The number every step of the chain has to reproduce.
+SKYNET_ZERO_POINT = 21.147659857998637
+AFTERGLOW_ZERO_POINT = 21.14747923526837
+
+
+def test_lists_the_four_recorded_solves():
+    fields = {ref.field for ref in list_zeropoint_references()}
+    assert fields == {"ngc5128_b_002", "ngc5286_b_000", "ngc5286_b_001", "ngc5286_b_002"}
+
+
+def test_the_ngc5128_reference_carries_all_three_recorded_numbers():
+    ref = load_zeropoint_reference("ngc5128_b_002")
+    assert ref.catalog == "APASS"
+    assert ref.num_calibration_sources == 35
+    assert ref.skynet_zero_point == SKYNET_ZERO_POINT
+    assert ref.afterglow_zero_point == pytest.approx(AFTERGLOW_ZERO_POINT, abs=1e-12)
+    assert ref.afterglow_base == 20.0
+    assert ref.web_table_zero_point == pytest.approx(21.147, abs=5e-4)
+    assert ref.parity_tolerance_mag == PARITY_ZP_TOLERANCE
+
+
+def test_the_afterglow_zero_point_is_base_plus_correction():
+    """Kepler computes the absolute value; Afterglow reports 20.0 + a correction."""
+    ref = load_zeropoint_reference("ngc5128_b_002")
+    assert ref.afterglow_zero_point == pytest.approx(
+        ref.afterglow_base + ref.afterglow_correction, abs=1e-12
+    )
+
+
+def test_the_reference_names_the_bundled_frame_it_describes():
+    ref = load_zeropoint_reference("ngc5128_b_002")
+    assert Path(ref.frame_path).name == "ngc5128_galaxy_b_001.fits"
+    assert Path(ref.frame_path).is_file()
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["ngc5128_b_002", "ngc5286_b_000", "ngc5286_b_001", "ngc5286_b_002"],
+)
+def test_solving_from_the_recorded_rows_reproduces_the_recorded_solve(field):
+    """PARITY: bit-exact against what Skynet returned for these exact rows."""
+    reference = load_zeropoint_reference(field)
+    solution = solve_zeropoint_from_reference(field)
+    assert solution.errors == []
+    assert solution.zero_point == reference.skynet_zero_point
+
+
+def test_comparison_places_a_zero_point_against_both_implementations():
+    comparison = compare_zeropoint_to_reference(SKYNET_ZERO_POINT, "ngc5128_b_002")
+    assert comparison.delta_vs_skynet == 0.0
+    assert abs(comparison.delta_vs_afterglow) == pytest.approx(1.806e-4, abs=1e-6)
+    assert comparison.within_tolerance is True
+    assert comparison.tolerance_mag == PARITY_ZP_TOLERANCE
+
+
+def test_comparison_flags_a_zero_point_outside_the_recorded_tolerance():
+    comparison = compare_zeropoint_to_reference(21.2, "ngc5128_b_002")
+    assert comparison.within_tolerance is False
+    assert comparison.delta_vs_skynet == pytest.approx(0.0523401, abs=1e-6)
+
+
+def test_the_twenty_magnitude_trap_is_called_out_not_silently_compared():
+    """Handing in Afterglow's bare correction must warn, not report a 20 mag error."""
+    comparison = compare_zeropoint_to_reference(1.1474792352683736, "ngc5128_b_002")
+    assert comparison.within_tolerance is False
+    assert "afterglow_base_convention" in [w.code for w in comparison.warnings]
+
+
+def test_an_unknown_field_returns_the_candidates_not_an_exception():
+    reference = load_zeropoint_reference("ngc9999_z_000")
+    assert [e.code for e in reference.errors] == ["not_found"]
+    assert "ngc5128_b_002" in reference.errors[0].message
+
+
+def test_a_missing_directory_returns_an_error_naming_the_env_override():
+    reference = load_zeropoint_reference("ngc5128_b_002", "/nonexistent/fieldcal")
+    assert [e.code for e in reference.errors] == ["directory_not_found"]
+    assert "KEPLER_FIELDCAL_DATA_DIR" in reference.errors[0].message

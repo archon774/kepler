@@ -19,6 +19,8 @@ __all__ = [
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
+    "ZeropointReference",
+    "ZeropointComparison",
     "PhotometryTargetLibrary",
     "SourceSummary",
     "PhotometryRunResult",
@@ -161,6 +163,60 @@ class ZeropointSolution(KeplerToolModel):
     limmag5: float | None = None
     rej_percent: float | None = None
     source_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class ZeropointReference(KeplerToolModel):
+    """A recorded zero-point solve shipped as ground truth.
+
+    Three independent numbers describe the same exposure and they do not use
+    the same convention: ``skynet_zero_point`` and ``web_table_zero_point`` are
+    absolute magnitudes, while Afterglow's API fixes a base of 20.0 and reports
+    a correction. ``afterglow_zero_point`` is the sum, already computed, so a
+    caller never has to remember which side the 20 goes on -- getting that
+    wrong is a clean, plausible 20-magnitude error (test_data/README.md).
+
+    Only ``ngc5128_b_002`` carries the Afterglow and web-table numbers; the
+    three NGC 5286 B solves are the leaner "bad values" fixture and populate
+    ``skynet_zero_point`` (the value ``calc_solution`` returned for those rows)
+    only. ``skynet_zero_point`` is always ``calc_solution``'s
+    ``catalog_mag = instrumental_mag + zero_point`` offset, whichever
+    instrumental-magnitude scale the recorded rows use.
+    """
+
+    field: str
+    frame_path: str | None = None
+    catalog: str | None = None
+    num_calibration_sources: int = 0
+    skynet_zero_point: float | None = None
+    afterglow_zero_point: float | None = None
+    afterglow_base: float | None = None
+    afterglow_correction: float | None = None
+    web_table_zero_point: float | None = None
+    parity_tolerance_mag: float | None = None
+    measurements: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class ZeropointComparison(KeplerToolModel):
+    """A computed zero point placed against the recorded ground truth.
+
+    ``delta_vs_skynet``/``delta_vs_afterglow`` are ``zero_point`` minus the
+    recorded value; ``within_tolerance`` tests ``abs(delta_vs_skynet)`` against
+    ``tolerance_mag`` (the upstream diagnostic's own declared agreement
+    threshold). A caller who hands in Afterglow's bare base-20 correction
+    instead of an absolute zero point gets ``within_tolerance = False`` and an
+    ``afterglow_base_convention`` warning, never a silent 20-magnitude miss.
+    """
+
+    zero_point: float | None = None
+    reference: ZeropointReference | None = None
+    delta_vs_skynet: float | None = None
+    delta_vs_afterglow: float | None = None
+    within_tolerance: bool | None = None
+    tolerance_mag: float | None = None
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 
