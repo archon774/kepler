@@ -200,7 +200,7 @@ def test_sources_with_nonpositive_mag_error_are_dropped_when_any_error_is_set():
 
 @pytest.mark.slow
 def test_zero_scatter_input_is_a_known_failure_mode(frame_image):
-    """A noiseless offset over real photometry raises ``math domain error``.
+    """A noiseless offset over real photometry raises ``ValueError``.
 
     Recorded rather than fixed, per the extraction contract: this is upstream
     behaviour and these tests exist to preserve it, not improve it.
@@ -209,7 +209,8 @@ def test_zero_scatter_input_is_a_known_failure_mode(frame_image):
     every residual is identical, ``sigma2`` collapses toward zero and the
     bracketed term ``(d1**2).sum() - 2*m0*(d1*d2).sum() + m0**2*(d2**2).sum()``
     — algebraically non-negative — lands just below zero through float
-    cancellation, and ``math.sqrt`` rejects it.
+    cancellation, and ``math.sqrt`` rejects it. The exception text differs
+    between supported Python versions, so the assertion accepts both forms.
 
     Whether the cancellation actually goes negative depends on the exact
     magnitudes and the spread of weights, so this is pinned against a real
@@ -241,7 +242,10 @@ def test_zero_scatter_input_is_a_known_failure_mode(frame_image):
                        ref_mag=m.mag + 21.0, ref_mag_error=0.02)
         for m in usable
     ]
-    with pytest.raises(ValueError, match="math domain error"):
+    with pytest.raises(
+        ValueError,
+        match=r"math domain error|expected a nonnegative input",
+    ):
         calc_solution(exact)
 
     # The same sources with a whisker of catalog noise solve cleanly.

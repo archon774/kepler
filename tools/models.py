@@ -19,8 +19,15 @@ __all__ = [
     "CatalogSummary",
     "ReferenceBandResolution",
     "ZeropointSolution",
+    "ZeropointReference",
+    "ZeropointComparison",
+    "PhotometryTargetLibrary",
+    "SourceSummary",
+    "PhotometryRunResult",
     "PulsarScan",
     "PulsarScanList",
+    "OpticalFrame",
+    "OpticalFrameList",
     "PulsarLightCurve",
     "PulsarPeriodogram",
     "PulsarFoldedProfile",
@@ -96,6 +103,17 @@ class TableSummary(KeplerToolModel):
 
 
 class WcsSummary(KeplerToolModel):
+    """Celestial WCS read straight from a FITS header -- no fitting involved.
+
+    This has no fitted residual to report: it is not a plate solve.
+    ``algorithms.wcs.state.WcsSolution`` (produced by
+    ``algorithms.wcs.wcs.solve_wcs``, a separate and heavier path) carries a
+    real solve's ``pointing_error_arcsec``/``n_field``; nothing here does.
+    Report ``center_ra_deg``/``center_dec_deg``/``pixel_scale_arcsec``/
+    ``rotation_deg`` as read from the header as-is, with no uncertainty
+    attached -- there isn't one to attach.
+    """
+
     file: FileMetadata
     has_wcs: bool
     image_shape: tuple[int, int] | None = None
@@ -134,12 +152,142 @@ class ReferenceBandResolution(KeplerToolModel):
 
 
 class ZeropointSolution(KeplerToolModel):
-    zero_point_corr: float | None = None
+    #: The ABSOLUTE photometric zero point in magnitudes, as ``calc_solution``
+    #: returns it. Afterglow's API instead fixes ``zero_point = 20`` and
+    #: reports a ``zero_point_correction``; adding the two gives this number.
+    #: Confusing the conventions is a clean, plausible 20-magnitude error --
+    #: see test_data/README.md.
+    zero_point: float | None = None
     zero_point_error_mag: float | None = None
     zero_point_slop: float | None = None
     limmag5: float | None = None
     rej_percent: float | None = None
     source_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class ZeropointReference(KeplerToolModel):
+    """A recorded zero-point solve shipped as ground truth.
+
+    Three independent numbers describe the same exposure and they do not use
+    the same convention: ``skynet_zero_point`` and ``web_table_zero_point`` are
+    absolute magnitudes, while Afterglow's API fixes a base of 20.0 and reports
+    a correction. ``afterglow_zero_point`` is the sum, already computed, so a
+    caller never has to remember which side the 20 goes on -- getting that
+    wrong is a clean, plausible 20-magnitude error (test_data/README.md).
+
+    Only ``ngc5128_b_002`` carries the Afterglow and web-table numbers; the
+    three NGC 5286 B solves are the leaner "bad values" fixture and populate
+    ``skynet_zero_point`` (the value ``calc_solution`` returned for those rows)
+    only. ``skynet_zero_point`` is always ``calc_solution``'s
+    ``catalog_mag = instrumental_mag + zero_point`` offset, whichever
+    instrumental-magnitude scale the recorded rows use.
+    """
+
+    field: str
+    frame_path: str | None = None
+    catalog: str | None = None
+    num_calibration_sources: int = 0
+    skynet_zero_point: float | None = None
+    afterglow_zero_point: float | None = None
+    afterglow_base: float | None = None
+    afterglow_correction: float | None = None
+    web_table_zero_point: float | None = None
+    parity_tolerance_mag: float | None = None
+    measurements: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class ZeropointComparison(KeplerToolModel):
+    """A computed zero point placed against the recorded ground truth.
+
+    ``delta_vs_skynet``/``delta_vs_afterglow`` are ``zero_point`` minus the
+    recorded value; ``within_tolerance`` tests ``abs(delta_vs_skynet)`` against
+    ``tolerance_mag`` (the upstream diagnostic's own declared agreement
+    threshold). A caller who hands in Afterglow's bare base-20 correction
+    instead of an absolute zero point gets ``within_tolerance = False`` and an
+    ``afterglow_base_convention`` warning, never a silent 20-magnitude miss.
+    """
+
+    zero_point: float | None = None
+    reference: ZeropointReference | None = None
+    delta_vs_skynet: float | None = None
+    delta_vs_afterglow: float | None = None
+    within_tolerance: bool | None = None
+    tolerance_mag: float | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class PhotometryTargetLibrary(KeplerToolModel):
+    """The local FITS library ``run_photometry_on_target`` can actually run on.
+
+    There is no live image archive behind photometry -- ``categories`` is
+    exactly ``tools.claude_photometry_haiku_tool.list_bundled_targets()``'s
+    output (bundled ``test_data/optical/`` stems grouped by the category
+    embedded in each filename), not a query result.
+    """
+
+    categories: dict[str, list[str]] = Field(default_factory=dict)
+    total_count: int = 0
+
+
+class SourceSummary(KeplerToolModel):
+    """One detected source's position, magnitude, and flux.
+
+    ``ra_deg``/``dec_deg`` are populated whenever the frame carries a celestial
+    WCS -- the same sky position the HR-diagram pipeline's own
+    ``extract_photometry_from_fits`` reports, so a source found here can be
+    looked up against Gaia or any other catalog the same way.
+
+    ``mag_error``/``flux_error`` are the extraction's own per-source formal
+    errors (background/Poisson-noise based, from
+    ``algorithms.skylib_lite.photometry.aperture``) -- report them alongside
+    ``mag``/``flux`` whenever quoting either, and say plainly that no
+    uncertainty was reported when either is ``None`` rather than omitting the
+    caveat. Like ``ZeropointSolution.zero_point_error_mag``, this is a formal/
+    statistical error only -- it does not include unmodeled systematics.
+    """
+
+    x: float | None = None
+    y: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    mag: float | None = None
+    mag_error: float | None = None
+    flux: float | None = None
+    flux_error: float | None = None
+
+
+class PhotometryRunResult(KeplerToolModel):
+    """Result of running source extraction (and optionally a verified
+    zero-point solve) on one bundled FITS target.
+
+    ``zero_point`` is only populated when ``zero_point_source == "field-cal"``
+    -- a CLI override or FITS-header value is applied to ``magnitude_label``'s
+    magnitudes but was never independently checked against a catalog, so
+    there is no ``ZeropointSolution`` to report for those paths.
+
+    ``exposure_seconds``, confirmed live: every ``mag`` here is
+    ``-2.5*log10(flux / exposure_seconds) + zero_point`` -- never the bare
+    ``-2.5*log10(flux) + zero_point`` a reader would otherwise assume. Without
+    this field, ``flux`` and ``mag`` looked mutually inconsistent by several
+    magnitudes on a real bundled frame (the reader has no way to know ``flux``
+    is a raw per-exposure sum, not a per-second rate) -- report this alongside
+    ``flux``/``mag`` whenever discussing either.
+    """
+
+    file: FileMetadata
+    source_count: int = 0
+    magnitude_label: str = "instrumental magnitude"
+    exposure_seconds: float | None = None
+    zero_point_source: str = "none"  # "cli" | "header" | "field-cal" | "none"
+    zero_point: ZeropointSolution | None = None
+    brightest: SourceSummary | None = None
+    faintest: SourceSummary | None = None
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 
@@ -183,6 +331,42 @@ class PulsarScanList(KeplerToolModel):
     scans: list[PulsarScan] = Field(default_factory=list)
     search_root: str
     count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class OpticalFrame(KeplerToolModel):
+    """An optical FITS frame available on local disk.
+
+    ``path`` is what every image tool takes. Everything else is read from the
+    primary header, so listing 39 frames stays cheap -- no pixel data is read.
+    """
+
+    path: str
+    object_name: str | None = None
+    category: str | None = None
+    image_filter: str | None = None
+    telescope: str | None = None
+    date_obs: str | None = None
+    exposure_s: float | None = None
+    width: int | None = None
+    height: int | None = None
+    has_wcs: bool = False
+    center_ra_deg: float | None = None
+    center_dec_deg: float | None = None
+    pixel_scale_arcsec: float | None = None
+    size_bytes: int | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class OpticalFrameList(KeplerToolModel):
+    """Frames found locally, plus where they were looked for."""
+
+    frames: list[OpticalFrame] = Field(default_factory=list)
+    search_root: str
+    count: int = 0
+    filters: list[str] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

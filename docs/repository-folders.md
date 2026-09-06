@@ -31,11 +31,24 @@ Important files and subfolders:
 - `config.py`: small environment-backed settings helpers for the tool layer.
 - `artifacts.py`: local artifact description and listing helpers.
 - `astrometry.py`, `calibration.py`, `catalogs.py`, `pulsar.py`,
-  `workspace.py`: local plain Python user-facing tool wrappers.
+  `photometry.py`, `workspace.py`: local plain Python user-facing tool
+  wrappers.
 - `simbad.py`, `ned.py`, `vizier.py`, `atnf.py`, `ads.py`, `mast.py`,
   `mpc.py`, `casda.py`, `resolve.py`: split remote database/archive tools.
+- `hr_diagram.py`: FITS-to-HR-diagram pipeline orchestration, backed by
+  `algorithms.hrdiagram_py` plus `tools.vizier.search_vizier` for the Gaia
+  DR3 and cluster-literature catalog lookups.
+- `radio_sources.py`: radio FITS -> catalog-identified sources -> labeled SED
+  plot, backed by `algorithms.radio` plus `tools.vizier.search_vizier` and
+  `tools.ned.search_ned`.
 - `registry.py`, `runner.py`: optional agent schema registry and Anthropic
   runner over the same ordinary Python tool functions.
+- `sessions.py`: `AgentSession` and `make_cache_key` -- per-run manifest
+  recording (tool calls, cache hits, artifacts, turns) plus the shared cache
+  key used both by `runner.py`'s in-memory repeat-call cache and by the
+  manifest's own cache-hit bookkeeping. Manifests are written under
+  `artifacts/sessions/<session_id>/session_manifest.json`; `list_session_manifests`
+  and `read_session_manifest` read them back.
 
 Current tools:
 
@@ -47,11 +60,21 @@ Current tools:
   filter-to-reference-band mapping Kepler would use.
 - `calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`:
   solve a zero point from local measurement and catalog-source records.
-- `pulsar.load_pulsar_lightcurve(path)`, `pulsar.compute_pulsar_periodogram(path)`,
+- `pulsar.resolve_pulsar_scan(...)` / `pulsar.list_pulsar_scans(...)`,
+  `pulsar.load_pulsar_lightcurve(path)`, `pulsar.compute_pulsar_periodogram(path)`,
   `pulsar.fold_pulsar_lightcurve(path, period_s)` and
-  `pulsar.sonify_pulsar(path, period_s=None)`: the four-stage pulsar pipeline,
-  local only, each stage's artifact feeding the next. See
-  [Pulsar Tool Pipeline](pulsar-tool-pipeline.md).
+  `pulsar.sonify_pulsar(path, period_s=None)`: the pulsar pipeline, local
+  only, each stage's artifact feeding the next. `pulsar.plot_pulsar(...)`
+  renders any stage's artifact as a PNG. See
+  [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md).
+- `photometry.list_photometry_targets()` and
+  `photometry.run_photometry_on_target(target, ...)`: local aperture
+  photometry (source extraction, optional live zero-point verification) over
+  a fixed bundled FITS library -- a thin wrapper reusing
+  `tools.claude_photometry_haiku_tool`'s pipeline, not a reimplementation.
+  Not a substitute for the HR-diagram pipeline below (no Gaia crossmatch, no
+  isochrone fit); `run_photometry_on_target(..., write_source_table=True)`
+  writes a CSV that bridges into it (see `hr_diagram.crossmatch_gaia` below).
 - `workspace.list_artifacts(directory=None)` and
   `workspace.describe_artifact(path)`: inspect local artifact files.
 - `resolve.resolve_target(name)`: resolve a target through SIMBAD.
@@ -59,6 +82,25 @@ Current tools:
   `ads.*`, `mast.search_mast`, `mpc.search_mpc`, and `casda.search_casda`:
   query remote astronomy databases and archives, returning bounded previews
   plus local artifact paths for complete tables or reviews.
+- `hr_diagram.extract_photometry_from_fits`, `crossmatch_gaia`,
+  `get_literature_cluster_params`, `select_cluster_members`,
+  `fit_and_compare_hr_diagram`, `run_full_hr_pipeline`: FITS frame -> HR
+  diagram -> literature comparison, chained through
+  `algorithms.hrdiagram_py` and `tools.vizier.search_vizier`. Deliberately
+  cheaper, uncalibrated source extraction than `photometry.py` above -- the
+  frame's own magnitude is discarded once Gaia's is fetched.
+- `hr_diagram.crossmatch_gaia_by_position`, `run_full_hr_pipeline_from_catalog`:
+  the same HR-diagram pipeline with no FITS frame required -- Gaia DR3 is
+  fetched directly around the cluster's own resolved position instead of
+  matched against a frame's detected sources. Prefer this path whenever the
+  user has not supplied a FITS file.
+- `radio_sources.plot_field_sed(fits_path, ...)`: the main radio entry point --
+  identifies sources in a radio FITS frame against VizieR's radio catalogs
+  (`identify_radio_sources`), then plots every identified source's spectral
+  energy distribution from NED on one labeled plot, each with its own fitted
+  spectral index (`analyze_source_spectrum`, callable standalone for one
+  already-named source). Replaces the non-functional `Spectral_Plot.py` /
+  `Best_Fit_Analysis.py` scratch scripts.
 
 ## `algorithms/`
 
@@ -193,6 +235,73 @@ Current caveats:
 - There is no TypeScript package manifest or build config in this repository.
 - Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser
   export handlers were removed.
+
+## `algorithms/hrdiagram_py/`
+
+A Python parity **port** of the CM/HR transform above, plus a real optimizer
+Astromancer never had -- not a byte-preserving extraction, and deliberately
+named with the `_py` suffix so it doesn't collide with `algorithms/hrdiagram/`
+(TypeScript) under this repo's Python/TypeScript domain-boundary rules. See
+[extraction.md](extraction.md), "HR Diagram (Python)".
+
+Important files:
+
+- `hrfit.py`: the CM<->HR transform (`computePlotDelta`/`getExtinction`
+  ported from `isochrone-matching/isochrone-plot.util.ts` /
+  `cluster.util.ts`), CCM extinction, isochrone loading, and the
+  distance/E(B-V)/age optimizer (`fit_distance_reddening`, `fit_cluster`) --
+  a new capability, Astromancer's own tool is manual/by-eye only.
+  `isochrone_cmd` drops PARSEC/COLIBRI thermally-pulsing-AGB rows (`label`
+  column > 7) by default -- a raw PARSEC download's dust/mass-loss modelling
+  breaks down there, and left in, it both scribbles the plotted track and
+  biases the optimizer's nearest-point cost.
+- `observations.py`: FITS frame -> detected sources, via `algorithms.photometry`.
+  Cheap "auto" Kron-like apertures, no zero-point solve -- the frame's own
+  magnitude is discarded once Gaia's is fetched.
+- `matching.py`: detected sources <-> a fetched comparison-catalog table, by
+  sky position (mutual nearest-neighbour).
+- `literature.py`: a fetched cluster-catalog row (Cantat-Gaudin & Anders 2020)
+  -> age/distance/E(B-V). Open clusters only.
+- `membership.py`: field-star removal -- a per-source error-scaled parallax
+  window, and Astromancer's own elliptical proper-motion acceptance region
+  (ported from `algorithms/hrdiagram/photometry/cluster-data.service.util.ts::updateClusterFieldSources`,
+  with each source's own ellipse semi-axes sized from its proper-motion error
+  and a distance-aware velocity-dispersion floor -- the ellipse's *shape*
+  alone doesn't help without that, since a circle and a fixed-radius ellipse
+  reject the same points).
+- `isochrones.py`: the one module here with its own network call -- fetches
+  PARSEC isochrones from stev.oapd.inaf.it directly, since no existing tool
+  wraps that service.
+
+`algorithms/hrdiagram_py/` never imports `tools.*`; all network I/O besides
+the PARSEC fetch above (Gaia DR3, cluster-literature lookups) lives one layer
+up in `tools/hr_diagram.py`, via `tools.vizier.search_vizier`.
+
+## `algorithms/radio/`
+
+New first-party capability -- no upstream Skynet/Astromancer equivalent, so
+there is no parity to preserve here.
+
+Important files:
+
+- `spectral_fitting.py`: pure-numpy flux-vs-frequency model fitting --
+  `fit_power_law` (log-log OLS, the standard `S_nu ~ nu**spectral_index`
+  radio spectral index), `fit_log_parabola` (quadratic in log-log space, for
+  spectral curvature/turnover), and `analyze_spectrum`, which fits both and
+  reports whichever the data actually supports. Every candidate model is fit
+  against the same target (`log10(flux)`), so their R^2 values are directly
+  comparable -- unlike an earlier draft of this fit, which compared R^2
+  across models fit to different targets and was fixed here, not preserved.
+- `matching.py`: `guess_radec_columns` (tries common VizieR RA/Dec
+  column-name conventions, since a `category="radio"` catalog search returns
+  one differently-shaped table per matched survey) and
+  `match_sources_to_catalog` (flat-sky KD-tree nearest-neighbour, not
+  mutual -- catalog density varies too much between radio surveys for a
+  mutual-nearest-neighbour requirement to be appropriate the way it is for
+  `algorithms/hrdiagram_py/matching.py`'s Gaia-specific version).
+
+`algorithms/radio/` never imports `tools.*`; VizieR/NED network I/O lives one
+layer up in `tools/radio_sources.py`.
 
 ## `algorithms/lightcurve/`
 

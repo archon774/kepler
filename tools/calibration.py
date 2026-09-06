@@ -113,9 +113,22 @@ def solve_zeropoint_from_measurements(
             ],
         )
 
-    m0, m0_error, slop, limmag, rej_percent = calc_solution(usable_sources)
+    try:
+        m0, m0_error, slop, limmag, rej_percent = calc_solution(usable_sources)
+    except ValueError as exc:
+        # calc_solution's weighted-variance formula can take sqrt() of a
+        # value that floating-point cancellation pushed slightly negative --
+        # observed with near-zero-scatter input (see
+        # tests/test_fieldcal_solution.py::test_zero_scatter_input_is_a_known_failure_mode).
+        # Real photometry always carries some scatter, so this is a rare edge
+        # case, not a common failure -- but it must return "unknown," not crash.
+        return ZeropointSolution(
+            source_count=len(usable_sources),
+            warnings=warnings,
+            errors=[ToolError(code="numerical_error", message=str(exc))],
+        )
     return ZeropointSolution(
-        zero_point_corr=_finite(m0),
+        zero_point=_finite(m0),
         zero_point_error_mag=_finite(m0_error),
         zero_point_slop=_finite(slop),
         limmag5=_finite(limmag),

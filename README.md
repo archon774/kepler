@@ -60,13 +60,31 @@ Python functions in `tools/`:
   `kepler-astro-query`). A bounded Anthropic tool-use loop (`max_turns=20`,
   default model `claude-sonnet-5`) over `tools.registry.TOOL_SCHEMAS`: one
   schema per remote database — SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA,
-  and ADS — plus SIMBAD-backed target resolution. Its system prompt encodes
-  per-database quirks confirmed by direct testing (NED's resolver fails on
-  colloquial names where SIMBAD's succeeds; MPC and ATNF do zero name
-  resolution and require formal designations; ADS needs fielded queries, not
-  natural language), sourcing discipline (quote a paper's abstract before
-  attributing a number to it), and repeat-call caching, so an identical tool
-  call costs no extra network round trip. Run it with:
+  and ADS — plus SIMBAD-backed target resolution, local aperture photometry
+  on a bundled FITS library (`tools.photometry`), a local pulsar pipeline
+  (`tools.pulsar`: ingest a scan, compute its periodogram, fold it into a
+  pulse profile, sonify it, and plot any stage), and an HR-diagram pipeline
+  (`tools.hr_diagram`) with two entry points: a catalog-only one that needs
+  nothing but a cluster name (fetches Gaia DR3 directly around the cluster's
+  own resolved position) and a FITS-frame one for a user who has their own
+  plate-solved frame and wants that frame's own photometry driving the fit —
+  both end at the same literature comparison, isochrone fit, and plot — and a
+  radio-source pipeline (`tools.radio_sources.plot_field_sed`): identify
+  sources in a processed radio FITS frame against VizieR's radio catalogs,
+  then plot every identified source's spectral energy distribution from NED
+  together on one labeled plot, each with its own fitted spectral index. Its
+  system prompt encodes per-database quirks confirmed by direct testing
+  (NED's resolver fails on colloquial names where SIMBAD's succeeds; MPC and
+  ATNF do zero name resolution and require formal designations; ADS needs
+  fielded queries, not natural language), sourcing discipline (quote a
+  paper's abstract before attributing a number to it), and repeat-call
+  caching, so an identical tool call costs no extra network round trip. Every
+  run also writes a session manifest (`tools.sessions.AgentSession`) recording
+  each turn and tool call — including cache hits — under
+  `artifacts/sessions/<session_id>/session_manifest.json`, so a session's
+  tool-call history can be inspected or replayed after the fact
+  (`tools.sessions.list_session_manifests` / `read_session_manifest`). Run it
+  with:
 
   ```bash
   ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
@@ -76,8 +94,12 @@ Python functions in `tools/`:
   pipeline.** Loads a FITS image, runs this repo's source extraction and
   aperture photometry, optionally resolves a verified photometric zero point
   through a live field-calibration catalog solve, saves a photometry plot,
-  and (unless `--no-claude`) asks Claude to summarize the results. Run it
-  with:
+  and (unless `--no-claude`) asks Claude to summarize the results. `tools.photometry`
+  (`list_photometry_targets`, `run_photometry_on_target`) is the thin
+  `tools.runner`-facing wrapper over this same pipeline — same extraction,
+  same zero-point resolution, same plots — so a tool-use conversation
+  produces exactly what the standalone script produces. Run the script
+  directly with:
 
   ```bash
   ANTHROPIC_API_KEY=... python3 tools/claude_photometry_haiku_tool.py ngc1846_cluster_r_000
@@ -85,7 +107,11 @@ Python functions in `tools/`:
 
   `--list-targets` lists the bundled `test_data/optical` targets it can run
   against with no live archive query; `--check-only` resolves a target
-  without running the pipeline.
+  without running the pipeline. Neither this nor `tools.photometry` calibrates
+  against Gaia or fits an isochrone — for that, see `tools.hr_diagram` above;
+  `run_photometry_on_target(..., write_source_table=True)` writes a CSV in the
+  column shape `tools.hr_diagram.crossmatch_gaia` expects, as a bridge between
+  the two when a bundled photometry target turns out to be a cluster.
 
 Both surfaces call directly into the same plain Python functions and
 extracted algorithm packages described below — an agent's tool call is the
@@ -121,8 +147,8 @@ identical function any other caller would import and run.
 
 | Path | Status | What it contains |
 | --- | --- | --- |
-| `tools/` | Python tools | Plain Python wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, local artifact inspection, and remote database/archive queries. |
-| `tools/runner.py`, `tools/registry.py` | Python agent | The `kepler-astro-query` Anthropic tool-use loop and the tool-schema registry it runs over. See [The Agent](#the-agent). |
+| `tools/` | Python tools | Plain Python wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
+| `tools/runner.py`, `tools/registry.py`, `tools/sessions.py` | Python agent | The `kepler-astro-query` Anthropic tool-use loop, the tool-schema registry it runs over, and the per-run session manifest recorder. See [The Agent](#the-agent). |
 | `tools/claude_photometry_haiku_tool.py` | Python agent | Automated FITS photometry pipeline with an optional Claude-generated results summary. See [The Agent](#the-agent). |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
@@ -130,6 +156,8 @@ identical function any other caller would import and run.
 | `algorithms/skylib_lite/` | Shared Python support | Consolidated local Skylib subset used by WCS, photometry, and field calibration: astrometry, SEP extraction, background estimation, aperture photometry, FITS helpers, angle math, and statistics. |
 | `algorithms/catalogs/` | Extracted Python algorithm | Skynet and Afterglow photometric catalog declarations, SIMBAD object-type vocabulary, and provider lookup tables used by ADS/NED/ATNF tools. Declaration only — no network code. |
 | `algorithms/query/` | Extracted Python algorithm | Skynet and Afterglow remote catalog access: the VizieR engine, SDSS SkyServer SQL, SIMBAD identifier resolution, astroquery cache handling, filter-aware catalog selection, and WCS-footprint query orchestration. |
+| `algorithms/hrdiagram_py/` | Python parity port + new capability | Star-cluster CMD/HR-diagram fitting: CM↔HR transform, extinction, isochrone loading, a distance/E(B-V)/age optimizer Astromancer's own tool never had, field-star removal, and geometric catalog matching. Not a byte-preserving extraction — see `docs/extraction.md`, "HR Diagram (Python)". |
+| `algorithms/radio/` | New Python capability | Radio spectral-index/log-parabola flux-vs-frequency fitting and generic RA/Dec-column-guessing catalog cross-matching. No upstream Skynet/Astromancer equivalent. |
 | `algorithms/pulsar/` | Ported Python algorithm | The four-stage pulsar chain: file ingest and background subtraction, Lomb-Scargle periodogram, phase folding and binning, and light-curve sonification. A **port** of the Astromancer TypeScript, not an extraction — see `docs/pulsar-tool-pipeline.md`. |
 | `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, period-folding, and sonification logic with Angular/RxJS/Highcharts removed. |
 | `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
@@ -220,6 +248,9 @@ from tools.mast import search_mast
 from tools.mpc import search_mpc
 from tools.atnf import search_atnf
 from tools.casda import search_casda
+from tools.photometry import list_photometry_targets, run_photometry_on_target
+from tools.pulsar import load_pulsar_lightcurve, compute_pulsar_periodogram
+from tools.hr_diagram import run_full_hr_pipeline, run_full_hr_pipeline_from_catalog
 from tools.workspace import describe_artifact, list_artifacts
 ```
 

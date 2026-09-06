@@ -97,7 +97,10 @@ def describe_image_wcs(path: str | Path) -> WcsSummary:
 
     center_ra_deg, center_dec_deg = _center_from_wcs(wcs, image_shape)
     center_ra_hours = center_ra_deg / 15.0 if center_ra_deg is not None else None
-    ctype = tuple(str(value) for value in wcs.wcs.ctype[:2])
+    # ``wcs.wcs.ctype`` is an astropy ``StrListProxy`` on the installed
+    # astropy version -- it supports integer indexing but not slicing
+    # (``TypeError: sequence index must be integer, not 'slice'``).
+    ctype = tuple(str(value) for value in list(wcs.wcs.ctype)[:2])
 
     return WcsSummary(
         file=file,

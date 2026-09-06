@@ -12,6 +12,8 @@ Internal section references such as `§5.2` are local to the package section the
 - [Catalogs](#catalogs)
 - [Query](#query)
 - [HR Diagram / Isochrone Matching](#hr-diagram-isochrone-matching)
+- [HR Diagram (Python)](#hr-diagram-python)
+- [Radio Sources (Python)](#radio-sources-python)
 - [Light Curve](#light-curve)
 - [Pulsar Sonification](#pulsar-sonification)
 - [Periodogram](#periodogram)
@@ -1874,6 +1876,223 @@ Faithfulness was chosen over correctness. Each is flagged inline at its site.
 - **No compiler was available in this environment** (`node`/`tsc` absent), so
   the extracted files have been reviewed by hand but not type-checked. Imports
   and paths were verified manually.
+
+## HR Diagram (Python)
+
+### A parity port + new capability, not a byte-preserving extraction
+
+`algorithms/hrdiagram_py/` is a **separate package from `algorithms/hrdiagram`**
+(the TypeScript extraction above) -- deliberately named with the `_py` suffix
+rather than reusing `hrdiagram/`, because that name is already owned by the
+TypeScript extraction under this repo's Python/TypeScript domain-boundary
+rules (`CLAUDE.md`, "TypeScript domain boundaries"). It is not governed by the
+byte-preservation contract the rest of this document records: it is a
+deliberate Python *port* of Astromancer's CM/HR transform, plus real new
+capability Astromancer never had.
+
+`hrfit.py` carries the parity-sensitive core, ported from
+`isochrone-matching/isochrone-plot.util.ts::computePlotDelta` and
+`cluster.util.ts::getExtinction`. Two differences from Astromancer are
+permanent, deliberate deviations rather than defects reproduced for parity
+(contrast with `algorithms/hrdiagram`'s catalogued defects above, all of which
+*are* reproduced):
+
+- `get_extinction` uses the caller's `rv` throughout, rather than Astromancer's
+  hard-coded leading factor of 3.1 (that extraction's defect #1).
+- `isochrone_cmd` does not reproduce Astromancer's off-by-one isochrone splice
+  index (that extraction's defect #3).
+
+It also adds a distance/E(B-V)/age optimizer (`fit_distance_reddening`,
+`fit_cluster`) -- Astromancer's own cluster tool is manual, by-eye fitting
+only, with no equivalent.
+
+### Structure
+
+```text
+algorithms/hrdiagram_py/
+├── hrfit.py            CM<->HR transform, CCM extinction, isochrone loading, the optimizer
+├── observations.py     FITS frame -> detected sources (calls algorithms.photometry/algorithms.wcs)
+├── matching.py          detected sources <-> a fetched comparison-catalog table, by sky position
+├── literature.py        a fetched cluster-catalog row -> age/distance/E(B-V)
+├── membership.py         field-star removal (parallax window + elliptical PM cut, see below)
+└── isochrones.py        PARSEC isochrone fetch (stev.oapd.inaf.it) + fit_and_compare
+```
+
+`observations.py`/`matching.py`/`literature.py` are original orchestration
+written for this package, not extracted or ported from either upstream
+system. `membership.py` is mostly the same -- except for one function,
+`_elliptical_pm_mask`, marked `# PORTED:` inline: a faithful translation of
+Astromancer's real field-star-removal acceptance test,
+`updateClusterFieldSources`
+(`algorithms/hrdiagram/photometry/cluster-data.service.util.ts:87-128`,
+elliptical in (pm_ra, pm_dec)), including its documented "correct by
+accident" NaN behaviour for a star outside the semi-major axis (defect #8
+above). `select_cluster_members` sizes that ellipse's semi-axes per source --
+`max(pm_sigma * that star's own PM error, a distance-aware velocity-
+dispersion floor)`, the same pattern its parallax gate already used -- which
+is original code layered on top of the ported test, not something upstream's
+manual slider-driven tool needed (a human just looked at a histogram).
+Confirmed live before this was written: a fixed absolute PM tolerance
+(the previous, unported circular cut) kept only 8 of 305 Gaia sources for the
+Pleiades (128 pc) while the same tolerance was comfortably generous for NGC
+6124 (654 pc) -- angular PM dispersion for a fixed physical velocity
+dispersion scales as 1/distance, so no single fixed mas/yr number can be
+right for both. `isochrones.py` is the one module here that still makes its
+own network call (the PARSEC CMD service has no existing Kepler tool
+wrapping it); Gaia DR3 and cluster-parameter catalog fetching are
+deliberately **not** implemented here. Both go through
+`tools.hr_diagram`, one layer up, which calls the existing
+`tools.vizier.search_vizier` against VizieR's Gaia DR3 mirror
+(`I/355/gaiadr3`) and against the Cantat-Gaudin & Anders (2020) cluster
+catalog (`J/A+A/640/A1/table1`) -- reused wholesale rather than reimplemented,
+since `search_vizier` already supports unbounded, all-column, position- or
+name-resolved VizieR queries. `algorithms/hrdiagram_py/` never imports
+`tools.*` -- consistent with `docs/tool-architecture.md`'s "Astropy-native
+inside, JSON-and-artifact-native outside" rule -- even though `isochrones.py`
+itself still talks to the network directly for the one service no tool wraps.
+
+`tools/hr_diagram.py`, one layer up, additionally exposes a catalog-only
+entry point (`crossmatch_gaia_by_position`, `run_full_hr_pipeline_from_catalog`)
+that skips FITS/detection entirely and pulls Gaia DR3 directly around a
+cluster's own resolved position -- for a plain "HR diagram for cluster X"
+request with no FITS file. See that module's own docstring for the
+distinction from `tools.photometry` (which reports one frame's own calibrated
+photometry and has no Gaia crossmatch or isochrone fit of its own).
+
+### Verification performed
+
+`tests/test_hrdiagram_py.py` fits a synthetic cluster with a known injected
+distance and E(B-V) and checks both are recovered, and that the isochrone
+line stays in native (unsorted-by-magnitude) order at the turnoff. No network
+access -- the isochrone there is hand-built, not fetched from PARSEC.
+
+Confirmed live, manually, against NGC 6124 (not an automated test -- there is
+no `network`-marked test for this path yet): `tools.vizier.search_vizier`'s
+`target=`-based name resolution correctly found the Cantat-Gaudin & Anders
+(2020) row for "NGC 6124" and separately fetched Gaia DR3 (`I/355/gaiadr3`)
+sources within 20'; `algorithms.hrdiagram_py.membership.select_cluster_members`
+removed field-star contamination; `isochrones.fit_and_compare` and the
+`tools.hr_diagram.fit_and_compare_hr_diagram` / `run_full_hr_pipeline_from_catalog`
+wrappers completed a full PARSEC fetch-and-fit, recovering a distance within
+a percent of the literature value. E(B-V) and age diverged more -- likely a
+real age/reddening degeneracy over a magnitude-limited bright subset, though
+this has not been separately re-isolated from the isochrone-quality fix below.
+
+That work surfaced and fixed three real bugs, none previously exercised
+against a real PARSEC response:
+
+- The download-link regex required a quoted `href="..."`; the service
+  actually emits it unquoted (`href=../tmp/output....dat.gz>`), so every
+  fetch failed with "no download link" before this fix. (`isochrones.py`)
+- The link was resolved against `post_url` (the form's own POST target),
+  one directory level too deep; it must resolve against `base` (the
+  original GET URL) or the request 404s. (`isochrones.py`)
+- **`isochrone_cmd` plotted and fit the raw PARSEC/COLIBRI table verbatim,
+  including thermally-pulsing AGB rows (`label` column >= 8).** Astromancer
+  never hits this because its backend hands the frontend an already-clean
+  `{data, iSkip}` track (see "ISOCHRONE DATA" in the TypeScript section
+  above) -- a single scalar splice index that presumes exactly one clean
+  discontinuity, not hundreds of oscillating points. A raw PARSEC download
+  has no such guarantee: once a track enters TP-AGB, `Mini` stops advancing
+  (PARSEC's dust/mass-loss model breaks down there) while synthetic Gaia
+  BP/RP swing by tens of magnitudes pulse to pulse. Plotted in native order,
+  that reads as a scribbled "wedge" spanning (BP-RP, M_G) out to (18, 34)
+  dominating the CMD; fed into `_weighted_cost` unfiltered, it also hands the
+  distance/E(B-V) optimizer a field of spurious nearest-point attractors near
+  the real main sequence. Fixed by dropping `label > 7` rows in
+  `isochrone_cmd` by default (`max_label=7`; pass `max_label=None` for the
+  old unfiltered behaviour). Regression-tested in `tests/test_hrdiagram_py.py`
+  with a hand-built table carrying an injected TP-AGB-style `label` column,
+  since the real trigger (an actual PARSEC download) is network-gated.
+  Verified once against a second, much older/more metal-poor real cluster (a
+  globular, via the Harris 2010 catalog rather than Cantat-Gaudin, using an ad
+  hoc script no longer in the tree) whose CMD has a real, well-populated RGB
+  and horizontal branch: the fix preserves those genuine features (`label`
+  3-5) while still dropping the TP-AGB tail.
+
+The `query_object`-based assumption that matches are ordered by increasing
+separation held for the clusters tested so far but is still not exhaustively
+verified -- see `tools/hr_diagram.py`'s docstrings.
+
+## Radio Sources (Python)
+
+### New first-party capability, replacing two non-functional scratch scripts
+
+`algorithms/radio/` and `tools/radio_sources.py` replace `Spectral_Plot.py` and
+`Best_Fit_Analysis.py` (two root-level scratch scripts, neither of which ran
+as committed -- both had code after their function definitions indented as if
+inside the function but actually at module scope, referencing undefined
+names, so importing either raised `NameError` immediately). No upstream
+Skynet/Astromancer equivalent exists; this is genuinely new capability, not
+an extraction or port.
+
+`Best_Fit_Analysis.py`'s model comparison also had a real methodological bug
+kept as a documented lesson, not reproduced: it compared R^2 across three
+models fit to *different* target transforms (raw intensity, log-log OLS, and
+intensity vs. log frequency) and picked the highest -- R^2 values from
+different target spaces are not commensurable, so "highest R^2 wins" did not
+mean what it looked like it meant. `algorithms/radio/spectral_fitting.py`
+fits every candidate model against the same target (`log10(flux)`), so
+comparing their R^2 is valid.
+
+### Structure
+
+```text
+algorithms/radio/
+├── spectral_fitting.py   power-law + log-parabola flux-vs-frequency fitting
+└── matching.py           RA/Dec-column guessing + flat-sky catalog cross-match
+tools/
+└── radio_sources.py      identify_radio_sources, analyze_source_spectrum, plot_field_sed
+```
+
+`plot_field_sed` is the main entry point: it chains `identify_radio_sources`
+(FITS source extraction via `algorithms.photometry`, then a single
+`tools.vizier.search_vizier(category="radio")` cone search cross-matched
+against every detected source by position) with `analyze_source_spectrum`'s
+NED-based path (`tools.ned.search_ned(name, table="photometry")`, whose
+already-homogenized `Frequency`/`Flux Density` columns are used directly
+rather than hand-parsing raw per-catalog VizieR flux columns, which differ in
+name and unit survey to survey) for every identified source, drawing them all
+on one labeled SED plot.
+
+### Verification performed
+
+`tests/test_radio_sources.py` covers the fitting math (injected spectral
+index and curvature recovery, no network), the matching utilities (including
+a sexagesimal-coordinate-column case -- see below), and the tool functions'
+offline/error paths (missing WCS, no detected sources, missing input).
+
+Confirmed live, manually, in two stages:
+
+- A synthetic FITS map (a single Gaussian source plus noise, real WCS)
+  pointed at Cas A's position was run through `identify_radio_sources`. This
+  surfaced and fixed a real bug: `algorithms/radio/matching.py`'s RA/Dec
+  column guesser matched a catalog whose `RA`/`DEC` columns held sexagesimal
+  strings (`"23 23 25.32"`) rather than decimal degrees under those same
+  conventional names, which crashed the float conversion. Fixed by falling
+  back to `astropy.coordinates.Angle` parsing before giving up on a catalog
+  (`_coerce_degrees`).
+- The same synthetic-FITS approach pointed at 3C 48 (a compact, well-
+  catalogued quasar -- Cas A itself is a poor test target here, being an
+  extended SNR that point-source radio catalogs only match in resolved
+  knots, not as a single named entity) ran the full `plot_field_sed` chain
+  end to end live: detected the source, cross-matched it against a real
+  VizieR radio catalog, resolved the match to "3C 48.0", fetched 85 real
+  NED radio-band flux measurements, and fit a spectral index of -0.585 --
+  consistent with 3C 48's known compact-steep-spectrum classification. The
+  log-parabola fit did show a marginally higher R^2 (0.456 vs. 0.443) from
+  3C 48's real spectral curvature, but stayed under `analyze_spectrum`'s
+  curvature-margin threshold, so `power_law` was correctly reported as
+  `best_model` rather than over-fitting the extra parameter to real-world
+  scatter across 85 points from heterogeneous literature sources.
+
+Not exhaustively verified: NED name resolution for a matched catalog's own
+designation is best-effort (`_ned_lookup_candidates` only handles NVSS's own
+bare-coordinate naming convention specifically, confirmed live to need a
+`"NVSS J"` prefix); other radio surveys' designation conventions (B1950-epoch
+names, 4C/3C-style catalog numbers, etc.) are tried as published and may not
+always resolve. A source identified spatially but whose designation NED
+cannot resolve is reported in `warnings` as skipped, not as a tool error.
 
 ## Light Curve
 
