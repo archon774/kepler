@@ -178,7 +178,7 @@ def run_photometry_on_target(
     if zero_point.verified:
         diagnostics = zero_point.diagnostics or {}
         zero_point_model = ZeropointSolution(
-            zero_point_corr=zero_point.value,
+            zero_point=zero_point.value,
             zero_point_error_mag=diagnostics.get("zero_point_error_mag"),
             zero_point_slop=diagnostics.get("zero_point_slop"),
             rej_percent=diagnostics.get("rejection_percent"),

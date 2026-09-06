@@ -148,7 +148,12 @@ class ReferenceBandResolution(KeplerToolModel):
 
 
 class ZeropointSolution(KeplerToolModel):
-    zero_point_corr: float | None = None
+    #: The ABSOLUTE photometric zero point in magnitudes, as ``calc_solution``
+    #: returns it. Afterglow's API instead fixes ``zero_point = 20`` and
+    #: reports a ``zero_point_correction``; adding the two gives this number.
+    #: Confusing the conventions is a clean, plausible 20-magnitude error --
+    #: see test_data/README.md.
+    zero_point: float | None = None
     zero_point_error_mag: float | None = None
     zero_point_slop: float | None = None
     limmag5: float | None = None
