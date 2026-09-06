@@ -2790,21 +2790,20 @@ answer; that is an infrastructure change, not a broken link.
 
 These are tracked elsewhere and this plan must not quietly absorb them.
 
-**`docs/pulsar-tool-pipeline.md` §8–§9 pressing issues.** The periodogram chart
-hard-codes "Polarization XX" while the default channel is `sum`; frequency-mode
-periodograms inherit period-mode axis semantics; a constant light curve raises
-`ZeroDivisionError` out of `lomb_scargle()`; `top_peaks` is ambiguous between
-seconds and Hz; `fold_lightcurve()` has no guard against a tiny period; Stage 0
-can still raise `OSError` on an unreadable file. Every one is a tool-correctness
-bug rather than a local-data link. **Task 10 edits `tools/pulsar.py` and must
-leave all of them alone** — fixing one in passing would put a behaviour change
-in a documentation-and-plumbing PR.
+**`docs/analysis/pulsar-pipeline-review.md` — open pulsar tool bugs.** The
+periodogram chart hard-codes "Polarization XX" while the default channel is
+`sum`; frequency-mode periodograms inherit period-mode axis semantics; a constant
+light curve raises `ZeroDivisionError` out of `lomb_scargle()`; `top_peaks` is
+ambiguous between seconds and Hz; `fold_lightcurve()` has no guard against a tiny
+period; Stage 0 can still raise `OSError` on an unreadable file. Every one is a
+tool-correctness bug rather than a local-data link. **Task 10 edits
+`tools/pulsar.py` and must leave all of them alone** — fixing one in passing
+would put a behaviour change in a documentation-and-plumbing PR.
 
-**`docs/pulsar-tool-pipeline.md` §7 is stale.** It still says "No name-to-scan
-resolution", which stopped being true when `list_pulsar_scans` /
-`resolve_pulsar_scan` landed; §8 already flags this against itself. Task 10
-makes it staler by adding a curated period to Stage 0. Worth a doc-only PR, not
-worth widening this one.
+**`docs/pulsar-tool-pipeline.md` §7 (name-to-scan resolution) was stale and has
+been fixed** in the docs reorganization — it described `list_pulsar_scans` /
+`resolve_pulsar_scan` as missing after they had landed. Task 10 adds a curated
+period to that Stage 0; keep the doc in step.
 
 **`docs/algorithm-remediation-plan.md`'s 109 findings and 7 blockers.**
 Algorithm correctness, untouched here by design. The extraction contract holds
