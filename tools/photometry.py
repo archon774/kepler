@@ -41,22 +41,64 @@ from tools.artifacts import describe_file
 from tools.claude_photometry_haiku_tool import (
     compute_photometry,
     list_bundled_targets,
+    load_fits_image,
     magnitude_label_for,
     plot_photometry,
     plot_zero_point_solution,
     resolve_fits_path,
 )
 from tools.config import artifact_directory
+from tools.fieldcal_reference import compare_zeropoint_to_reference
 from tools.models import (
     ArtifactRef,
     FileMetadata,
     PhotometryRunResult,
     PhotometryTargetLibrary,
     SourceSummary,
+    ToolError,
+    ZeropointComparison,
     ZeropointSolution,
 )
 
-__all__ = ["list_photometry_targets", "run_photometry_on_target"]
+__all__ = [
+    "list_photometry_targets",
+    "run_photometry_on_target",
+    "wire_fieldcal_deps",
+    "calibrate_zeropoint",
+]
+
+
+def wire_fieldcal_deps() -> None:
+    """Wire the ``algorithms.fieldcal.deps`` seam to this repo's own photometry
+    and WCS implementations.
+
+    ``field_cal.py`` reads these as ``deps.<name>(...)`` at call time, so
+    assigning them here rather than at import is exactly what the seam is for
+    (see ``docs/extraction.md``, Field Calibration). Idempotent, and the single
+    wiring site: ``tools.claude_photometry_haiku_tool`` calls this too, so the
+    CLI and :func:`calibrate_zeropoint` cannot drift apart.
+
+    ``deps.query_catalogs`` already defaults to ``query.runner.query_catalogs``
+    and needs no wiring.
+    """
+    from algorithms.fieldcal import deps as fieldcal_deps
+    from algorithms.photometry.photometry import run_photometry
+    from algorithms.photometry.source_extraction import (
+        build_wcs_from_header,
+        get_source_radec,
+        run_source_extraction,
+    )
+
+    fieldcal_deps.run_photometry = run_photometry
+    fieldcal_deps.run_source_extraction = run_source_extraction
+    fieldcal_deps.get_source_radec = get_source_radec
+    # EXTRACTED: was ``build_wcs_from_header(header) or
+    # build_wcs_from_processing_run_solution(...)``; the DB-backed fallback was
+    # dropped upstream of fieldcal (see deps.py), so a header-only
+    # implementation is exactly what field calibration depends on here.
+    fieldcal_deps.build_wcs_for_processing_run = (
+        lambda _processing_run, hdr: build_wcs_from_header(hdr)
+    )
 
 
 def list_photometry_targets() -> PhotometryTargetLibrary:
@@ -214,3 +256,132 @@ def run_photometry_on_target(
         faintest=_source_summary(faintest),
         artifacts=artifacts,
     )
+
+
+def calibrate_zeropoint(
+    path: str | Path,
+    *,
+    catalog_sources: list | None = None,
+    catalogs: list[str] | None = None,
+    compare_to: str | None = None,
+) -> ZeropointComparison:
+    """Solve a photometric zero point from a local frame's own pixels, then
+    place it against the recorded ground truth.
+
+    The real chain: source extraction -> aperture photometry -> match to
+    catalog rows -> resolve reference magnitudes -> ``calc_solution``. The
+    zero point returned is ABSOLUTE, on ``field_cal.py``'s aperture-correction-
+    off magnitude scale.
+
+    ``catalog_sources`` (from
+    ``tools.fieldcal_reference.replay_catalog_sources``) is the offline path:
+    the recorded APASS rows are injected, so ``deps.query_catalogs`` is never
+    reached and the variable-star cross-check (which would query VSX) is
+    disabled. Without it, calibration queries a reference catalog over the
+    network, exactly as ``run_photometry_on_target(use_field_cal=True)`` does.
+
+    ``compare_to`` names a recorded solve (e.g. ``"ngc5128_b_002"``); the
+    result is a :class:`~tools.models.ZeropointComparison` against it. Omit it
+    and ``reference`` is ``None`` -- just the solved ``zero_point``.
+
+    LIMITATION: only ``ngc5128_b_002`` / ``ngc5128_galaxy_b_001.fits`` can be
+    driven end to end -- the three NGC 5286 B solves have no bundled frame. And
+    only the *matched* catalog rows were recorded, so a replay validates
+    photometry -> matching -> ref-mag -> solve, not catalog selection.
+    """
+    file_meta = describe_file(path)
+    if not file_meta.exists or not file_meta.is_file:
+        return ZeropointComparison(
+            errors=[
+                ToolError(
+                    code="file_not_found",
+                    message=f"{path!r} is not a readable local FITS file.",
+                )
+            ]
+        )
+
+    try:
+        data, header = load_fits_image(Path(file_meta.path))
+    except (OSError, ValueError) as exc:
+        return ZeropointComparison(
+            errors=[ToolError(code="fits_read_error", message=str(exc))]
+        )
+
+    from algorithms.fieldcal.field_cal import perform_field_calibration
+    from algorithms.fieldcal.schemas import PhotometricCalibrationSettings, ProcessingRunRef
+
+    # The same settings classes the CLI field-cal path constructs -- the ones
+    # the wired ``run_photometry`` / ``run_source_extraction`` expect.
+    from algorithms.photometry.photometry import PhotometrySettings
+    from algorithms.photometry.schemas import SourceExtractionSettings
+
+    wire_fieldcal_deps()
+
+    offline = catalog_sources is not None
+    selected_catalogs = list(catalogs) if catalogs else None
+    if selected_catalogs is None and offline:
+        selected_catalogs = sorted(
+            {
+                name
+                for name in (getattr(s, "catalog_name", None) for s in catalog_sources)
+                if name
+            }
+        )
+    if selected_catalogs is None:
+        from algorithms.catalogs import CATALOGS
+        from algorithms.query.selection import select_catalogs_for_filter
+
+        image_filter = header.get("FILTER") if hasattr(header, "get") else None
+        selected_catalogs = select_catalogs_for_filter(list(CATALOGS), image_filter)
+        if not selected_catalogs:
+            return ZeropointComparison(
+                errors=[
+                    ToolError(
+                        code="no_catalog_for_filter",
+                        message=f"No calibration catalog supports filter {image_filter!r}; "
+                        "pass catalogs= or catalog_sources=.",
+                    )
+                ]
+            )
+
+    field_cal_settings = PhotometricCalibrationSettings(
+        catalogs=selected_catalogs or ["APASS"],
+        # Replaying the exact rows upstream fed calc_solution: skip the
+        # variable-star cross-check, which would query VSX over the network and
+        # could drop rows that are already in the recorded matched set.
+        variable_check_tol=0 if offline else PhotometricCalibrationSettings().variable_check_tol,
+    )
+    photometry_settings = PhotometrySettings(
+        mode="aperture", a=5.0, a_in_px=8.0, a_out_px=12.0
+    )
+
+    try:
+        outcome = perform_field_calibration(
+            ProcessingRunRef(),
+            header.copy(),
+            data,
+            field_cal_settings=field_cal_settings,
+            photometry_settings=photometry_settings,
+            extraction_settings=SourceExtractionSettings(),
+            catalog_names=selected_catalogs or None,
+            catalog_sources=catalog_sources,
+        )
+    except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
+        return ZeropointComparison(
+            errors=[ToolError(code="field_calibration_failed", message=str(exc))]
+        )
+
+    if outcome is None:
+        return ZeropointComparison(
+            errors=[ToolError(code="no_solution", message="field calibration returned no solution")]
+        )
+    zero_point, _result = outcome
+    if zero_point is None:
+        return ZeropointComparison(
+            errors=[ToolError(code="no_solution", message="field calibration did not converge")]
+        )
+    zero_point = float(zero_point)
+
+    if compare_to is not None:
+        return compare_zeropoint_to_reference(zero_point, compare_to)
+    return ZeropointComparison(zero_point=zero_point, reference=None)

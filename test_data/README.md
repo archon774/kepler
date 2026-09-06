@@ -23,6 +23,7 @@ test_data/
   fieldcal/
     zp_solutions/              4 recorded Skynet zero-point solves (in + out)
     ocl_filter_report.json     Open/Clear/Lum substitute-filter trials
+  frame_provenance.json        bundled frame stem -> pre-rename upstream filename
   pulsar/                      5 Green Bank 20 m pulsar scans (5.7 MB)
     Curated pulsars.docx       the curation: periods + difficulty ratings
 ```
@@ -236,6 +237,30 @@ Two structural details the ingest depends on, both visible in any of the files:
 Skynet's OCL filter-substitution report: for ten Open/Clear/Lum frames it trials
 `V`, `rprime` and `R` as substitute reference filters and records the resulting
 slop, selecting the lowest. Copied from `zp-fits/ocl_fits/ocl_filter_report.json`.
+
+Every row is keyed by `input_file` — the **pre-rename upstream filename** (e.g.
+`messier 15_14111493_Lum_005.fits`). The report carries no `DATE-OBS`, exposure
+time, or any other identifier, so once the frames were renamed to
+`<object>_<category>_<filter>_<seq>.fits` the join was lost. `frame_provenance.json`
+(below) is the only way back to it; `tools.fieldcal_reference.load_ocl_reference`
+takes a bundled stem and returns the matching row.
+
+Note the sweep only **read the header WCS** — it did not plate-solve. That is
+why `m15_globular_open_000` fails every trial with `"no WCS solution found in
+FITS header"` (it is the one bundled frame with no WCS keywords): a working
+`solve_astrometry` could take that frame further than the recorded pipeline did.
+
+## `frame_provenance.json`
+
+`{ "frames": { "<bundled stem>": "<pre-rename upstream basename>" } }`, plus a
+`_collisions` note for the one stem two upstream files mapped to. Transcribed
+from `skynet-data/pipeline_data/reorganize.py`, the rename script, so the
+mapping lives in this repository rather than only on the machine that ran it.
+
+It exists because `ocl_filter_report.json` keys its rows by upstream filename
+and nothing else does — the Afterglow CSVs were rewritten to the new names by
+the same script, so they need no map. The full 90-entry table is kept (not just
+the ten OCL frames) so the next fixture that needs a join already has it.
 
 ## Repository size
 
