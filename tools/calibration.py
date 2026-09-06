@@ -128,7 +128,7 @@ def solve_zeropoint_from_measurements(
             errors=[ToolError(code="numerical_error", message=str(exc))],
         )
     return ZeropointSolution(
-        zero_point_corr=_finite(m0),
+        zero_point=_finite(m0),
         zero_point_error_mag=_finite(m0_error),
         zero_point_slop=_finite(slop),
         limmag5=_finite(limmag),

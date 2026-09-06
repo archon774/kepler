@@ -104,7 +104,7 @@ def test_live_field_cal_zero_point_matches_afterglow_web_value(target, tmp_path)
         )
 
     assert result.zero_point is not None
-    kepler_zero_point = result.zero_point.zero_point_corr
+    kepler_zero_point = result.zero_point.zero_point
     kepler_error = result.zero_point.zero_point_error_mag or 0.0
 
     diff = kepler_zero_point - web_zero_point
