@@ -49,7 +49,11 @@ from tools.pulsar import (
     load_pulsar_lightcurve,
     sonify_pulsar,
 )
-from tools.photometry import list_photometry_targets, run_photometry_on_target
+from tools.photometry import (
+    calibrate_zeropoint,
+    list_photometry_targets,
+    run_photometry_on_target,
+)
 from tools.radio_sources import (
     analyze_source_spectrum,
     identify_radio_sources,
@@ -1324,6 +1328,41 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["zero_point", "field"],
         },
     },
+    {
+        "name": "calibrate_zeropoint",
+        "description": "Solve a photometric zero point from a local FITS "
+        "frame's own pixels -- source extraction, aperture photometry, catalog "
+        "match, reference-magnitude resolution, calc_solution -- and place the "
+        "result against the recorded ground truth. The zero point is ABSOLUTE "
+        "(Afterglow's API reports 20.0 plus a correction instead). Without "
+        "`catalog_sources` this queries a reference catalog over the network, "
+        "like run_photometry_on_target(use_field_cal=true). Today only "
+        "ngc5128_galaxy_b_001.fits can be driven end to end offline, via "
+        "catalog_sources from the recorded solve.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to a local plate-solved FITS frame. Get "
+                    "one from resolve_optical_frame.",
+                },
+                "catalogs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Reference catalogs to query (e.g. ['APASS']). "
+                    "Defaults to catalogs that support the frame's FILTER.",
+                },
+                "compare_to": {
+                    "type": "string",
+                    "description": "A recorded-solve name (see "
+                    "list_zeropoint_references) to compare the result against, "
+                    "e.g. 'ngc5128_b_002'.",
+                },
+            },
+            "required": ["path"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -1374,4 +1413,5 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "list_zeropoint_references": list_zeropoint_references,
     "load_zeropoint_reference": load_zeropoint_reference,
     "compare_zeropoint_to_reference": compare_zeropoint_to_reference,
+    "calibrate_zeropoint": calibrate_zeropoint,
 }

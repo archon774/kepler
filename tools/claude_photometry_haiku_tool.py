@@ -96,23 +96,17 @@ def compute_field_cal_zero_point(
     # Imported lazily: `fieldcal`/`catalogs`/`query` pull in the (optional) network
     # stack only when field calibration is actually attempted.
     from algorithms.catalogs import CATALOGS
-    from algorithms.fieldcal import deps as fieldcal_deps
     from algorithms.fieldcal.field_cal import perform_field_calibration
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
-    from algorithms.photometry.source_extraction import get_source_radec, run_source_extraction
     from algorithms.query.selection import select_catalogs_for_filter
 
+    from tools.photometry import wire_fieldcal_deps
+
     # Wire the seams `fieldcal` cut when it was extracted from Skynet (see
-    # docs/extraction.md §4.3) to this repo's own photometry/WCS implementations.
-    # `deps.query_catalogs` already defaults to `query.runner.query_catalogs`, so it
-    # needs no wiring here.
-    fieldcal_deps.run_photometry = run_photometry
-    fieldcal_deps.run_source_extraction = run_source_extraction
-    fieldcal_deps.get_source_radec = get_source_radec
-    # EXTRACTED: was `build_wcs_from_header(header) or build_wcs_from_processing_run_solution(...)`;
-    # the DB-backed fallback was dropped upstream of fieldcal (see deps.py), so a
-    # header-only implementation is exactly what field calibration depends on here.
-    fieldcal_deps.build_wcs_for_processing_run = lambda _processing_run, hdr: build_wcs_from_header(hdr)
+    # docs/extraction.md, Field Calibration) to this repo's own photometry/WCS
+    # implementations. One shared wiring site, so this CLI path and
+    # `tools.photometry.calibrate_zeropoint` cannot drift apart.
+    wire_fieldcal_deps()
 
     wcs = build_wcs_from_header(header)
     if wcs is None:

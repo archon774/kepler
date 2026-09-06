@@ -50,6 +50,7 @@ __all__ = [
     "load_zeropoint_reference",
     "solve_zeropoint_from_reference",
     "compare_zeropoint_to_reference",
+    "replay_catalog_sources",
 ]
 
 #: Where the recorded solves are looked for. Overridable so a caller with
@@ -322,6 +323,58 @@ def solve_zeropoint_from_reference(
             errors=list(reference.errors), warnings=list(reference.warnings)
         )
     return solve_zeropoint_from_measurements(reference.measurements, [])
+
+
+def replay_catalog_sources(field: str, directory: str | Path | None = None) -> list:
+    """Rebuild the catalog rows Skynet actually matched, for an offline solve.
+
+    Returns ``list[algorithms.fieldcal.schemas.CatalogSource]`` -- the recorded
+    matched APASS rows, with position and reference magnitude, so
+    ``tools.photometry.calibrate_zeropoint`` can run the real extract -> measure
+    -> match -> solve chain against real catalog values with no network.
+
+    LIMITATION: ``fit_data.csv`` recorded only the rows that *matched* a
+    detection (the ``local_catalog_*`` columns), not the full cone-search
+    response. Injecting these reproduces photometry -> matching -> ref-mag ->
+    solve, but not the selection statistics -- ``fit_summary.json``'s
+    ``num_not_selected_by_field_cal`` cannot be recovered from this fixture.
+    Only ``ngc5128_b_002`` carries these columns; every other field returns
+    ``[]``.
+    """
+    from algorithms.fieldcal.schemas import CatalogSource, Mag
+
+    field_dir = _solutions_dir(directory) / field
+    csv_path = field_dir / "fit_data.csv"
+    if not csv_path.is_file():
+        return []
+
+    sources: list[CatalogSource] = []
+    with csv_path.open(newline="") as handle:
+        for record in csv.DictReader(handle):
+            flag = str(record.get("used_for_calibration", "")).strip().lower()
+            if flag not in ("true", "1"):
+                continue
+            ra_hours = _f(record.get("local_catalog_ra"))
+            dec_degs = _f(record.get("local_catalog_dec"))
+            ref_mag = _f(record.get("local_ref_mag"))
+            if ra_hours is None or dec_degs is None or ref_mag is None:
+                continue
+            ref_mag_error = _f(record.get("local_ref_mag_error"))
+            catalog_name = (record.get("local_catalog_name") or "").strip() or None
+            band = (record.get("filter") or "").strip() or None
+            source_id = (record.get("id") or "").strip() or None
+            sources.append(
+                CatalogSource(
+                    id=source_id,
+                    catalog_name=catalog_name,
+                    ra_hours=ra_hours,
+                    dec_degs=dec_degs,
+                    ref_mag=ref_mag,
+                    ref_mag_error=ref_mag_error,
+                    mags={band: Mag(value=ref_mag, error=ref_mag_error)} if band else {},
+                )
+            )
+    return sources
 
 
 def compare_zeropoint_to_reference(

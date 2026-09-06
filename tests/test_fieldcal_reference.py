@@ -22,6 +22,7 @@ from tools.fieldcal_reference import (
     compare_zeropoint_to_reference,
     list_zeropoint_references,
     load_zeropoint_reference,
+    replay_catalog_sources,
     solve_zeropoint_from_reference,
 )
 
@@ -106,3 +107,60 @@ def test_a_missing_directory_returns_an_error_naming_the_env_override():
     reference = load_zeropoint_reference("ngc5128_b_002", "/nonexistent/fieldcal")
     assert [e.code for e in reference.errors] == ["directory_not_found"]
     assert "KEPLER_FIELDCAL_DATA_DIR" in reference.errors[0].message
+
+
+def test_replay_returns_the_recorded_catalog_rows():
+    sources = replay_catalog_sources("ngc5128_b_002")
+    assert len(sources) == 35
+    assert {s.catalog_name for s in sources} == {"APASS"}
+    assert all(s.ra_hours is not None and s.dec_degs is not None for s in sources)
+
+
+@pytest.mark.slow
+def test_offline_field_calibration_lands_inside_the_afterglow_tolerance():
+    """The full chain on a real frame with no network: extract, measure, match,
+    resolve reference magnitudes, solve, compare.
+
+    LIMITATION -- only the 35 *matched* APASS rows were recorded upstream, not
+    the full cone-search response. This exercises photometry -> matching ->
+    ref-mag resolution -> solve against real catalog values, but it cannot
+    reproduce fit_summary.json's num_not_selected_by_field_cal (263): the rows
+    that failed to match were never written down.
+    """
+    from tools.optical import resolve_optical_frame
+    from tools.photometry import calibrate_zeropoint
+
+    frame = resolve_optical_frame("ngc5128_galaxy_b_001")
+    comparison = calibrate_zeropoint(
+        frame.path,
+        catalog_sources=replay_catalog_sources("ngc5128_b_002"),
+        compare_to="ngc5128_b_002",
+    )
+
+    assert comparison.errors == []
+    # A loose bound, deliberately: this re-measures photometry from pixels
+    # rather than replaying the recorded instrumental magnitudes, so it will
+    # not be bit-exact. test_solving_from_the_recorded_rows_reproduces_the_
+    # recorded_solve is the bit-exact check.
+    assert abs(comparison.delta_vs_afterglow) < 0.1
+
+
+def test_calibrate_zeropoint_does_not_reach_the_network_when_rows_are_supplied(monkeypatch):
+    """A supplied catalog must short-circuit query_catalogs entirely."""
+    import algorithms.fieldcal.deps as deps
+
+    def explode(*args, **kwargs):
+        raise AssertionError("calibrate_zeropoint queried the network")
+
+    monkeypatch.setattr(deps, "query_catalogs", explode)
+
+    from tools.optical import resolve_optical_frame
+    from tools.photometry import calibrate_zeropoint
+
+    frame = resolve_optical_frame("ngc5128_galaxy_b_001")
+    comparison = calibrate_zeropoint(
+        frame.path,
+        catalog_sources=replay_catalog_sources("ngc5128_b_002"),
+        compare_to="ngc5128_b_002",
+    )
+    assert comparison.zero_point is not None
