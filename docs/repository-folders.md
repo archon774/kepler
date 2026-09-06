@@ -153,17 +153,21 @@ Current caveats:
 
 ## `docs/`
 
-Project documentation and planning material.
+Project documentation. The top level holds the reference documents; three
+subdirectories hold everything else. See [`README.md`](README.md) for the full
+map and the document lifecycle.
 
-- `tool-architecture.md` is the master package architecture document: public
-  tools, algorithm ownership, future services, runtime policy, and
-  `skylib_lite` consolidation.
-- `extraction.md` is the master extraction record for every algorithm package
+- `tool-architecture.md` — the master package architecture: public tools,
+  algorithm ownership, shared models, `skylib_lite` consolidation, runtime and
+  validation policy.
+- `extraction.md` — the master extraction record for every algorithm package
   under `algorithms/`.
-- `repository-folders.md` is this current-state folder guide.
-
-Docs in this folder should distinguish clearly between the repository's current
-extracted-code state and the planned package architecture.
+- `repository-folders.md` — this current-state folder guide.
+- `pulsar-tool-pipeline.md` — the four-stage pulsar tool chain and the extracted
+  Astromancer code behind each stage.
+- `analysis/` — point-in-time review and external-research output (dated).
+- `working/` — plans under active development.
+- `examples/` — committed sample output.
 
 ## `algorithms/fieldcal/`
 
@@ -366,7 +370,7 @@ Important files and subfolders:
   `duplicate_if_needed`, `difference_and_sum`, `fold_lightcurve`.
 - `sonification.py`: `interpolate_linear`, `window_sonification_input`,
   `folded_sonification_input`, `sonify`, `write_wav`.
-- [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md): the stage-by-stage
+- [Pulsar Tool Pipeline](pulsar-tool-pipeline.md): the stage-by-stage
   architecture and the extracted Astromancer code behind each stage.
 - [extraction.md](extraction.md), Pulsar Sonification: provenance, the seams
   cut, the port's deliberate divergences, and the preserved upstream quirks.

@@ -12,7 +12,7 @@ wide-field index set. So ``solve_wcs`` is exercised only behind the
   candidate solution is written into the header at all;
 * **header write-back** — which keywords are cleared, which survive;
 * **``_clear_wcs_solution_fields``**, whose attribute-name mismatch is a
-  documented parity quirk (``algorithms/wcs/EXTRACTION.md`` §5.2) and is
+  documented parity quirk (``docs/extraction.md``, WCS §5.2) and is
   asserted here so it cannot be "tidied up" by accident.
 """
 
@@ -495,7 +495,7 @@ def test_clearing_resets_the_fields_whose_names_actually_match():
 
 
 def test_clearing_silently_misses_four_mapped_columns():
-    """PRESERVED QUIRK — ``algorithms/wcs/EXTRACTION.md`` §5.2.
+    """PRESERVED QUIRK — ``docs/extraction.md``, WCS §5.2.
 
     ``_clear_wcs_solution_fields`` clears the names ``ra``, ``dec``,
     ``pixel_scale`` and ``rotation``. The solve writes ``ra_deg``, ``dec_deg``,
