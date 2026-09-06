@@ -81,6 +81,14 @@ For a catalogued source, search_atnf gives a period more accurate than a short \
 scan can measure -- prefer it over step 2's result when the two disagree, and \
 use it when step 2 warns that its peak does not fold.
 
+LOCAL OPTICAL FRAMES. Image work has the same Stage 0 as the pulsar chain: \
+list_optical_frames / resolve_optical_frame find a FITS frame on this machine. \
+There is no archive behind them -- a path only resolves if the frame is \
+already here, so never invent one. resolve_optical_frame returns candidates \
+with an "ambiguous" error whenever a field was observed in more than one band; \
+pick a band rather than guessing. Once you have a path, describe_image_wcs \
+summarizes its pointing and pixel scale.
+
 BEFORE calling any tool, work out the correct search term for that specific database from \
 the user's request -- do not pass the user's wording through unchanged by default. Each \
 database expects a different kind of identifier; use your own astronomical knowledge to \

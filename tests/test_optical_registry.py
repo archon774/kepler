@@ -107,3 +107,27 @@ def test_env_override_redirects_the_search_root(tmp_path, monkeypatch):
     listing = list_optical_frames()
     assert Path(listing.search_root) == tmp_path
     assert listing.count == 0
+
+
+def test_the_frame_registry_is_reachable_from_an_agent_loop():
+    from tools.registry import TOOL_FUNCTIONS
+
+    assert TOOL_FUNCTIONS["list_optical_frames"] is list_optical_frames
+    assert TOOL_FUNCTIONS["resolve_optical_frame"] is resolve_optical_frame
+
+
+def test_the_cli_resolver_delegates_to_the_registry():
+    """One resolution rule, not two. BL-3."""
+    from tools.claude_photometry_haiku_tool import resolve_fits_path
+
+    resolved = resolve_fits_path("ngc5128_galaxy_b_001")
+    frame = resolve_optical_frame("ngc5128_galaxy_b_001")
+    assert Path(resolved) == Path(frame.path)
+
+
+def test_the_cli_resolver_still_raises_for_its_own_callers():
+    """The CLI contract is an exception; the tool contract is a ToolError."""
+    from tools.claude_photometry_haiku_tool import resolve_fits_path
+
+    with pytest.raises(FileNotFoundError):
+        resolve_fits_path("messier 87")
