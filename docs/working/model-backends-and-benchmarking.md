@@ -2,7 +2,7 @@
 
 Date: 2026-09-04
 Status: design approved 2026-09-04; implementation planned, no code written
-Plan: `docs/model-port-plan.md` covers phases -1--3
+Plan: `docs/working/model-port-plan.md` covers phases -1--3
 (the model port). Phases 4--5 (the benchmark harness) get their own plan,
 written once the port lands and the fault taxonomy is real rather than
 predicted.

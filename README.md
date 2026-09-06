@@ -136,12 +136,13 @@ identical function any other caller would import and run.
 | `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
 | `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
 | `tests/` | Python test suite | Algorithm-preservation and tool-smoke tests: bit-exact parity against recorded Skynet output, real FITS fixtures, and no-network coverage of the public `tools/` surface. See `tests/README.md`. |
+| `docs/` | Documentation | `docs/README.md` is the map: reference docs at the top level, `docs/analysis/` for review output, `docs/working/` for in-progress plans. |
 | `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
 | `docs/extraction.md` | Provenance | Consolidated extraction records for every algorithm package under `algorithms/`. |
 | `docs/pulsar-tool-pipeline.md` | Architecture | The pulsar tool chain — light curve, periodogram, fold, sonify — and the extracted Astromancer code behind each stage. |
-| `docs/examples/` | Sample output | One committed pulsar sonification (`psr_b0329_54_sonification.wav`), produced by the agent loop. The only generated file in the repository. |
 | `docs/repository-folders.md` | Folder guide | Per-folder responsibilities, important files, and current caveats for every source folder. |
-| `docs/algorithm-remediation-plan.md` | Planning | Plan for addressing the known algorithm defects pinned by the test suite. |
+| `docs/analysis/` | Review output | Point-in-time algorithm and design reviews: the remediation plan's finding register, external-agent design analysis, and the pulsar tooling-bug list. |
+| `docs/examples/` | Sample output | One committed pulsar sonification (`psr_b0329_54_sonification.wav`), produced by the agent loop. The only generated file in the repository. |
 
 The consolidated extraction record in `docs/extraction.md` captures provenance,
 severed framework dependencies, known parity behaviors, dependency notes, and
@@ -158,10 +159,14 @@ Kepler/
   CONTRIBUTING.md                # contribution guidelines
   AGENTS.md                      # repository guidelines for agentic contributors
   docs/
+    README.md                    # documentation map + lifecycle
     extraction.md                # master algorithm extraction record
     tool-architecture.md         # master package architecture
     repository-folders.md        # per-folder guide
-    algorithm-remediation-plan.md
+    pulsar-tool-pipeline.md      # the four-stage pulsar tool chain
+    analysis/                    # point-in-time algorithm/design reviews
+    working/                     # in-progress plans
+    examples/                    # one committed sample output
   tools/                         # public Python tool wrappers, runner, shared models
   algorithms/
     wcs/                         # Python WCS extraction from Skynet
@@ -332,6 +337,7 @@ light-curve ingest path still uses browser globals such as `FileReader`.
 
 ## Architecture & Further Reading
 
+- `docs/README.md` — the documentation map and the document lifecycle.
 - `docs/tool-architecture.md` — the master package architecture: public tools,
   algorithm ownership, future services, runtime policy, and `skylib_lite`
   consolidation.
@@ -340,8 +346,10 @@ light-curve ingest path still uses browser globals such as `FileReader`.
   dependencies, parity notes, and verification performed.
 - `docs/repository-folders.md` — a per-folder guide to responsibilities,
   important files, and current caveats.
-- `docs/algorithm-remediation-plan.md` — the plan for addressing known
-  algorithm defects pinned by the test suite.
+- `docs/pulsar-tool-pipeline.md` — the four-stage pulsar tool chain and the
+  extracted Astromancer code behind each stage.
+- `docs/analysis/algorithm-remediation-plan.md` — the algorithm-review finding
+  register and a proposed rollout for the defects pinned by the test suite.
 - `tests/README.md` — what the test suite proves, its markers, and what it
   deliberately does not cover yet.
 

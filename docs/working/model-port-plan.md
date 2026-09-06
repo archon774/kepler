@@ -17,7 +17,7 @@ module-level `TOOL_SCHEMAS`/`TOOL_FUNCTIONS` globals; it gains one optional
 `httpx==0.28.1` (already pinned, used raw for the three new providers),
 `pydantic==2.13.4`, `pytest==9.0.3`. **Zero new packages.**
 
-**Spec:** `docs/model-backends-and-benchmarking.md` — read sections 1–5 and 8–10
+**Spec:** `docs/working/model-backends-and-benchmarking.md` — read sections 1–5 and 8–10
 before starting. This plan implements phases **-1 through 3** of that spec's
 section 9. Phases 4–5 (manifest v2, fixtures, harness, graders, CLI) are a
 separate plan, written after this one lands.
@@ -123,7 +123,7 @@ Both are recorded in Task 2 and Task 11.
 | `tools/runner.py` | Task 5: loop rewritten onto the port. Task 8: validation before dispatch. |
 | `tools/sessions.py` | Task 8: `record_fault()` and a `protocol_faults` manifest key. |
 | `pyproject.toml` | Task 9: two new pytest markers. **No dependency changes.** |
-| `docs/model-backends-and-benchmarking.md` | Task 11: status, resolved open questions. |
+| `docs/working/model-backends-and-benchmarking.md` | Task 11: status, resolved open questions. |
 | `docs/tool-architecture.md`, `README.md`, `CLAUDE.md` | Task 11: describe `tools/llm/`. |
 
 **Deliberately not touched:** `tools/registry.py` (the schemas are the input to
@@ -1612,7 +1612,7 @@ import one name rather than hard-coding a string in several places.
 
 The spec assumes yes and requires verification before the native `/api/chat`
 fallback is discarded. **Step 4 is that verification.** Its result — whichever
-way it goes — gets written into `docs/model-backends-and-benchmarking.md` §11 in
+way it goes — gets written into `docs/working/model-backends-and-benchmarking.md` §11 in
 Task 12. Do not skip it and do not record an assumption as a finding.
 
 - [ ] **Step 1: Write the offline tests**
@@ -1875,7 +1875,7 @@ Claude-Session: https://claude.ai/code/session_01UCeUthn9EKVQGevAoMJVir"
 and behavior changes."* Docs land last and alone.
 
 **Files:**
-- Modify: `docs/model-backends-and-benchmarking.md`,
+- Modify: `docs/working/model-backends-and-benchmarking.md`,
   `docs/tool-architecture.md`, `README.md`, `CLAUDE.md`
 
 **Interfaces:**
@@ -1883,7 +1883,7 @@ and behavior changes."* Docs land last and alone.
 
 - [ ] **Step 1: Update the design doc's status and resolved questions**
 
-In `docs/model-backends-and-benchmarking.md`:
+In `docs/working/model-backends-and-benchmarking.md`:
 
 - Header: `Status: proposed design` → `Status: phases -1--3 implemented; phases
   4--5 pending`, with the date.
