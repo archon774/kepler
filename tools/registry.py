@@ -34,6 +34,7 @@ from tools.hr_diagram import (
 from tools.mast import search_mast
 from tools.mpc import search_mpc
 from tools.ned import search_ned
+from tools.optical import list_optical_frames, resolve_optical_frame
 from tools.pulsar import (
     compute_pulsar_periodogram,
     plot_pulsar,
@@ -1124,6 +1125,52 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "list_optical_frames",
+        "description": "Stage 0 for image work: list the optical FITS frames "
+        "available on local disk, with object, filter, telescope, geometry and "
+        "whether each carries a WCS. There is no archive behind the image "
+        "tools -- a path only resolves if the frame is already on this "
+        "machine, so call this before assuming a frame exists. Reads headers "
+        "only.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "directory": {
+                    "type": "string",
+                    "description": "Directory to search. Defaults to "
+                    "KEPLER_OPTICAL_DATA_DIR, then the bundled test_data/optical.",
+                },
+                "image_filter": {
+                    "type": "string",
+                    "description": "Narrow to one FILTER value, e.g. 'B', 'V', 'Halpha'.",
+                },
+            },
+        },
+    },
+    {
+        "name": "resolve_optical_frame",
+        "description": "Stage 0. Find the local FITS frame for an object name, "
+        "a filename stem, or an explicit path. Matching ignores punctuation, "
+        "so 'NGC 5128' and 'ngc5128' are equivalent. A name matching several "
+        "frames -- which happens whenever a field was observed in more than "
+        "one band -- returns the candidates with an 'ambiguous' error so you "
+        "can choose. Never invent a path.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Object name, filename stem, filename, or full path.",
+                },
+                "directory": {
+                    "type": "string",
+                    "description": "Directory to search. Defaults as for list_optical_frames.",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+    {
         "name": "describe_image_wcs",
         "description": "Summarize the celestial WCS of a local FITS image: "
         "CTYPE, field centre in degrees and hours, pixel scale in arcseconds, "
@@ -1257,6 +1304,8 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "fold_pulsar_lightcurve": fold_pulsar_lightcurve,
     "plot_pulsar": plot_pulsar,
     "sonify_pulsar": sonify_pulsar,
+    "list_optical_frames": list_optical_frames,
+    "resolve_optical_frame": resolve_optical_frame,
     "describe_image_wcs": describe_image_wcs,
     "list_photometric_catalogs": list_photometric_catalogs,
     "resolve_reference_band": resolve_reference_band,

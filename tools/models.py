@@ -24,6 +24,8 @@ __all__ = [
     "PhotometryRunResult",
     "PulsarScan",
     "PulsarScanList",
+    "OpticalFrame",
+    "OpticalFrameList",
     "PulsarLightCurve",
     "PulsarPeriodogram",
     "PulsarFoldedProfile",
@@ -273,6 +275,42 @@ class PulsarScanList(KeplerToolModel):
     scans: list[PulsarScan] = Field(default_factory=list)
     search_root: str
     count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class OpticalFrame(KeplerToolModel):
+    """An optical FITS frame available on local disk.
+
+    ``path`` is what every image tool takes. Everything else is read from the
+    primary header, so listing 39 frames stays cheap -- no pixel data is read.
+    """
+
+    path: str
+    object_name: str | None = None
+    category: str | None = None
+    image_filter: str | None = None
+    telescope: str | None = None
+    date_obs: str | None = None
+    exposure_s: float | None = None
+    width: int | None = None
+    height: int | None = None
+    has_wcs: bool = False
+    center_ra_deg: float | None = None
+    center_dec_deg: float | None = None
+    pixel_scale_arcsec: float | None = None
+    size_bytes: int | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class OpticalFrameList(KeplerToolModel):
+    """Frames found locally, plus where they were looked for."""
+
+    frames: list[OpticalFrame] = Field(default_factory=list)
+    search_root: str
+    count: int = 0
+    filters: list[str] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

@@ -158,71 +158,48 @@ def compute_field_cal_zero_point(
 
 
 def resolve_fits_path(query: str | Path) -> Path:
-    """Resolve a FITS path from an explicit path, a relative path, or a bundled target name."""
-    query_path = Path(str(query))
-    search_roots = [Path.cwd(), ROOT, ROOT / "test_data" / "optical"]
+    """Resolve a FITS path from an explicit path, a relative path, or a bundled target name.
 
+    Delegates to ``tools.optical.resolve_optical_frame`` so the CLI and the
+    registered tool cannot drift apart. The CLI contract is an exception on
+    failure; the tool contract is a ToolError, so this translates.
+    """
+    from tools.optical import resolve_optical_frame
+
+    query_path = Path(str(query))
     if query_path.is_absolute():
         if query_path.exists():
             return query_path.resolve()
-        raise FileNotFoundError(
-            f"FITS file '{query_path}' was not found locally."
-        )
+        raise FileNotFoundError(f"FITS file '{query_path}' was not found locally.")
 
-    candidates = [
-        query_path,
-        *[root / query_path for root in search_roots],
-    ]
-    for candidate in candidates:
+    for candidate in (query_path, ROOT / query_path):
         if candidate.exists():
             return candidate.resolve()
 
-    search_root = ROOT / "test_data" / "optical"
-    if search_root.exists():
-        name = query_path.name.lower()
-        stem = query_path.stem.lower()
-        fits_matches = [
-            path
-            for path in search_root.rglob("*.fits")
-            if path.is_file() and (path.name.lower() == name or path.stem.lower() == stem)
-        ]
-        if len(fits_matches) == 1:
-            return fits_matches[0].resolve()
-        if len(fits_matches) > 1:
-            matches_text = ", ".join(str(path.relative_to(ROOT)) for path in fits_matches[:8])
-            raise FileNotFoundError(
-                f"FITS target '{query}' matched multiple local files: {matches_text}."
-            )
-
+    result = resolve_optical_frame(str(query))
+    if hasattr(result, "path"):
+        return Path(result.path).resolve()
     raise FileNotFoundError(
-        f"FITS file '{query}' was not found locally. Searched current directory, repo root, and {search_root}."
+        "; ".join(error.message for error in result.errors)
+        or f"FITS file '{query}' was not found locally."
     )
 
 
 def list_bundled_targets() -> dict[str, list[str]]:
-    """Return the FITS target stems bundled under test_data/optical, by category.
+    """Return the FITS target stems bundled locally, by category.
 
-    This tool has no live archive query behind it — a target name resolves only
-    if it ships in test_data/optical. This is the discovery step for what's
-    actually on hand, so a user isn't left guessing or hitting a bare
-    FileNotFoundError for a target that was never bundled.
-
-    test_data/optical is a flat directory (see test_data/README.md), so the
-    category isn't a subdirectory name — it's derived from each file's stem,
-    which follows a `<object>_<category>_<filter>_<seq>` naming convention
-    (e.g. ``ngc1846_cluster_r_000``, ``m104_galaxy_v_000``).
+    Delegates to ``tools.optical.list_optical_frames``; the category is the
+    second token of each stem, per the <object>_<category>_<filter>_<seq>
+    convention documented in test_data/README.md.
     """
-    search_root = ROOT / "test_data" / "optical"
+    from tools.optical import list_optical_frames
+
     targets: dict[str, list[str]] = {}
-    if not search_root.exists():
-        return targets
-    for path in sorted(search_root.glob("*.fits")):
-        if not path.is_file():
-            continue
-        parts = path.stem.split("_")
-        category = parts[1] if len(parts) > 1 else "uncategorized"
-        targets.setdefault(category, []).append(path.stem)
-    return targets
+    for frame in list_optical_frames().frames:
+        targets.setdefault(frame.category or "uncategorized", []).append(
+            Path(frame.path).stem
+        )
+    return {category: sorted(stems) for category, stems in sorted(targets.items())}
 
 
 #: Where --credits looks for the mentor's photo. Not bundled by default --
