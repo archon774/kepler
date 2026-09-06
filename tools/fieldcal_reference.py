@@ -51,6 +51,7 @@ __all__ = [
     "solve_zeropoint_from_reference",
     "compare_zeropoint_to_reference",
     "replay_catalog_sources",
+    "load_ocl_reference",
 ]
 
 #: Where the recorded solves are looked for. Overridable so a caller with
@@ -323,6 +324,71 @@ def solve_zeropoint_from_reference(
             errors=list(reference.errors), warnings=list(reference.warnings)
         )
     return solve_zeropoint_from_measurements(reference.measurements, [])
+
+
+def load_ocl_reference(frame_stem: str) -> dict:
+    """The recorded Open/Clear/Lum filter-substitution sweep for a bundled frame.
+
+    BL-6: ``test_data/fieldcal/ocl_filter_report.json`` records a full
+    wcs -> photometry -> field-calibration sweep over ten M15 frames, keyed by
+    upstream filename. The rename to ``m15_globular_lum_000.fits`` stranded it;
+    ``test_data/frame_provenance.json`` restores the join.
+
+    Takes a bundled frame stem (``"m15_globular_open_000"``) and returns the
+    matching ``results`` entry from the report -- ``input_file``,
+    ``best_filter``, ``winning_trial``, ``trials``. A stem with no recorded row
+    (only the ten M15 OCL frames were swept) comes back as a ``dict`` carrying
+    a ``not_found`` entry under ``errors``, never raised.
+
+    Reads the bundled fixtures directly; ``KEPLER_FIELDCAL_DATA_DIR`` does not
+    relocate them.
+    """
+    test_data = _REPO_ROOT / "test_data"
+    provenance_path = test_data / "frame_provenance.json"
+    report_path = test_data / "fieldcal" / "ocl_filter_report.json"
+
+    if not provenance_path.is_file() or not report_path.is_file():
+        return {
+            "frame_stem": frame_stem,
+            "errors": [
+                {
+                    "code": "fixture_missing",
+                    "message": "frame_provenance.json or fieldcal/ocl_filter_report.json "
+                    "is not present in test_data/.",
+                }
+            ],
+        }
+
+    frames = json.loads(provenance_path.read_text()).get("frames", {})
+    upstream = frames.get(frame_stem)
+    if upstream is None:
+        return {
+            "frame_stem": frame_stem,
+            "errors": [
+                {
+                    "code": "not_found",
+                    "message": f"No upstream filename is recorded for {frame_stem!r} in "
+                    "frame_provenance.json.",
+                }
+            ],
+        }
+
+    report = json.loads(report_path.read_text())
+    for row in report.get("results", []):
+        if row.get("input_file") == upstream:
+            return row
+
+    return {
+        "frame_stem": frame_stem,
+        "upstream_file": upstream,
+        "errors": [
+            {
+                "code": "not_found",
+                "message": f"{frame_stem!r} maps to {upstream!r}, which has no row in "
+                "ocl_filter_report.json -- only the ten M15 Open/Lum frames were swept.",
+            }
+        ],
+    }
 
 
 def replay_catalog_sources(field: str, directory: str | Path | None = None) -> list:

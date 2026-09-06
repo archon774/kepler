@@ -164,3 +164,25 @@ def test_calibrate_zeropoint_does_not_reach_the_network_when_rows_are_supplied(m
         compare_to="ngc5128_b_002",
     )
     assert comparison.zero_point is not None
+
+
+def test_the_bundled_ocl_frames_join_back_to_the_recorded_sweep():
+    """BL-6: the rename lost the join key; frame_provenance.json restores it."""
+    from tools.fieldcal_reference import load_ocl_reference
+
+    lum = load_ocl_reference("m15_globular_lum_000")
+    assert lum["input_file"] == "messier 15_14111493_Lum_005.fits"
+    assert lum["best_filter"] == "V"
+    assert lum["winning_trial"]["metrics"]["zero_point"] == pytest.approx(
+        20.141497332382436, abs=1e-12
+    )
+
+    openf = load_ocl_reference("m15_globular_open_000")
+    assert openf["input_file"] == "messier 15_14111493_Open_000.fits"
+    assert openf["best_filter"] is None
+    # Corroborates the mapping independently: this is the one bundled frame
+    # with no WCS keywords, and every trial failed for exactly that reason.
+    assert all(
+        t["pipeline"]["wcs"]["failure_reason"] == "no WCS solution found in FITS header"
+        for t in openf["trials"]
+    )
