@@ -31,7 +31,7 @@ follow from this:
   cut and why. Preserve them; add one whenever you cut another dependency.
 - **Documented parity quirks are deliberate.** Example: `algorithms/wcs/state.py` is a non-`slots`
   dataclass *specifically* so `_clear_wcs_solution_fields()` reproduces upstream's silent
-  no-op on unmapped attribute names (`algorithms/wcs/EXTRACTION.md` §5.2).
+  no-op on unmapped attribute names (`docs/extraction.md`, WCS §5.2).
   `algorithms/hrdiagram/` preserves several flagged upstream bugs. Do not "fix"
   these unless the task is explicitly to diverge from Skynet/Astromancer.
 
@@ -138,7 +138,7 @@ with composition.
 Two catalog registries exist and disagree deliberately: `CATALOGS` (11 catalogs)
 and `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
 resolution). Merging them silently changes which reference band a narrowband or
-unfiltered image calibrates against. See `algorithms/catalogs/EXTRACTION.md` §4.
+unfiltered image calibrates against. See `docs/extraction.md`, Catalogs §4.
 
 `algorithms.fieldcal` needs WCS, source extraction, and photometry but does not own them. The seam is
 `algorithms/fieldcal/deps.py`: module-level names that default to stubs raising
@@ -183,7 +183,7 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   `current_app.config` reads and Skynet's five-line literal module. Callers with
   their own configuration assign `query.config.settings`. Note that enabling the
   cache snaps query regions to a fixed grid, which is observable near a field
-  edge (`algorithms/query/EXTRACTION.md` §5.1).
+  edge (`docs/extraction.md`, Query §5.1).
 
 ### Runtime dependencies that are not optional
 
@@ -194,7 +194,7 @@ and Pydantic v2 are likewise required.
 
 End-to-end runs additionally need data that is not in this repo: astrometry.net index files
 plus a `solve-field` binary on `PATH` (or the `SKYLIB_*` overrides documented in
-`algorithms/wcs/EXTRACTION.md`), and/or a local UCAC4/UCAC5 catalog. Both WCS backends degrade to
+`docs/extraction.md`, WCS), and/or a local UCAC4/UCAC5 catalog. Both WCS backends degrade to
 "unavailable" rather than failing, so imports succeed and solves simply return no solution
 when the data is absent. This is why full parity has never been validated here.
 

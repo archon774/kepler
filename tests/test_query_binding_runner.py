@@ -369,7 +369,7 @@ def test_malformed_cache_age_falls_back_to_the_default(monkeypatch):
 def test_enabling_the_cache_snaps_query_regions_to_a_grid():
     """Documented consequence: the cache is not transparent near a field edge.
 
-    ``algorithms/query/EXTRACTION.md`` §5.1 records that enabling the cache
+    ``docs/extraction.md``, Query §5.1 records that enabling the cache
     rounds the query region to a fixed grid so near-identical fields share an
     entry — which means turning it on can change which sources come back. Pinned
     as a fact about the setting, since the default is *enabled*.
