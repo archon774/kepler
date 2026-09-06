@@ -2805,7 +2805,7 @@ been fixed** in the docs reorganization — it described `list_pulsar_scans` /
 `resolve_pulsar_scan` as missing after they had landed. Task 10 adds a curated
 period to that Stage 0; keep the doc in step.
 
-**`docs/algorithm-remediation-plan.md`'s 109 findings and 7 blockers.**
+**`docs/analysis/algorithm-remediation-plan.md`'s 109 findings and 7 blockers.**
 Algorithm correctness, untouched here by design. The extraction contract holds
 throughout this plan: no task moves a numeric expression.
 
