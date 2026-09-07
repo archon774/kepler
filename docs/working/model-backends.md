@@ -282,9 +282,10 @@ Whoever changes the endpoint must also choose the key that travels to it.
 
 ### 4.4 Schema translation
 
-One pure function per dialect — `to_anthropic`, `to_openai`, `to_gemini` — taking
-the registry's tool schemas and returning the dialect payload, with no I/O so every
-case is a unit test. `for_dialect` dispatches on a backend's declared dialect.
+One pure function per dialect — `to_anthropic`, `to_openai`, `to_gemini` —
+taking the registry's tool schemas and returning the dialect payload, with no
+I/O so every case is a unit test. `for_dialect` dispatches on a backend's
+declared dialect.
 
 | | Anthropic | OpenAI / Ollama | Gemini |
 | --- | --- | --- | --- |
@@ -299,10 +300,11 @@ case is a unit test. `for_dialect` dispatches on a backend's declared dialect.
 portability finding re-checked at 48 on 2026-09-07.** No
 `anyOf`/`oneOf`/`allOf`/`$ref`/`additionalProperties`; exactly one `enum`
 (`search_ned`); exactly one array-of-string (`search_simbad`); exactly two
-integer-or-null unions (`search_vizier.max_catalogs`, `search_mast.max_observations`).
-Every schema is a flat object, and six tools carry no `required` key at all.
-The line numbers cited in this document come from a read of the file; **confirm
-property names and offsets against `tools/registry.py` before relying on them.**
+integer-or-null unions (`search_vizier.max_catalogs`,
+`search_mast.max_observations`). Every schema is a flat object, and six tools
+carry no `required` key at all. The line numbers cited in this document come
+from a read of the file; **confirm property names and offsets against
+`tools/registry.py` before relying on them.**
 
 Three requirements the implementer must not negotiate:
 
@@ -564,13 +566,13 @@ Two rules that are the whole point:
 
 ### S9 — Fix the stale gitleaks allowlist first (LOW-MEDIUM)
 
-Verified: `.gitleaks.toml` scopes its allowlist of the three environment-variable *names*
-`ADS_DEV_KEY`, `ANTHROPIC_API_KEY`, and `NASA_API_KEY` to
-`kepler/runner.py` and `kepler/tools/ads.py`. **Both paths are missing** — the
-real files are `tools/runner.py` and `tools/ads.py`. Five further files
-reference those key names outside any allowlisted path: `AGENTS.md`,
-`CLAUDE.md`, `tests/test_runner_session.py`, `tools/registry.py`, and
-`tools/claude_photometry_haiku_tool.py`.
+Verified: `.gitleaks.toml` scopes its allowlist of the three
+environment-variable *names* `ADS_DEV_KEY`, `ANTHROPIC_API_KEY`, and
+`NASA_API_KEY` to `kepler/runner.py` and `kepler/tools/ads.py`. **Both paths are
+missing** — the real files are `tools/runner.py` and `tools/ads.py`. Five
+further files reference those key names outside any allowlisted path:
+`AGENTS.md`, `CLAUDE.md`, `tests/test_runner_session.py`, `tools/registry.py`,
+and `tools/claude_photometry_haiku_tool.py`.
 
 `CLAUDE.md` tells contributors to add allowlist entries for new paths, pointing
 at a control that is already misaligned. This design adds two more key names.
@@ -707,8 +709,9 @@ test asserts on it.
 Version 2 adds: `schema_version` set to 2; a `backend` object carrying the spec,
 provider, a `base_url_host` **scrubbed of userinfo** (S4), and the capability
 record; a `usage_totals` object with `input_tokens`, `output_tokens`, and
-`estimated_usd`; a `protocol_faults` list of turn-stamped fault records; and a `turns` list
-carrying per-turn latency, usage, and the provider's raw stop reason.
+`estimated_usd`; a `protocol_faults` list of turn-stamped fault records; and a
+`turns` list carrying per-turn latency, usage, and the provider's raw stop
+reason.
 
 The existing note that full tool payloads are omitted stays true: manifests
 reference artifact paths, they do not embed results.
@@ -1006,8 +1009,8 @@ test still passes unedited.
       checks one call against it.
 - [ ] Add fault recording to `AgentSession`: a `protocol_faults` list, a
       `record_fault` method taking the turn and the fault, and a
-      `protocol_faults` key in the manifest.
-      **Leave `SESSION_SCHEMA_VERSION` at 1** — see section 7.
+      `protocol_faults` key in the manifest. **Leave `SESSION_SCHEMA_VERSION` at
+      1** — see section 7.
 - [ ] Wire validation into the loop *before* dispatch. On a fault: record it,
       build the error result, record the tool call with the **real** arguments so
       the trace stays honest, append an error result block, and **continue**.
@@ -1061,15 +1064,14 @@ the credential binding rule.
 - [ ] **Answer section 11 question 2 by measurement.** With the daemon running
       and the reference model pulled, run a real two-turn tool loop behind the
       `ollama` marker and the environment gate, against stub tool functions, and
-      record three findings:
-      1. **Does the integer-or-null union survive the compatibility layer?** Send
-         the real `search_vizier` schema and prompt for an uncapped query. Record
-         what the model emits for `max_catalogs`: JSON null, an omitted key, or
-         the string `"None"`. All three are valid *findings*; only a
-         transport-level rejection of the union is a *failure*.
+      record three findings: 1. **Does the integer-or-null union survive the
+      compatibility layer?** Send the real `search_vizier` schema and prompt for
+      an uncapped query. Record what the model emits for `max_catalogs`: JSON
+      null, an omitted key, or the string `"None"`. All three are valid
+      *findings*; only a transport-level rejection of the union is a *failure*.
       2. **Are arguments a JSON string or an object?** Assert which one arrives.
       3. **Do parallel tool calls come back in one message?** Prompt for two
-         lookups.
+      lookups.
 - [ ] Write the three findings into the PR description verbatim. **If the
       compatibility layer proves lossy on any of the three, stop and raise it** —
       the documented fallback is Ollama's native chat endpoint, and taking it is
@@ -1197,10 +1199,10 @@ object, and whether parallel calls return in one message. If the compatibility
 layer proves lossy, the native chat endpoint is the documented fallback and
 taking it is a decision, not a silent implementation choice.
 
-**3. Is the price table maintainable?** *Open — belongs to the benchmark phases.*
-A stale price table produces confident wrong cost numbers. Leaning toward keeping
-estimated USD but printing the `retrieved_on` date in every report header, so a reader
-can discount a stale figure rather than trust it.
+**3. Is the price table maintainable?** *Open — belongs to the benchmark
+phases.* A stale price table produces confident wrong cost numbers. Leaning
+toward keeping estimated USD but printing the `retrieved_on` date in every
+report header, so a reader can discount a stale figure rather than trust it.
 
 **4. How large should the seed suite be?** *Resolved: eight tasks, one per
 confirmed-live failure mode `SYSTEM_PROMPT` already documents.* Smallest suite

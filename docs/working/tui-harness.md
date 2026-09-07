@@ -556,9 +556,10 @@ Ships as the first TUI-scoped PR, after the stateless optical rollout merges. It
 removes the repository's second Anthropic caller.
 
 - [ ] **Record the current state first** so the diff is checkable: run the four
-      affected test files, and grep for the old module name. The grep should list
-      exactly `tools/photometry.py`, `tools/optical.py`, and three test files. **If
-      it finds more, add them rather than following this document blindly.**
+      affected test files, and grep for the old module name. The grep should
+      list exactly `tools/photometry.py`, `tools/optical.py`, and three test
+      files. **If it finds more, add them rather than following this document
+      blindly.**
 - [ ] Rename the module **with history preserved** (`git mv`), then update every
       import site.
 - [ ] Delete exactly these and nothing else:
@@ -571,15 +572,16 @@ removes the repository's second Anthropic caller.
       | `call_claude_haiku()` | Posts to the Anthropic API. |
       | `main()` and its entry guard | The retired CLI. |
       | `import argparse`, `import requests` | Now unused. |
-- [ ] **`summarize_results` and `render_credits_card` are NOT deleted.** Both are
-      non-LLM — a numeric summary and a matplotlib credits card — and both are used
-      by the photometry smoke test. Verified before this was written.
+- [ ] **`summarize_results` and `render_credits_card` are NOT deleted.** Both
+      are non-LLM — a numeric summary and a matplotlib credits card — and both
+      are used by the photometry smoke test. Verified before this was written.
 - [ ] Replace the module docstring so the module's name and its contents agree.
-- [ ] Remove `test_check_only_cli_resolves_bundled_subject`, which runs the module
-as a subprocess with `--check-only` — a CLI that no longer exists — along with any
-imports it alone needed. **Its coverage is not lost** — path resolution for a bundled
-subject is already asserted by the registry smoke test and the optical registry test.
-Confirm that by grep before deleting.
+- [ ] Remove `test_check_only_cli_resolves_bundled_subject`, which runs the
+      module as a subprocess with `--check-only` — a CLI that no longer exists —
+      along with any imports it alone needed. **Its coverage is not lost** —
+      path resolution for a bundled subject is already asserted by the registry
+      smoke test and the optical registry test. Confirm that by grep before
+      deleting.
 - [ ] Update `NOT_TOOL_MODULES` to name the renamed module, with a comment saying
       its public surface is re-exported through `tools.optical` and
       `tools.photometry`.
@@ -592,9 +594,10 @@ The module keeps every symbol it exported except the six deleted ones.
       `TOOL_RISK`, `Approver`, `auto_approve`, `risk_tags`, `needs_confirmation`,
       `SessionPolicy`, and `policy_approver`.
 - [ ] `SessionPolicy`'s `ask` blocks on a `threading.Event` while the UI thread
-renders a modal (section 6). A test asserts every tagged tool is a real registered tool,
-so the table cannot drift from the registry. The engine's approver default is unchanged,
-so the shim and every plain-Python caller behave exactly as today.
+      renders a modal (section 6). A test asserts every tagged tool is a real
+      registered tool, so the table cannot drift from the registry. The engine's
+      approver default is unchanged, so the shim and every plain-Python caller
+      behave exactly as today.
 - [ ] Add the test asserting `tools.agent` imports no UI package.
 - [ ] Update `NOT_TOOL_MODULES`.
 
@@ -672,10 +675,11 @@ and no command text is ever forwarded to the engine.
 - [ ] **Confirm the shim has no remaining callers.** The grep should find only the
       console script in `pyproject.toml`, the session test, and the coverage
       allowlist. **Anything else must be migrated before continuing.**
-- [ ] Retarget the session test at the engine — rename the file, switch the import,
-      and change the call site from calling the shim to iterating `run_session`.
-      **The manifest assertions stay exactly as they are.** If any needs changing,
-      the engine diverged from the shim and that is a bug in Phase A, not here.
+- [ ] Retarget the session test at the engine — rename the file, switch the
+      import, and change the call site from calling the shim to iterating
+      `run_session`. **The manifest assertions stay exactly as they are.** If
+      any needs changing, the engine diverged from the shim and that is a bug in
+      Phase A, not here.
 - [ ] Delete the shim and replace the console scripts with the single `kepler`
       entry.
 - [ ] Drop the stale `tools.runner` entry from `NOT_TOOL_MODULES`. Leaving it is
@@ -714,12 +718,12 @@ Its own PR, per the separation rule. Re-run the grep before editing.
 | `tools/sessions.py`, `tools/registry.py` | Module docstrings: `tools.agent` is the consumer. |
 
 - [ ] **Fold this document into a reference document and delete it.**
-      `docs/working/README.md` states the lifecycle: when a plan's work lands, the
-      durable outcome moves into a reference document at the top level of `docs/`
-      and the working document goes. Add a section to `docs/tool-architecture.md`
-      describing `tools/agent/` and `tools/tui/` — the event contract, the approval
-      policy, and the threading model — then delete this file and remove its row
-      from `docs/working/README.md`.
+      `docs/working/README.md` states the lifecycle: when a plan's work lands,
+      the durable outcome moves into a reference document at the top level of
+      `docs/` and the working document goes. Add a section to
+      `docs/tool-architecture.md` describing `tools/agent/` and `tools/tui/` —
+      the event contract, the approval policy, and the threading model — then
+      delete this file and remove its row from `docs/working/README.md`.
 
 ---
 

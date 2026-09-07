@@ -113,11 +113,11 @@ this repository ships**, and could not list an artifact it produced.
 
 ### BL-3 — no optical-frame lookup registry
 
-The pulsar chain's Stage 0 has: a listing function, a resolver that returns either a
-match or the candidate list, a data directory overridable through
-`KEPLER_PULSAR_DATA_DIR`, name matching that normalizes punctuation (so `PSR B0329+54`
-and `psr_b0329_54` are the same source), and ambiguity or miss handling that returns
-`ToolError`s rather than raising.
+The pulsar chain's Stage 0 has: a listing function, a resolver that returns
+either a match or the candidate list, a data directory overridable through
+`KEPLER_PULSAR_DATA_DIR`, name matching that normalizes punctuation (so `PSR
+B0329+54` and `psr_b0329_54` are the same source), and ambiguity or miss
+handling that returns `ToolError`s rather than raising.
 
 The optical equivalent existed only inside a CLI script — the photometry tool's
 private path resolver and target lister. It was not registered, not importable as
@@ -152,12 +152,12 @@ Afterglow's fixed base of 20 is added.
 Two things stood between that and a tool call. First, the zero-point solver
 takes already-measured sources, and nothing produced them from a local frame.
 Second, the one path that did produce them —
-`claude_photometry_haiku_tool.compute_field_cal_zero_point` — queried VizieR over
-the network, and **field calibration is on by default**; the flag is the negative
-`--no-field-cal`. Offline,
-the default bundled-target run printed a warning to stderr and silently fell back
-to instrumental magnitudes — for `ngc5128_galaxy_b_001.fits`, whose true zero
-point is recorded three different ways in this repository.
+`claude_photometry_haiku_tool.compute_field_cal_zero_point` — queried VizieR
+over the network, and **field calibration is on by default**; the flag is the
+negative `--no-field-cal`. Offline, the default bundled-target run printed a
+warning to stderr and silently fell back to instrumental magnitudes — for
+`ngc5128_galaxy_b_001.fits`, whose true zero point is recorded three different
+ways in this repository.
 
 **A limitation to state up front.** Offline replay is feasible because
 `fit_data.csv` carries the matched catalog rows — but only the 35 *matched* rows
@@ -193,12 +193,13 @@ filename. The bundled frames were renamed to `m15_globular_lum_000.fits` and
 date, no exposure time, and no other identifier — only the input filename — so
 **the join key was lost in the rename** and the ground truth was stranded.
 
-The mapping was recoverable only from outside this repository, from the upstream rename
-script at `/home/claude/skynet-data/pipeline_data/reorganize.py`. One row corroborates
-it independently: all three trial filters for the Open frame failed with "no WCS
-solution found in FITS header", and `m15_globular_open_000.fits` is precisely the one
-bundled frame with no WCS keywords. The mapping was certain; it just was not written
-down here. It now is, as `test_data/frame_provenance.json`.
+The mapping was recoverable only from outside this repository, from the upstream
+rename script at `/home/claude/skynet-data/pipeline_data/reorganize.py`. One row
+corroborates it independently: all three trial filters for the Open frame failed
+with "no WCS solution found in FITS header", and `m15_globular_open_000.fits` is
+precisely the one bundled frame with no WCS keywords. The mapping was certain;
+it just was not written down here. It now is, as
+`test_data/frame_provenance.json`.
 
 Worth noting for BL-7: upstream's OCL sweep only *read* the header WCS — it did
 not plate-solve. A working plate-solving tool takes that frame further than the
@@ -245,10 +246,10 @@ rationale:
 
 And `pixel_scale_hint_arcsec` does **not** narrow the astrometry.net search.
 `anet_min_scale` and `anet_max_scale` are assigned straight from the
-`WcsCalibrationSettings` defaults, under a comment recording that a radius of 180 is a
-true all-sky search. The hint feeds only the acceptance threshold `max_sep_deg` and the
-*ATLAS* backend's scale narrowing — and no UCAC4/UCAC5 data exists on this host, so
-ATLAS is unavailable and that narrowing never runs.
+`WcsCalibrationSettings` defaults, under a comment recording that a radius of
+180 is a true all-sky search. The hint feeds only the acceptance threshold
+`max_sep_deg` and the *ATLAS* backend's scale narrowing — and no UCAC4/UCAC5
+data exists on this host, so ATLAS is unavailable and that narrowing never runs.
 
 **Consequence, and it survived into the landed tool:** a wrapper cannot make this
 solve fast through the public signature. It can only (a) bound it with a timeout
@@ -330,11 +331,11 @@ decision. Deferred with BL-9; section 5.
 ### BL-11 — archive downloads dead-end
 
 `tools/mast.py` creates `FITS_DOWNLOAD_DIR` and downloads products into it when
-`download=True`. Nothing can then be done with them: `tools/optical.py` still reports a
-single `search_root` and searches only the optical data directory, so a
-downloaded frame is invisible to the frame registry that every other optical tool
-resolves through. The chain **find data → measure → calibrate → compare** is
-still severed at its first joint.
+`download=True`. Nothing can then be done with them: `tools/optical.py` still
+reports a single `search_root` and searches only the optical data directory, so
+a downloaded frame is invisible to the frame registry that every other optical
+tool resolves through. The chain **find data → measure → calibrate → compare**
+is still severed at its first joint.
 
 ### BL-12 — `npm run typecheck` cannot run from a fresh checkout
 
@@ -358,14 +359,16 @@ established, because everything below builds on it.
 | 3 — the field-calibration reference comparison | #45 | `tools/fieldcal_reference.py` — listing, loading, solving from, and comparing against the recorded solves, plus `replay_catalog_sources` for offline replay; `tools/photometry.py`'s `calibrate_zeropoint`; `test_data/frame_provenance.json` restoring the OCL join key. |
 | 4 — plate solving as a tool | #47 | `tools/wcs.py`'s `solve_astrometry`, with a timeout bound, backend-attempt reporting, fixture protection, a concurrent-file-change check, and an atomic WCS header write. Behind a `solver` marker by default. |
 
-**Names later phases depend on:** `list_optical_frames`, `resolve_optical_frame`,
-`OPTICAL_DATA_DIR_ENV` (`KEPLER_OPTICAL_DATA_DIR`); `list_zeropoint_references`,
-`load_zeropoint_reference`, `solve_zeropoint_from_reference`,
-`solve_zeropoint_from_recorded_solve`, `compare_zeropoint_to_reference`,
-`load_ocl_reference`, `replay_catalog_sources`, `FIELDCAL_DATA_DIR_ENV`
-(`KEPLER_FIELDCAL_DATA_DIR`); `calibrate_zeropoint`; `solve_astrometry`, returning a
-`WcsSummary`; and `ZeropointSolution.zero_point`. The result models are
-`OpticalFrame`/`OpticalFrameList`, `ZeropointReference`, and `ZeropointComparison`.
+**Names later phases depend on:** `list_optical_frames`,
+`resolve_optical_frame`, `OPTICAL_DATA_DIR_ENV` (`KEPLER_OPTICAL_DATA_DIR`);
+`list_zeropoint_references`, `load_zeropoint_reference`,
+`solve_zeropoint_from_reference`, `solve_zeropoint_from_recorded_solve`,
+`compare_zeropoint_to_reference`, `load_ocl_reference`,
+`replay_catalog_sources`, `FIELDCAL_DATA_DIR_ENV` (`KEPLER_FIELDCAL_DATA_DIR`);
+`calibrate_zeropoint`; `solve_astrometry`, returning a `WcsSummary`; and
+`ZeropointSolution.zero_point`. The result models are
+`OpticalFrame`/`OpticalFrameList`, `ZeropointReference`, and
+`ZeropointComparison`.
 
 `TOOL_FUNCTIONS` is **49** on `dev` as of 2026-09-07, up from 23 when the
 findings were written.
@@ -461,11 +464,12 @@ solve output in two frozen dataclasses, `WcsSolveMetadata` and `WcsSolveResult`:
 - **`WcsSolveResult`** carrying the WCS itself (or nothing, when no solution was
   accepted), the `CatalogSource` rows as a tuple, and that metadata.
 
-`solve_wcs` takes the FITS header, the image data, a temporary directory, and — all
-keyword-only and optional — `file_id`, `pixel_scale_hint_arcsec`, `extraction_settings`
-(a `SourceExtractionSettings`), `solve_settings` (a `PlateSolveSettings`),
-`solver_settings` (a `SolverSettings`), and the two diagnostic channels
-`solver_attempts` and `solver_failures`. It returns the `WcsSolveResult`.
+`solve_wcs` takes the FITS header, the image data, a temporary directory, and —
+all keyword-only and optional — `file_id`, `pixel_scale_hint_arcsec`,
+`extraction_settings` (a `SourceExtractionSettings`), `solve_settings` (a
+`PlateSolveSettings`), `solver_settings` (a `SolverSettings`), and the two
+diagnostic channels `solver_attempts` and `solver_failures`. It returns the
+`WcsSolveResult`.
 
 The solve continues updating the caller-provided **in-memory** FITS header with
 an accepted WCS, because downstream calculations in the same call depend on it.
@@ -492,9 +496,8 @@ changing the values.
 Both source-extraction packages already expose deterministic functions that
 accept `file_id` explicitly. Those become the only supported entry points:
 `run_source_extraction`, taking data, header, `settings` and an optional
-`file_id`;
-and `run_photometry`, taking data, header, sources and settings, plus an optional
-`wcs`, `background`, and `background_rms`.
+`file_id`; and `run_photometry`, taking data, header, sources and settings, plus
+an optional `wcs`, `background`, and `background_rms`.
 
 The two run-shaped `perform_source_extraction` adapters and the run-shaped
 `perform_photometry` adapter are deleted. Callers that need the old combined flow
@@ -508,15 +511,16 @@ the internal source-row file identifier.
 
 ### 3.5 Field calibration contract
 
-`algorithms.fieldcal.deps` and the wiring function are deleted. Field calibration has
-**no process-global callable registry**. `perform_field_calibration` receives all
-externally acquired data explicitly: header, image data, and — keyword-only — `wcs`,
-`catalog_sources`, `variable_sources` (defaulting to none), `file_id`, the three
-settings objects `field_cal_settings` (a `PhotometricCalibrationSettings`),
-`photometry_settings` (a `PhotometrySettings`) and `extraction_settings` (a
+`algorithms.fieldcal.deps` and the wiring function are deleted. Field
+calibration has **no process-global callable registry**.
+`perform_field_calibration` receives all externally acquired data explicitly:
+header, image data, and — keyword-only — `wcs`, `catalog_sources`,
+`variable_sources` (defaulting to none), `file_id`, the three settings objects
+`field_cal_settings` (a `PhotometricCalibrationSettings`), `photometry_settings`
+(a `PhotometrySettings`) and `extraction_settings` (a
 `SourceExtractionSettings`), optional pre-detected `detected_sources`
-(`SourceExtractionData` rows), and `use_provided_photometry`. It returns the zero point
-and a `FieldCalResult`.
+(`SourceExtractionData` rows), and `use_provided_photometry`. It returns the
+zero point and a `FieldCalResult`.
 
 It normalizes and matches the provided catalog data, optionally filters it
 against the provided variable-star rows, runs deterministic extraction and
@@ -531,11 +535,11 @@ id. These ids are bookkeeping; they do not participate in matching or numerical
 results.
 
 `tools.photometry.calibrate_zeropoint` performs catalog selection and calls
-`algorithms.query.runner.query_catalogs`. When variable-star rejection is enabled, the
-tool also queries VSX and passes those results in. **Offline recorded-source replay
-makes no network calls at all, VSX included.** Shared tool-layer preparation is a
-private helper in `tools.photometry`; the standalone compatibility module calls that
-helper rather than wiring global state.
+`algorithms.query.runner.query_catalogs`. When variable-star rejection is
+enabled, the tool also queries VSX and passes those results in. **Offline
+recorded-source replay makes no network calls at all, VSX included.** Shared
+tool-layer preparation is a private helper in `tools.photometry`; the standalone
+compatibility module calls that helper rather than wiring global state.
 
 The calibration algorithm may continue writing `PHOT_M0`, `PHOT_M0E`, and
 `PHOT_CAL` to its in-memory header, because those are explicit scientific outputs
@@ -921,11 +925,11 @@ Before the PR is declared ready, confirm all of the following:
 
 - [ ] Create `test_data/pulsar/curated_periods.json`, transcribed from
       `tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and
-      `PULSAR_DIFFICULTY` tables — themselves
-      the literature-period column of `Curated pulsars.docx`. The file carries a
-      comment recording that **that document, not ATNF, is the reference the
-      tests compare against**, and that the scan files carry no topocentric-period
-      header, so the period always comes from outside the data.
+      `PULSAR_DIFFICULTY` tables — themselves the literature-period column of
+      `Curated pulsars.docx`. The file carries a comment recording that **that
+      document, not ATNF, is the reference the tests compare against**, and that
+      the scan files carry no topocentric-period header, so the period always
+      comes from outside the data.
 - [ ] Add three optional fields to `PulsarScan`: `curated_period_s`,
       `curated_difficulty`, and `period_source`.
 - [ ] Load the fixture once at module level in `tools/pulsar.py`, guarded so a
@@ -934,17 +938,17 @@ Before the PR is declared ready, confirm all of the following:
       normalized form (`b0329`), so a containment test against the normalized
       source name is the lookup.
 - [ ] Repoint `tests/conftest.py`'s `PULSAR_PERIODS_S` at the fixture so the
-      number lives in one place.
-      **Keep the surrounding comment block** — it explains why the document and
-      not ATNF is the arbiter, and that reasoning is not in the JSON.
+      number lives in one place. **Keep the surrounding comment block** — it
+      explains why the document and not ATNF is the arbiter, and that reasoning
+      is not in the JSON.
 - [ ] Amend the system prompt so the offline path is stated first: the scan
-      resolver reports a curated literature period for every bundled scan, and it
-      is preferred over the blind search, which succeeds on only one of the five.
-      **Locate the prompt before editing it** — it moves to `tools/agent/prompt.py`
-      in [model-backends.md](model-backends.md) Phase 0c and
-      `tools/runner.py` re-exports it while the shim exists. Edit whichever file
-      holds it; the prompt text and the reason for the edit are the same either
-      way.
+      resolver reports a curated literature period for every bundled scan, and
+      it is preferred over the blind search, which succeeds on only one of the
+      five. **Locate the prompt before editing it** — it moves to
+      `tools/agent/prompt.py` in [model-backends.md](model-backends.md) Phase 0c
+      and `tools/runner.py` re-exports it while the shim exists. Edit whichever
+      file holds it; the prompt text and the reason for the edit are the same
+      either way.
 
 **Do not fix anything else in `tools/pulsar.py` while here.**
 `docs/analysis/pulsar-pipeline-review.md` tracks a set of open tool-correctness
@@ -966,8 +970,8 @@ it in step when Stage 0 gains the curated period.
 
 - [ ] Make the optical data directory resolve to a **list** of roots: the
       `KEPLER_OPTICAL_DATA_DIR` override or the default optical directory, plus
-      `tools.config.FITS_DOWNLOAD_DIR` when it exists. Both the lister and the resolver walk all
-      of them.
+      `tools.config.FITS_DOWNLOAD_DIR` when it exists. Both the lister and the
+      resolver walk all of them.
 - [ ] Keep the existing `search_root` field reporting the primary root, and add a
       `search_roots` list to `OpticalFrameList` so a caller can see both. An
       explicit `directory` argument still means exactly that one directory.
@@ -980,8 +984,8 @@ it in step when Stage 0 gains the curated period.
       zero point needs either `--no-field-cal`, a `--zero-point` override, or the
       offline `compare_to` path.
 - [ ] `README.md` and `docs/tool-architecture.md` section 2: add the tools the
-      baseline phases landed to the local-tool lists, and strike `solve_astrometry`
-      from "next tools" now that it exists.
+      baseline phases landed to the local-tool lists, and strike
+      `solve_astrometry` from "next tools" now that it exists.
 - [ ] `CLAUDE.md` Commands: note that `npm run typecheck` needs `npm install`
       first — `node_modules/` is not present in a fresh checkout and the typecheck
       is not a CI job (BL-12). `README.md` already says so; `CLAUDE.md` does not.
@@ -1054,17 +1058,17 @@ you who unblocks each one.
 **The astrometry.net search window (BL-7).** The one that stops plate solving
 from being useful on the only frame that needs it. `solve_wcs` constructs
 `WcsCalibrationSettings()` internally and exposes just two of its fields, under
-the explicit rationale quoted in BL-7: search radii, scale windows and source caps stay
-internal because an observer narrowing the search would silently cause misses. So
-astrometry.net always gets a 180-degree radius and a 0.1–60 arcsec/px window. On
-`m15_globular_open_000.fits` that ran 670 seconds and returned nothing, on a
-frame whose own header states `SECPIX = 0.5864922312362758`. Narrowing the window to
-the header value would very probably make the solve tractable — and would be
-precisely the failure mode that comment warns about. **Phase 4 therefore bounded
-the run with a timeout and narrowed nothing.** Until this is decided,
-`solve_astrometry` is a tool that reaches the backend correctly and reports an
-honest non-result. Deciding it changes extracted behaviour and belongs in its own
-PR under the extraction contract.
+the explicit rationale quoted in BL-7: search radii, scale windows and source
+caps stay internal because an observer narrowing the search would silently cause
+misses. So astrometry.net always gets a 180-degree radius and a 0.1–60 arcsec/px
+window. On `m15_globular_open_000.fits` that ran 670 seconds and returned
+nothing, on a frame whose own header states `SECPIX = 0.5864922312362758`.
+Narrowing the window to the header value would very probably make the solve
+tractable — and would be precisely the failure mode that comment warns about.
+**Phase 4 therefore bounded the run with a timeout and narrowed nothing.** Until
+this is decided, `solve_astrometry` is a tool that reaches the backend correctly
+and reports an honest non-result. Deciding it changes extracted behaviour and
+belongs in its own PR under the extraction contract.
 
 **The TypeScript runtime for the variable-star tools (BL-10).** Section 5.
 
@@ -1089,25 +1093,24 @@ the one place the pixel-scale hint actually does something. Half of
 `algorithms/wcs/`'s solver surface stays unvalidated, and no phase here changes
 that.
 
-**The B-band frames behind three of the four recorded zero-point solves.** Three of them
-— `ngc5286_b_000`, `_001` and `_002` — describe NGC 5286 exposures in B; the only NGC
-5286 frame bundled is `ngc5286_globular_v_000.fits`, a V frame. So all four solves are
-checked bit-exactly at the solution level, but **only NGC 5128 B can be driven
-end-to-end from pixels**. Three quarters of the recorded ground truth is reachable as
-numbers and not as a pipeline.
+**The B-band frames behind three of the four recorded zero-point solves.** Three
+of them — `ngc5286_b_000`, `_001` and `_002` — describe NGC 5286 exposures in B;
+the only NGC 5286 frame bundled is `ngc5286_globular_v_000.fits`, a V frame. So
+all four solves are checked bit-exactly at the solution level, but **only NGC
+5128 B can be driven end-to-end from pixels**. Three quarters of the recorded
+ground truth is reachable as numbers and not as a pipeline.
 
 ### 6.3 Needs a fixture nobody recorded upstream
 
 **The unmatched catalog rows (BL-4).** `fit_data.csv` recorded the 35 APASS rows
 that *matched* a detection. The cone-search rows that did not match were never
 written down, so the recorded count of sources not selected by field calibration
-(`num_not_selected_by_field_cal: 263`) is unreproducible from the shipped fixture,
-and the replay validates
-photometry → matching → reference magnitude → solve but not catalog selection.
-Closing this needs a live VizieR cone search re-recorded as a new fixture — a
-network operation producing a new artifact, against two of this document's own
-constraints. The tool docstring and the test say so, rather than letting a partial
-replay pass for a full one.
+(`num_not_selected_by_field_cal: 263`) is unreproducible from the shipped
+fixture, and the replay validates photometry → matching → reference magnitude →
+solve but not catalog selection. Closing this needs a live VizieR cone search
+re-recorded as a new fixture — a network operation producing a new artifact,
+against two of this document's own constraints. The tool docstring and the test
+say so, rather than letting a partial replay pass for a full one.
 
 **The 36 frames above the 9 MB cut-off.** The Afterglow web table covers 73
 subjects (~1.5 GB); `test_data/optical/` carries the 37 under 9 MB plus the two
