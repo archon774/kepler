@@ -2,35 +2,36 @@
 
 Plans under active development. They describe intended work, not necessarily the
 current codebase. Each document states its **Status**, **Prerequisites**, and
-**Unblocks**. A prerequisite marked *satisfied* is retained as provenance; every
-other prerequisite must land on `dev` before the dependent implementation starts.
+**Unblocks**.
 
-## Plan Index
+There is **one document per track**. Each states the problem, the architecture
+that answers it, and the phased rollout that gets there — a track's design and
+its action plan are the same document, and neither carries implementation code.
+They are architecture and sequencing for an agent to work through; the agent
+writes the code.
+
+## Index
 
 | Track | Document | Status | Prerequisites | Unblocks |
 | --- | --- | --- | --- | --- |
-| Model | [model-backends-and-benchmarking.md](model-backends-and-benchmarking.md) | Approved design | None | Model-port implementation and future benchmarking plan |
-| Model | [model-port-plan.md](model-port-plan.md) | Approved, implementation pending | Model-backends design | TUI agent engine |
-| Optical baseline | [broken-links-remediation-plan.md](broken-links-remediation-plan.md) | Phases 1-4 merged; later phases pending | Stateless optical rollout before remaining work | Local-data tool surface and optical refactor baseline |
-| Optical prerequisite | [stateless-optical-tools-architecture.md](stateless-optical-tools-architecture.md) | Approved design | Broken-links Phase 4, satisfied by PR #47 | Stateless rollout |
-| Optical prerequisite | [stateless-optical-tools-rollout-plan.md](stateless-optical-tools-rollout-plan.md) | Approved, implementation pending | Broken-links Phase 4, satisfied by PR #47 | Remaining broken-links work and all TUI phases |
-| TUI | [tui-harness-design.md](tui-harness-design.md) | Approved design | Model port and stateless optical rollout | TUI implementation plan |
-| TUI | [tui-harness-plan.md](tui-harness-plan.md) | Approved, implementation pending | Model port and stateless optical rollout | Textual `kepler` console |
+| Model | [model-backends.md](model-backends.md) | Approved; implementation pending | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
+| Optical | [optical-tools.md](optical-tools.md) | Baseline phases merged; stateless rollout pending; later broken-links phases blocked behind it | None outstanding — the stateless rollout's prerequisite merged as PR #47 | The remaining broken-links phases and every TUI phase |
+| TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 ## Implementation Sequence
 
-1. The model port can proceed from its approved design independently.
-2. The merged broken-links Phases 1-4 form the optical baseline. Implement and
-   merge the stateless optical rollout next.
-3. Once the stateless rollout merges, begin the remaining broken-links work and
-   any TUI phase. TUI implementation also requires the model port.
+1. **The model port can proceed now**, independently. Its phases -1 to 3 build
+   `tools/llm/` and the headless engine in `tools/agent/`.
+2. **The stateless optical rollout is the next optical step.** The merged
+   broken-links phases 1–4 are its baseline. It must merge before the remaining
+   broken-links phases or any TUI phase begins, so later work never has to
+   support both the processing-run and the stateless tool boundary.
+3. **Once the stateless rollout merges**, the remaining broken-links phases and
+   the TUI phases are unblocked. TUI phase A is owned by the model document;
+   TUI phase C additionally requires the stateless rollout.
 
-The stateless optical documents are deliberately separate from the TUI and
-broken-links documents. They preserve the extracted algorithms while removing
-the old Skynet batch wrapper. Their rollout must merge before subsequent
-broken-links work or any TUI phase begins, so later work never has to support
-both processing-run and stateless tool boundaries.
+## Lifecycle
 
-When a plan's work lands, fold the durable outcome into a reference document at
-the top level of `docs/`, then delete the plan. Git history preserves completed
-plans. See [`../README.md`](../README.md) for how `docs/` is organized.
+When a track's work lands, fold the durable outcome into a reference document at
+the top level of `docs/`, then delete the working document. Git history preserves
+it. See [`../README.md`](../README.md) for how `docs/` is organized.

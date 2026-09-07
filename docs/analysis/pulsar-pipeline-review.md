@@ -8,8 +8,9 @@ architecture document stays a description of the pipeline as designed. §1 comes
 from the 2026-08-11 pipeline write-up; §2 reviews the `agent/pulsar-plots` work
 merged to `dev` in `808f2ad`.
 
-The working `broken-links-remediation-plan.md` is scoped away from all of this —
-its §10.4 names these as "a doc-only PR", which the split into this file is.
+The working `optical-tools.md` is scoped away from all of this — its
+"real problems, different topic" section names these as "a doc-only PR", which
+the split into this file is.
 
 ---
 
