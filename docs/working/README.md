@@ -52,42 +52,24 @@ The TUI track cannot start at all until both of its prerequisites have merged.
 
 ## What can run in parallel
 
-Grouped by what has to have landed first. Everything in a group is concurrent
-with everything else in it.
+**One pairing, and nothing else: the whole model track alongside the whole
+optical stateless rollout (phases S0–S6).**
 
-**Nothing landed yet — start both now:**
+They are safe to run at once because they sit on separate branches off separate
+bases and their footprints are near-disjoint — `tools/llm/` and `tools/agent/`
+against `algorithms/wcs|fieldcal|photometry/` and the optical tools. The one
+interaction is `SYSTEM_PROMPT` moving to `tools/agent/prompt.py` in model phase
+0c, and the only phase that edits it, optical Phase 5, is blocked behind the
+stateless rollout anyway and carries a locate-before-editing step.
 
-| Concurrent | Why it is safe |
-| --- | --- |
-| The whole **model** track ‖ the whole **optical** stateless rollout (S0–S6) | Separate branches off separate bases, and near-disjoint footprints: `tools/llm/` and `tools/agent/` against `algorithms/wcs\|fieldcal\|photometry/` and the optical tools. The one interaction is `SYSTEM_PROMPT` moving to `tools/agent/prompt.py` in model phase 0c — and the only phase that edits it, optical Phase 5, is blocked behind the stateless rollout anyway and carries a locate-before-editing step. |
-| Model **phase -1** ‖ anything at all | It touches `.gitleaks.toml` and nothing else. Ship it first and alone; it fixes an already-misconfigured control. |
+**Everything else is serial.** Within a track, phases run in the order their
+document gives them, and no other pair of tracks overlaps. Two ordering hazards
+are worth naming here because they are easy to get wrong:
 
-**After model phase 2a lands:**
-
-| Concurrent | Caveat |
-| --- | --- |
-| Model **phase 2b** (Ollama) ‖ model **phase 3** (Gemini) | Both are built on the shared HTTP base that 2a introduces, and they own different adapter modules. Both register a provider in `factory.py` and add a key name to `.gitleaks.toml`, so expect two small conflicts. |
-
-**After the stateless optical rollout merges:**
-
-| Concurrent | Caveat |
-| --- | --- |
-| Optical **Phase 5** (curated pulsar periods) ‖ optical **Phase 6** (archive loop and docs) | Disjoint but for `tools/models.py`, where they add fields to different models — `PulsarScan` and `OpticalFrameList`. |
-| TUI **Phase C** (photometry-pipeline rename) ‖ the rest of the model track | Phase C is independent of TUI phases A and B and of the model port entirely; it ships first among the TUI PRs while the port is still in progress. |
-
-**After TUI phase D.1 lands:**
-
-| Concurrent | Caveat |
-| --- | --- |
-| TUI **Phase E** (artifact rendering) ‖ TUI **Phase F** (session browser and resume) | Separate render and widget modules; both add a modal and a keybinding to `app.py`. |
-
-**Deliberately serial — do not parallelize:**
-
-- **Optical S0 → S6.** One pull request, phases as commits, and the branch is
-  not merged partway through. Each removal step requires its consumers migrated
-  first, so the order is a dependency.
-- **Model 1a then 1b.** Both follow phase 0c and both edit `tools/runner.py`.
-- **TUI G.1 then G.2.** CI is red between them; they merge as a stacked pair.
+- **Optical S0 → S6 is a single pull request**, phases as commits, and the
+  branch is not merged partway through. Each removal step requires its consumers
+  migrated first, so the order is a dependency rather than a convention.
+- **TUI G.1 and G.2 leave CI red between them.** They merge as a stacked pair;
   G.3 follows.
 
 ## Lifecycle
