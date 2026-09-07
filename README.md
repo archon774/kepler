@@ -238,6 +238,7 @@ The plain Python tools live under `tools`:
 
 ```python
 from tools.astrometry import describe_image_wcs
+from tools.wcs import solve_astrometry
 from tools.catalogs import list_photometric_catalogs, resolve_reference_band
 from tools.calibration import solve_zeropoint_from_measurements
 from tools.simbad import search_simbad
@@ -334,6 +335,7 @@ see `docs/extraction.md`, Query §5.1.
 The WCS solver reads backend settings from environment variables:
 
 - `ANET_INDEX_PATH`: astrometry.net index directory or `os.pathsep`-separated directories.
+- `ANET_TIMEOUT_S`: astrometry.net low-level solve-attempt limit in seconds (minimum 1).
 - `ATLAS_CATALOG_ROOT`: local UCAC4/UCAC5 catalog root for the ATLAS fallback.
 - `ATLAS_CATALOG`: catalog name, defaulting to `ucac5`.
 - `ATLAS_TIMEOUT_S`: ATLAS matcher timeout in seconds.

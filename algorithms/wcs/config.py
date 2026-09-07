@@ -6,17 +6,17 @@ settings`` and hands that object to ``build_anet_config`` /
 layered over ``config/settings.toml`` + ``config/environments/dev.local.toml``
 with a ``SKYNET_`` env-var prefix — deployment plumbing, not algorithm.
 
-The builders in ``wcs.py`` only ever read four keys, and they read them through
+The builders in ``wcs.py`` only ever read five keys, and they read them through
 ``getattr(cfg, NAME, None)``, so any object exposing those attributes works.
-This module provides exactly that, sourced from the environment. Nothing here
-changes solver behaviour: an unset key yields ``None``, which is the same value
-Dynaconf's ``getattr`` fallback produced, and each builder already handles it
-(``build_anet_config`` returns ``None`` and logs; ``build_atlas_config`` returns
-``None``).
+This module provides that shape, sourced from the environment. An unset key
+yields ``None``, which is the same value Dynaconf's ``getattr`` fallback
+produced, and each builder already handles it. ``ANET_TIMEOUT_S`` is the one
+post-extraction addition: it exposes the vendored backend's existing subprocess
+deadline to callers without changing its search behavior.
 
-Callers with their own configuration should ignore this module and pass their
-own object to ``build_anet_config(cfg)`` / ``build_atlas_config(cfg)``, or
-assign ``algorithms.wcs.wcs.settings``.
+Callers with their own configuration can pass their object to
+``solve_wcs(..., solver_settings=cfg)``, call the builders directly, or assign
+``algorithms.wcs.wcs.settings``.
 """
 
 from __future__ import annotations
@@ -25,11 +25,12 @@ import os
 
 
 class SolverSettings:
-    """Duck-typed stand-in for the four keys the WCS backends read.
+    """Duck-typed stand-in for the five keys the WCS backends read.
 
     * ``ANET_INDEX_PATH`` — directory (or ``os.pathsep``-separated list, or a
       sequence) holding astrometry.net index files. Falsy ⇒ the astrometry.net
       backend is disabled.
+    * ``ANET_TIMEOUT_S`` — astrometry.net low-level attempt limit, in seconds.
     * ``ATLAS_CATALOG_ROOT`` — root of the local star catalog used by the ATLAS
       triangle solver. Falsy ⇒ the ATLAS backend is disabled.
     * ``ATLAS_CATALOG`` — catalog name; ``ucac5`` when unset.
@@ -40,6 +41,7 @@ class SolverSettings:
         self,
         *,
         anet_index_path=None,
+        anet_timeout_s=None,
         atlas_catalog_root=None,
         atlas_catalog=None,
         atlas_timeout_s=None,
@@ -47,6 +49,10 @@ class SolverSettings:
         self.ANET_INDEX_PATH = (
             anet_index_path if anet_index_path is not None
             else os.getenv("ANET_INDEX_PATH")
+        )
+        self.ANET_TIMEOUT_S = (
+            anet_timeout_s if anet_timeout_s is not None
+            else os.getenv("ANET_TIMEOUT_S")
         )
         self.ATLAS_CATALOG_ROOT = (
             atlas_catalog_root if atlas_catalog_root is not None

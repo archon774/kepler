@@ -165,9 +165,14 @@ to a radio map), `algorithms.radio` (spectral fitting, catalog cross-match),
 - `tools.radio_sources.analyze_source_spectrum(name=..., csv_path=..., frequencies_hz=..., fluxes_jy=...)`
   -- the spectral half alone, for one already-identified/named source.
 
+`tools.wcs.solve_astrometry(path, *, index_path=None, write_header=False,
+timeout_s=None, force=False)` wraps the extracted plate solver with its required
+`ProcessingRun`, per-call backend configuration, structured unavailable and
+no-solution outcomes, attempted-backend reporting, and guarded FITS-header
+persistence.
+
 Next Python tools should follow the same pattern before adding new layers:
 
-- `solve_astrometry(path, settings=None)`
 - `extract_sources(path, settings=None)`
 - `measure_photometry(path, sources, settings=None)`
 - `calibrate_zeropoint(path, settings=None)`

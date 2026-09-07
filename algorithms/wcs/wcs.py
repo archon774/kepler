@@ -4,9 +4,10 @@
 #   packages/py/skynet-db/skynet_db/runners/observation_asset_processing/
 #       optical_data_processing/wcs.py
 # Only the import block below was rewritten (each change is marked `EXTRACTED:`).
-# Every function body, constant, numeric expression and comment — including the
-# legacy-Afterglow parity notes and the 2026-08-03 pointing-seed removal note —
-# is unchanged. See docs/extraction.md, WCS.
+# Numerical/search behavior, constants, and the legacy-Afterglow parity notes
+# remain unchanged. The backend-config builder and main entry point now accept
+# caller-scoped timeout/config and diagnostic-list plumbing for
+# tools.wcs.solve_astrometry. See docs/extraction.md, WCS.
 
 from __future__ import annotations
 
@@ -393,7 +394,19 @@ def build_anet_config(cfg) -> AstrometryNetConfig | None:
     if not index_path:
         logger.warning("ANET_INDEX_PATH not configured; astrometry.net backend disabled")
         return None
-    return AstrometryNetConfig(index_path=index_path)
+    if isinstance(index_path, Path):
+        index_path = str(index_path)
+    elif not isinstance(index_path, str):
+        index_path = [str(path) for path in index_path]
+
+    timeout_raw = getattr(cfg, "ANET_TIMEOUT_S", None)
+    try:
+        timeout_s = float(timeout_raw) if timeout_raw else None
+    except (TypeError, ValueError):
+        logger.warning("ANET_TIMEOUT_S=%r is not a number; ignoring", timeout_raw)
+        timeout_s = None
+
+    return AstrometryNetConfig(index_path=index_path, timeout_s=timeout_s)
 
 
 def build_atlas_config(cfg) -> AtlasConfig | None:
@@ -534,6 +547,9 @@ def solve_wcs(
         pixel_scale_hint_arcsec: float | None = None,
         extraction_settings: SourceExtractionSettings | None = None,
         solve_settings: "PlateSolveSettings | None" = None,
+        solver_settings=None,
+        solver_attempts: list[str] | None = None,
+        solver_failures: list[str] | None = None,
 ) -> tuple[WCS | None, list[CatalogSource]]:
 
     file_id = getattr(processing_run, "observation_asset_id", None)
@@ -661,8 +677,9 @@ def solve_wcs(
     max_sep_deg = max(1.0, 3.0 * field_diag_deg)
 
     # --- Backend configs ---
-    anet_config = build_anet_config(settings)
-    atlas_config = build_atlas_config(settings)
+    solver_config = solver_settings if solver_settings is not None else settings
+    anet_config = build_anet_config(solver_config)
+    atlas_config = build_atlas_config(solver_config)
 
     # Clean header for Atlas FITS input (strip stale WCS keywords)
     clean_header = header.copy()
@@ -729,6 +746,8 @@ def solve_wcs(
 
                     t0 = time.time()
                     try:
+                        if solver_attempts is not None:
+                            solver_attempts.append("astrometry.net")
                         solution = anet_solve_field_glob(request, anet_config)
                     except SolveFieldTimeout as exc:
                         logger.warning(
@@ -738,6 +757,8 @@ def solve_wcs(
                         )
                         solution = None
                     except AstrometryNetError as exc:
+                        if solver_failures is not None:
+                            solver_failures.append(f"astrometry.net: {exc}")
                         logger.warning(
                             "solve_wcs: anet backend error — %s (file_id=%s)", exc, file_id
                         )
@@ -820,6 +841,8 @@ def solve_wcs(
             )
 
             t0 = time.time()
+            if solver_attempts is not None:
+                solver_attempts.append("atlas")
             solution = atlas_backend.solve(request, atlas_config)
             elapsed = time.time() - t0
 
@@ -856,7 +879,10 @@ def solve_wcs(
                     "solve_wcs: Atlas no solution in %.2fs — file_id=%s", elapsed, file_id
                 )
 
-    except Exception:
+    except Exception as exc:
+        if solver_failures is not None:
+            backend = solver_attempts[-1] if solver_attempts else "solver"
+            solver_failures.append(f"{backend}: {exc}")
         logger.exception("Astrometric solution failed for file_id=%s", file_id)
         _clear_wcs_solution_fields(wcs_solution)
         wcs_solution.width_px = width
