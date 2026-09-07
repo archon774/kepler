@@ -1,6 +1,10 @@
 # Stateless Optical Tools Rollout Plan
 
-**Status:** Approved for implementation after PR #47 merges
+**Status:** Approved; implementation pending on current `dev`
+
+**Prerequisites:** Broken-links Phase 4, satisfied by PR #47 merged to `dev`.
+
+**Unblocks:** The remaining [broken-links-remediation-plan.md](broken-links-remediation-plan.md) work and all [tui-harness-plan.md](tui-harness-plan.md) phases.
 
 **Date:** 2026-09-07
 
@@ -28,9 +32,15 @@ not merged partway through the rollout: intermediate APIs may exist while the
 branch is under development, but the final PR must contain no compatibility
 facade for the processing-run or batch architecture.
 
-PR #47 is a prerequisite because its `solve_astrometry` tool must be migrated to
-the stateless WCS result in the same follow-up PR. Once #47 is merged, update the
-feature branch from the latest `dev` before implementation begins.
+PR #47 was the prerequisite because its `solve_astrometry` tool must be migrated
+to the stateless WCS result in the same follow-up PR. It is now merged. Update
+the feature branch from current `dev` before implementation begins.
+
+This rollout is the next implementation step for the shared optical surface. It
+must merge before remaining broken-links work or any TUI phase starts. The TUI's
+later photometry-pipeline rename therefore operates on the stateless pipeline;
+it must not preserve, recreate, or rename the removed processing-run or batch
+architecture.
 
 ## Governing Constraints
 
@@ -86,11 +96,12 @@ changing the values.
 ### Phase 0: Baseline And Inventory
 
 **Intent:** Establish the comparison point and confirm the branch contains the
-complete Phase 4 tool surface.
+complete merged Phase 4 tool surface.
 
 **Scope:**
 
-- Confirm PR #47 is merged to `dev` and update the feature branch from it.
+- Confirm the merged PR #47 is present on `dev` and update the feature branch
+  from current `dev`.
 - Run the complete default suite under Python 3.14 and record pass, skip, and
   warning counts.
 - Inventory every current reference to processing runs, WCS solution state,
@@ -365,9 +376,9 @@ Before the PR is declared ready, confirm all of the following:
 
 ## Next-Phase Readiness
 
-This rollout is ready for implementation when PR #47 is merged and Phase 0 is
-green. It is ready to hand off to the next broken-links phase when the completion
-audit passes and the follow-up PR merges to `dev`.
+This rollout is ready for implementation when Phase 0 is green on current `dev`.
+It is ready to hand off to the next broken-links phase and the TUI only when the
+completion audit passes and the follow-up PR merges to `dev`.
 
 The resulting base will let later tools compose WCS, extraction, photometry, and
 calibration through explicit values. Later phases should build on those public

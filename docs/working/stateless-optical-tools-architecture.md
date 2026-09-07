@@ -1,6 +1,10 @@
 # Stateless Optical Tools Architecture
 
-**Status:** Approved for the follow-up PR after #47
+**Status:** Approved; implementation pending on current `dev`
+
+**Prerequisites:** Broken-links Phase 4, satisfied by PR #47 merged to `dev`.
+
+**Unblocks:** [stateless-optical-tools-rollout-plan.md](stateless-optical-tools-rollout-plan.md), the remaining [broken-links-remediation-plan.md](broken-links-remediation-plan.md) work, and all [tui-harness-plan.md](tui-harness-plan.md) phases.
 
 **Date:** 2026-09-07
 
@@ -49,8 +53,9 @@ This change will not:
 - change the public tool response models except where additional diagnostics are
   required to preserve information currently hidden in mutable run state.
 
-PR #47 is a prerequisite. The implementation branch must be rebased on `dev`
-after #47 merges so `tools.wcs.solve_astrometry` is migrated in the same PR.
+PR #47 was the prerequisite and has merged to `dev`. The implementation branch
+must start from current `dev` so `tools.wcs.solve_astrometry` is migrated in the
+same PR.
 
 ## Architectural Boundary
 
