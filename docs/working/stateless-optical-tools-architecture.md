@@ -1,6 +1,6 @@
 # Stateless Optical Tools Architecture
 
-**Status:** Proposed for the follow-up PR after #47
+**Status:** Approved for the follow-up PR after #47
 
 **Date:** 2026-09-07
 
