@@ -32,6 +32,18 @@ solver_available = pytest.mark.skipif(
 )
 
 
+def _configure_fake_anet(monkeypatch, tmp_path: Path) -> Path:
+    index_path = tmp_path / "indexes"
+    index_path.mkdir()
+    (index_path / "index-4107.fits").touch()
+    monkeypatch.setattr("tools.wcs.find_solve_field", lambda: "/fake/solve-field")
+    monkeypatch.setattr(
+        "algorithms.wcs.wcs.AstrometryNetBackend.is_available",
+        lambda self: True,
+    )
+    return index_path
+
+
 def test_a_missing_file_returns_an_error_not_an_exception():
     summary = solve_astrometry(ROOT / "test_data" / "optical" / "does_not_exist.fits")
 
@@ -63,9 +75,7 @@ def test_a_frame_with_wcs_short_circuits_the_solver_by_default(monkeypatch):
 
 
 def test_force_resolves_a_frame_that_already_has_wcs(monkeypatch, tmp_path):
-    index_path = tmp_path / "indexes"
-    index_path.mkdir()
-    (index_path / "index-4107.fits").touch()
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(*args, solver_attempts=None, **kwargs):
         solver_attempts.append("astrometry.net")
@@ -81,9 +91,7 @@ def test_force_resolves_a_frame_that_already_has_wcs(monkeypatch, tmp_path):
 
 def test_per_call_index_and_timeout_reach_the_algorithm(monkeypatch, tmp_path):
     captured = {}
-    index_path = tmp_path / "indexes"
-    index_path.mkdir()
-    (index_path / "index-4107.fits").touch()
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(
         processing_run,
@@ -160,8 +168,8 @@ def test_an_invalid_astrometry_net_install_is_unavailable(
     monkeypatch.delenv("ATLAS_CATALOG_ROOT", raising=False)
     index_path = tmp_path / "indexes"
     index_path.mkdir()
-    if missing_binary:
-        monkeypatch.setattr("tools.wcs.find_solve_field", lambda: None)
+    executable = None if missing_binary else "/fake/solve-field"
+    monkeypatch.setattr("tools.wcs.find_solve_field", lambda: executable)
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("an unavailable backend must not be invoked")
@@ -179,9 +187,7 @@ def test_a_backend_execution_error_is_not_reported_as_a_solve_miss(
     tmp_path,
 ):
     monkeypatch.delenv("ATLAS_CATALOG_ROOT", raising=False)
-    index_path = tmp_path / "indexes"
-    index_path.mkdir()
-    (index_path / "index-4107.fits").touch()
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fail_backend(*args, **kwargs):
         raise AstrometryNetError("backend execution failed")
@@ -234,9 +240,7 @@ def test_write_header_persists_a_successful_solution(monkeypatch, tmp_path):
     shutil.copyfile(OPEN_FRAME, target)
     fits.setval(target, "OBSERVER", value="preserve this")
     solved_wcs = WCS(fits.getheader(SOLVED_FRAME), relax=True)
-    index_path = tmp_path / "indexes"
-    index_path.mkdir()
-    (index_path / "index-4107.fits").touch()
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(
         processing_run,
@@ -277,9 +281,7 @@ def test_write_header_refuses_to_overwrite_a_file_changed_during_solve(
     target = tmp_path / "changed-during-solve.fits"
     shutil.copyfile(OPEN_FRAME, target)
     solved_wcs = WCS(fits.getheader(SOLVED_FRAME), relax=True)
-    index_path = tmp_path / "indexes"
-    index_path.mkdir()
-    (index_path / "index-4107.fits").touch()
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(
         processing_run,
