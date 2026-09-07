@@ -838,7 +838,7 @@ git diff --check                          # whitespace
 **Deliberately not touched:** `tools/registry.py` — the schemas are the input to
 translation, not a subject of it; `tools/claude_photometry_haiku_tool.py` —
 deferred by section 10, and renamed with its Anthropic path deleted by
-[tui-harness.md](tui-harness.md) Phase B; anything under `algorithms/`.
+[tui-harness.md](tui-harness.md) Phase C; anything under `algorithms/`.
 
 ### Phase -1 — Fix the stale gitleaks allowlist (S9)
 
@@ -1160,7 +1160,7 @@ visible in all four dialects.
   It is a separate raw-HTTP Anthropic caller with its own prompt and its own
   result contract, and folding it in would mix a behaviour change into an
   architecture change. **Resolved 2026-09-07:** [tui-harness.md](tui-harness.md)
-  Phase B renames it to `tools/photometry_pipeline.py` and deletes its Anthropic
+  Phase C renames it to `tools/photometry_pipeline.py` and deletes its Anthropic
   path and CLI outright rather than migrating them, since the console supersedes
   the entry point. The ~1,000-line photometry and plotting pipeline it wraps is
   kept — registered tools depend on it. Add a module-level note pointing at

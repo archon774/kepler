@@ -1161,5 +1161,5 @@ question is answered.
   Git LFS note behind section 6.3.
 * [tui-harness.md](tui-harness.md) — blocked on the stateless rollout, and the
   owner of the photometry-pipeline rename that must operate on its result.
-* [model-backends.md](model-backends.md) — owner of the system-prompt move Phase 5
-  must account for.
+* [model-backends.md](model-backends.md) — owner of the system-prompt move that
+  this document's Phase 5 must account for.
