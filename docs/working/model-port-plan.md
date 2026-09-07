@@ -9,9 +9,11 @@ Gemini backends, plus schema translation and pre-dispatch argument validation.
 **Architecture:** A `tools/llm/` package owns neutral message/response types and
 a `ModelBackend` protocol with one required method, `complete()`. Adapters
 translate the neutral history into each provider's dialect on every call and are
-stateless. `tools/runner.py` keeps its path, its public entry points, and its
-module-level `TOOL_SCHEMAS`/`TOOL_FUNCTIONS` globals; it gains one optional
-`backend=` keyword and loses every direct reference to the `anthropic` SDK.
+stateless. The loop itself moves to `tools/agent/`, which emits typed events as
+an iterator; `tools/runner.py` keeps its path and public entry points as a shim
+over it, preserving its module-level `TOOL_SCHEMAS`/`TOOL_FUNCTIONS` globals,
+gaining one optional `backend=` keyword, and losing every direct reference to the
+`anthropic` SDK.
 
 **Tech Stack:** Python 3.12+, `anthropic==0.121.0` (already pinned, kept),
 `httpx==0.28.1` (already pinned, used raw for the three new providers),
@@ -44,9 +46,11 @@ include this section.
   may open a socket under a plain `uv run pytest`. Live provider calls sit
   behind a marker plus an environment gate, mirroring the existing `network`
   convention in `pyproject.toml`.
-- **`tools/runner.py` must keep its path.** CI's `repository-shape` job asserts
-  `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
-  `tools/runner.py`, and `docs/tool-architecture.md` all exist.
+- **`tools/runner.py` must keep its path for the duration of this plan.** CI's
+  `repository-shape` job asserts `README.md`, `pyproject.toml`, `uv.lock`,
+  `tools/registry.py`, `tools/runner.py`, and `docs/tool-architecture.md` all
+  exist. It is deleted later by `tui-harness-plan.md` Task 8, together with the
+  workflow change that retires the assertion — not here.
 - **No changes to `algorithms/`.** The extraction contract is untouched by this
   work. Do not edit any file carrying an `# EXTRACTED:` or `# PORTED:` marker.
 - **Never `verify=False`. Never `follow_redirects=True`.** Always an explicit
@@ -120,15 +124,21 @@ Both are recorded in Task 2 and Task 11.
 | Path | Change |
 | --- | --- |
 | `.gitleaks.toml` | Task 1: correct two stale allowlist paths, add the five real ones. |
-| `tools/runner.py` | Task 5: loop rewritten onto the port. Task 8: validation before dispatch. |
+| `tools/runner.py` | Task 5: reduced to a shim over `tools/agent/`. Task 8: validation before dispatch. |
+| `tests/test_tool_registry_coverage.py` | Task 5: add `"tools.agent"` to `NOT_TOOL_MODULES`. |
 | `tools/sessions.py` | Task 8: `record_fault()` and a `protocol_faults` manifest key. |
 | `pyproject.toml` | Task 9: two new pytest markers. **No dependency changes.** |
 | `docs/working/model-backends-and-benchmarking.md` | Task 11: status, resolved open questions. |
 | `docs/tool-architecture.md`, `README.md`, `CLAUDE.md` | Task 11: describe `tools/llm/`. |
 
+**Also created by this plan (Task 5, per the amendment):** `tools/agent/__init__.py`,
+`tools/agent/events.py`, `tools/agent/prompt.py`, `tools/agent/engine.py` — the
+headless loop the shim and the TUI both consume.
+
 **Deliberately not touched:** `tools/registry.py` (the schemas are the input to
 translation, not a subject of it), `tools/claude_photometry_haiku_tool.py`
-(spec §10 defers it), anything under `algorithms/`.
+(spec §10 defers it; it is renamed and its Anthropic path deleted by
+`tui-harness-plan.md` Task 1), anything under `algorithms/`.
 
 ---
 
@@ -671,7 +681,21 @@ Claude-Session: https://claude.ai/code/session_01UCeUthn9EKVQGevAoMJVir"
 
 ---
 
-## Task 5: Refactor `tools/runner.py` onto the port (Phase 0c)
+## Task 5: Move the loop into `tools/agent/` (Phase 0c)
+
+> **AMENDED 2026-09-07.** This task originally refactored the body of `run()` in
+> place and preserved `SYSTEM_PROMPT`, `main()`, and the `kepler-astro-query`
+> console script. `docs/working/tui-harness-design.md` retires all three, so
+> doing that work here would mean rewriting the same function twice. The task now
+> **builds `tools/agent/` directly and leaves `tools/runner.py` as a shim.**
+>
+> **The phase gate is unchanged and still meaningful:**
+> `tests/test_runner_session.py` must pass with zero edits — now against the
+> shim. If the test needs changing, the extraction changed observable behaviour
+> and is wrong.
+>
+> Everything under "What must not change" below still holds; it is now the
+> *shim's* contract rather than `run()`'s. See `tui-harness-design.md` §14.1.
 
 **This is the phase gate.** Spec §4.7:
 
@@ -680,7 +704,11 @@ Claude-Session: https://claude.ai/code/session_01UCeUthn9EKVQGevAoMJVir"
 > observable behaviour and is wrong.
 
 **Files:**
-- Modify: `tools/runner.py:196-355` (the body of `run()`)
+- Create: `tools/agent/__init__.py`, `tools/agent/events.py`,
+  `tools/agent/prompt.py`, `tools/agent/engine.py`
+- Modify: `tools/runner.py` (reduced to a shim), `tests/test_tool_registry_coverage.py`
+  (add `"tools.agent"` to `NOT_TOOL_MODULES` — `pkgutil.iter_modules` yields
+  packages, so the coverage test fails without it)
 - Test: `tests/test_runner_session.py` — **read only. Do not edit.**
 
 **Interfaces:**
@@ -689,6 +717,28 @@ Claude-Session: https://claude.ai/code/session_01UCeUthn9EKVQGevAoMJVir"
 - Produces:
 
 ```python
+# tools/agent/prompt.py — moved verbatim from tools/runner.py:46, not edited
+SYSTEM_PROMPT: str
+
+# tools/agent/events.py — the ten frozen event dataclasses and their union.
+# Full definitions in docs/working/tui-harness-design.md §4.1.
+Event = (SessionStarted | TurnStarted | TextDelta | ToolCallProposed
+         | ToolCallStarted | ToolCallFinished | ToolCallDenied
+         | ProtocolFault | TurnFinished | SessionFinished)
+
+# tools/agent/engine.py — events out as an iterator, decisions in as a callable
+def run_session(
+    user_message: str,
+    *,
+    backend: ModelBackend,
+    system: str = SYSTEM_PROMPT,
+    max_turns: int = 20,
+    approver: Approver = auto_approve,
+    session: AgentSession | None = None,
+) -> Iterator[Event]: ...
+
+# tools/runner.py — the shim. Same signature as before; prints and returns
+# the manifest path by consuming run_session().
 def run(
     user_message: str,
     *,
@@ -699,10 +749,24 @@ def run(
 ) -> str | None: ...
 ```
 
+**`approver` and `auto_approve` are defined in `tools/agent/policy.py`, which
+this task does not create** — it is Task 2 of `tui-harness-plan.md`. Until then,
+give `run_session` the parameter with a module-level default that returns
+"allow", so the signature is stable and the TUI plan only has to supply a real
+policy rather than change the contract.
+
 **What must not change:**
 
-- The module path `tools/runner.py` (CI `repository-shape` asserts it).
-- `SYSTEM_PROMPT`, `main()`, and the `kepler-astro-query` console script.
+- The module path `tools/runner.py` (CI `repository-shape` asserts it). It
+  survives this task as a shim and is deleted later, by `tui-harness-plan.md`
+  Task 8, alongside the workflow change that retires the assertion.
+- `main()` and the `kepler-astro-query` console script — still working at the end
+  of this task, so nothing downstream of the port breaks before the TUI exists.
+- `SYSTEM_PROMPT` **moves** to `tools/agent/prompt.py` and is re-exported from
+  `tools/runner.py` (`from tools.agent.prompt import SYSTEM_PROMPT`) so both
+  `runner.SYSTEM_PROMPT` and the default argument keep resolving. Move it
+  verbatim: it is ~270 lines of confirmed-live guidance and the source of all
+  eight benchmark seed tasks (spec §6.2). Do not reword it while moving it.
 - Module-level `TOOL_SCHEMAS` and `TOOL_FUNCTIONS`, **read at call time, not
   import time** — the existing test monkeypatches
   `runner.TOOL_SCHEMAS`/`runner.TOOL_FUNCTIONS` after import and expects the
@@ -1910,7 +1974,10 @@ governing rules (*the core owns the loop; adapters own the dialect*), the
 `complete()` is the only required method.
 
 `README.md`: the `KEPLER_MODEL_BACKEND` variable and a one-line example
-(`KEPLER_MODEL_BACKEND=ollama/qwen3:8b kepler-astro-query "..."`).
+(`KEPLER_MODEL_BACKEND=ollama/qwen3:8b kepler-astro-query "..."`). That command
+is retired by `tui-harness-plan.md` Task 10 in favour of `kepler`; write it as it
+stands now and let that task update it, rather than documenting a console script
+that does not exist yet.
 
 `CLAUDE.md`: extend the *Python domain boundaries* section with `tools/llm/` —
 it owns the model port and nothing else; adapters never import
