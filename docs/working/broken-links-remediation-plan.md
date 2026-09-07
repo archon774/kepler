@@ -69,6 +69,22 @@ inherits them.
 - **Result contract:** public tools return typed models carrying
   `warnings: list[ToolWarning]` and `errors: list[ToolError]`. Failures are
   returned, not raised.
+- **Two files this plan edits are moving.** Added 2026-09-07, for phases 4-6,
+  which had not started when this plan was written:
+  - **`SYSTEM_PROMPT` moves out of `tools/runner.py`** into
+    `tools/agent/prompt.py` (`model-port-plan.md` Task 5, as amended).
+    `tools/runner.py` re-exports it while the shim exists and is deleted by
+    `tui-harness-plan.md` Task 8. **Before editing the system prompt, check
+    which file holds it:** `ls tools/agent/prompt.py`. Edit whichever exists —
+    the prompt text and the reason for each edit are unchanged either way.
+  - **`tools/claude_photometry_haiku_tool.py` is renamed** to
+    `tools/photometry_pipeline.py`, with its Anthropic path and CLI deleted
+    (`tui-harness-plan.md` Task 1). Its photometry and plotting surface is
+    unchanged, so any task here that imports `resolve_fits_path` or
+    `list_bundled_targets` only needs the module path updated.
+
+  Neither move changes what this plan asks for. Phase 4 (`tools/wcs.py`) touches
+  neither file and is unaffected.
 
 ---
 
@@ -550,9 +566,9 @@ Modified:
 | `tools/models.py` | Add `OpticalFrame`, `OpticalFrameList`, `ZeropointComparison`, `PhotometryMeasurement`; rename the `ZeropointSolution` zero-point field. |
 | `tools/calibration.py` | Follow the model rename; add `solve_zeropoint_from_recorded_solve`. |
 | `tools/registry.py` | Register the local tools. |
-| `tools/runner.py` | Teach the system prompt that local frames and recorded ground truth exist. |
+| `tools/runner.py` *(or `tools/agent/prompt.py`, whichever holds `SYSTEM_PROMPT` — see Global Constraints)* | Teach the system prompt that local frames and recorded ground truth exist. |
 | `tools/pulsar.py` | Add the curated-period lookup to Stage 0. |
-| `tools/claude_photometry_haiku_tool.py` | Delegate `resolve_fits_path`/`list_bundled_targets` to `tools/optical.py`. |
+| `tools/claude_photometry_haiku_tool.py` *(renamed `tools/photometry_pipeline.py`)* | Delegate `resolve_fits_path`/`list_bundled_targets` to `tools/optical.py`. |
 | `test_data/README.md`, `README.md`, `docs/tool-architecture.md`, `CLAUDE.md` | Document what changed. |
 
 ---
@@ -2410,8 +2426,9 @@ Fixes BL-8.
 
 **Files:**
 - Create: `test_data/pulsar/curated_periods.json`
-- Modify: `tools/pulsar.py`, `tools/models.py`, `tools/runner.py`,
-  `tests/conftest.py`
+- Modify: `tools/pulsar.py`, `tools/models.py`, `tests/conftest.py`, and
+  whichever of `tools/agent/prompt.py` / `tools/runner.py` holds `SYSTEM_PROMPT`
+  (see Global Constraints)
 - Test: `tests/test_pulsar_sonification.py` (extend)
 
 **Interfaces:**
@@ -2501,10 +2518,16 @@ Replace the literal `PULSAR_PERIODS_S` dict with a read of
 comment block — it explains why the docx and not ATNF is the arbiter, and that
 reasoning is not in the JSON.
 
-- [ ] **Step 6: Update the runner system prompt**
+- [ ] **Step 6: Update the system prompt**
 
-In `tools/runner.py`, amend the ATNF sentence so the offline path is stated
-first:
+Locate it first — it moved:
+
+```bash
+ls tools/agent/prompt.py 2>/dev/null && echo "edit tools/agent/prompt.py" \
+  || echo "edit tools/runner.py"
+```
+
+In that file, amend the ATNF sentence so the offline path is stated first:
 
 ```
 resolve_pulsar_scan reports a curated literature period for every bundled \
@@ -2517,7 +2540,9 @@ without a bundled scan, but it needs the network.
 
 ```bash
 uv run pytest tests/test_pulsar_sonification.py -q
-git add test_data/pulsar/curated_periods.json tools/pulsar.py tools/models.py tools/runner.py tests/conftest.py tests/test_pulsar_sonification.py
+git add test_data/pulsar/curated_periods.json tools/pulsar.py tools/models.py tests/conftest.py tests/test_pulsar_sonification.py
+# plus whichever holds SYSTEM_PROMPT:
+git add tools/agent/prompt.py 2>/dev/null || git add tools/runner.py
 git commit -m "feat(pulsar): surface the curated literature period on PulsarScan
 
 The reference the tests fold at lived in a .docx and a pytest module. An agent

@@ -8,6 +8,11 @@ written once the port lands and the fault taxonomy is real rather than
 predicted.
 Branch: `agent/model-backends` (off `main`, at the maintainer's instruction;
 `CLAUDE.md` otherwise defaults to `dev`)
+Consumed by: `docs/working/tui-harness-design.md` — the Kepler console, which
+drives this port through the headless engine in `tools/agent/`. That design
+amends this one in two places, both marked inline: §4.7 (the loop moves to
+`tools/agent/`; `tools/runner.py` becomes a shim and is later deleted) and §10
+(the second Anthropic caller is no longer deferred).
 
 Kepler's agent loop is hardwired to one vendor. This document specifies a
 provider-neutral model port that puts Ollama, Anthropic, OpenAI-compatible, and
@@ -40,7 +45,9 @@ all the way through.** It imports `anthropic`, reads `ANTHROPIC_API_KEY`, calls
 blocks with `.type == "tool_use"`, and appends **raw SDK content objects** back
 into `messages`. The vendor's data model is the loop's data model.
 
-**`tools/registry.py` is 23 tools and is almost perfectly portable.** No
+**`tools/registry.py` was 23 tools when this was written and is 48 as of
+2026-09-07** — the broken-links phases added the local-data tools. The
+portability finding is unchanged and was re-checked at 48. No
 `anyOf`, no `oneOf`, no `allOf`, no `$ref`, no `additionalProperties`. One
 `enum`, one array-of-string, 23 flat objects. Translating it to three other
 schema dialects is tractable — with exactly one exception, below.
@@ -625,6 +632,15 @@ is untrusted text by construction.
 
 ---
 
+> **Amended 2026-09-07 by `tui-harness-design.md` §14.1.** The loop described
+> above moves to `tools/agent/`, which emits typed events as an iterator and
+> takes approval decisions as a callable. `tools/runner.py` keeps its path as a
+> shim over that engine — the phase gate is unchanged, the same test must pass
+> unedited — and is deleted once the console replaces it. `SYSTEM_PROMPT` moves
+> to `tools/agent/prompt.py` verbatim and is re-exported from `tools/runner.py`.
+
+---
+
 ## 7. Session Manifest, Schema Version 2
 
 Additive only. Readers must handle v1. `model` stays top-level — the existing
@@ -703,15 +719,22 @@ visible in all four dialects.
 
 ## 10. Non-Goals and Deferred Work
 
-* **`tools/claude_photometry_haiku_tool.py` is not migrated.** It is a separate
-  raw-HTTP Anthropic caller with its own prompt and its own result contract.
-  Folding it in would mix a behaviour change into an architecture change.
-  Deferred deliberately, with a note in the module.
+* **`tools/claude_photometry_haiku_tool.py` is not migrated *by this plan*.** It
+  is a separate raw-HTTP Anthropic caller with its own prompt and its own result
+  contract, and folding it in would mix a behaviour change into an architecture
+  change. **Resolved 2026-09-07:** `tui-harness-plan.md` Task 1 renames it to
+  `tools/photometry_pipeline.py` and deletes its Anthropic path and CLI outright
+  rather than migrating it, since the console supersedes the entry point. The
+  ~1,000-line photometry and plotting pipeline it wraps is kept — two registered
+  tools depend on it.
 * **No CLI-agent or MCP backend.** The protocol permits one; nothing builds one.
 * **No streaming for non-Anthropic providers.** Capability flag exists; the
   default fallback is used.
 * **No serving surface.** Section 7 of `docs/tool-architecture.md` stands:
-  serving is optional and every tool must remain callable from plain Python.
+  serving is optional and every tool must remain callable from plain Python. The
+  Kepler console added by `tui-harness-design.md` is a local interface, not a
+  server — it opens no port, and `tools/agent/` imports no UI package, which a
+  test asserts.
 * **No changes to algorithm packages.** This design touches `tools/` only. The
   extraction contract is untouched.
 * **No composite score by default.**
