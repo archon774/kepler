@@ -65,9 +65,10 @@ Three consequences shape everything here:
   both `-m network` and `KEPLER_TEST_NETWORK=1`, per CLAUDE.md's rule that
   default checks stay deterministic and bounded.
 - `solver_data` — needs astrometry.net index files covering a ~10 arcmin field,
-  or a local UCAC4/UCAC5 tree. Skips itself when the data is absent, which it
-  normally is: the commonly packaged 4107-4119 index set starts at 22 arcmin
-  and cannot solve these frames.
+  or a local UCAC4/UCAC5 tree, plus the corresponding environment setting.
+  Tests skip themselves when the configured data is absent. The commonly
+  packaged 4107-4119 index set starts at 22 arcmin and cannot solve these
+  frames.
 
 ## CI
 
@@ -130,7 +131,7 @@ Gaps are listed so they are visible rather than assumed.
 | --- | --- |
 | **TypeScript** — `algorithms/lightcurve/`, `periodogram/`, `hrdiagram/` | `package.json` provides `tsc --noEmit` typechecking only; there is **no test runner**. Covering the Lomb-Scargle core, period folding, field-star removal and `computePlotDelta` needs a runner (vitest or jest) added as a devDependency — a tooling decision left to a maintainer. The FITS fixtures here do not apply to light curves; those algorithms would need their own recorded Astromancer inputs and outputs. |
 | **`tools/hr_diagram.py`'s VizieR-backed steps** | `crossmatch_gaia` / `crossmatch_gaia_by_position` (Gaia DR3 via `I/355/gaiadr3`) and `get_literature_cluster_params` (Cantat-Gaudin & Anders 2020 via a name-resolved `target=` query) go through `tools.vizier.search_vizier`. Confirmed working manually against NGC 6124 and, for the catalog-only path, a globular cluster (via an ad hoc script no longer in the tree; see `docs/extraction.md`, "HR Diagram (Python)") — but there is still no `network`-marked automated test for any of these steps, so a future regression would not be caught by CI. |
-| **`solve_wcs` end to end** | Marked `solver_data` and skips. `solve-field` is on PATH but the packaged 4107-4119 index set starts at 22 arcmin, and these frames are ~10 arcmin — so the blind solve returns no solution rather than failing. Needs the 4200-series indexes, or a local UCAC4/UCAC5 tree with `ATLAS_CATALOG_ROOT` set. The test asserts the recovered centre and parity against the frame's own solution once data is available. |
+| **`solve_wcs` end to end** | `tools.wcs.solve_astrometry` is covered for configuration, state construction, structured failures, header short-circuiting, and guarded writes. `solver_data`-marked tests reach the real backend when explicitly configured. The packaged 4107-4119 indexes start at 22 arcmin while these frames are ~10 arcmin, so the blind astrometry.net solve returns no solution rather than failing; a successful solve still needs suitable 4200-series indexes or `ATLAS_CATALOG_ROOT` pointed at a local UCAC4/UCAC5 tree. |
 | **The ATLAS triangle solver** | `skylib_lite/astrometry/atlas/` — `sample_triangles`, `triangle_invariant_and_order`, `build_kdtree`, `solve_oriented`, `solver.py`. Only the orientation round-trip (`decompose_linear` ↔ `_known_cd_rad_per_pix`) is covered; matching itself needs a local UCAC catalog. |
 | **Live catalog queries** | `query/runner.py`'s network path, the VizieR/SDSS/SkyMapper backends, and `query/cache.py`. One `network`-marked smoke test exists for APASS. The row mappers (`table_to_sources` on Landolt, USNO, VSX) are covered structurally via the MRO contract but not executed against real provider rows — that needs recorded VizieR responses, which this repository does not carry. |
 | **`fieldcal/batch_wcs_photometry_zeropoint_export.py`** | A batch driver over the whole pipeline; every stage it calls is covered individually, but the driver itself needs the solver data above to run. |

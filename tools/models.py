@@ -103,15 +103,13 @@ class TableSummary(KeplerToolModel):
 
 
 class WcsSummary(KeplerToolModel):
-    """Celestial WCS read straight from a FITS header -- no fitting involved.
+    """Compact celestial WCS metadata from a FITS header or plate solve.
 
-    This has no fitted residual to report: it is not a plate solve.
-    ``algorithms.wcs.state.WcsSolution`` (produced by
-    ``algorithms.wcs.wcs.solve_wcs``, a separate and heavier path) carries a
-    real solve's ``pointing_error_arcsec``/``n_field``; nothing here does.
-    Report ``center_ra_deg``/``center_dec_deg``/``pixel_scale_arcsec``/
-    ``rotation_deg`` as read from the header as-is, with no uncertainty
-    attached -- there isn't one to attach.
+    ``algorithms.wcs.state.WcsSolution`` carries fitted diagnostics such as
+    ``pointing_error_arcsec`` and ``n_field``; this public summary intentionally
+    reports only the common WCS geometry shared by header inspection and the
+    plate-solving tool. ``attempted_backends`` identifies which configured
+    solvers the plate-solving path actually invoked.
     """
 
     file: FileMetadata
@@ -123,6 +121,7 @@ class WcsSummary(KeplerToolModel):
     center_ra_hours: float | None = None
     pixel_scale_arcsec: tuple[float, float] | None = None
     rotation_deg: float | None = None
+    attempted_backends: list[str] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

@@ -67,6 +67,7 @@ from tools.simbad import (
     search_simbad_measurements,
 )
 from tools.vizier import list_vizier_catalogs, search_vizier
+from tools.wcs import solve_astrometry
 from tools.workspace import describe_artifact, list_artifacts
 
 __all__ = ["TOOL_SCHEMAS", "TOOL_FUNCTIONS"]
@@ -1199,6 +1200,42 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "solve_astrometry",
+        "description": "Plate-solve a local FITS image. Existing celestial WCS "
+        "metadata is returned without re-solving unless force=true. Solver failures "
+        "and missing configuration are reported as structured results.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to a local FITS image.",
+                },
+                "index_path": {
+                    "type": "string",
+                    "description": "astrometry.net index directory. Defaults to ANET_INDEX_PATH.",
+                },
+                "write_header": {
+                    "type": "boolean",
+                    "description": "Write a successful WCS solution into the FITS header.",
+                    "default": False,
+                },
+                "timeout_s": {
+                    "type": "number",
+                    "minimum": 1,
+                    "description": "Time limit forwarded to each low-level solve attempt "
+                    "(minimum 1); this does not cap total call runtime across retries.",
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "Solve even when the FITS header already has celestial WCS.",
+                    "default": False,
+                },
+            },
+            "required": ["path"],
+        },
+    },
+    {
         "name": "list_photometric_catalogs",
         "description": "List the photometric catalogs this repository can "
         "resolve a reference band from, with their bands. Declaration only -- "
@@ -1405,6 +1442,7 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "list_optical_frames": list_optical_frames,
     "resolve_optical_frame": resolve_optical_frame,
     "describe_image_wcs": describe_image_wcs,
+    "solve_astrometry": solve_astrometry,
     "list_photometric_catalogs": list_photometric_catalogs,
     "resolve_reference_band": resolve_reference_band,
     "solve_zeropoint_from_measurements": solve_zeropoint_from_measurements,

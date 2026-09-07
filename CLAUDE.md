@@ -173,10 +173,11 @@ preserve extraction-parity notes.
 
 Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 
-- `algorithms/wcs/config.py` — `SolverSettings` reads `ANET_INDEX_PATH`, `ATLAS_CATALOG_ROOT`,
-  `ATLAS_CATALOG` (default `ucac5`), `ATLAS_TIMEOUT_S` from the environment. Callers with
-  their own config pass any object exposing those four attributes to
-  `build_anet_config` / `build_atlas_config`, or reassign `wcs.settings`.
+- `algorithms/wcs/config.py` — `SolverSettings` reads `ANET_INDEX_PATH`,
+  `ANET_TIMEOUT_S`, `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG` (default `ucac5`), and
+  `ATLAS_TIMEOUT_S` from the environment. `solve_wcs(..., solver_settings=...)`
+  accepts a per-call settings object; callers using the builders directly can
+  likewise pass any object exposing the relevant attributes.
 - `algorithms/wcs/state.py` — plain dataclasses replacing SQLAlchemy rows; persistence dropped.
 - `algorithms/query/config.py` — `QuerySettings` reads `VIZIER_SERVER`, `VIZIER_CACHE_ENABLED`
   and `VIZIER_CACHE_AGE_DAYS` from the environment, replacing Afterglow's Flask
@@ -192,11 +193,16 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 `extraction/centroiding.py`); there is no non-numba fallback. `scipy`, `astropy`,
 and Pydantic v2 are likewise required.
 
-End-to-end runs additionally need data that is not in this repo: astrometry.net index files
-plus a `solve-field` binary on `PATH` (or the `SKYLIB_*` overrides documented in
-`docs/extraction.md`, WCS), and/or a local UCAC4/UCAC5 catalog. Both WCS backends degrade to
-"unavailable" rather than failing, so imports succeed and solves simply return no solution
-when the data is absent. This is why full parity has never been validated here.
+End-to-end runs additionally need data that is not in this repo. On the
+development host, `solve-field` is `/usr/bin/solve-field`, astrometry.net
+indexes 4107-4119 are under `/usr/share/astrometry/data`, and UCAC5 data is
+under `/srv/agents/catalogs/ATLAS/UCAC5`; none is selected by the repository's
+default environment. Set `ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` to opt
+in. The packaged astrometry.net indexes start at a wider scale than the
+~10-arcminute fixture, and the all-sky 0.1-60 arcsec/pixel search has reached
+the backend without producing a solution. The `solver_data`-marked tests gate
+this path. The solver is wired and exercised; successful solve parity has not
+been validated. Both backends still degrade to "unavailable" when unconfigured.
 
 ## TypeScript domain boundaries
 
