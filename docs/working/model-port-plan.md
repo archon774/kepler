@@ -15,7 +15,7 @@ over it, preserving its module-level `TOOL_SCHEMAS`/`TOOL_FUNCTIONS` globals,
 gaining one optional `backend=` keyword, and losing every direct reference to the
 `anthropic` SDK.
 
-**Tech Stack:** Python 3.12+, `anthropic==0.121.0` (already pinned, kept),
+**Tech Stack:** Python 3.14 (project floor: 3.12), `anthropic==0.121.0` (already pinned, kept),
 `httpx==0.28.1` (already pinned, used raw for the three new providers),
 `pydantic==2.13.4`, `pytest==9.0.3`. **Zero new packages.**
 
@@ -23,6 +23,12 @@ gaining one optional `backend=` keyword, and losing every direct reference to th
 before starting. This plan implements phases **-1 through 3** of that spec's
 section 9. Phases 4–5 (manifest v2, fixtures, harness, graders, CLI) are a
 separate plan, written after this one lands.
+
+**Status:** Approved; implementation pending.
+
+**Prerequisites:** [model-backends-and-benchmarking.md](model-backends-and-benchmarking.md) is the approved design. No implementation PR must merge first.
+
+**Unblocks:** The headless agent-engine dependency of [tui-harness-plan.md](tui-harness-plan.md). It does not replace the separate stateless optical prerequisite for the TUI.
 
 ---
 

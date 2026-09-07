@@ -4,8 +4,11 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Date: 2026-09-04
-Status: proposed
+Date: 2026-09-04 (sequencing updated 2026-09-07)
+Status: phases 1-4 are merged to `dev`; later phases remain pending
+Prerequisites: [stateless-optical-tools-rollout-plan.md](stateless-optical-tools-rollout-plan.md) must merge before remaining implementation work begins.
+Unblocks: the stateless optical rollout through the merged Phase 4 baseline;
+after that rollout merges, the remaining broken-links work and TUI plans.
 Scope: the seam between the public `tools/` surface and the local data in
 `test_data/` — not algorithm correctness (that is
 [`algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md)) and not file
@@ -24,11 +27,18 @@ generalizes that pattern to the other data classes this repository ships —
 optical frames, recorded zero-point solves, and the Afterglow cross-check —
 and then registers the result so an agent loop can reach it.
 
-**Tech Stack:** Python 3.12, Pydantic v2, astropy 8.0.1, numpy 2.4.6,
+**Tech Stack:** Python 3.14 (project floor: 3.12), Pydantic v2, astropy 8.0.1, numpy 2.4.6,
 sep 1.4.1, numba 0.66.0, pytest. No new dependencies.
 
 **Spec:** this document. §1 is the evidence, §2 onward is the plan; there is no
 separate spec to read.
+
+> **Current scheduling.** Phase 4 landed in PR #47. Its task text remains as
+> historical design and parity evidence, not an instruction to recreate the
+> implementation. The dedicated stateless optical rollout is now the required
+> next step. It removes the processing-run wrapper around the optical surface
+> while preserving its algorithms; only after it merges may the remaining work
+> in this plan proceed.
 
 > **Branch basis — read §1.0 first.** The investigation was carried out against
 > `main` (`c8f46a7`) plus `agent/model-backends`. `origin/dev` (`db2f7bd`) is

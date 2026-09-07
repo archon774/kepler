@@ -10,7 +10,7 @@ approval decisions as a callable; it imports no UI code. `tools/tui/` is the onl
 package that imports `textual`, and runs the synchronous engine inside a Textual
 thread worker, forwarding each event to the UI thread with `post_message`.
 
-**Tech Stack:** Python 3.12+, `textual==8.2.8`, `textual-image==0.13.2`,
+**Tech Stack:** Python 3.14 (project floor: 3.12), `textual==8.2.8`, `textual-image==0.13.2`,
 `rich==15.0.0` (+4 transitive), `pillow==12.3.0` (already pinned),
 `pytest==9.0.3`. Eight new pins, confined to `tools/tui/`.
 
@@ -21,6 +21,12 @@ before starting.
 build `tools/agent/{events,prompt,engine}.py` and leave `tools/runner.py` as a
 shim. That amendment is recorded in this plan's section "Phase A dependency"
 below and in `tui-harness-design.md` section 14.1.
+
+**Status:** Approved; implementation pending.
+
+**Prerequisites:** [model-port-plan.md](model-port-plan.md) phases -1 to 3, and the merged [stateless-optical-tools-rollout-plan.md](stateless-optical-tools-rollout-plan.md).
+
+**Unblocks:** The Textual `kepler` console and retirement of its legacy entry points.
 
 ---
 
@@ -149,8 +155,11 @@ anything under `algorithms/`.
 
 ## Task 1: Rename the photometry pipeline and delete the Anthropic path
 
-Ships first and alone. It is independent of the model port and of Phase A, and it
-removes the repository's second Anthropic caller.
+Ships as the first TUI-scoped PR, after the stateless optical rollout merges. It
+is independent of the model port and of Phase A once that prerequisite is
+satisfied, and it removes the repository's second Anthropic caller. It must
+retain the stateless tool boundary rather than preserving or reintroducing
+processing-run or batch orchestration.
 
 **Files:**
 - Rename: `tools/claude_photometry_haiku_tool.py` -> `tools/photometry_pipeline.py`

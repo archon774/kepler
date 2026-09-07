@@ -1,8 +1,9 @@
 # Kepler TUI Agentic Harness
 
 Date: 2026-09-07
-Status: design approved 2026-09-07; implementation planned, no code written
-Depends on: `model-port-plan.md` phases -1 to 3 (the `tools/llm/` model port).
+Status: design approved; implementation pending
+Prerequisites: [model-port-plan.md](model-port-plan.md) phases -1 to 3, and the merged [stateless-optical-tools-rollout-plan.md](stateless-optical-tools-rollout-plan.md).
+Unblocks: [tui-harness-plan.md](tui-harness-plan.md).
 Amends: `model-port-plan.md` Task 5 (see section 14).
 Branch: `agent/tui-harness`, off `dev`.
 
@@ -466,7 +467,7 @@ stay separated per `CLAUDE.md`.
 | --- | --- | --- |
 | **A** | `tools/agent/`: events, engine, `SYSTEM_PROMPT` moved. `runner.py` becomes a shim. | `tests/test_runner_session.py` passes **unedited**. |
 | **B** | Approval policy and approver wiring. | A denied call never dispatches. |
-| **C** | `photometry_pipeline.py` rename, 5 import sites, docs. | Suite green. Independent of A and B. |
+| **C** | `photometry_pipeline.py` rename, 5 import sites, docs. | Suite green. Requires the stateless optical rollout; independent of A and B once that prerequisite is satisfied. |
 | **D** | Textual dependency (8 pins, `uv lock`) and TUI skeleton: transcript, streaming, tool tree, status bar, slash-command registry with `/help`, `/status`, `/tools`, `/prompt`, `/approve`, `/new`, `/quit`. | A real session runs end to end. |
 | **E** | Artifact rendering: probe, tiers, and `/artifacts`. | Half-block path green in CI. |
 | **F** | Session browser and resume: `/sessions` and `/resume`. | A resumed session continues a prior trace. |
