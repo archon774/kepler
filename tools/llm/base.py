@@ -11,7 +11,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Literal, Protocol, Sequence, runtime_checkable
 
-from tools.llm.types import Message, ModelResponse
+from tools.llm.types import (
+    Message,
+    ModelResponse,
+    ProtocolFault,
+    StopReason,
+    ToolCallBlock,
+)
 
 __all__ = [
     "SchemaDialect",
@@ -20,6 +26,7 @@ __all__ = [
     "BackendUnavailableError",
     "OnText",
     "ModelBackend",
+    "truncation_fault",
 ]
 
 #: The three tool-schema dialects the port translates into. A backend declares
@@ -63,6 +70,31 @@ class BackendUnavailableError(RuntimeError):
         if hint:
             message = f"{message} ({hint})"
         super().__init__(message)
+
+
+def truncation_fault(
+    stop_reason: StopReason,
+    tool_calls: Sequence[ToolCallBlock],
+) -> ProtocolFault | None:
+    """The ``truncated_output`` rule of section 4.6, implemented once and shared
+    by every adapter rather than four times.
+
+    A ``max_tokens`` stop that arrived with at least one tool call means the
+    arguments may be incomplete and the trajectory is not trustworthy. A
+    ``max_tokens`` stop with no tool calls is ordinary truncated prose and
+    records nothing. The check is on the *normalized* stop reason, so every
+    provider's own ceiling value (``length``, ``MAX_TOKENS``, ...) is covered.
+    """
+
+    if stop_reason == "max_tokens" and tool_calls:
+        return ProtocolFault(
+            type="truncated_output",
+            detail=(
+                f"stopped at the token ceiling with {len(tool_calls)} tool "
+                "call(s) present; their arguments may be truncated"
+            ),
+        )
+    return None
 
 
 @runtime_checkable
