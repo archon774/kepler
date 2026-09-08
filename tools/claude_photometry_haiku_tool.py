@@ -34,7 +34,7 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Downloads"
 
 from algorithms.photometry.photometry import PhotometrySettings, run_photometry
 from algorithms.photometry.schemas import SourceExtractionSettings
-from algorithms.photometry.source_extraction import build_wcs_from_header, perform_source_extraction
+from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
 
 
 @dataclass
@@ -421,10 +421,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-class ProcessingRun:
-    observation_asset_id = None
-
-
 def load_fits_image(fits_path: Path) -> tuple[np.ndarray, object]:
     with fits.open(fits_path) as hdulist:
         header = hdulist[0].header
@@ -450,11 +446,8 @@ def compute_photometry(
     )
     effective_zero_point_mag = zero_point.value
     extraction_settings = SourceExtractionSettings()
-    sources, background, background_rms = perform_source_extraction(
-        ProcessingRun(),
-        header,
-        data,
-        settings=extraction_settings,
+    sources, background, background_rms = run_source_extraction(
+        data, header, extraction_settings,
     )
 
     photometry_settings = PhotometrySettings(
@@ -1267,4 +1260,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

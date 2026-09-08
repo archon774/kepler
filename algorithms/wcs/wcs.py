@@ -15,6 +15,7 @@ import logging
 import math
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -55,11 +56,7 @@ from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 # layered over the deployment's TOML config. See ./config.py; `build_anet_config`
 # and `build_atlas_config` below read it only through `getattr(cfg, NAME, None)`.
 from .config import settings
-# EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun` —
-# a SQLAlchemy model. See ./state.py for the plain-object stand-in; the solve
-# touches only `.observation_asset_id`, `.wcs_solution` and
-# `.ensure_wcs_solution()`.
-from .state import ProcessingRun as ObservationAssetProcessingRun
+from .results import WcsSolveMetadata, WcsSolveResult
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...` and
 # `from skynet_sdk.schemas import PlateSolveSettings` — the WCS-related models
 # from both are consolidated into ./schemas.py.
@@ -72,10 +69,7 @@ from .schemas import (
 # EXTRACTED: was `from skynet_db.runners.utils import ...` — the two header-hint
 # helpers are in ./header_utils.py.
 from .header_utils import estimate_pixel_scale_arcsec_per_pix, guess_icrs_radec_from_header
-from .source_extraction import build_wcs_from_header, get_source_xy, perform_source_extraction
-# EXTRACTED: was `from ..common import now` (skynet_db.runners.
-# observation_asset_processing.common) — a UTC `datetime.now`. See ./state.py.
-from .state import now
+from .source_extraction import build_wcs_from_header, get_source_xy, run_source_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -122,70 +116,6 @@ _OBS_TIME_KEYS = ("DATE-OBS", "MJD-OBS", "DATEREF", "MJDREFI", "MJDREFF")
 # build_wcs_from_header lives in .source_extraction (imported above) so a single
 # canonical implementation serves both modules. It is re-exported here because
 # .photometry imports it from this module.
-
-
-def build_wcs_from_processing_run_solution(
-        processing_run: ObservationAssetProcessingRun,
-) -> WCS | None:
-    """Build an Astropy WCS from the persisted processing-run WCS state.
-
-    Observation asset processing stores astrometric solutions on the
-    ``ObservationAssetProcessingRun`` rather than in Flask/global request
-    state.  Some pipeline stages need the solved WCS before the FITS header is
-    rewritten, so reconstruct the WCS directly from that run state.
-    """
-    solution = getattr(processing_run, "wcs_solution", None)
-    if solution is None or not getattr(solution, "found_solution", None):
-        return None
-
-    required = (
-        solution.crpix1,
-        solution.crpix2,
-        solution.crval1,
-        solution.crval2,
-        solution.cd11,
-        solution.cd12,
-        solution.cd21,
-        solution.cd22,
-    )
-    if any(value is None for value in required):
-        return None
-
-    try:
-        wcs = WCS(naxis=2)
-        wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
-        wcs.wcs.crpix = [float(solution.crpix1), float(solution.crpix2)]
-        wcs.wcs.crval = [float(solution.crval1) % 360.0, float(solution.crval2)]
-        wcs.wcs.cd = np.array(
-            [
-                [float(solution.cd11), float(solution.cd12)],
-                [float(solution.cd21), float(solution.cd22)],
-            ],
-            dtype=float,
-        )
-        if solution.width_px is not None and solution.height_px is not None:
-            wcs.array_shape = (int(solution.height_px), int(solution.width_px))
-        return wcs if wcs.has_celestial else None
-    except Exception:
-        logger.exception(
-            "Failed to build WCS from processing run %s state",
-            getattr(processing_run, "id", None),
-        )
-        return None
-
-
-def build_wcs_for_processing_run(
-        processing_run: ObservationAssetProcessingRun,
-        header,
-) -> WCS | None:
-    """Return the WCS for this processing run.
-
-    Tries the current FITS header first (preferred after a successful solve_wcs()
-    call, which writes the accepted solution into the header).  Falls back to
-    reconstructing from persisted processing-run DB state when the header has no
-    celestial WCS.
-    """
-    return build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)
 
 
 # ---------------------------------------------------------------------------
@@ -540,19 +470,18 @@ def _load_atlas_catalog_sources(
 # ---------------------------------------------------------------------------
 
 def solve_wcs(
-        processing_run: ObservationAssetProcessingRun,
         header: fits.Header,
         data: np.ndarray,
         tmpdir: Path,
+        *,
+        file_id: int | None = None,
         pixel_scale_hint_arcsec: float | None = None,
         extraction_settings: SourceExtractionSettings | None = None,
         solve_settings: "PlateSolveSettings | None" = None,
         solver_settings=None,
         solver_attempts: list[str] | None = None,
         solver_failures: list[str] | None = None,
-) -> tuple[WCS | None, list[CatalogSource]]:
-
-    file_id = getattr(processing_run, "observation_asset_id", None)
+) -> WcsSolveResult:
 
     wcs_settings = WcsCalibrationSettings()
 
@@ -585,13 +514,17 @@ def solve_wcs(
     width = int(header.get("NAXIS1", image.shape[1]))
     height = int(header.get("NAXIS2", image.shape[0]))
 
-    sources, _, _ = perform_source_extraction(processing_run, header, data, settings=extraction_settings)
+    sources, _, _ = run_source_extraction(
+        data,
+        header,
+        extraction_settings,
+        file_id=file_id,
+    )
 
     if wcs_settings.max_sources and len(sources) > wcs_settings.max_sources:
         sources.sort(key=lambda s: s.flux or 0.0, reverse=True)
         sources = sources[:wcs_settings.max_sources]
 
-    wcs_solution = processing_run.ensure_wcs_solution()
     atlas_catalog_sources: list[CatalogSource] = []
 
     # --- Coordinate hints ---
@@ -884,51 +817,51 @@ def solve_wcs(
             backend = solver_attempts[-1] if solver_attempts else "solver"
             solver_failures.append(f"{backend}: {exc}")
         logger.exception("Astrometric solution failed for file_id=%s", file_id)
-        _clear_wcs_solution_fields(wcs_solution)
-        wcs_solution.width_px = width
-        wcs_solution.height_px = height
-        wcs_solution.n_field = int(len(sources))
-        return None, []
-
-    wcs_solution.width_px = width
-    wcs_solution.height_px = height
-    wcs_solution.n_field = int(len(sources))
+        return WcsSolveResult(
+            wcs=None,
+            catalog_sources=(),
+            metadata=WcsSolveMetadata(
+                width_px=width,
+                height_px=height,
+                n_field=int(len(sources)),
+            ),
+        )
 
     if solution is None or solution.wcs is None:
         logger.warning("solve_wcs: no accepted solution (file_id=%s)", file_id)
-        _clear_wcs_solution_fields(wcs_solution)
-        wcs_solution.width_px = width
-        wcs_solution.height_px = height
-        wcs_solution.n_field = int(len(sources))
-        return None, atlas_catalog_sources
+        return WcsSolveResult(
+            wcs=None,
+            catalog_sources=tuple(atlas_catalog_sources),
+            metadata=WcsSolveMetadata(
+                width_px=width,
+                height_px=height,
+                n_field=int(len(sources)),
+            ),
+        )
 
     wcs_obj = solution.wcs
     wcs_params = wcs_obj.wcs
-    wcs_solution.found_solution = 1
-    wcs_solution.crpix1 = float(wcs_params.crpix[0])
-    wcs_solution.crpix2 = float(wcs_params.crpix[1])
-    wcs_solution.crval1 = float(wcs_params.crval[0])
-    wcs_solution.crval2 = float(wcs_params.crval[1])
+    crpix1 = float(wcs_params.crpix[0])
+    crpix2 = float(wcs_params.crpix[1])
+    crval1 = float(wcs_params.crval[0])
+    crval2 = float(wcs_params.crval[1])
 
     if wcs_params.has_cd():
         A = wcs_params.cd
     else:
         A = wcs_params.get_pc() @ np.diag([wcs_params.cdelt[0], wcs_params.cdelt[1]])
-    wcs_solution.cd11 = float(A[0, 0])
-    wcs_solution.cd12 = float(A[0, 1])
-    wcs_solution.cd21 = float(A[1, 0])
-    wcs_solution.cd22 = float(A[1, 1])
+    cd11 = float(A[0, 0])
+    cd12 = float(A[0, 1])
+    cd21 = float(A[1, 0])
+    cd22 = float(A[1, 1])
 
     cx, cy = (width - 1) / 2.0, (height - 1) / 2.0
     ra_c, dec_c = wcs_obj.all_pix2world(cx, cy, 0)
     ra = float(ra_c % 360.0)
     dec = float(dec_c)
-    wcs_solution.ra_deg = ra
-    wcs_solution.dec_deg = dec
-
     sx = float(np.hypot(A[0, 0], A[1, 0])) * 3600.0
     sy = float(np.hypot(A[0, 1], A[1, 1])) * 3600.0
-    wcs_solution.pixel_scale_arcsec_per_px = 0.5 * (sx + sy)
+    pixel_scale_arcsec_per_px = 0.5 * (sx + sy)
 
     pa_x = np.degrees(np.arctan2(A[1, 0], A[0, 0]))
     pa_y = np.degrees(np.arctan2(-A[0, 1], A[1, 1]))
@@ -937,32 +870,33 @@ def solve_wcs(
             pa_x -= 180
         if pa_y >= 90:
             pa_y -= 180
-    wcs_solution.crota2 = float(0.5 * (pa_x + pa_y))
-    wcs_solution.rotation_deg = float(180.0 - np.degrees(np.arctan2(A[0, 1], A[1, 1])))
+    crota2 = float(0.5 * (pa_x + pa_y))
+    rotation_deg = float(180.0 - np.degrees(np.arctan2(A[0, 1], A[1, 1])))
 
     det = A[0, 0] * A[1, 1] - A[0, 1] * A[1, 0]
-    wcs_solution.mirrored = int(det < 0)
+    mirrored = bool(det < 0)
 
     if wcs_params.has_cd():
-        wcs_solution.cdelt1 = None
-        wcs_solution.cdelt2 = None
+        cdelt1 = None
+        cdelt2 = None
     else:
         try:
-            wcs_solution.cdelt1 = float(wcs_params.cdelt[0])
-            wcs_solution.cdelt2 = float(wcs_params.cdelt[1])
+            cdelt1 = float(wcs_params.cdelt[0])
+            cdelt2 = float(wcs_params.cdelt[1])
         except Exception:
-            wcs_solution.cdelt1 = None
-            wcs_solution.cdelt2 = None
+            cdelt1 = None
+            cdelt2 = None
 
-    wcs_solution.date_solved = now()
-
+    pointing_error_arcsec = None
+    delta_ra_arcsec = None
+    delta_dec_arcsec = None
     if ra_hint_deg is not None and dec_hint_deg is not None:
         dra_deg = ((ra - ra_hint_deg + 180.0) % 360.0) - 180.0
         dra = dra_deg * math.cos(math.radians(dec))
         ddec = dec - dec_hint_deg
-        wcs_solution.pointing_error_arcsec = math.hypot(dra * 3600.0, ddec * 3600.0)
-        wcs_solution.delta_ra_deg = dra * 3600.0
-        wcs_solution.delta_dec_deg = ddec * 3600.0
+        pointing_error_arcsec = math.hypot(dra * 3600.0, ddec * 3600.0)
+        delta_ra_arcsec = dra * 3600.0
+        delta_dec_arcsec = ddec * 3600.0
 
     logger.info(
         "solve_wcs: accepted — file_id=%s "
@@ -970,14 +904,42 @@ def solve_wcs(
         "cd=[[%.8f, %.8f], [%.8f, %.8f]] "
         "size=%dx%d scale=%.3f mirrored=%s",
         file_id,
-        wcs_solution.crval1, wcs_solution.crval2,
-        wcs_solution.crpix1, wcs_solution.crpix2,
-        wcs_solution.cd11, wcs_solution.cd12,
-        wcs_solution.cd21, wcs_solution.cd22,
+        crval1, crval2,
+        crpix1, crpix2,
+        cd11, cd12,
+        cd21, cd22,
         width, height,
-        wcs_solution.pixel_scale_arcsec_per_px, bool(wcs_solution.mirrored),
+        pixel_scale_arcsec_per_px, mirrored,
     )
 
     _write_wcs_to_header(header, wcs_obj, solution=solution)
 
-    return wcs_obj, atlas_catalog_sources
+    return WcsSolveResult(
+        wcs=wcs_obj,
+        catalog_sources=tuple(atlas_catalog_sources),
+        metadata=WcsSolveMetadata(
+            ra_deg=ra,
+            dec_deg=dec,
+            crpix1=crpix1,
+            crpix2=crpix2,
+            crval1=crval1,
+            crval2=crval2,
+            cdelt1=cdelt1,
+            cdelt2=cdelt2,
+            cd11=cd11,
+            cd12=cd12,
+            cd21=cd21,
+            cd22=cd22,
+            crota2=crota2,
+            width_px=width,
+            height_px=height,
+            rotation_deg=rotation_deg,
+            pixel_scale_arcsec_per_px=pixel_scale_arcsec_per_px,
+            mirrored=mirrored,
+            date_solved=datetime.now(timezone.utc),
+            pointing_error_arcsec=pointing_error_arcsec,
+            delta_ra_arcsec=delta_ra_arcsec,
+            delta_dec_arcsec=delta_dec_arcsec,
+            n_field=int(len(sources)),
+        ),
+    )

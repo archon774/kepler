@@ -13,8 +13,6 @@ from algorithms.skylib_lite.extraction.centroiding import centroid_sources
 from algorithms.skylib_lite.photometry import aperture_photometry
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
-# EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
-# (SQLAlchemy ORM row for a processing job) — see the seam in perform_photometry().
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...`
 from .schemas import (
     PhotometryData,
@@ -22,16 +20,9 @@ from .schemas import (
     SourceExtractionData,
     SourceExtractionSettings,
 )
-from .source_extraction import SIGMA_TO_FWHM, get_source_xy, perform_source_extraction
-# EXTRACTED: was `from .wcs import build_wcs_for_processing_run, build_wcs_from_header`
-# (optical_data_processing/wcs.py — the astrometry.net/ATLAS plate-solving stage).
-# `build_wcs_from_header` is imported here from its point of definition instead:
-# wcs.py itself does `from .source_extraction import build_wcs_from_header`, so
-# this is the same function, not a reimplementation.
-# `build_wcs_for_processing_run` is severed — see the seam in perform_photometry().
-from .source_extraction import build_wcs_from_header
+from .source_extraction import SIGMA_TO_FWHM, build_wcs_from_header, get_source_xy
 
-__all__ = ["perform_photometry", "run_photometry"]
+__all__ = ["run_photometry"]
 
 logger = logging.getLogger(__name__)
 
@@ -246,44 +237,3 @@ def run_photometry(
 
     logger.info("Photometry produced %d valid measurements", len(results))
     return results
-
-
-def perform_photometry(
-    # EXTRACTED: was `processing_run: ObservationAssetProcessingRun` (skynet_db ORM
-    # model). Annotation dropped; the object is now only duck-typed for
-    # `.observation_asset_id` (read inside perform_source_extraction).
-    processing_run,
-    header,
-    data: np.ndarray,
-    *,
-    settings: PhotometrySettings | None = None,
-    extraction_settings: SourceExtractionSettings | None = None,
-    return_results: bool = False,
-) -> list[PhotometryData]:
-    settings = settings or PhotometrySettings()
-    extraction_settings = extraction_settings or SourceExtractionSettings()
-    sources, _, _ = perform_source_extraction(
-        processing_run,
-        header,
-        data,
-        settings=extraction_settings,
-    )
-    # EXTRACTED: was `wcs = build_wcs_for_processing_run(processing_run, header)`
-    # (optical_data_processing/wcs.py:151), which is
-    #     `build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`
-    # The first term is kept verbatim. The second term reconstructs a WCS from the
-    # plate solution persisted on the ORM run row, and is dropped with the ORM. If
-    # the header carries no celestial WCS, `wcs` is None here where Skynet could
-    # still have recovered one from the database.
-    wcs = build_wcs_from_header(header)
-    photometry = run_photometry(data, header, sources, settings, wcs=wcs)
-
-    # EXTRACTED: was
-    #     photometry_state = processing_run.ensure_photometry()
-    #     photometry_state.zero_point_mag = settings.zero_point_mag
-    # ORM job-state persistence (stamps the zero point onto the processing run
-    # row). It writes back into the database only; the returned measurements are
-    # unaffected, and `settings.zero_point_mag` is already folded into each
-    # magnitude by PhotometryData.from_source_and_row().
-
-    return photometry

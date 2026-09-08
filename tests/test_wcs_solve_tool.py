@@ -17,7 +17,7 @@ from astropy.wcs import WCS
 
 from algorithms.wcs.config import SolverSettings
 from algorithms.skylib_lite.astrometry.anet import AstrometryNetError
-from algorithms.wcs.state import ProcessingRun
+from algorithms.wcs.results import WcsSolveMetadata, WcsSolveResult
 from algorithms.wcs.wcs import build_anet_config
 from tools.wcs import solve_astrometry
 
@@ -79,7 +79,11 @@ def test_force_resolves_a_frame_that_already_has_wcs(monkeypatch, tmp_path):
 
     def fake_solve(*args, solver_attempts=None, **kwargs):
         solver_attempts.append("astrometry.net")
-        return None, []
+        return WcsSolveResult(
+            wcs=None,
+            catalog_sources=(),
+            metadata=WcsSolveMetadata(width_px=1056, height_px=1027),
+        )
 
     monkeypatch.setattr("tools.wcs._solve_wcs", fake_solve)
 
@@ -94,20 +98,25 @@ def test_per_call_index_and_timeout_reach_the_algorithm(monkeypatch, tmp_path):
     index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(
-        processing_run,
         header,
         data,
         tmpdir,
+        *,
+        file_id=None,
         pixel_scale_hint_arcsec=None,
         solver_settings=None,
         solver_attempts=None,
         solver_failures=None,
     ):
-        captured["processing_run"] = processing_run
+        captured["file_id"] = file_id
         captured["solver_settings"] = solver_settings
         captured["pixel_scale_hint_arcsec"] = pixel_scale_hint_arcsec
         solver_attempts.append("astrometry.net")
-        return None, []
+        return WcsSolveResult(
+            wcs=None,
+            catalog_sources=(),
+            metadata=WcsSolveMetadata(width_px=1056, height_px=1027),
+        )
 
     monkeypatch.setattr("tools.wcs._solve_wcs", fake_solve)
 
@@ -121,8 +130,7 @@ def test_per_call_index_and_timeout_reach_the_algorithm(monkeypatch, tmp_path):
     assert settings.ANET_INDEX_PATH == [str(index_path)]
     assert settings.ANET_TIMEOUT_S == 12.5
     assert settings.ATLAS_TIMEOUT_S == 12.5
-    assert isinstance(captured["processing_run"], ProcessingRun)
-    assert captured["processing_run"].observation_asset_id is None
+    assert captured["file_id"] is None
     assert captured["pixel_scale_hint_arcsec"] is not None
     assert summary.has_wcs is False
     assert summary.attempted_backends == ["astrometry.net"]
@@ -243,19 +251,23 @@ def test_write_header_persists_a_successful_solution(monkeypatch, tmp_path):
     index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(
-        processing_run,
         header,
         data,
         tmpdir,
+        *,
+        file_id=None,
         pixel_scale_hint_arcsec=None,
         solver_settings=None,
         solver_attempts=None,
         solver_failures=None,
     ):
         header.update(solved_wcs.to_header(relax=True))
-        processing_run.ensure_wcs_solution().found_solution = 1
         solver_attempts.append("astrometry.net")
-        return solved_wcs, []
+        return WcsSolveResult(
+            wcs=solved_wcs,
+            catalog_sources=(),
+            metadata=WcsSolveMetadata(width_px=1056, height_px=1027),
+        )
 
     monkeypatch.setattr("tools.wcs._solve_wcs", fake_solve)
 
@@ -284,10 +296,11 @@ def test_write_header_refuses_to_overwrite_a_file_changed_during_solve(
     index_path = _configure_fake_anet(monkeypatch, tmp_path)
 
     def fake_solve(
-        processing_run,
         header,
         data,
         tmpdir,
+        *,
+        file_id=None,
         pixel_scale_hint_arcsec=None,
         solver_settings=None,
         solver_attempts=None,
@@ -298,7 +311,11 @@ def test_write_header_refuses_to_overwrite_a_file_changed_during_solve(
             hdul.flush()
         header.update(solved_wcs.to_header(relax=True))
         solver_attempts.append("astrometry.net")
-        return solved_wcs, []
+        return WcsSolveResult(
+            wcs=solved_wcs,
+            catalog_sources=(),
+            metadata=WcsSolveMetadata(width_px=1056, height_px=1027),
+        )
 
     monkeypatch.setattr("tools.wcs._solve_wcs", fake_solve)
 

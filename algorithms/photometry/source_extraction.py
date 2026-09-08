@@ -12,10 +12,6 @@ from astropy.wcs import WCS
 from algorithms.skylib_lite.extraction import auto_sat_level, extract_sources
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
-# EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
-# (SQLAlchemy ORM row for a processing job). `perform_source_extraction()` only
-# ever reads `.observation_asset_id` off it via getattr, so the parameter is now
-# duck-typed — see the seam note there.
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...`
 from .schemas import SourceExtractionData, SourceExtractionSettings
 
@@ -68,7 +64,6 @@ __all__ = [
     "SIGMA_TO_FWHM",
     "get_source_radec",
     "get_source_xy",
-    "perform_source_extraction",
     "run_source_extraction",
 ]
 
@@ -302,18 +297,3 @@ def run_source_extraction(
     ]
 
     return sources, background, background_rms
-
-
-def perform_source_extraction(
-    # EXTRACTED: was `processing_run: ObservationAssetProcessingRun` (skynet_db ORM
-    # model). The annotation is dropped, not the behavior: the body already read
-    # the run duck-typed, so any object exposing `.observation_asset_id` works.
-    processing_run,
-    header,
-    data: np.ndarray,
-    *,
-    settings: SourceExtractionSettings | None = None,
-) -> tuple[list[SourceExtractionData], np.ndarray | None, np.ndarray | None]:
-    settings = settings or SourceExtractionSettings()
-    file_id = getattr(processing_run, "observation_asset_id", None)
-    return run_source_extraction(data, header, settings, file_id=file_id)

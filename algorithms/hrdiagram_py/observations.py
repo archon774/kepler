@@ -1,9 +1,8 @@
 """algorithms.hrdiagram_py.observations - FITS frame -> detected sources.
 
-Calls into ``algorithms.photometry`` for source extraction/aperture photometry
-and ``algorithms.wcs.state`` for the plain dataclass Skynet ORM stand-in these
-functions expect; owns neither. No new algorithm code lives here, only the
-glue that turns one FITS frame into a table of instrumental photometry.
+Calls into ``algorithms.photometry`` for source extraction/aperture photometry;
+owns neither. No new algorithm code lives here, only the glue that turns one
+FITS frame into a table of instrumental photometry.
 """
 
 from __future__ import annotations
@@ -14,10 +13,9 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 
-from algorithms.photometry.photometry import perform_photometry
+from algorithms.photometry.photometry import run_photometry
 from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionSettings
-from algorithms.photometry.source_extraction import build_wcs_from_header
-from algorithms.wcs.state import ProcessingRun
+from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
 
 __all__ = ["extract_photometry_from_fits"]
 
@@ -59,15 +57,15 @@ def extract_photometry_from_fits(
     # otherwise have to know in advance).
     photometry_settings = photometry_settings or PhotometrySettings(mode="auto")
 
-    # SourceExtractionData.file_id is typed int|None (it's just a log label), so
-    # derive a stable small int from the path rather than passing the path itself.
-    processing_run = ProcessingRun(observation_asset_id=abs(hash(str(fits_path))) % 10**8)
-    results = perform_photometry(
-        processing_run,
-        header,
+    wcs = build_wcs_from_header(header)
+    sources, background, background_rms = run_source_extraction(
         data,
-        settings=photometry_settings,
-        extraction_settings=extraction_settings,
+        header,
+        extraction_settings,
+    )
+    results = run_photometry(
+        data, header, sources, photometry_settings,
+        wcs=wcs, background=background, background_rms=background_rms,
     )
 
     if not results:
