@@ -34,6 +34,7 @@ from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import ModelBackend
 from tools.llm.schema import for_dialect
 from tools.llm.types import Message, ModelResponse, TextBlock, ToolResultBlock
+from tools.llm.validation import index_schemas, validate_tool_call
 from tools.sessions import AgentSession, make_cache_key
 
 __all__ = ["run_session"]
@@ -62,6 +63,7 @@ def run_session(
 
     schemas, functions = _resolve_registry(tool_schemas, tool_functions)
     dialect_tools = for_dialect(backend.capabilities.schema_dialect, list(schemas))
+    schema_index = index_schemas(schemas)
 
     if session is None:
         session = AgentSession(
@@ -102,6 +104,7 @@ def run_session(
                 for chunk in streamed:
                     yield events.TextDelta(text=chunk)
                 for fault in response.faults:
+                    session.record_fault(turn=turn_number, fault=fault)
                     yield events.ProtocolFault(
                         turn=turn_number, type=fault.type, detail=fault.detail
                     )
@@ -115,6 +118,7 @@ def run_session(
                         functions=functions,
                         approver=approver,
                         session=session,
+                        schema_index=schema_index,
                     )
                     continue
 
@@ -163,6 +167,7 @@ def _run_tool_turn(
     functions: _ToolFunctions,
     approver: Approver,
     session: AgentSession,
+    schema_index: Mapping[str, Mapping[str, Any]],
 ) -> Iterator[events.Event]:
     assistant_blocks: list[Any] = []
     if response.text:
@@ -183,10 +188,29 @@ def _run_tool_turn(
         )
         yield proposed
 
-        denied = approver(proposed) is Decision.DENY
-        if denied:
-            reason = "not permitted by the approval policy"
+        # S8: validate against the tool's own schema BEFORE dispatch. A fault
+        # is recorded, an error result goes back to the model, and the loop
+        # continues -- the tool function is never called, nothing raises.
+        fault = validate_tool_call(
+            call.name, arguments, schema_index, call_id=call.call_id
+        )
+        denied = fault is None and approver(proposed) is Decision.DENY
+
+        if fault is not None:
+            session.record_fault(turn=turn_number, fault=fault)
+            yield events.ProtocolFault(
+                turn=turn_number, type=fault.type, detail=fault.detail
+            )
             result: dict[str, Any] = {
+                "status": "error",
+                "errors": [{"code": fault.type, "message": fault.detail}],
+            }
+            cache_hit = cache_key in call_cache
+            if not cache_hit:
+                call_cache[cache_key] = result
+        elif denied:
+            reason = "not permitted by the approval policy"
+            result = {
                 "status": "error",
                 "errors": [{"code": "denied", "message": reason}],
             }
@@ -205,19 +229,7 @@ def _run_tool_turn(
             if cache_hit:
                 result = call_cache[cache_key]
             else:
-                func = functions.get(call.name)
-                if func is None:
-                    result = {
-                        "status": "error",
-                        "errors": [
-                            {
-                                "code": "invalid_input",
-                                "message": f"Unknown tool: {call.name}",
-                            }
-                        ],
-                    }
-                else:
-                    result = func(**arguments).model_dump()
+                result = functions[call.name](**arguments).model_dump()
                 call_cache[cache_key] = result
             duration_ms = (time.monotonic() - started) * 1000.0
 

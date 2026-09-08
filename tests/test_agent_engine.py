@@ -165,20 +165,21 @@ def test_max_turns_is_a_terminal_outcome(monkeypatch):
     assert sum(isinstance(e, events.TurnStarted) for e in stream) == 3
 
 
-def test_an_unknown_tool_returns_an_error_result_and_does_not_abort(monkeypatch):
+def test_an_unknown_tool_is_caught_by_validation_not_dispatched(monkeypatch):
     backend = StubBackend(
         [
             ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(name="nonesuch"),)),
             ModelResponse(stop_reason="end_turn", text="ok"),
         ]
     )
-    stream, _ = _drain(backend, tool_functions={})
+    stream, session = _drain(backend, tool_functions={})
+    fault = next(e for e in stream if isinstance(e, events.ProtocolFault))
+    assert fault.type == "unknown_tool"
     finished = next(e for e in stream if isinstance(e, events.ToolCallFinished))
-    assert finished.result == {
-        "status": "error",
-        "errors": [{"code": "invalid_input", "message": "Unknown tool: nonesuch"}],
-    }
-    assert isinstance(stream[-1], events.SessionFinished)
+    assert finished.result["status"] == "error"
+    assert finished.result["errors"][0]["code"] == "unknown_tool"
+    assert not any(isinstance(e, events.ToolCallStarted) for e in stream)
+    assert session.protocol_faults[0]["type"] == "unknown_tool"
     assert stream[-1].outcome == "end_turn"
 
 
@@ -205,6 +206,63 @@ def test_a_denied_call_never_reaches_the_tool_function(monkeypatch):
     assert denied.name == "lookup"
     assert not any(isinstance(e, events.ToolCallStarted) for e in stream)
     assert not any(isinstance(e, events.ToolCallFinished) for e in stream)
+
+
+def test_a_stringified_null_argument_is_a_fault_and_the_tool_is_not_dispatched(monkeypatch):
+    invoked: list = []
+
+    def vizier(**kwargs):
+        invoked.append(kwargs)
+        return ToolResult(status="ok")
+
+    schema = {
+        "name": "vizier",
+        "input_schema": {
+            "type": "object",
+            "properties": {"max_catalogs": {"type": ["integer", "null"]}},
+        },
+    }
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(ToolCallBlock(call_id="c0", name="vizier", arguments={"max_catalogs": "None"}),),
+            ),
+            ModelResponse(stop_reason="end_turn", text="ok"),
+        ]
+    )
+    session = _session()
+    stream = list(
+        run_session(
+            "hi",
+            backend=backend,
+            session=session,
+            tool_schemas=[schema],
+            tool_functions={"vizier": vizier},
+        )
+    )
+    assert invoked == []
+    fault = next(e for e in stream if isinstance(e, events.ProtocolFault))
+    assert fault.type == "stringified_null"
+    assert session.protocol_faults[0]["type"] == "stringified_null"
+    assert session.protocol_faults[0]["tool_name"] == "vizier"
+    # the trace records the real arguments the model sent
+    assert session.tool_calls[0]["arguments"] == {"max_catalogs": "None"}
+
+
+def test_adapter_faults_are_recorded_to_the_manifest_too(monkeypatch):
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="done",
+                faults=(ProtocolFault(type="truncated_output", detail="ceiling"),),
+            )
+        ]
+    )
+    _, session = _drain(backend)
+    assert [f["type"] for f in session.protocol_faults] == ["truncated_output"]
+    assert session.protocol_faults[0]["turn"] == 1
 
 
 def test_a_backend_reported_fault_becomes_a_turn_stamped_fault_event(monkeypatch):
@@ -244,7 +302,9 @@ def test_a_tool_that_raises_saves_an_error_manifest_and_re_raises(monkeypatch):
             backend=backend,
             session=session,
             tool_functions={"boom": boom},
-            tool_schemas=[],
+            tool_schemas=[
+                {"name": "boom", "input_schema": {"type": "object", "properties": {}}}
+            ],
         ):
             produced.append(event)
     assert session.outcome == "error"
