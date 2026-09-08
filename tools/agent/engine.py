@@ -32,6 +32,7 @@ from tools.agent import events
 from tools.agent.approval import Approver, Decision, auto_approve
 from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import ModelBackend
+from tools.llm.schema import for_dialect
 from tools.llm.types import Message, ModelResponse, TextBlock, ToolResultBlock
 from tools.sessions import AgentSession, make_cache_key
 
@@ -53,13 +54,14 @@ def run_session(
 ) -> Iterator[events.Event]:
     """Run a bounded agent loop and yield its events.
 
-    ``tool_schemas`` is passed to ``backend.complete()`` untranslated in Phase
-    0c (the Anthropic dialect is the registry's native shape); Phase 1a
-    inserts translation here. ``tool_schemas``/``tool_functions`` default to the
-    live registry, read at call time.
+    The registry schemas are translated into the backend's declared dialect
+    once, before the turn loop; every ``complete()`` call gets that payload.
+    ``tool_schemas``/``tool_functions`` default to the live registry, read at
+    call time.
     """
 
     schemas, functions = _resolve_registry(tool_schemas, tool_functions)
+    dialect_tools = for_dialect(backend.capabilities.schema_dialect, list(schemas))
 
     if session is None:
         session = AgentSession(
@@ -92,7 +94,7 @@ def run_session(
                 streamed: list[str] = []
                 response = backend.complete(
                     messages=messages,
-                    tools=schemas,
+                    tools=dialect_tools,
                     system=system,
                     max_tokens=max_tokens,
                     on_text=streamed.append,
