@@ -317,9 +317,15 @@ def solve_astrometry(
         )
 
     solver_settings = SolverSettings(
-        anet_index_path=_normalise_index_path(index_path),
-        anet_timeout_s=timeout_s,
-        atlas_timeout_s=timeout_s,
+        anet_index_path=(
+            _normalise_index_path(index_path)
+            if index_path is not None
+            else os.getenv("ANET_INDEX_PATH")
+        ),
+        anet_timeout_s=timeout_s if timeout_s is not None else os.getenv("ANET_TIMEOUT_S"),
+        atlas_catalog_root=os.getenv("ATLAS_CATALOG_ROOT"),
+        atlas_catalog=os.getenv("ATLAS_CATALOG"),
+        atlas_timeout_s=timeout_s if timeout_s is not None else os.getenv("ATLAS_TIMEOUT_S"),
     )
     timeout_settings = (
         ("ANET_TIMEOUT_S", solver_settings.ANET_TIMEOUT_S, solver_settings.ANET_INDEX_PATH),

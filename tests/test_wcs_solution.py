@@ -24,6 +24,7 @@ import pytest
 from astropy.io import fits
 from astropy.wcs import WCS
 
+import algorithms.wcs.wcs as wcs_module
 from algorithms.wcs.results import WcsSolveMetadata, WcsSolveResult
 from algorithms.wcs.config import SolverSettings
 from algorithms.wcs.wcs import (
@@ -92,6 +93,33 @@ def test_solve_wcs_returns_per_call_result_without_a_processing_run(
     assert result.metadata.width_px == 1056
     assert result.metadata.height_px == 1027
     assert result.metadata.n_field == 2
+
+
+def test_solve_wcs_without_settings_does_not_use_global_solver_configuration(
+    monkeypatch, frame_header_copy, tmp_path
+):
+    """An algorithm call with no configuration has no enabled solver backends."""
+    config_inputs = []
+    monkeypatch.setattr(
+        wcs_module,
+        "run_source_extraction",
+        lambda data, header, settings, *, file_id=None: ([], None, None),
+    )
+    monkeypatch.setattr(
+        wcs_module,
+        "build_anet_config",
+        lambda config: config_inputs.append(config) or None,
+    )
+    monkeypatch.setattr(wcs_module, "build_atlas_config", lambda config: None)
+
+    result = solve_wcs(
+        frame_header_copy("m15_open"),
+        np.zeros((1027, 1056), dtype=np.float32),
+        tmp_path,
+    )
+
+    assert result.wcs is None
+    assert config_inputs == [None]
 
 
 # ---------------------------------------------------------------------------

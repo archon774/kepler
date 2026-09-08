@@ -215,20 +215,20 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
 - **Was:** `from skynet_db.config import settings` — a Dynaconf instance layered
   over `config/settings.toml` + `config/environments/dev.local.toml` with a
   `SKYNET_` env-var prefix.
-- **Now:** `wcs/config.py` exposes a `SolverSettings` object with the five
+- **Now:** `wcs/config.py` exposes a pure `SolverSettings` object with the five
   attribute names the builders read (`ANET_INDEX_PATH`, `ANET_TIMEOUT_S`,
-  `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S`), sourced from the
-  environment. `solve_wcs(..., solver_settings=...)` also accepts an isolated
-  per-call settings object for the public tool wrapper. Optional caller-owned
-  attempt/failure lists expose backend diagnostics without changing the legacy
-  two-value return shape.
+  `ATLAS_CATALOG_ROOT`, `ATLAS_CATALOG`, `ATLAS_TIMEOUT_S`). `tools.wcs`
+  reads environment configuration and passes an isolated per-call settings
+  object to `solve_wcs`; a direct algorithm call with no settings has no
+  configured backend. Optional caller-owned attempt/failure lists expose
+  backend diagnostics alongside the explicit `WcsSolveResult` output.
 - **Behaviour:** the extracted solver logic is unchanged. `build_anet_config` /
   `build_atlas_config` read configuration only through
   `getattr(cfg, NAME, None)`, and both already handle `None` (anet
   logs a warning and disables itself; atlas returns `None`). `ANET_TIMEOUT_S`
   is new caller-facing plumbing to the vendored backend's existing
   `AstrometryNetConfig.timeout_s`. Callers with their own config can pass any
-  object to the builders, pass it to `solve_wcs`, or reassign `wcs.settings`.
+  object to the builders or pass it to `solve_wcs`.
 
 ##### 5.2 ORM rows — removed
 - **Was:** `from skynet_db.models import ObservationAssetProcessingRun`
@@ -369,9 +369,8 @@ data installed.
 - Spot-checked behaviour: `WCS_REGEX` keyword matching, `_angular_sep_deg`,
   `_parse_ra_hours` / `_parse_dec_deg` sexagesimal parsing, `decompose_linear`,
   `wcs_from_similarity` → `_wcs_parity` round trip, `WcsCalibrationSettings` /
-  `PlateSolveSettings` defaults, `build_anet_config` / `build_atlas_config`
-  returning `None` when unconfigured, and `_clear_wcs_solution_fields` against
-  `state.WcsSolution`.
+  `PlateSolveSettings` defaults and `build_anet_config` /
+  `build_atlas_config` returning `None` when unconfigured.
 - **Not** run: an end-to-end solve. That needs `solve-field` plus astrometry.net
   index files or a UCAC catalog on disk, none of which are present here.
 

@@ -284,7 +284,7 @@ def calibrate_zeropoint(
     ``tools.fieldcal_reference.replay_catalog_sources``) is the offline path:
     the recorded APASS rows are injected, so ``deps.query_catalogs`` is never
     reached and the variable-star cross-check (which would query VSX) is
-    disabled. Without it, calibration queries a reference catalog over the
+    disabled. Without it, the tool-owned calibration-input helper queries a reference catalog over the
     network, exactly as ``run_photometry_on_target(use_field_cal=True)`` does.
 
     ``compare_to`` names a recorded solve (e.g. ``"ngc5128_b_002"``); the

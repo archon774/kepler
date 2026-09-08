@@ -10,6 +10,7 @@ FORBIDDEN_OPTICAL_API = (
     "ProcessingRun",
     "ProcessingRunRef",
     "ensure_wcs_solution",
+    "_clear_wcs_solution_fields",
     "build_wcs_for_processing_run",
     "build_wcs_from_processing_run_solution",
     "wire_fieldcal_deps",

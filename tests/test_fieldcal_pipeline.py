@@ -76,6 +76,17 @@ def test_calibration_requires_supplied_catalog_sources():
         perform_field_calibration({}, np.zeros((4, 4), dtype=np.float32), wcs=_wcs())
 
 
+def test_calibration_settings_cannot_supply_catalog_sources():
+    assert "catalog_sources" not in PhotometricCalibrationSettings.model_fields
+    with pytest.raises(ValueError, match="Missing catalog sources"):
+        perform_field_calibration(
+            {},
+            np.zeros((4, 4), dtype=np.float32),
+            wcs=_wcs(),
+            field_cal_settings=PhotometricCalibrationSettings(),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Catalog-source normalisation
 # ---------------------------------------------------------------------------

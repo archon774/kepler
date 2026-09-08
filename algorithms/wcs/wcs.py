@@ -52,10 +52,6 @@ from algorithms.skylib_lite.astrometry.anet.backend import (
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 
-# EXTRACTED: was `from skynet_db.config import settings` — a Dynaconf instance
-# layered over the deployment's TOML config. See ./config.py; `build_anet_config`
-# and `build_atlas_config` below read it only through `getattr(cfg, NAME, None)`.
-from .config import settings
 from .results import WcsSolveMetadata, WcsSolveResult
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...` and
 # `from skynet_sdk.schemas import PlateSolveSettings` — the WCS-related models
@@ -246,18 +242,6 @@ def _write_wcs_to_header(header: fits.Header, wcs_obj: WCS, *, solution=None) ->
         header[k] = v
         if comment:
             header.comments[k] = comment
-
-
-def _clear_wcs_solution_fields(wcs_solution) -> None:
-    """Reset all astrometric fields so stale DB state is not visible after a failed solve."""
-    wcs_solution.found_solution = 0
-    for attr in (
-        "crpix1", "crpix2", "crval1", "crval2",
-        "cd11", "cd12", "cd21", "cd22",
-        "ra", "dec", "pixel_scale", "crota2", "rotation", "mirrored",
-        "cdelt1", "cdelt2", "pointing_error_arcsec", "delta_ra_deg", "delta_dec_deg", "date_solved",
-    ):
-        setattr(wcs_solution, attr, None)
 
 
 # ---------------------------------------------------------------------------
@@ -610,9 +594,8 @@ def solve_wcs(
     max_sep_deg = max(1.0, 3.0 * field_diag_deg)
 
     # --- Backend configs ---
-    solver_config = solver_settings if solver_settings is not None else settings
-    anet_config = build_anet_config(solver_config)
-    atlas_config = build_atlas_config(solver_config)
+    anet_config = build_anet_config(solver_settings)
+    atlas_config = build_atlas_config(solver_settings)
 
     # Clean header for Atlas FITS input (strip stale WCS keywords)
     clean_header = header.copy()

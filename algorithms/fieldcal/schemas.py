@@ -218,7 +218,6 @@ class PhotometricCalibrationSettings(KeplerBaseModel):
     id: Optional[int] = None
     user_id: Optional[int] = None
     name: Optional[str] = None
-    catalog_sources: List[CatalogSource] = Field(default_factory=list)
     catalogs: List[str] = Field(default_factory=lambda: ["APASS"])
     custom_filter_lookup: Dict[str, Dict[str, str]] = Field(default_factory=dict)
     source_inclusion_percent: Optional[float] = 100

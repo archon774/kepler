@@ -494,8 +494,7 @@ def perform_field_calibration(
     logger.info("Starting field calibration for file_id=%s", file_id)
     logger.info("WCS available for field calibration: %s", wcs is not None)
 
-    sources_input = catalog_sources if catalog_sources is not None else settings.catalog_sources
-    sources = _normalize_catalog_sources(sources_input, file_id=file_id) if sources_input else []
+    sources = _normalize_catalog_sources(catalog_sources, file_id=file_id) if catalog_sources else []
     _attach_catalog_magnitudes(sources)
 
     if not sources or not _has_reference_magnitudes(sources):
