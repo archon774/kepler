@@ -167,9 +167,10 @@ to a radio map), `algorithms.radio` (spectral fitting, catalog cross-match),
 
 `tools.wcs.solve_astrometry(path, *, index_path=None, write_header=False,
 timeout_s=None, force=False)` wraps the extracted plate solver with its required
-`ProcessingRun`, per-call backend configuration, structured unavailable and
-no-solution outcomes, attempted-backend reporting, and guarded FITS-header
-persistence.
+per-call backend configuration, structured unavailable and no-solution outcomes,
+attempted-backend reporting, and guarded FITS-header persistence. A single tool
+call is Kepler's execution boundary: no run or stage state is retained between
+calls.
 
 Next Python tools should follow the same pattern before adding new layers:
 

@@ -1,8 +1,7 @@
 """Tool-layer coverage for plate solving.
 
-BL-7: ``solve_wcs`` was reachable only by importing the algorithm package,
-needed a processing-run object exposing ``ensure_wcs_solution()``, and its
-astrometry.net index directory was never configured by a public tool.
+BL-7: ``solve_wcs`` was reachable only by importing the algorithm package, and
+its astrometry.net index directory was never configured by a public tool.
 """
 
 from __future__ import annotations

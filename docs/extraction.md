@@ -230,29 +230,18 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
   `AstrometryNetConfig.timeout_s`. Callers with their own config can pass any
   object to the builders, pass it to `solve_wcs`, or reassign `wcs.settings`.
 
-##### 5.2 ORM rows — `state.py`
+##### 5.2 ORM rows — removed
 - **Was:** `from skynet_db.models import ObservationAssetProcessingRun`
   (SQLAlchemy), whose `ensure_wcs_solution()` creates and `session.add()`s an
   `ObservationTaskAssetProcessingRunWcsSolution` row.
-- **Now:** `state.ProcessingRun` / `state.WcsSolution`, plain dataclasses. The
-  25 solution columns are reproduced 1:1 in name, order and `None` default; the
-  `processing_run_id` primary key, the relationship and the `session.add()` are
-  dropped as persistence-only. `ProcessingRun` keeps only the three members the
-  solve touches (`id`, `observation_asset_id`, `wcs_solution`).
-- **Preserved quirk:** `wcs._clear_wcs_solution_fields()` resets attribute names
-  that do **not** all match the mapped columns — it clears `ra`, `dec`,
-  `pixel_scale` and `rotation`, whereas the solve writes `ra_deg`, `dec_deg`,
-  `pixel_scale_arcsec_per_px` and `rotation_deg`. On a SQLAlchemy instance,
-  `setattr` of an unmapped name silently creates a throwaway instance
-  attribute, so upstream those four clears are no-ops and the corresponding
-  columns retain their previous values after a failed solve. `WcsSolution` is a
-  plain (non-`slots`) dataclass **specifically so this reproduces exactly**
-  rather than raising `AttributeError`. Not fixed — reported here.
+- **Now:** WCS solving returns frozen `WcsSolveResult` and `WcsSolveMetadata`
+  values. A failed solve has no previous mutable row to clear, so dimensions and
+  source count describe that call only.
 
-##### 5.3 Clock — `state.now()`
+##### 5.3 Clock
 - **Was:** `from ..common import now`
   (`skynet_db.runners.observation_asset_processing.common`).
-- **Now:** the same one-line `datetime.now(timezone.utc)`, in `state.py`.
+- **Now:** successful result metadata records UTC time directly; no state module remains.
 
 ##### 5.4 Pydantic base — `schemas.py`
 - **Was:** `from skynet_sdk.schemas import SkynetBaseModel`.
@@ -337,7 +326,7 @@ data installed.
    `skylib.util.stats.chauvenet`.
 
 3. **`source_extraction.py` was taken whole**, though only
-   `build_wcs_from_header`, `get_source_xy` and `perform_source_extraction` are
+   `build_wcs_from_header`, `get_source_xy` and `run_source_extraction` are
    imported by `wcs.py`. Splitting it would have meant editing `__all__` and
    fragmenting a cohesive module; `get_source_radec` came along unused.
 
@@ -504,11 +493,11 @@ Every seam is marked in the source with `# EXTRACTED: was <original symbol>`.
 | # | File | Cut | Consequence |
 |---|---|---|---|
 | 1 | `photometry.py`, `source_extraction.py` | `from skylib...` (installed package) -> `from algorithms.skylib_lite...` (shared vendored copy) | None. Same code. |
-| 2 | `source_extraction.py` | `from skynet_db.models import ObservationAssetProcessingRun`; the `processing_run:` annotation on `perform_source_extraction` | None. The body already read the run duck-typed (`getattr(processing_run, "observation_asset_id", None)`); only the SQLAlchemy type annotation was dropped. |
-| 3 | `photometry.py` | Same ORM import + annotation on `perform_photometry` | None on the returned values. |
+| 2 | `source_extraction.py` | Upstream ORM-shaped extraction adapter | Removed. Callers use `run_source_extraction(..., file_id=...)`. |
+| 3 | `photometry.py` | Upstream ORM-shaped photometry adapter | Removed. Callers explicitly compose detections, WCS, background, and RMS into `run_photometry`. |
 | 4 | `photometry.py` | `from .wcs import build_wcs_from_header` -> `from .source_extraction import build_wcs_from_header` | None. Not a reimplementation: `wcs.py` itself does `from .source_extraction import build_wcs_from_header`, so this is the identical function imported from its point of definition. Avoids dragging in the astrometry.net/ATLAS plate-solving stage (which belongs to `algorithms/wcs/`). |
-| 5 | `photometry.py` | `build_wcs_for_processing_run(processing_run, header)` → `build_wcs_from_header(header)` | **Behavioral.** The original (`optical_data_processing/wcs.py:151`) is `build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`. The first term is kept; the second reconstructs a WCS from the plate solution persisted on the ORM row. If the FITS header carries no celestial WCS, `wcs` is now `None` where Skynet could still have recovered one from the database. Affects `perform_photometry()` only — `run_photometry()`, the numeric entry point, is untouched. |
-| 6 | `photometry.py` | `processing_run.ensure_photometry()` / `photometry_state.zero_point_mag = ...` | None on the returned values. Pure ORM job-state persistence; `settings.zero_point_mag` is already folded into each magnitude by `PhotometryData.from_source_and_row()`. |
+| 5 | `photometry.py` | Persisted-run WCS reconstruction | Removed. Callers pass a header-derived or solve-result WCS explicitly. |
+| 6 | `photometry.py` | ORM photometry-state persistence | Removed. `settings.zero_point_mag` is already folded into each returned magnitude. |
 | 7 | `schemas.py` | `from skynet_sdk.schemas import SkynetBaseModel` → local base class | See below. |
 
 ##### Seam 7 in detail
@@ -819,12 +808,11 @@ unless noted. `OPD/` abbreviates
 
 | Kepler file | Lines | Source | Source lines | Fidelity |
 |---|---|---|---|---|
-| `field_cal.py` | 735 | `OPD/field_cal.py` | 701 (all) | Verbatim. Diff vs original is imports + 4 `deps.` call seams + 2 type annotations + the added parity annotation at the `apcorr_tol` line. No logic touched. |
+| `field_cal.py` |  | `OPD/field_cal.py` | 701 (all) | Numerical body retained; its maintained interface receives WCS and catalog/variable rows explicitly and imports deterministic extraction/photometry directly. |
 | `solution.py` | 166 | `utils.py` | 468–603 (`_sigma_eq`, `calc_solution`) | **Byte-identical body** (verified by diff). |
 | `ref_mag.py` | 217 | `utils.py` | 605–799 (`_SAFE_NAMES`, `_ALLOWED_TOKENS`, `_get_catalog_filter_lookup`, `_safe_eval_expr`, `_resolve_filter_lookup_candidate`, `_ref_mag_filter_token_candidates`, `resolve_ref_mag_for_filter`) | Verbatim (one blank line lost trailing whitespace). |
 | `schemas.py` | 316 | `common/schemas.py` | field-cal subset of 331 | Verbatim per class; base model reduced (§4.1); catalog schemas re-exported from `algorithms/catalogs/` (§4.4). |
-| `batch_wcs_photometry_zeropoint_export.py` | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Verbatim except the repo-root discovery seam (§4.6). |
-| `deps.py` | 130 | — | — | **New file.** Seam module only; contains no math. |
+| batch exporter | 195 | `OPD/batch_wcs_photometry_zeropoint_export.py` | 180 (all) | Deliberately removed: batch orchestration is not a maintained Kepler API. |
 | `__init__.py` | 58 | — | — | **New file.** Public API surface. |
 
 ##### Catalog metadata — MOVED OUT
@@ -902,37 +890,13 @@ behaviourally load-bearing:**
   re-hydrates matched sources through `model_dump()`, so this is inside the
   numeric path. Verified still active: `PhotometryData(mag=nan).model_dump()["mag"] is None`.
 
-##### 4.2 `ObservationAssetProcessingRun` → duck-typed `Any`
+##### 4.2 `ObservationAssetProcessingRun` → explicit values
 
-Two sites: `field_cal.perform_field_calibration` and
-`field_cal._filter_variable_stars`.
+The maintained calibration API receives WCS, supplied catalog and variable rows,
+and optional provenance `file_id` directly. The upstream row remains provenance
+only; Kepler does not recreate it.
 
-Only `.id` (source-ID prefix + logging) and `.observation_asset_id` (used as
-`file_id`) are read. `schemas.ProcessingRunRef` is a concrete stand-in for
-standalone callers. The third upstream site was the catalog query entry point,
-which never read the parameter at all; `algorithms/query/runner.py` drops it (§4.4).
-
-##### 4.3 Cross-domain callables → `algorithms/fieldcal/deps.py`
-
-| `deps` name | Was | Belongs in |
-|---|---|---|
-| `run_photometry` | `from .photometry import run_photometry` | `algorithms/photometry/` |
-| `run_source_extraction` | `from .source_extraction import run_source_extraction` | `algorithms/photometry/` |
-| `get_source_radec` | `from .source_extraction import get_source_radec` | `algorithms/photometry/` |
-| `build_wcs_for_processing_run` | `from .wcs import build_wcs_for_processing_run` | `algorithms/wcs/` |
-| `solve_wcs` | `from .wcs import solve_wcs` (batch driver only) | `algorithms/wcs/` |
-
-Unassigned, each raises `FieldCalDependencyError` naming the original symbol.
-Call sites use `deps.<name>(...)` rather than a `from .deps import <name>`
-binding so late assignment works.
-
-One behavioural note on `build_wcs_for_processing_run`: the Skynet original is
-`build_wcs_from_header(header) or build_wcs_from_processing_run_solution(processing_run)`.
-The second branch reconstructs a WCS from persisted DB rows and is ORM
-persistence — it is not reproduced. A header-only implementation gives the
-behaviour field calibration actually depends on.
-
-##### 4.4 Catalog ownership → `algorithms/catalogs/` and `algorithms/query/`
+##### 4.3 Catalog ownership → `algorithms/catalogs/` and `algorithms/query/`
 
 Originally this extraction copied catalog metadata into `fieldcal/catalogs/` and
 severed the query backends, so `query_box` / `query_circ` / `query_objects` /
@@ -945,14 +909,11 @@ What changed in `fieldcal`:
 |---|---|
 | `from .catalogs import CATALOGS` | `from algorithms.catalogs import CATALOGS` |
 | `from .catalog_plugins import CATALOG_OPTIONS` | `from algorithms.catalogs import CATALOG_OPTIONS` |
-| `from .catalog_query import query_catalogs_for_processing_run` | `deps.query_catalogs(...)` |
+| `from .catalog_query import query_catalogs_for_processing_run` | `tools.photometry` resolves rows before calling field calibration |
 | `fieldcal.schemas` defined `CatalogSource`, `Mag`, ... | re-exported from `algorithms.catalogs.schemas` |
 
-`deps.query_catalogs` is the one new seam, and unlike the other entries in
-`deps.py` it has a **working default** — it lazily imports
-`algorithms.query.runner.query_catalogs` on first call. So catalog fetching needs
-no wiring, and `import algorithms.fieldcal` still pulls in no astroquery.
-Override it to route queries elsewhere.
+The deterministic algorithm package does not query catalogs. `tools.photometry`
+selects catalogs and queries them for each public tool call.
 
 Two consequences worth noting:
 
@@ -971,19 +932,17 @@ The three magnitude-math overrides — `LandoltCatalog.table_to_sources`,
 throughout and are now live: the first two reach the real VizieR row mapper
 through `super()` via the MRO that `algorithms/query/binding.py` constructs.
 
-##### 4.5 `skylib` absolute imports → shared `skylib_lite` imports
+##### 4.4 `skylib` absolute imports → shared `skylib_lite` imports
 
 `from skylib.util.{stats,angle,fits} import ...` →
 `from algorithms.skylib_lite.util.{stats,angle,fits} import ...`. Mirrors the
 pattern used by `algorithms/photometry/` and `algorithms/wcs/`.
 
-##### 4.6 Repo-root discovery (batch driver)
+##### 4.5 Batch driver
 
-`_find_repo_root()` walked ancestors looking for `packages/py/skynet-db`, then
-derived `../skynet-data/pipeline_data`. That marker cannot exist in Kepler, so
-the walk was replaced with `$KEPLER_PIPELINE_DATA_DIR` (default
-`./pipeline_data`). Only *where the driver looks for data* changed; the batch
-logic and every calibration setting literal are untouched.
+The upstream exporter is deliberately not maintained. Kepler tools execute one
+known input per call and return structured results rather than iterating a
+directory, persisting run state, or aggregating CSV output.
 
 ---
 

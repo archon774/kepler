@@ -63,42 +63,49 @@ from tools.models import (
 __all__ = [
     "list_photometry_targets",
     "run_photometry_on_target",
-    "wire_fieldcal_deps",
     "calibrate_zeropoint",
 ]
 
 
-def wire_fieldcal_deps() -> None:
-    """Wire the ``algorithms.fieldcal.deps`` seam to this repo's own photometry
-    and WCS implementations.
+def _resolve_calibration_inputs(
+    header,
+    wcs,
+    *,
+    catalog_sources: list | None,
+    catalogs: list[str] | None,
+    variable_check_tol: float | None,
+) -> tuple[list, list | None, list[str]]:
+    """Resolve remote catalog data at the tool boundary for one calibration call."""
+    from algorithms.catalogs import CATALOGS
+    from algorithms.query.runner import query_catalogs
+    from algorithms.query.selection import select_catalogs_for_filter
 
-    ``field_cal.py`` reads these as ``deps.<name>(...)`` at call time, so
-    assigning them here rather than at import is exactly what the seam is for
-    (see ``docs/extraction.md``, Field Calibration). Idempotent, and the single
-    wiring site: ``tools.claude_photometry_haiku_tool`` calls this too, so the
-    CLI and :func:`calibrate_zeropoint` cannot drift apart.
-
-    ``deps.query_catalogs`` already defaults to ``query.runner.query_catalogs``
-    and needs no wiring.
-    """
-    from algorithms.fieldcal import deps as fieldcal_deps
-    from algorithms.photometry.photometry import run_photometry
-    from algorithms.photometry.source_extraction import (
-        build_wcs_from_header,
-        get_source_radec,
-        run_source_extraction,
+    image_filter = header.get("FILTER") if hasattr(header, "get") else None
+    selected_catalogs = list(catalogs) if catalogs else select_catalogs_for_filter(
+        list(CATALOGS), image_filter
     )
+    if catalog_sources is None:
+        if not selected_catalogs:
+            raise ValueError(f"No calibration catalog supports filter {image_filter!r}")
+        catalog_sources = query_catalogs(
+            selected_catalogs,
+            wcs=wcs,
+            skip_failed=True,
+            stop_on_success=True,
+            image_filter=image_filter,
+        )
+    elif not selected_catalogs:
+        selected_catalogs = sorted(
+            {name for name in (getattr(source, "catalog_name", None) for source in catalog_sources) if name}
+        )
 
-    fieldcal_deps.run_photometry = run_photometry
-    fieldcal_deps.run_source_extraction = run_source_extraction
-    fieldcal_deps.get_source_radec = get_source_radec
-    # EXTRACTED: was ``build_wcs_from_header(header) or
-    # build_wcs_from_processing_run_solution(...)``; the DB-backed fallback was
-    # dropped upstream of fieldcal (see deps.py), so a header-only
-    # implementation is exactly what field calibration depends on here.
-    fieldcal_deps.build_wcs_for_processing_run = (
-        lambda _processing_run, hdr: build_wcs_from_header(hdr)
-    )
+    variable_sources = None
+    if catalog_sources is not None and variable_check_tol and variable_check_tol > 0:
+        try:
+            variable_sources = query_catalogs(["VSX"], wcs=wcs, skip_failed=True)
+        except Exception:
+            variable_sources = None
+    return list(catalog_sources), variable_sources, selected_catalogs
 
 
 def list_photometry_targets() -> PhotometryTargetLibrary:
@@ -308,14 +315,14 @@ def calibrate_zeropoint(
         )
 
     from algorithms.fieldcal.field_cal import perform_field_calibration
-    from algorithms.fieldcal.schemas import PhotometricCalibrationSettings, ProcessingRunRef
+    from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
 
     # The same settings classes the CLI field-cal path constructs -- the ones
     # the wired ``run_photometry`` / ``run_source_extraction`` expect.
     from algorithms.photometry.photometry import PhotometrySettings
     from algorithms.photometry.schemas import SourceExtractionSettings
 
-    wire_fieldcal_deps()
+    from algorithms.photometry.source_extraction import build_wcs_from_header
 
     offline = catalog_sources is not None
     selected_catalogs = list(catalogs) if catalogs else None
@@ -327,23 +334,6 @@ def calibrate_zeropoint(
                 if name
             }
         )
-    if selected_catalogs is None:
-        from algorithms.catalogs import CATALOGS
-        from algorithms.query.selection import select_catalogs_for_filter
-
-        image_filter = header.get("FILTER") if hasattr(header, "get") else None
-        selected_catalogs = select_catalogs_for_filter(list(CATALOGS), image_filter)
-        if not selected_catalogs:
-            return ZeropointComparison(
-                errors=[
-                    ToolError(
-                        code="no_catalog_for_filter",
-                        message=f"No calibration catalog supports filter {image_filter!r}; "
-                        "pass catalogs= or catalog_sources=.",
-                    )
-                ]
-            )
-
     field_cal_settings = PhotometricCalibrationSettings(
         catalogs=selected_catalogs or ["APASS"],
         # Replaying the exact rows upstream fed calc_solution: skip the
@@ -356,15 +346,25 @@ def calibrate_zeropoint(
     )
 
     try:
+        wcs = build_wcs_from_header(header)
+        if wcs is None:
+            raise ValueError("Missing WCS needed for calibration")
+        resolved_sources, variable_sources, selected_catalogs = _resolve_calibration_inputs(
+            header,
+            wcs,
+            catalog_sources=catalog_sources,
+            catalogs=selected_catalogs,
+            variable_check_tol=field_cal_settings.variable_check_tol,
+        )
         outcome = perform_field_calibration(
-            ProcessingRunRef(),
             header.copy(),
             data,
+            wcs=wcs,
             field_cal_settings=field_cal_settings,
             photometry_settings=photometry_settings,
             extraction_settings=SourceExtractionSettings(),
-            catalog_names=selected_catalogs or None,
-            catalog_sources=catalog_sources,
+            catalog_sources=resolved_sources,
+            variable_sources=variable_sources,
         )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
         return ZeropointComparison(

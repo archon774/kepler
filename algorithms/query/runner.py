@@ -29,10 +29,9 @@ EXTRACTED FROM:
   distinctive parts, the combined-FOV bounding box and the FOV geometry, are in
   ``query/geometry.py``; the job/ORM wrapper is not extracted.
 
-SEVERED: upstream's signature led with a ``processing_run``
-(``ObservationAssetProcessingRun``) SQLAlchemy row that the function never read
-— it was there for call-site symmetry. Kepler drops the parameter rather than
-carry a duck-typed placeholder.
+SEVERED: upstream's signature led with an SQLAlchemy job row that the function
+never read — it was there for call-site symmetry. Kepler drops that parameter
+rather than carry a duck-typed placeholder.
 """
 
 from __future__ import annotations

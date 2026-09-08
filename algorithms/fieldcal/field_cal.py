@@ -3,16 +3,15 @@
 EXTRACTED FROM: skynet/packages/py/skynet-db/skynet_db/runners/
 observation_asset_processing/optical_data_processing/field_cal.py (701 lines).
 
-Copied verbatim.  The only edits are import rewrites and the four
-cross-domain call seams routed through ``fieldcal.deps`` (photometry, source
-extraction, WCS construction) — every marked with an ``# EXTRACTED:`` comment.
-No algorithm, constant, ordering or comment has been changed.
+Copied verbatim. The maintained interface supplies WCS and catalog rows
+explicitly, while deterministic extraction and photometry are ordinary imports.
+No numerical expression, constant, or ordering has been changed.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 import logging
-from typing import Any, Iterable, Mapping
+from typing import Iterable, Mapping
 
 import numpy as np
 from astropy.wcs import WCS
@@ -24,10 +23,6 @@ from scipy.spatial import cKDTree
 from algorithms.skylib_lite.util.angle import angdist
 from algorithms.skylib_lite.util.fits import get_fits_time
 
-# EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
-# (SQLAlchemy ORM row).  Field calibration reads only `.id` and
-# `.observation_asset_id` off it, so the parameter is duck-typed as `Any`; see
-# `schemas.ProcessingRunRef` for a concrete stand-in.
 # EXTRACTED: was `from skynet_db.runners.common.schemas import (...)`
 from .schemas import (
     FieldCalResult,
@@ -43,16 +38,10 @@ from .schemas import (
 # functions now live in fieldcal/solution.py and fieldcal/ref_mag.py).
 from .solution import calc_solution
 from .ref_mag import resolve_ref_mag_for_filter
-# Catalog metadata (band tables and colour transforms) is read directly from
-# Kepler's catalogs package: it is pure data and pulls in no network stack.
-# The queries themselves go through deps.query_catalogs -- see deps.py.
+# Catalog metadata (band tables and colour transforms) is pure local data.
 from algorithms.catalogs import CATALOGS
-# EXTRACTED: was `from .photometry import run_photometry`,
-# `from .source_extraction import get_source_radec, run_source_extraction` and
-# `from .wcs import build_wcs_for_processing_run` — sibling optical-processing
-# stages that are not field calibration.  They are reached through the
-# `fieldcal.deps` seam module (imported as a module so late injection works).
-from . import deps
+from algorithms.photometry.photometry import run_photometry
+from algorithms.photometry.source_extraction import get_source_radec, run_source_extraction
 from .schemas import CatalogSource
 
 __all__ = ["perform_field_calibration"]
@@ -79,9 +68,9 @@ def _normalize_catalog_sources(
 def _ensure_unique_source_ids(
     sources: list[CatalogSource],
     *,
-    run_id: int | None,
+    file_id: int | None,
 ) -> None:
-    prefix = f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{run_id or 'fieldcal'}_"
+    prefix = f"fieldcal_{file_id if file_id is not None else 'source'}_"
     source_ids: set[str | tuple[str, int | None]] = set()
     for idx, source in enumerate(sources):
         source_id = getattr(source, "id", None)
@@ -164,10 +153,9 @@ def _catalog_filter_lookup_map(
 def _filter_variable_stars(
     sources: list[CatalogSource],
     *,
-    processing_run: Any,  # EXTRACTED: was ObservationAssetProcessingRun
+    variable_sources: Iterable[CatalogSource] | None,
     wcs: WCS | None,
     header,
-    data: np.ndarray,
     variable_check_tol: float | None,
 ) -> list[CatalogSource]:
     if not variable_check_tol or variable_check_tol <= 0:
@@ -175,15 +163,7 @@ def _filter_variable_stars(
     if wcs is None:
         return sources
 
-    try:
-        var_stars = deps.query_catalogs(
-            ["VSX"],
-            wcs=wcs,
-            skip_failed=True,
-        )
-    except Exception:
-        return sources
-
+    var_stars = list(variable_sources or [])
     if not var_stars:
         return sources
 
@@ -191,8 +171,7 @@ def _filter_variable_stars(
 
     filtered: list[CatalogSource] = []
     for source in sources:
-        # EXTRACTED: was `get_source_radec(...)` from .source_extraction
-        ra, dec = deps.get_source_radec(
+        ra, dec = get_source_radec(
             SourceExtractionData(**source.model_dump(exclude={"mags", "catalog_name", "label"})),
             epoch,
             wcs,
@@ -495,30 +474,24 @@ def _collect_calibration_sources(
 
 
 def perform_field_calibration(
-    processing_run: Any,  # EXTRACTED: was ObservationAssetProcessingRun
     header,
     data: np.ndarray,
     *,
+    wcs: WCS | None = None,
+    catalog_sources: Iterable[CatalogSource | Mapping[str, object]] | None = None,
+    variable_sources: Iterable[CatalogSource] | None = None,
+    file_id: int | None = None,
     field_cal_settings: PhotometricCalibrationSettings | None = None,
     photometry_settings: PhotometrySettings | None = None,
     extraction_settings: SourceExtractionSettings | None = None,
-    catalog_names: Iterable[str] | None = None,
-    catalog_sources: Iterable[CatalogSource | Mapping[str, object]] | None = None,
     detected_sources: list[SourceExtractionData] | None = None,
     use_provided_photometry: bool = False,
 ) -> tuple[float | None, FieldCalResult] | None:
     settings = field_cal_settings or PhotometricCalibrationSettings()
     phot_settings = photometry_settings or PhotometrySettings()
-    configured_catalogs = list(catalog_names) if catalog_names else list(settings.catalogs or [])
+    configured_catalogs = list(settings.catalogs or [])
 
-    file_id = getattr(processing_run, "observation_asset_id", None)
-    logger.info(
-        "Starting field calibration for run_id=%s file_id=%s",
-        getattr(processing_run, "id", None),
-        file_id,
-    )
-    # EXTRACTED: was `build_wcs_for_processing_run(...)` from .wcs
-    wcs = deps.build_wcs_for_processing_run(processing_run, header)
+    logger.info("Starting field calibration for file_id=%s", file_id)
     logger.info("WCS available for field calibration: %s", wcs is not None)
 
     sources_input = catalog_sources if catalog_sources is not None else settings.catalog_sources
@@ -526,42 +499,18 @@ def perform_field_calibration(
     _attach_catalog_magnitudes(sources)
 
     if not sources or not _has_reference_magnitudes(sources):
-        catalogs = list(configured_catalogs)
-        if not catalogs and sources:
-            catalogs = _catalogs_from_sources(sources)
-        if not catalogs:
-            raise ValueError("Missing catalog sources or catalog list for field calibration")
-        if wcs is None:
-            raise ValueError("Missing WCS needed to query catalogs for calibration")
-        image_filter = _image_filter_from_header(header)
-        logger.info(
-            "Querying catalogs for field calibration: %s (filter=%r)",
-            ", ".join(catalogs),
-            image_filter,
-        )
-        sources = deps.query_catalogs(
-            catalogs,
-            wcs=wcs,
-            skip_failed=True,
-            stop_on_success=True,
-            image_filter=image_filter,
-            custom_filter_lookup=settings.custom_filter_lookup or None,
-        )
-        _attach_catalog_magnitudes(sources)
-        logger.info("Catalog query returned %d sources", len(sources))
-    else:
-        logger.info("Using %d provided catalog sources for field calibration", len(sources))
+        raise ValueError("Missing catalog sources for field calibration")
+    logger.info("Using %d provided catalog sources for field calibration", len(sources))
 
     if not sources:
         raise RuntimeError("No catalog sources available for calibration")
 
-    _ensure_unique_source_ids(sources, run_id=getattr(processing_run, "id", None))
+    _ensure_unique_source_ids(sources, file_id=file_id)
     sources = _filter_variable_stars(
         sources,
-        processing_run=processing_run,
+        variable_sources=variable_sources,
         wcs=wcs,
         header=header,
-        data=data,
         variable_check_tol=settings.variable_check_tol,
     )
     logger.info("Catalog sources after variable-star filter: %d", len(sources))
@@ -570,8 +519,7 @@ def perform_field_calibration(
     background_rms: np.ndarray | None = None
 
     if extraction_settings is not None and detected_sources is None:
-        # EXTRACTED: was `run_source_extraction(...)` from .source_extraction
-        detected_sources, background, background_rms = deps.run_source_extraction(
+        detected_sources, background, background_rms = run_source_extraction(
             data,
             header,
             extraction_settings,
@@ -639,8 +587,7 @@ def perform_field_calibration(
         # from legacy Afterglow output.  (Annotation added by the extraction;
         # the statement itself is verbatim from field_cal.py:612.)
         cal_phot_settings = phot_settings.model_copy(update={"apcorr_tol": 0.0})
-        # EXTRACTED: was `run_photometry(...)` from .photometry
-        photometry_results = deps.run_photometry(
+        photometry_results = run_photometry(
             data,
             header,
             normalized_sources,

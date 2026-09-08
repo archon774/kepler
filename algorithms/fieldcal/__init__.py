@@ -17,21 +17,11 @@ Pipeline (``perform_field_calibration``):
                      ->  reference-magnitude resolution per image FILTER
                      ->  weighted zero-point solve with Chauvenet rejection
 
-Before calling ``perform_field_calibration``, wire the cross-domain callables
-that this package does not own::
-
-    from algorithms.fieldcal import deps
-    deps.run_photometry = ...              # algorithms.photometry
-    deps.run_source_extraction = ...       # algorithms.photometry
-    deps.get_source_radec = ...            # algorithms.photometry
-    deps.build_wcs_for_processing_run = ...  # algorithms.wcs
-
-``deps.query_catalogs`` already has a working default backed by Kepler's
-``algorithms.query`` package, so catalog fetching needs no wiring; override it to
-route queries elsewhere.
+Callers provide WCS, catalog rows, optional variable-star rows, and any desired
+source-extraction or photometry settings explicitly. Catalog queries belong at
+the public tool boundary, not in this deterministic algorithm package.
 """
 
-from . import deps
 from .field_cal import perform_field_calibration
 from .ref_mag import resolve_ref_mag_for_filter
 from .schemas import (
@@ -41,7 +31,6 @@ from .schemas import (
     PhotometricCalibrationSettings,
     PhotometryData,
     PhotometrySettings,
-    ProcessingRunRef,
     SourceExtractionData,
     SourceExtractionSettings,
 )
@@ -54,11 +43,9 @@ __all__ = [
     "PhotometricCalibrationSettings",
     "PhotometryData",
     "PhotometrySettings",
-    "ProcessingRunRef",
     "SourceExtractionData",
     "SourceExtractionSettings",
     "calc_solution",
-    "deps",
     "perform_field_calibration",
     "resolve_ref_mag_for_filter",
 ]

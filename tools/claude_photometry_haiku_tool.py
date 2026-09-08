@@ -100,13 +100,7 @@ def compute_field_cal_zero_point(
     from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
     from algorithms.query.selection import select_catalogs_for_filter
 
-    from tools.photometry import wire_fieldcal_deps
-
-    # Wire the seams `fieldcal` cut when it was extracted from Skynet (see
-    # docs/extraction.md, Field Calibration) to this repo's own photometry/WCS
-    # implementations. One shared wiring site, so this CLI path and
-    # `tools.photometry.calibrate_zeropoint` cannot drift apart.
-    wire_fieldcal_deps()
+    from tools.photometry import _resolve_calibration_inputs
 
     wcs = build_wcs_from_header(header)
     if wcs is None:
@@ -124,13 +118,22 @@ def compute_field_cal_zero_point(
     photometry_settings = PhotometrySettings(mode="aperture", a=5.0, a_in_px=8.0, a_out_px=12.0)
 
     try:
+        catalog_sources, variable_sources, _ = _resolve_calibration_inputs(
+            header,
+            wcs,
+            catalog_sources=None,
+            catalogs=selected_catalogs,
+            variable_check_tol=field_cal_settings.variable_check_tol,
+        )
         outcome = perform_field_calibration(
-            ProcessingRun(),
             header,
             data,
+            wcs=wcs,
             field_cal_settings=field_cal_settings,
             photometry_settings=photometry_settings,
             extraction_settings=extraction_settings,
+            catalog_sources=catalog_sources,
+            variable_sources=variable_sources,
         )
     except Exception as exc:  # network failures, no catalog matches, etc.
         return None, None, f"field calibration failed: {exc}", None

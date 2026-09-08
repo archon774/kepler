@@ -1,16 +1,13 @@
-"""Field-calibration orchestration: the dependency seam and the matching stage.
+"""Field-calibration orchestration and matching.
 
-``fieldcal`` owns the zero-point solve and nothing else. Everything it needs
-from ``algorithms/wcs/`` and ``algorithms/photometry/`` arrives through ``algorithms.fieldcal.deps``, a module of
-module-level names that default to raising stubs. That seam and the source
-matching that feeds the solver are what this file covers; the solver itself is
-in ``test_fieldcal_solution.py``.
+``fieldcal`` receives WCS and catalog data as explicit inputs, then composes
+deterministic extraction and photometry locally. This file covers those inputs
+and the source matching that feeds the solver; the solver itself is in
+``test_fieldcal_solution.py``.
 
 Two documented invariants get particular attention because both are the kind of
 thing a tidy-up would break:
 
-* call sites use ``deps.<name>(...)`` rather than a ``from .deps import <name>``
-  binding, so that assignment-based late injection works at all;
 * calibration photometry forces ``apcorr_tol = 0.0``, which is what keeps the
   zero point matching legacy Afterglow.
 
@@ -23,15 +20,11 @@ Modelled on ``skynet .../tests/runners/test_field_cal.py``.
 
 from __future__ import annotations
 
-import importlib
-from datetime import datetime, timezone
-
 import numpy as np
 import pytest
 from astropy.wcs import WCS
 
 from algorithms.catalogs.schemas import CatalogSource, Mag
-from algorithms.fieldcal import deps, field_cal
 from algorithms.fieldcal.field_cal import (
     _attach_catalog_magnitudes,
     _catalog_filter_lookup_map,
@@ -51,18 +44,6 @@ from algorithms.fieldcal.schemas import (
     SourceExtractionSettings,
 )
 from algorithms.fieldcal.schemas import PhotometrySettings as FieldCalPhotometrySettings
-
-
-@pytest.fixture
-def restore_deps():
-    """Reload ``algorithms.fieldcal.deps`` after a test wires implementations into it.
-
-    ``deps`` is module-global mutable state by design, so a test that assigns to
-    it would otherwise leak into every test after it.
-    """
-    yield
-    importlib.reload(deps)
-    importlib.reload(field_cal)
 
 
 def _wcs(crpix=(512.0, 512.0), crval=(180.0, 10.0), scale=1.7e-4, shape=(1027, 1056)):
@@ -87,84 +68,12 @@ def _catalog_source(idx, ra_hours, dec_degs, *, mags=None, **kw):
 
 
 # ---------------------------------------------------------------------------
-# The dependency seam
+# Explicit calibration inputs
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize(
-    "name",
-    ["run_photometry", "run_source_extraction", "get_source_radec",
-     "build_wcs_for_processing_run", "solve_wcs"],
-)
-def test_unwired_dependency_raises_with_a_wiring_hint(name):
-    """The stubs must name themselves, their upstream origin, and the fix.
-
-    A bare ``NotImplementedError`` here would leave a caller guessing which of
-    five names they forgot; the message is the seam's documentation.
-    """
-    with pytest.raises(deps.FieldCalDependencyError) as exc:
-        getattr(deps, name)()
-
-    message = str(exc.value)
-    assert f"algorithms.fieldcal.deps.{name}" in message
-    assert "EXTRACTED: was" in message
-    assert f"algorithms.fieldcal.deps.{name} = <callable>" in message
-
-
-def test_dependency_error_is_a_notimplementederror():
-    """Callers upstream catch ``NotImplementedError``; keep that relationship."""
-    assert issubclass(deps.FieldCalDependencyError, NotImplementedError)
-
-
-def test_query_catalogs_is_the_one_dependency_with_a_working_default():
-    """It resolves to ``algorithms.query.runner.query_catalogs`` — and only on first call.
-
-    The deferred import is what keeps ``import algorithms.fieldcal`` free of astroquery.
-    Asserting the function body has not yet imported ``algorithms.query.runner`` at import
-    time is the only way to catch a refactor that hoists it to module scope.
-    """
-    assert deps.query_catalogs is not None
-    assert "query.runner" in deps._default_query_catalogs.__doc__ or True
-    source = deps._default_query_catalogs.__code__.co_consts
-    assert any("deferred" in str(c) for c in source if isinstance(c, str))
-
-
-def test_importing_fieldcal_does_not_import_astroquery():
-    """The documented cost guarantee: no network stack for a supplied-source run."""
-    import subprocess
-    import sys
-
-    result = subprocess.run(
-        [sys.executable, "-c",
-         "import sys, algorithms.fieldcal; "
-         "assert 'astroquery' not in sys.modules, sorted(m for m in sys.modules if 'astroquery' in m)"],
-        capture_output=True, text=True, cwd=str(__import__("pathlib").Path(__file__).parent.parent),
-    )
-    assert result.returncode == 0, result.stderr
-
-
-def test_late_injection_reaches_call_sites(restore_deps):
-    """Assigning to ``deps`` after ``field_cal`` was imported must take effect.
-
-    This is the whole reason call sites are written ``deps.build_wcs_...(...)``
-    instead of importing the name. A ``from .deps import`` binding would freeze
-    the stub at import time and this test would raise FieldCalDependencyError.
-    """
-    calls: list[tuple] = []
-
-    def fake_build_wcs(processing_run, header):
-        calls.append((processing_run, header))
-        return None
-
-    deps.build_wcs_for_processing_run = fake_build_wcs
-
-    # Returning None takes the "no WCS" branch, which is a clean early exit that
-    # proves the injected callable ran without needing any other dependency
-    # wired. (``PhotometricCalibrationSettings`` defaults ``catalogs`` to
-    # ``["APASS"]``, so the missing-catalog branch is not the one reached.)
-    with pytest.raises(ValueError, match="Missing WCS needed to query catalogs"):
-        perform_field_calibration(object(), {}, np.zeros((4, 4), dtype=np.float32))
-
-    assert len(calls) == 1
+def test_calibration_requires_supplied_catalog_sources():
+    with pytest.raises(ValueError, match="Missing catalog sources"):
+        perform_field_calibration({}, np.zeros((4, 4), dtype=np.float32), wcs=_wcs())
 
 
 # ---------------------------------------------------------------------------
@@ -191,12 +100,12 @@ def test_normalize_backfills_file_id_but_never_overwrites_one():
     assert [s.file_id for s in normalized] == [77, 5]
 
 
-def test_missing_source_ids_are_generated_with_a_run_scoped_prefix():
+def test_missing_source_ids_are_generated_with_a_call_local_prefix():
     sources = [CatalogSource(ra_hours=1.0, dec_degs=2.0) for _ in range(3)]
-    _ensure_unique_source_ids(sources, run_id=42)
+    _ensure_unique_source_ids(sources, file_id=42)
 
     assert all(s.id and s.id.endswith(f"_{i + 1}") for i, s in enumerate(sources))
-    assert all("_42_" in s.id for s in sources)
+    assert all(s.id.startswith("fieldcal_42_") for s in sources)
 
 
 def test_duplicate_source_ids_are_rejected():
@@ -207,7 +116,7 @@ def test_duplicate_source_ids_are_rejected():
     """
     sources = [CatalogSource(id="dup", ra_hours=1.0, dec_degs=2.0) for _ in range(2)]
     with pytest.raises(ValueError, match='Non-unique source ID "dup"'):
-        _ensure_unique_source_ids(sources, run_id=1)
+        _ensure_unique_source_ids(sources, file_id=1)
 
 
 def test_ids_may_repeat_across_different_files():
@@ -216,7 +125,7 @@ def test_ids_may_repeat_across_different_files():
         CatalogSource(id="shared", file_id=1, ra_hours=1.0, dec_degs=2.0),
         CatalogSource(id="shared", file_id=2, ra_hours=1.0, dec_degs=2.0),
     ]
-    _ensure_unique_source_ids(sources, run_id=1)  # must not raise
+    _ensure_unique_source_ids(sources, file_id=1)  # must not raise
 
 
 def test_magnitude_dicts_are_promoted_to_mag_models():
@@ -504,10 +413,8 @@ def test_collect_infers_the_catalog_name_when_exactly_one_is_configured():
 # End to end on a real frame
 # ---------------------------------------------------------------------------
 
-def test_perform_field_calibration_end_to_end_on_a_real_frame(
-    frame_image, restore_deps
-):
-    """Wire the seam to Kepler's own photometry/wcs and calibrate a real frame.
+def test_perform_field_calibration_end_to_end_on_a_real_frame(frame_image):
+    """Calibrate a real frame using only supplied scientific inputs.
 
     Catalog sources are synthesised at the sky positions of sources actually
     detected in the frame, with reference magnitudes offset by a known constant,
@@ -517,18 +424,11 @@ def test_perform_field_calibration_end_to_end_on_a_real_frame(
     path, and nothing touches the network.
     """
     from algorithms.photometry.photometry import run_photometry
-    from algorithms.photometry.source_extraction import (
-        get_source_radec, run_source_extraction,
-    )
+    from algorithms.photometry.source_extraction import run_source_extraction
     from algorithms.photometry.schemas import (
         SourceExtractionSettings as PhotExtractionSettings,
     )
-    from algorithms.wcs.wcs import build_wcs_for_processing_run
-
-    deps.run_photometry = run_photometry
-    deps.run_source_extraction = run_source_extraction
-    deps.get_source_radec = get_source_radec
-    deps.build_wcs_for_processing_run = build_wcs_for_processing_run
+    from algorithms.photometry.source_extraction import build_wcs_from_header
 
     data, header = frame_image("ngc3628")
     header = header.copy()
@@ -583,12 +483,10 @@ def test_perform_field_calibration_end_to_end_on_a_real_frame(
     ]
     assert len(catalog_sources) > 10
 
-    class Run:
-        id = 1
-        observation_asset_id = 1
-
     zero_point, result = perform_field_calibration(
-        Run(), header, data,
+        header, data,
+        wcs=build_wcs_from_header(header),
+        file_id=1,
         field_cal_settings=PhotometricCalibrationSettings(
             catalogs=["APASS"], source_match_tol=3.0, variable_check_tol=0,
         ),
@@ -607,7 +505,7 @@ def test_perform_field_calibration_end_to_end_on_a_real_frame(
     assert header["PHOT_CAL"] == "APASS"
 
 
-def test_calibration_photometry_forces_apcorr_tol_to_zero(restore_deps):
+def test_calibration_photometry_forces_apcorr_tol_to_zero(monkeypatch):
     """LEGACY AFTERGLOW PARITY — the caller's ``apcorr_tol`` must not survive.
 
     ``field_cal.py`` copies the photometry settings with ``apcorr_tol = 0.0``
@@ -630,8 +528,7 @@ def test_calibration_photometry_forces_apcorr_tol_to_zero(restore_deps):
     ra_deg, dec_deg = w.all_pix2world(500.0, 500.0, 1)
     ra_hours, dec = float(ra_deg) / 15.0, float(dec_deg)
 
-    deps.build_wcs_for_processing_run = lambda run, header: w
-    deps.run_photometry = spy_run_photometry
+    monkeypatch.setattr("algorithms.fieldcal.field_cal.run_photometry", spy_run_photometry)
 
     catalog_sources = [
         CatalogSource(
@@ -650,7 +547,8 @@ def test_calibration_photometry_forces_apcorr_tol_to_zero(restore_deps):
     ]
 
     perform_field_calibration(
-        object(), {"FILTER": "V"}, np.zeros((1027, 1056), dtype=np.float32),
+        {"FILTER": "V"}, np.zeros((1027, 1056), dtype=np.float32),
+        wcs=w,
         field_cal_settings=PhotometricCalibrationSettings(
             catalogs=["APASS"], source_match_tol=5.0, variable_check_tol=0,
         ),
