@@ -23,6 +23,9 @@ NOT_TOOL_MODULES = {
     # The provider-neutral model port -- a backend interface for the agent
     # loop, not a callable tool. pkgutil.iter_modules yields it as a package.
     "tools.llm",
+    # The headless agent loop (run_session, events, the moved SYSTEM_PROMPT).
+    # Infrastructure the runner shim and the console consume, not a tool.
+    "tools.agent",
 }
 
 

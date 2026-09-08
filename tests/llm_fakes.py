@@ -73,6 +73,58 @@ class FakeAnthropicMessages:
         return next(self._streams)
 
 
+class StubBackend:
+    """A hand-written ``ModelBackend`` for engine and runner tests: no SDK, no
+    network. ``complete()`` returns queued ``ModelResponse`` objects and
+    forwards their text to ``on_text`` once, the way every non-Anthropic
+    adapter does."""
+
+    def __init__(
+        self,
+        responses: Iterable[Any],
+        *,
+        spec: str = "stub/model",
+        max_output_tokens: int = 4096,
+    ) -> None:
+        from tools.llm.base import Capabilities
+
+        self._responses = iter(list(responses))
+        self.spec = spec
+        self.capabilities = Capabilities(
+            streaming=False,
+            parallel_tool_calls=True,
+            native_tool_call_ids=True,
+            schema_dialect="json_schema",
+            supports_union_types=True,
+            max_output_tokens=max_output_tokens,
+        )
+        self.calls: list[dict[str, Any]] = []
+
+    def complete(
+        self,
+        *,
+        messages: Any,
+        tools: Any,
+        system: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+        on_text: Any = None,
+    ) -> Any:
+        self.calls.append(
+            {
+                "messages": list(messages),
+                "tools": tools,
+                "system": system,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+        )
+        response = next(self._responses)
+        if on_text is not None and response.text:
+            on_text(response.text)
+        return response
+
+
 def fake_anthropic_module(messages: FakeAnthropicMessages) -> SimpleNamespace:
     """A stand-in ``anthropic`` module: ``anthropic.Anthropic(api_key=...)``
     hands back a client whose ``.messages`` is ``messages`` and records the key
