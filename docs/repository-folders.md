@@ -188,8 +188,6 @@ Important files and subfolders:
   `perform_field_calibration`.
 - `solution.py`: zero-point solver, exposed as `calc_solution`.
 - `ref_mag.py`: reference-magnitude/filter-resolution logic.
-- `deps.py`: seam for cross-domain dependencies owned by `algorithms.wcs`,
-  `algorithms.photometry`, and `algorithms.query`.
 - `algorithms.skylib_lite`: shared vendored utility subset used by calibration.
 - [extraction.md](extraction.md), Field Calibration: provenance, severed Skynet
   dependencies, known parity behavior, dependency notes, and verification.
@@ -199,9 +197,8 @@ Current caveats:
 - Field calibration does not own catalogs. Band tables and colour transforms
   live in `algorithms.catalogs`; catalog selection and querying live in
   `algorithms.query`.
-- `algorithms.fieldcal.deps` must be wired before `perform_field_calibration` can
-  call WCS, source extraction, or photometry. `deps.query_catalogs` is the
-  exception: it defaults to `algorithms.query` and needs no wiring.
+- `perform_field_calibration` receives WCS, catalog rows, optional variable-star
+  rows, and optional detected sources explicitly. Tools perform catalog queries.
 - `numba` and `scipy` are required for real numeric execution.
 
 ## `algorithms/hrdiagram/`
@@ -458,7 +455,7 @@ Important files:
 
 - `source_extraction.py`: FITS-header WCS construction and source
   extraction entry points.
-- `photometry.py`: `run_photometry` and `perform_photometry`.
+- `photometry.py`: `run_photometry` over explicit detections and optional WCS/background inputs.
 - `schemas.py`: Pydantic settings and data models.
 - `algorithms.skylib_lite`: vendored algorithmic core for aperture photometry,
   exact aperture overlap, centroiding, background estimation, and statistics.

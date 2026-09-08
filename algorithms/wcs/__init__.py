@@ -13,7 +13,7 @@ Layout::
     schemas.py          WCS-related settings / data objects
     header_utils.py     pixel-scale and RA/Dec guesses from FITS keywords
     config.py           backend configuration seam (was Dynaconf)
-    state.py            plain-object seam for the Skynet ORM rows
+    results.py          immutable per-call WCS solve result and metadata
 
 The vendored Skylib astrometry stack and FITS/angle/HDU helpers now live in
 ``algorithms.skylib_lite``.

@@ -8,20 +8,16 @@ with a ``SKYNET_`` env-var prefix — deployment plumbing, not algorithm.
 
 The builders in ``wcs.py`` only ever read five keys, and they read them through
 ``getattr(cfg, NAME, None)``, so any object exposing those attributes works.
-This module provides that shape, sourced from the environment. An unset key
-yields ``None``, which is the same value Dynaconf's ``getattr`` fallback
-produced, and each builder already handles it. ``ANET_TIMEOUT_S`` is the one
-post-extraction addition: it exposes the vendored backend's existing subprocess
-deadline to callers without changing its search behavior.
+This module provides that shape as a pure per-call value object. Tool wrappers
+own environment lookup and pass the resulting values in. ``ANET_TIMEOUT_S`` is
+the one post-extraction addition: it exposes the vendored backend's existing
+subprocess deadline to callers without changing its search behavior.
 
 Callers with their own configuration can pass their object to
-``solve_wcs(..., solver_settings=cfg)``, call the builders directly, or assign
-``algorithms.wcs.wcs.settings``.
+``solve_wcs(..., solver_settings=cfg)`` or call the builders directly.
 """
 
 from __future__ import annotations
-
-import os
 
 
 class SolverSettings:
@@ -46,29 +42,11 @@ class SolverSettings:
         atlas_catalog=None,
         atlas_timeout_s=None,
     ) -> None:
-        self.ANET_INDEX_PATH = (
-            anet_index_path if anet_index_path is not None
-            else os.getenv("ANET_INDEX_PATH")
-        )
-        self.ANET_TIMEOUT_S = (
-            anet_timeout_s if anet_timeout_s is not None
-            else os.getenv("ANET_TIMEOUT_S")
-        )
-        self.ATLAS_CATALOG_ROOT = (
-            atlas_catalog_root if atlas_catalog_root is not None
-            else os.getenv("ATLAS_CATALOG_ROOT")
-        )
-        self.ATLAS_CATALOG = (
-            atlas_catalog if atlas_catalog is not None
-            else os.getenv("ATLAS_CATALOG")
-        )
-        self.ATLAS_TIMEOUT_S = (
-            atlas_timeout_s if atlas_timeout_s is not None
-            else os.getenv("ATLAS_TIMEOUT_S")
-        )
+        self.ANET_INDEX_PATH = anet_index_path
+        self.ANET_TIMEOUT_S = anet_timeout_s
+        self.ATLAS_CATALOG_ROOT = atlas_catalog_root
+        self.ATLAS_CATALOG = atlas_catalog
+        self.ATLAS_TIMEOUT_S = atlas_timeout_s
 
 
-#: EXTRACTED: was `skynet_db.config.settings` (a Dynaconf instance).
-settings = SolverSettings()
-
-__all__ = ["SolverSettings", "settings"]
+__all__ = ["SolverSettings"]

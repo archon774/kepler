@@ -48,12 +48,11 @@ from astropy.table import Table
 from astropy.wcs.utils import proj_plane_pixel_scales
 
 from algorithms.hrdiagram_py.matching import field_footprint
-from algorithms.photometry.photometry import perform_photometry
+from algorithms.photometry.photometry import run_photometry
 from algorithms.photometry.schemas import PhotometrySettings, SourceExtractionSettings
-from algorithms.photometry.source_extraction import build_wcs_from_header
+from algorithms.photometry.source_extraction import build_wcs_from_header, run_source_extraction
 from algorithms.radio import spectral_fitting
 from algorithms.radio.matching import match_sources_to_catalog
-from algorithms.wcs.state import ProcessingRun
 from tools import artifacts
 from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult
@@ -171,11 +170,12 @@ def _extract_radio_sources(fits_path: str, threshold: float = 3.0) -> pd.DataFra
     # than a fixed aperture radius tuned for stellar PSFs -- radio source
     # sizes vary far more than optical PSFs do (point sources to resolved lobes).
     photometry_settings = PhotometrySettings(mode="auto")
-    processing_run = ProcessingRun(observation_asset_id=abs(hash(str(fits_path))) % 10**8)
-
-    results = perform_photometry(
-        processing_run, header, data,
-        settings=photometry_settings, extraction_settings=extraction_settings,
+    sources, background, background_rms = run_source_extraction(
+        data, header, extraction_settings,
+    )
+    results = run_photometry(
+        data, header, sources, photometry_settings,
+        wcs=wcs, background=background, background_rms=background_rms,
     )
     if not results:
         raise RuntimeError(f"No sources detected in {fits_path!r}")

@@ -3,8 +3,7 @@
 # EXTRACTED verbatim from Skynet:
 #   packages/py/skynet-db/skynet_db/runners/observation_asset_processing/
 #       optical_data_processing/source_extraction.py
-# `wcs.py` imports `build_wcs_from_header`, `get_source_xy` and
-# `perform_source_extraction` from here, so the module was taken whole rather
+# `wcs.py` imports `build_wcs_from_header` and `get_source_xy` from here, so the module was taken whole rather
 # than split; `get_source_radec` came along unused by the solve. Only the import
 # block was rewritten (changes marked `EXTRACTED:`). See docs/extraction.md, WCS.
 
@@ -27,9 +26,6 @@ from algorithms.skylib_lite.extraction import auto_sat_level, extract_sources
 # EXTRACTED: shared vendored — see algorithms.skylib_lite.util.fits.
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
-# EXTRACTED: was `from skynet_db.models import ObservationAssetProcessingRun`
-# (SQLAlchemy) — see ./state.py.
-from .state import ProcessingRun as ObservationAssetProcessingRun
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...` — see ./schemas.py.
 from .schemas import SourceExtractionData, SourceExtractionSettings
 
@@ -82,7 +78,6 @@ __all__ = [
     "SIGMA_TO_FWHM",
     "get_source_radec",
     "get_source_xy",
-    "perform_source_extraction",
     "run_source_extraction",
 ]
 
@@ -316,15 +311,3 @@ def run_source_extraction(
     ]
 
     return sources, background, background_rms
-
-
-def perform_source_extraction(
-    processing_run: ObservationAssetProcessingRun,
-    header,
-    data: np.ndarray,
-    *,
-    settings: SourceExtractionSettings | None = None,
-) -> tuple[list[SourceExtractionData], np.ndarray | None, np.ndarray | None]:
-    settings = settings or SourceExtractionSettings()
-    file_id = getattr(processing_run, "observation_asset_id", None)
-    return run_source_extraction(data, header, settings, file_id=file_id)

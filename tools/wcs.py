@@ -21,7 +21,6 @@ from algorithms.skylib_lite.astrometry.anet.engine import (
 )
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
 from algorithms.wcs.source_extraction import build_wcs_from_header
-from algorithms.wcs.state import ProcessingRun
 from algorithms.wcs.wcs import WCS_REGEX, solve_wcs as _solve_wcs
 from tools.artifacts import describe_file
 from tools.astrometry import (
@@ -318,9 +317,15 @@ def solve_astrometry(
         )
 
     solver_settings = SolverSettings(
-        anet_index_path=_normalise_index_path(index_path),
-        anet_timeout_s=timeout_s,
-        atlas_timeout_s=timeout_s,
+        anet_index_path=(
+            _normalise_index_path(index_path)
+            if index_path is not None
+            else os.getenv("ANET_INDEX_PATH")
+        ),
+        anet_timeout_s=timeout_s if timeout_s is not None else os.getenv("ANET_TIMEOUT_S"),
+        atlas_catalog_root=os.getenv("ATLAS_CATALOG_ROOT"),
+        atlas_catalog=os.getenv("ATLAS_CATALOG"),
+        atlas_timeout_s=timeout_s if timeout_s is not None else os.getenv("ATLAS_TIMEOUT_S"),
     )
     timeout_settings = (
         ("ANET_TIMEOUT_S", solver_settings.ANET_TIMEOUT_S, solver_settings.ANET_INDEX_PATH),
@@ -349,14 +354,12 @@ def solve_astrometry(
             warnings=configuration_warnings,
         )
 
-    processing_run = ProcessingRun()
     pixel_scale_hint = estimate_pixel_scale_arcsec_per_pix(header)
     attempted_backends: list[str] = []
     solver_failures: list[str] = []
     try:
         with TemporaryDirectory(prefix="kepler-wcs-") as tmpdir:
-            solved_wcs, _ = _solve_wcs(
-                processing_run,
+            solve_result = _solve_wcs(
                 header,
                 data,
                 Path(tmpdir),
@@ -375,6 +378,7 @@ def solve_astrometry(
             errors=[ToolError(code="solver_failed", message=str(exc))],
         )
 
+    solved_wcs = solve_result.wcs
     if solved_wcs is None:
         if solver_failures:
             return WcsSummary(

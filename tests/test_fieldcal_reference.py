@@ -147,12 +147,10 @@ def test_offline_field_calibration_lands_inside_the_afterglow_tolerance():
 
 def test_calibrate_zeropoint_does_not_reach_the_network_when_rows_are_supplied(monkeypatch):
     """A supplied catalog must short-circuit query_catalogs entirely."""
-    import algorithms.fieldcal.deps as deps
-
     def explode(*args, **kwargs):
         raise AssertionError("calibrate_zeropoint queried the network")
 
-    monkeypatch.setattr(deps, "query_catalogs", explode)
+    monkeypatch.setattr("algorithms.query.runner.query_catalogs", explode)
 
     from tools.optical import resolve_optical_frame
     from tools.photometry import calibrate_zeropoint

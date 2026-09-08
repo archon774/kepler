@@ -218,7 +218,6 @@ class PhotometricCalibrationSettings(KeplerBaseModel):
     id: Optional[int] = None
     user_id: Optional[int] = None
     name: Optional[str] = None
-    catalog_sources: List[CatalogSource] = Field(default_factory=list)
     catalogs: List[str] = Field(default_factory=lambda: ["APASS"])
     custom_filter_lookup: Dict[str, Dict[str, str]] = Field(default_factory=dict)
     source_inclusion_percent: Optional[float] = 100
@@ -248,30 +247,3 @@ class FieldCalResult(KeplerBaseModel):
     limmag5: Optional[float] = None
     rej_percent: Optional[float] = None
 # (Ports legacy FieldCalResult fields.)  # :contentReference[oaicite:5]{index=5}
-
-
-# ============================================================================
-# EXTRACTED: stand-in for the Skynet ORM row
-# ============================================================================
-
-class ProcessingRunRef(KeplerBaseModel):
-    """EXTRACTED: stand-in for ``skynet_db.models.ObservationAssetProcessingRun``.
-
-    Field calibration reads exactly two attributes off the processing-run
-    object it is handed:
-
-      * ``.id``                   — used only to build the unique source-ID
-                                    prefix in ``_ensure_unique_source_ids`` and
-                                    for log lines;
-      * ``.observation_asset_id`` — used as ``file_id`` on emitted sources.
-
-    Everything else on the SQLAlchemy row (session binding, S3 asset locators,
-    job state, WCS solution rows) is persistence/job-runner infrastructure and
-    is not used by the calibration algorithm.  ``perform_field_calibration``
-    duck-types this parameter, so any object exposing those two attributes
-    works; this model is provided so standalone callers have something concrete
-    to construct.
-    """
-
-    id: Optional[int] = None
-    observation_asset_id: Optional[int] = None
