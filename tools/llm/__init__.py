@@ -16,11 +16,13 @@ from __future__ import annotations
 from tools.llm.base import (
     SCHEMA_DIALECTS,
     BackendUnavailableError,
+    BaseHTTPBackend,
     Capabilities,
     ModelBackend,
     OnText,
     SchemaDialect,
 )
+from tools.llm.factory import build_backend, parse_spec
 from tools.llm.types import (
     FAULT_TYPES,
     STOP_REASONS,
@@ -56,5 +58,8 @@ __all__ = [
     "Capabilities",
     "OnText",
     "BackendUnavailableError",
+    "BaseHTTPBackend",
     "ModelBackend",
+    "build_backend",
+    "parse_spec",
 ]

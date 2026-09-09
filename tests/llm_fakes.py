@@ -136,3 +136,67 @@ def fake_anthropic_module(messages: FakeAnthropicMessages) -> SimpleNamespace:
             self.messages = messages
 
     return SimpleNamespace(Anthropic=_Client)
+
+
+class CapturingTransport:
+    """An ``httpx`` mock transport that records every request and replies with a
+    canned JSON body. Pass it to a ``BaseHTTPBackend`` subclass via the
+    ``transport`` keyword -- production never sets it."""
+
+    def __init__(self, body: Any = None, status_code: int = 200) -> None:
+        import httpx
+
+        self.requests: list[httpx.Request] = []
+        self._body = {} if body is None else body
+        self._status = status_code
+        self._transport = httpx.MockTransport(self._handle)
+
+    def _handle(self, request: "Any") -> "Any":
+        import httpx
+
+        self.requests.append(request)
+        body = self._body(request) if callable(self._body) else self._body
+        return httpx.Response(self._status, json=body)
+
+    def __call__(self) -> Any:
+        return self._transport
+
+    @property
+    def last(self) -> Any:
+        return self.requests[-1]
+
+
+def openai_chat_response(
+    *,
+    text: str | None = "Here is the answer.",
+    tool_calls: Iterable[dict[str, Any]] = (),
+    finish_reason: str = "stop",
+    usage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A minimal OpenAI Chat Completions response body."""
+
+    message: dict[str, Any] = {"role": "assistant", "content": text}
+    calls = list(tool_calls)
+    if calls:
+        message["tool_calls"] = calls
+    return {
+        "id": "chatcmpl-recorded",
+        "object": "chat.completion",
+        "model": "gpt-4.1",
+        "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
+        "usage": usage
+        or {"prompt_tokens": 120, "completion_tokens": 18, "total_tokens": 138},
+    }
+
+
+def openai_tool_call(
+    name: str, arguments: str, *, call_id: str = "call_recorded"
+) -> dict[str, Any]:
+    """One OpenAI tool_calls entry. ``arguments`` is a JSON *string*, as the
+    wire format has it."""
+
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": name, "arguments": arguments},
+    }

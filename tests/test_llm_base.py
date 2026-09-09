@@ -82,15 +82,23 @@ def test_an_object_without_complete_is_not_a_model_backend():
     assert not isinstance(NotABackend(), base.ModelBackend)
 
 
-def test_base_module_imports_no_vendor_sdk_at_module_scope():
-    import ast
+def test_importing_base_pulls_in_no_http_stack_or_vendor_sdk():
+    # httpx is imported only inside BaseHTTPBackend's methods, never at module
+    # scope, so `import tools.llm` stays cheap. A fresh interpreter proves it.
+    import subprocess
+    import sys
     from pathlib import Path
 
-    tree = ast.parse(Path(base.__file__).read_text(encoding="utf-8"))
-    imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            imported.add(node.module.split(".")[0])
-    assert imported.isdisjoint({"anthropic", "httpx", "openai", "google"})
+    code = (
+        "import sys, tools.llm.base; "
+        "bad = [m for m in sys.modules "
+        "if m.split('.')[0] in {'anthropic', 'httpx', 'openai', 'google'}]; "
+        "assert not bad, bad"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parent.parent,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
