@@ -18,9 +18,11 @@ writes the code.
 | Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases complete; nine closure phases planned | `dev` | P5 needs a maintainer-supplied PARSEC grid; P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | Remaining local-data, documentation, WCS, variable-star, and HR-diagram gaps; the TUI stateless prerequisite is met |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
-**The model track branches off `main`, not `dev`,** at the maintainer's
-instruction. Every other branch here targets `dev`, which is what `CLAUDE.md`
-otherwise requires. Do not retarget either one.
+**The model track was implemented on `dev`** (the maintainer redirected the
+base from `main`, since `dev` carries the current plan and registry). Phases
+−1–3 are done — `tools/llm/` and `tools/agent/` exist; `tools/runner.py` is a
+shim over them. The remaining model work is the deferred benchmark harness
+(phases 4–5). Every other branch here targets `dev`.
 
 ## Start here
 

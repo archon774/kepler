@@ -8,9 +8,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from tools.config import artifact_directory
+
+if TYPE_CHECKING:
+    from tools.llm.types import ProtocolFault
 
 __all__ = [
     "AgentSession",
@@ -123,6 +126,7 @@ class AgentSession:
     current_turn: int | None = None
     turns: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    protocol_faults: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def artifact_subdir(self) -> str:
@@ -151,6 +155,24 @@ class AgentSession:
                 "stop_reason": stop_reason,
                 "assistant_text": _bounded_text(assistant_text),
                 "tool_call_sequences": tool_call_sequences,
+            }
+        )
+
+    def record_fault(self, *, turn: int, fault: "ProtocolFault") -> None:
+        """Append a turn-stamped protocol-fault record.
+
+        Faults come from pre-dispatch validation (S8) and from the model
+        adapters. ``SESSION_SCHEMA_VERSION`` stays at 1 for now: the key is
+        additive, and the bump to 2 lands with the rest of the v2 payload.
+        """
+
+        self.protocol_faults.append(
+            {
+                "turn": turn,
+                "type": fault.type,
+                "detail": fault.detail,
+                "tool_name": fault.tool_name,
+                "call_id": fault.call_id,
             }
         )
 
@@ -224,6 +246,7 @@ class AgentSession:
             "cache_entry_count": len(cache_entries),
             "tool_calls": self.tool_calls,
             "call_cache": cache_entries,
+            "protocol_faults": self.protocol_faults,
             "notes": [
                 "Tool result previews and full payloads are intentionally omitted; "
                 "inspect the referenced artifact paths for complete data."

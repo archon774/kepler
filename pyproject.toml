@@ -103,4 +103,10 @@ markers = [
     # not in this repo. Skips itself when the data is absent.
     "solver_data: needs astrometry index / ATLAS catalog data not in the repo",
     "slow: runs full source extraction + photometry over a real frame",
+    # Reaches a live model-provider API. Never runs by default, mirroring
+    # `network`: requires both `-m model_api` and KEPLER_TEST_MODEL_API=1.
+    "model_api: hits a live model provider (opt-in, costs tokens/money)",
+    # Needs a local Ollama daemon with the reference model pulled. Skips itself
+    # when the daemon is unreachable.
+    "ollama: needs a local Ollama daemon and a pulled model",
 ]
