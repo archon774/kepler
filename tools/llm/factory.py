@@ -70,9 +70,12 @@ def build_backend(
         # No api_key is ever passed to Ollama.
         return OllamaBackend(model=model, base_url=base_url, transport=transport)
 
-    # gemini (Phase 3) registers its branch here.
-    if provider in RECOGNIZED_PROVIDERS:
-        raise ValueError(f"provider {provider!r} is recognized but not yet wired")
+    if provider == "gemini":
+        from tools.llm.gemini_backend import GeminiBackend
+
+        return GeminiBackend(
+            model=model, api_key=api_key, base_url=base_url, transport=transport
+        )
 
     raise ValueError(
         f"unknown provider {provider!r}; recognized: {', '.join(RECOGNIZED_PROVIDERS)}"

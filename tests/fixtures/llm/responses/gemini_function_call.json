@@ -1,0 +1,27 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          { "text": "I'll resolve M31 in NED." },
+          {
+            "functionCall": {
+              "name": "search_ned",
+              "args": { "name": "M31", "table": "photometry" }
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 512,
+    "candidatesTokenCount": 44,
+    "cachedContentTokenCount": 128,
+    "totalTokenCount": 556
+  },
+  "modelVersion": "gemini-2.5-pro"
+}

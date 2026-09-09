@@ -22,6 +22,7 @@ regexes = [
   '''ANTHROPIC_API_KEY''',
   '''NASA_API_KEY''',
   '''OPENAI_API_KEY''',
+  '''GEMINI_API_KEY''',
 ]
 paths = [
   '''AGENTS\.md''',
@@ -40,4 +41,7 @@ paths = [
   '''tests/test_llm_openai_backend\.py''',
   '''tools/llm/factory\.py''',
   '''tools/llm/openai_backend\.py''',
+  # GEMINI_API_KEY: added in Phase 3 with its first uses.
+  '''tests/test_llm_gemini_backend\.py''',
+  '''tools/llm/gemini_backend\.py''',
 ]
