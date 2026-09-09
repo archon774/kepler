@@ -24,6 +24,7 @@ All four are local: no network, no solver data, no external binaries.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -943,6 +944,41 @@ def _pulsar_data_dir() -> Path:
     )
 
 
+#: The curated literature periods that ship with the bundled scans, and the
+#: only period any of them has: a scan file carries no ``P_topo`` header --
+#: that field appears on prefolded "standard" files, none of which ship here --
+#: so the period always comes from outside the data. ``test_data/README.md``
+#: records the rest, including that ``Curated pulsars.docx``, not ATNF, is the
+#: reference the tests compare against.
+CURATED_PERIODS_FILE = _REPO_ROOT / "test_data" / "pulsar" / "curated_periods.json"
+
+
+def _load_curated_periods(
+    path: str | Path = CURATED_PERIODS_FILE,
+) -> tuple[dict[str, dict[str, Any]], Optional[str]]:
+    """Read the curated period map, or report that there isn't one.
+
+    Guarded because ``tools/`` has to import and run wherever it is installed,
+    with or without this repository's ``test_data/``. A missing or unreadable
+    map costs the curated period, not the pipeline: the scan still resolves,
+    and the caller is told the period has to be measured or fetched instead.
+    """
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        entries = payload["pulsars"]
+        source = payload["period_source"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}, None
+    if not isinstance(entries, dict) or not isinstance(source, str):
+        return {}, None
+    return entries, source
+
+
+#: Loaded once. The keys are already normalized designations (``b0329``), so
+#: matching a scan is a containment test against its normalized source name.
+_CURATED_PERIODS, _CURATED_PERIOD_SOURCE = _load_curated_periods()
+
+
 def _normalize_pulsar_name(name: str) -> str:
     """Reduce a pulsar designation to comparable characters.
 
@@ -956,6 +992,23 @@ def _normalize_pulsar_name(name: str) -> str:
     if lowered.startswith("psr"):
         lowered = lowered[3:]
     return re.sub(r"[^a-z0-9]", "", lowered)
+
+
+def _curated_entry(source_name: Optional[str], filename: str) -> dict[str, Any] | None:
+    """Match a scan to its curated row, by source name then by filename.
+
+    The filename is the fallback because Skynet does not always write a bare
+    designation into ``SRC_NAME`` -- the B2021+51 scan's is
+    ``3_Pulsar_Team_B2021+51_ERIRA``, the observing programme.
+    """
+    for candidate in (source_name or "", filename):
+        haystack = _normalize_pulsar_name(candidate)
+        if not haystack:
+            continue
+        for key, entry in _CURATED_PERIODS.items():
+            if key in haystack:
+                return entry
+    return None
 
 
 def _scan_summary(path: Path) -> PulsarScan:
@@ -976,6 +1029,8 @@ def _scan_summary(path: Path) -> PulsarScan:
         except (KeyError, TypeError, ValueError):
             return None
 
+    curated = _curated_entry(header.get("SRC_NAME"), path.name)
+
     return PulsarScan(
         path=str(path),
         source_name=header.get("SRC_NAME"),
@@ -986,6 +1041,9 @@ def _scan_summary(path: Path) -> PulsarScan:
         dec_deg=_float("DEC(deg)"),
         duration_s=_float("DURATION"),
         size_bytes=path.stat().st_size,
+        curated_period_s=curated.get("period_s") if curated else None,
+        curated_difficulty=curated.get("difficulty") if curated else None,
+        period_source=_CURATED_PERIOD_SOURCE if curated else None,
     )
 
 
@@ -998,6 +1056,11 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
     out what is actually on hand instead of guessing a path.
 
     Reads only each file's ``#`` header, so it stays cheap.
+
+    Each bundled scan comes back with the curated literature period for its
+    source. That is the offline period: a blind search finds the period on one
+    of the five, so for the rest the alternative to this number is a network
+    call to ATNF.
     """
     root = Path(directory).expanduser() if directory else _pulsar_data_dir()
     errors: list[ToolError] = []
@@ -1013,7 +1076,19 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
         return PulsarScanList(scans=[], search_root=str(root), count=0, errors=errors)
 
     scans = [_scan_summary(p) for p in sorted(root.glob("*.txt")) if p.is_file()]
-    return PulsarScanList(scans=scans, search_root=str(root), count=len(scans))
+    warnings: list[ToolWarning] = []
+    if not _CURATED_PERIODS:
+        warnings.append(
+            ToolWarning(
+                code="curated_periods_unavailable",
+                message=f"No curated period map at {CURATED_PERIODS_FILE}, so no "
+                "scan reports curated_period_s. A period has to be measured "
+                "(compute_pulsar_periodogram) or fetched (search_atnf).",
+            )
+        )
+    return PulsarScanList(
+        scans=scans, search_root=str(root), count=len(scans), warnings=warnings
+    )
 
 
 def resolve_pulsar_scan(

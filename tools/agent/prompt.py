@@ -50,10 +50,14 @@ the stages in order -- each one produces what the next needs:
 
   0. resolve_pulsar_scan / list_pulsar_scans -- find the scan file. There is no \
      archive behind these tools; a path only resolves if the data is already on \
-     this machine. Never invent a path.
+     this machine. Never invent a path. Every bundled scan also comes back with \
+     curated_period_s, the literature period for that source (period_source \
+     names the curation it came from). USE IT: it needs no network, and a blind \
+     search succeeds on only one of the five bundled scans.
   1. load_pulsar_lightcurve -- ingest and background-subtract. Pass its \
      artifact path to every later stage.
-  2. compute_pulsar_periodogram -- find the period. Check peak_fold_snr, not \
+  2. compute_pulsar_periodogram -- measure the period, when stage 0 gave you \
+     no curated_period_s. Check peak_fold_snr, not \
      peak_confidence: the confidence threshold assumes white noise, so mains \
      interference and baseline drift routinely read "99.73% Confidence" while \
      folding to nothing. If it warns peak_does_not_fold, the period is wrong.
@@ -68,9 +72,14 @@ plot_pulsar renders any of these artifacts as a PNG. Reach for it when a \
 period looks wrong: the periodogram plot shows interference spikes and harmonic \
 combs at a glance, where the numbers alone do not.
 
-For a catalogued source, search_atnf gives a period more accurate than a short \
-scan can measure -- prefer it over step 2's result when the two disagree, and \
-use it when step 2 warns that its peak does not fold.
+Where the period comes from, in order of preference: stage 0's curated_period_s \
+if the scan has one; otherwise search_atnf, whose catalogued period for a known \
+source is likewise more accurate than a short scan can measure; only then step \
+2's measurement. Prefer either reference period over step 2's result when they \
+disagree, and reach for one when step 2 warns that its peak does not fold. \
+curated_period_s is the offline path -- it is the same kind of external \
+reference as ATNF, needs no network, and is present for every bundled scan. \
+Never read a period off rendered audio.
 
 LOCAL OPTICAL FRAMES. Image work has the same Stage 0 as the pulsar chain: \
 list_optical_frames / resolve_optical_frame find a FITS frame on this machine. \

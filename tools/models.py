@@ -311,6 +311,11 @@ class PulsarScan(KeplerToolModel):
 
     ``path`` is what every pipeline stage takes. The rest is read from the
     file's own ``#`` header, so listing is cheap -- no sample data is parsed.
+
+    ``curated_period_s`` is the exception: it is not in the file. Scans carry
+    no period of their own, so it comes from the curation shipped alongside
+    them and is matched by source name. It is null for a scan the curation
+    does not cover, which means "not recorded", never "no period".
     """
 
     path: str
@@ -322,6 +327,9 @@ class PulsarScan(KeplerToolModel):
     dec_deg: float | None = None
     duration_s: float | None = None
     size_bytes: int | None = None
+    curated_period_s: float | None = None
+    curated_difficulty: str | None = None
+    period_source: str | None = None
 
 
 class PulsarScanList(KeplerToolModel):

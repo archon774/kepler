@@ -44,6 +44,13 @@ PULSAR_SCANS: dict[str, str] = {
     "b2045": "Skynet_60902_psr_b2045_16_138488_88426.A.cal.txt",
 }
 
+#: The curated tables, read from ``test_data/pulsar/curated_periods.json``
+#: rather than restated here, so the tool layer and the suite compare against
+#: one copy of each number (BL-8). The reasoning below is not in the JSON.
+_CURATED_PULSARS: dict[str, dict] = json.loads(
+    (PULSAR / "curated_periods.json").read_text(encoding="utf-8")
+)["pulsars"]
+
 #: Reference periods (s), from ``test_data/pulsar/Curated pulsars.docx`` — the
 #: curation shipped alongside the scans, column "Period(Literature)". That
 #: document is the intended verification reference for this data set, so it is
@@ -52,11 +59,7 @@ PULSAR_SCANS: dict[str, str] = {
 #: Independent of anything in the code: the scans carry no period in-file, so a
 #: successful fold is a real detection rather than a fit to a known answer.
 PULSAR_PERIODS_S: dict[str, float] = {
-    "b0329": 0.7145197,
-    "b1133": 1.187913066,
-    "b1933": 0.358738411,
-    "b2021": 0.529196918,
-    "b2045": 1.961572304,
+    key: entry["period_s"] for key, entry in _CURATED_PULSARS.items()
 }
 
 #: The live ATNF Pulsar Catalogue values, retrieved 2026-08-11 via
@@ -78,11 +81,7 @@ PULSAR_PERIODS_S: dict[str, float] = {
 #: both B1133**+**16 and B2045**−**16 as ``_16``, so the declination sign
 #: cannot be read off the filename.
 PULSAR_ATNF: dict[str, dict[str, float]] = {
-    "b0329": {"p0": 0.714519699725801, "dm": 26.7641, "s1400": 203.0},
-    "b1133": {"p0": 1.1879172746306204, "dm": 4.8407, "s1400": 20.0},
-    "b1933": {"p0": 0.3587451401989297, "dm": 158.6394, "s1400": 58.0},
-    "b2021": {"p0": 0.5291969178083342, "dm": 22.5497, "s1400": 27.0},
-    "b2045": {"p0": 1.9615846233291023, "dm": 11.456, "s1400": 22.0},
+    key: dict(entry["atnf"]) for key, entry in _CURATED_PULSARS.items()
 }
 
 #: Difficulty rating and archival observation number, from the same curated
@@ -90,11 +89,12 @@ PULSAR_ATNF: dict[str, dict[str, float]] = {
 #: to detect, and it is an independent check on the pipeline: what the code
 #: measures should track what the curator expected.
 PULSAR_DIFFICULTY: dict[str, dict[str, object]] = {
-    "b0329": {"obs": 81239, "rank": 0, "label": "Easy"},
-    "b2021": {"obs": 63183, "rank": 1, "label": "Lightly Challenging"},
-    "b1133": {"obs": 79294, "rank": 1, "label": "Lightly Challenging"},
-    "b1933": {"obs": 74403, "rank": 3, "label": "More Challenging"},
-    "b2045": {"obs": 71350, "rank": 4, "label": "Most Challenging"},
+    key: {
+        "obs": entry["observation"],
+        "rank": entry["difficulty_rank"],
+        "label": entry["difficulty"],
+    }
+    for key, entry in _CURATED_PULSARS.items()
 }
 
 #: Short aliases for the frames individual tests single out, each chosen for a
