@@ -26,6 +26,7 @@ test_data/
   frame_provenance.json        bundled frame stem -> pre-rename upstream filename
   pulsar/                      5 Green Bank 20 m pulsar scans (5.7 MB)
     Curated pulsars.docx       the curation: periods + difficulty ratings
+    curated_periods.json       that curation, machine-readable, for the tools
 ```
 
 ## `optical/` — 39 science frames
@@ -203,14 +204,17 @@ observing programme they were drawn from (including B1919+21, the first pulsar
 discovered).
 
 **This document, not ATNF, is the reference the tests compare against** —
-`tests/conftest.py::PULSAR_PERIODS_S` is its "Period(Literature)" column.
+`curated_periods.json` beside it carries the transcription, and
+`tests/conftest.py::PULSAR_PERIODS_S` reads its `period_s` field, which is the
+document's "Period(Literature)" column.
 
 **The periods are not in the scan files.** They carry no `P_topo` header; that
 field only appears on prefolded "standard" files, and none ship here. So the
 period always comes from outside the data, which is what makes a successful
 fold an independent check rather than a self-consistency one.
 
-ATNF's live `P0` is carried alongside in `PULSAR_ATNF` as a cross-check. The
+ATNF's live `P0` is carried alongside in each `curated_periods.json` entry's
+`atnf` block, and reaches the suite as `PULSAR_ATNF`, as a cross-check. The
 two agree to 4e-10 for B0329+54 and B2021+51 and differ by 4e-6 to 2e-5 for
 the other three — different epochs or source references. **Neither is "more
 correct" for this data**, and the choice cannot change a result here: across a
@@ -222,6 +226,21 @@ Each scan's own `RA(deg)`/`DEC(deg)` header agrees with the catalogue position
 to within arcseconds — the check that confirms which pulsar each file actually
 points at, since `SRC_NAME` renders both B1133**+**16 and B2045**−**16 as
 `_16`.
+
+### `pulsar/curated_periods.json` — the same numbers, reachable from a tool
+
+A `.docx` is not readable by the pipeline, so the five curated rows are
+transcribed into JSON beside it: `period_s`, `difficulty`/`difficulty_rank`,
+the archival `observation` number, and the ATNF cross-check. Keys are
+normalized designations (`b0329`), the form `tools.pulsar` matches a scan's
+`SRC_NAME` against, so `list_pulsar_scans` and `resolve_pulsar_scan` report
+`curated_period_s`, `curated_difficulty` and `period_source` on every bundled
+scan.
+
+That closes an offline gap rather than adding a convenience: a blind period
+search succeeds on **one** of these five scans, so without a curated period the
+only route to the other four is a network call to ATNF. The file is the one
+copy of each number — `tests/conftest.py` reads it rather than restating it.
 
 Two structural details the ingest depends on, both visible in any of the files:
 

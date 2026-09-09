@@ -12,6 +12,15 @@ scan path under `test_data/pulsar/` — override with `KEPLER_PULSAR_DATA_DIR` �
 returning `ToolError`s for misses and ambiguity rather than raising. It is
 optional; every stage below also accepts a bare file path.
 
+It also reports the **curated literature period** for a bundled scan
+(`curated_period_s`, with `curated_difficulty` and `period_source` alongside),
+read from `test_data/pulsar/curated_periods.json`. That is the offline answer to
+§4's finding that a blind search works on one of the five scans: the period a
+scan cannot supply now arrives with the scan itself, rather than only from ATNF
+over the network. A scan the curation does not cover reports `null` — not
+recorded, never a substituted number — and a missing map is a
+`curated_periods_unavailable` warning on the listing, not an import error.
+
 ```text
    raw scan (.cal.txt)
           │
@@ -59,11 +68,13 @@ marking it as wrong. That is why:
   four of five bundled scans return a confident artifact;
 - `sonify_pulsar` warns (`unfolded_rendering`) when called without a period;
 - every stage's schema says to prefer `search_atnf` for a known source, whose
-  catalogued period beats anything a 60-second scan can measure.
+  catalogued period beats anything a 60-second scan can measure, and stage 0
+  hands back a curated literature period for a bundled scan without a network
+  call at all.
 
-Stage 4 can run without stage 2, and stage 3 can take a period from
-`search_atnf` instead. Those are the two legitimate shortcuts; both are
-documented on the tools themselves.
+Stage 4 can run without stage 2, and stage 3 can take a period from stage 0's
+`curated_period_s` or from `search_atnf` instead. Those are the legitimate
+shortcuts; all are documented on the tools themselves.
 
 ---
 
@@ -166,8 +177,10 @@ consequences for tool design are the load-bearing part:
    B1133+16 the spurious ~2.18 s peak appears at `back_scale` 3, 12 and 30 but
    the true 1.19 s period wins at 1 and 6. Varying it is the cheapest
    diagnostic available.
-4. **For any known source, `search_atnf` beats measuring.** A catalogued period
-   turns four of these five scans from failures into usable folds.
+4. **For any known source, an external period beats measuring.** A catalogued
+   period turns four of these five scans from failures into usable folds — and
+   for these five it needs no network, because stage 0 reports the curated one
+   from `curated_periods.json`. `search_atnf` covers every other source.
 
 B1933+16 resists even a tuned search, for a physical reason worth recording:
 `DM = 158.6` smears its pulse across ~11% of its 359 ms period over the 80 MHz
@@ -276,7 +289,13 @@ can report them and continue.
   differ from an ATNF `P0` in the fourth decimal.
 - **No period uncertainty.** The periodogram reports a grid peak, not a fitted
   period with an error bar. Refine by re-running with a narrow `start`/`stop`
-  and more `steps`.
+  and more `steps`. The curated period stage 0 reports carries no error bar
+  either — it is a transcribed literature value, and it is barycentric while
+  the scans are topocentric.
+- **No curated period beyond the bundled five.** `curated_periods.json` covers
+  the scans in this repository and nothing else. A scan from elsewhere resolves
+  with `curated_period_s` null, and its period has to be measured or fetched
+  from ATNF.
 - **`sonificationBrowser` is not ported** — it drives an `AudioContext`, which
   a file-writing tool has no use for. It remains extracted in TypeScript.
 

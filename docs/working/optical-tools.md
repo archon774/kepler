@@ -1,8 +1,9 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`. The remaining closure phases are planned below; they are independently
-deliverable unless a phase states an asset prerequisite.
+`dev`, and closure phase P1 is complete. The remaining closure phases are
+planned below; they are independently deliverable unless a phase states an
+asset prerequisite.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation), 2026-09-09 (completion audit and approved closure rollout)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
@@ -945,30 +946,27 @@ PR #52 completed S0–S6. P3 corrects the remaining stale reference prose, while
 P6 and P9 separately cover solver convergence controls and optional operator
 data; neither reopens the completed stateless boundary.
 
-### Phase P1 — Curated pulsar periods (BL-8)
+### Phase P1 — Curated pulsar periods (BL-8) — Complete
 
-**Now unblocked by the stateless rollout merge. The phase retains its
-independent scope.**
-
-- [ ] Create `test_data/pulsar/curated_periods.json`, transcribed from
+- [x] Create `test_data/pulsar/curated_periods.json`, transcribed from
       `tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and
       `PULSAR_DIFFICULTY` tables — themselves the literature-period column of
       `Curated pulsars.docx`. The file carries a comment recording that **that
       document, not ATNF, is the reference the tests compare against**, and that
       the scan files carry no topocentric-period header, so the period always
       comes from outside the data.
-- [ ] Add three optional fields to `PulsarScan`: `curated_period_s`,
+- [x] Add three optional fields to `PulsarScan`: `curated_period_s`,
       `curated_difficulty`, and `period_source`.
-- [ ] Load the fixture once at module level in `tools/pulsar.py`, guarded so a
+- [x] Load the fixture once at module level in `tools/pulsar.py`, guarded so a
       missing file is a warning rather than an import error, and match a scan to a
       key using the existing `_normalize_pulsar_name` — the keys are already in
       normalized form (`b0329`), so a containment test against the normalized
       source name is the lookup.
-- [ ] Repoint `tests/conftest.py`'s `PULSAR_PERIODS_S` at the fixture so the
+- [x] Repoint `tests/conftest.py`'s `PULSAR_PERIODS_S` at the fixture so the
       number lives in one place. **Keep the surrounding comment block** — it
       explains why the document and not ATNF is the arbiter, and that reasoning
       is not in the JSON.
-- [ ] Amend the system prompt so the offline path is stated first: the scan
+- [x] Amend the system prompt so the offline path is stated first: the scan
       resolver reports a curated literature period for every bundled scan, and
       it is preferred over the blind search, which succeeds on only one of the
       five. **Locate the prompt before editing it** — it moves to
@@ -990,6 +988,22 @@ documentation-and-plumbing PR.
 
 `docs/pulsar-tool-pipeline.md` section 7 was stale and has been corrected; keep
 it in step when Stage 0 gains the curated period.
+
+**Outcome.** `test_data/pulsar/curated_periods.json` is the single copy of the
+curated periods, difficulty ratings and ATNF cross-check;
+`tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and `PULSAR_DIFFICULTY`
+read it rather than restating it, with their comment blocks kept. `PulsarScan`
+gained `curated_period_s`, `curated_difficulty` and `period_source`, filled by
+`tools/pulsar.py`'s module-level guarded load and a `_normalize_pulsar_name`
+containment match; a missing or malformed map is a `curated_periods_unavailable`
+warning on the listing, never an import error. All five bundled scans resolve
+with their literature period, including the B2021+51 scan whose `SRC_NAME` is
+its observing programme. The system prompt now states the offline path first,
+and `docs/pulsar-tool-pipeline.md` and `test_data/README.md` are in step.
+`tests/test_pulsar_registry.py` pins it (18 cases). Verified with the default
+no-network suite (1648 passed, 41 skipped), `compileall`, and `git diff
+--check`; no `.ts` file was touched, so `npm run typecheck` did not apply. The
+open tool-correctness bugs listed above were left alone.
 
 ### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12)
 
