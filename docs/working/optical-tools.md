@@ -933,7 +933,9 @@ not replace, deterministic offline characterization.
 
 ### Completion audit for the stateless rollout (recorded outcome)
 
-PR #52's review and successful GitHub CI gate confirm the following:
+PR #52's review and successful GitHub CI gate confirm the completed
+implementation and orchestration items below; the separately required
+validation records remain explicitly open where noted:
 
 - `ProcessingRun`, `ProcessingRunRef`, `ensure_wcs_solution`, processing-run WCS
   reconstruction, and field-calibration dependency wiring are absent from current
@@ -944,7 +946,8 @@ PR #52's review and successful GitHub CI gate confirm the following:
 - Algorithm modules do not open caller-selected FITS paths or query catalogs.
 - Public tools own configuration, I/O, network access, error translation, and
   requested persistence.
-- Protected numerical-kernel files have no diff.
+- [ ] Protected numerical-kernel files have no diff; awaiting a recorded clean
+  diff result for the protected-kernel audit.
 - Changes inside mixed modules are limited to the approved orchestration boundary
   and typed result construction.
 - [ ] Default tests pass under Python 3.14 with no network requirement, with
