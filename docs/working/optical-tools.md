@@ -1,20 +1,26 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
-**Status:** Baseline phases merged; stateless rollout merged as PR #52;
-remaining broken-links phases are unblocked and retain their independent scope.
+**Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
+`dev`. The remaining closure phases are planned below; they are independently
+deliverable unless a phase states an asset prerequisite.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
-consolidation)
-**Prerequisites:** None outstanding. The stateless rollout's prerequisite —
-broken-links Phase 4 — merged as PR #47.
-**Unblocks:** The remaining broken-links phases below, and every phase of
-[tui-harness.md](tui-harness.md).
+consolidation), 2026-09-09 (completion audit and approved closure rollout)
+**Prerequisites:** No architectural prerequisite remains. The stateless rollout's
+prerequisite — broken-links Phase 4 — merged as PR #47. P5, P8, and P9 have
+separate maintainer- or operator-supplied asset gates.
+**Unblocks:** The stateless boundary required by every phase of
+[tui-harness.md](tui-harness.md) is complete. The remaining phases close
+local-data, documentation, solver-convergence, and TypeScript-runtime gaps.
 **Merged at:** `dev` commit `33617a4adaf89aadd006ec8be11fe6678f19d0cd` (PR #52,
 "Refactor optical processing to stateless S0–S6 contracts").
 **Scope:** the seam between the public `tools/` surface and the local data in
-`test_data/`, and the execution architecture behind that seam. **Not** algorithm
-correctness — that is
-[`../analysis/algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md) —
-and not file organization, which is [`../tool-architecture.md`](../tool-architecture.md).
+`test_data/`, the execution architecture behind that seam, and the Python
+runtime ports needed to make the locally shipped TypeScript algorithms callable.
+The ports preserve TypeScript numerical behavior; separate correctness
+remediation remains
+[`../analysis/algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md).
+This is not a general file-organization plan; see
+[`../tool-architecture.md`](../tool-architecture.md).
 
 This document is architecture and sequencing. It contains no implementation
 code. An agent working a phase reads the contracts here, then writes the code
@@ -25,7 +31,8 @@ that satisfies them.
 **The links are broken.** Tools that should run against the data bundled in this
 repository do not reach it, and the recorded ground truth in
 `test_data/afterglow/` and `test_data/fieldcal/` is readable only as a pytest
-fixture, never as a tool result. Twelve findings, section 1.
+fixture, never as a tool result. The original twelve findings are supplemented
+by the reference-document drift found in the post-rollout audit, section 1.
 
 **The architecture underneath is the wrong shape.** Kepler exposes astronomy
 capabilities as tools an agent invokes one call at a time. It is not the
@@ -58,24 +65,25 @@ out against `main`, then **re-verified in a `dev` checkout** before being
 recorded, and the status column has been updated again after the baseline phases
 merged.
 
-### Severity summary
+### Status summary
 
-Status is **as of 2026-09-07 on `dev`**, after PRs #43, #44, #45, and #47.
+Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
 
 | # | Broken link | Status | Severity |
 |---|---|---|---|
 | BL-1 | `describe_image_wcs` raised `TypeError` on 38 of 39 bundled frames | **closed** — fixed on `dev` before Phase 1; the parametrized sweep landed with it | — |
 | BL-2 | The agent registry omitted the local no-network tools | **closed** — Phase 1 registered `astrometry`, `calibration`, `catalogs`, `workspace` | was High |
 | BL-3 | No optical-frame lookup registry (the HR-diagram example) | **closed** — Phase 2 added `tools/optical.py` | was Medium |
-| BL-4 | No tool read `test_data/afterglow/` or `test_data/fieldcal/` | **closed** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py` | was High |
+| BL-4 | No tool read `test_data/afterglow/` or `test_data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
 | BL-5 | `ZeropointSolution.zero_point_corr` held an absolute zero point | **closed** — Phase 1 renamed it to `zero_point` | was High |
 | BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `test_data/frame_provenance.json` | was Medium |
-| BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **closed as far as wiring goes** — Phase 4 added `tools/wcs.py`. Convergence remains open, section 6.1 | was Medium |
-| BL-8 | Curated pulsar periods unreachable from the tool layer | **stands** — no `test_data/pulsar/curated_periods.json`; Phase 5 below | Medium |
-| BL-9 | HR diagram: no offline path | **stands, narrowed** — `dev` has a Python runtime and seven registered tools; the gap is offline operation, section 5 | Medium (deferred) |
-| BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **stands** | Medium (deferred) |
-| BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **stands** — `tools/optical.py` still searches one root; Phase 6 below | Medium |
-| BL-12 | `npm run typecheck` cannot run from a fresh checkout | **stands** — `CLAUDE.md` still omits `npm install`; Phase 6 below | Low |
+| BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **wiring closed; convergence planned** — Phase P6 adds explicit opt-in search bounds while retaining the parity default | was Medium |
+| BL-8 | Curated pulsar periods unreachable from the tool layer | **planned** — Phase P1 | Medium |
+| BL-9 | HR diagram: no offline path and an incomplete Python port | **planned** — Phase P5 provides explicit local-grid input and ports the remaining computational TypeScript surface | Medium |
+| BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **planned** — Phase P4 is an exact-parity Python runtime port | Medium |
+| BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **planned** — Phase P2 | Medium |
+| BL-12 | `npm run typecheck` cannot run from a fresh checkout | **planned** — Phase P2 | Low |
+| BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **planned** — Phase P3 reconciles reference documents with the landed architecture | Medium |
 
 ### BL-1 — `describe_image_wcs` raised on almost every bundled frame
 
@@ -252,10 +260,10 @@ And `pixel_scale_hint_arcsec` does **not** narrow the astrometry.net search.
 data exists on this host, so ATLAS is unavailable and that narrowing never runs.
 
 **Consequence, and it survived into the landed tool:** a wrapper cannot make this
-solve fast through the public signature. It can only (a) bound it with a timeout
-and report non-convergence as a warning, or (b) reassign the calibration-settings
-defaults — which diverges from upstream and is a maintainer decision, not a
-tool-layer one. Phase 4 took route (a) and route (b) remains open (section 6.1).
+solve fast through the public signature. Phase 4 bounded it with a timeout and
+reported non-convergence as a warning. P6 resolves the remaining public-control
+gap by adding explicit opt-in search-radius and scale bounds while preserving the
+default all-sky 0.1–60 arcsec/px behavior.
 
 An earlier draft of that phase told the implementer to pass the pixel-scale hint
 to speed the solve up. Reading the algorithm after the real run showed the hint
@@ -304,7 +312,9 @@ photometry is a live VizieR query, and there is no cluster fixture anywhere in
 repository's "default checks stay deterministic and bounded" constraint means
 none of it can be covered by the default suite. The fix is a recorded fixture
 (one cluster's Gaia rows plus one PARSEC grid), not a runtime or a data-licensing
-decision.
+decision. Phase P5 now expands the Python port to every remaining
+computational HR-diagram algorithm and adds an explicit local-grid execution
+path; M67 is a test fixture only, never a public registry entry.
 
 For the record of what was severed: `docs/extraction.md` section 3 lists four
 backend endpoints. Three — cluster catalog cone search (returning
@@ -325,8 +335,8 @@ PARSEC fetch now supplies at the cost of a network call.
 TypeScript with no runtime, and there is no fixture data anywhere in
 `test_data/`. Astromancer ships no sample light curves. Unlike BL-9 there is no
 external-data blocker — a variable-star light curve is an ordinary time series
-and VizieR, ASAS-SN, or ZTF can supply one — but it needs the same runtime
-decision. Deferred with BL-9; section 5.
+and VizieR, ASAS-SN, or ZTF can supply one. Phase P4 settles the runtime as an
+exact-parity Python port and adds a compact paired-source fixture.
 
 ### BL-11 — archive downloads dead-end
 
@@ -343,6 +353,15 @@ is still severed at its first joint.
 `tsc` is not on `PATH`; the command needs `npm install` first, which `CLAUDE.md`
 does not mention (`README.md` does), and it is not a CI job so nothing else runs
 it. One-line documentation fix.
+
+### BL-13 — reference documents describe deleted architecture
+
+The stateless code removed `algorithms.fieldcal.deps`, processing-run state,
+and run-shaped photometry adapters, but `CLAUDE.md`, `README.md`, and parts of
+the reference architecture still tell callers to use them or omit the landed
+local optical tools. This is a broken link between the public documentation and
+the maintained API. Phase P3 reconciles those current-state documents while
+preserving clearly labelled upstream provenance in `docs/extraction.md`.
 
 ---
 
@@ -611,7 +630,7 @@ the batch driver as deliberately removed from the maintained architecture.
 ## 4. Rollout
 
 **The rollout is complete.** The stateless rollout (phases S0–S6) merged as one
-focused PR before broken-links Phase 5 or 6 begins, and before any
+focused PR before implementation of the remaining P1–P9 phases begins, and before any
 [tui-harness.md](tui-harness.md) phase. The TUI's later photometry-pipeline
 rename therefore operates on the stateless pipeline; it must not preserve,
 recreate, or rename the removed processing-run or batch architecture.
@@ -626,11 +645,9 @@ dependency registry, and automated optical batch exporter were removed, and the
 architecture, extraction, repository-layout, package, and test documentation
 was updated accordingly.
 
-The remaining broken-links phases are now unblocked by this merge, but their
-scope is independent: Phase 5 still adds curated pulsar-period data and Phase 6
-still closes the archive-download loop and documents the TypeScript typecheck
-prerequisite. The deferred TypeScript-backed tools and the maintainer/data
-decisions in sections 5 and 6 remain out of this rollout.
+The remaining broken-links phases are now unblocked by this merge and have an
+approved, independent P1–P9 rollout below. P5, P8, and P9 begin when their
+explicit maintainer or operator assets are supplied.
 
 PR #52's GitHub CI checks, including `python tests`, succeeded. This completion
 record does not claim that optional local solver-data or live-network checks ran;
@@ -704,48 +721,43 @@ compatibility facade for the processing-run or batch architecture.
 Each phase must leave its focused tests passing. Temporary compatibility code is
 allowed only inside an uncommitted red-green-refactor cycle.
 
-### Phase S0 — Baseline and inventory
+### Phase S0 — Baseline and inventory — Complete
 
 **Intent:** establish the comparison point and confirm the branch carries the
 complete merged Phase 4 tool surface.
 
-- [x] Confirm PR #47 is present on `dev` and update the feature branch from
+- Confirm PR #47 is present on `dev` and update the feature branch from
       current `dev`.
-- [ ] Run the complete default suite under Python 3.14 and record pass, skip, and
-      warning counts.
-
-      **Validation record still needed:** add the Python 3.14 pass, skip, and
-      warning counts from the complete default run; PR #52's CI success does
-      not establish that record here.
-- [x] Inventory every current reference to processing runs, WCS solution state,
+- Run the complete default suite under Python 3.14.
+- Inventory every current reference to processing runs, WCS solution state,
       field-calibration dependency wiring, path-derived ids, and optical batch
       orchestration.
-- [x] Classify each match as current executable architecture, historical
+- Classify each match as current executable architecture, historical
       provenance, or an active planning reference.
-- [x] Identify mixed modules where plumbing may change but numerical blocks must
+- Identify mixed modules where plumbing may change but numerical blocks must
       remain untouched.
 
 **Parity gate:** the branch starts green, and the inventory accounts for all
 known artifacts before deletion begins.
-**Exit:** a reviewed removal list, a recorded test baseline, and no ambiguity
+**Exit:** a reviewed removal list, a completed test baseline, and no ambiguity
 about which files hold source-of-truth mathematics.
 
-### Phase S1 — Stateless WCS results
+### Phase S1 — Stateless WCS results — Complete
 
 **Intent:** remove run-owned WCS state while retaining the solver's current
 scientific and operational behaviour.
 
-- [x] Characterize successful, unsuccessful, and backend-failure solve outputs
+- Characterize successful, unsuccessful, and backend-failure solve outputs
       **before** changing the interface.
-- [x] Introduce the immutable result and metadata contract of section 3.3.
-- [x] Change WCS solving to accept header, image data, temporary storage,
+- Introduce the immutable result and metadata contract of section 3.3.
+- Change WCS solving to accept header, image data, temporary storage,
       configuration, diagnostic channels, and an optional `file_id` explicitly.
-- [x] Preserve in-memory header updates — later calculations in the same tool
+- Preserve in-memory header updates — later calculations in the same tool
       call depend on them.
-- [x] Migrate `tools.wcs.solve_astrometry` to consume the returned result while
+- Migrate `tools.wcs.solve_astrometry` to consume the returned result while
       preserving its error handling, backend reporting, fixture protection,
       concurrent-write guard, and atomic header persistence.
-- [x] Remove the processing-run WCS reconstruction helpers and the WCS state
+- Remove the processing-run WCS reconstruction helpers and the WCS state
       module once all consumers use returned or header WCS values directly.
 
 **Latitude:** choose the smallest internal refactor that produces the approved
@@ -757,20 +769,20 @@ existing solver-data tests remain valid when local indexes are available.
 **Exit:** WCS solving has no processing-run input and no mutable persisted state,
 and the Phase 4 tool behaves identically at its public boundary.
 
-### Phase S2 — Explicit extraction and photometry composition
+### Phase S2 — Explicit extraction and photometry composition — Complete
 
 **Intent:** make the already-stateless numerical entry points the only supported
 algorithm APIs.
 
-- [x] Migrate WCS, HR-diagram observation extraction, radio-source extraction,
+- Migrate WCS, HR-diagram observation extraction, radio-source extraction,
       and any other consumers to call source extraction with an explicit
       `file_id`.
-- [x] Make callers explicitly pass detected sources, WCS, background, and RMS
+- Make callers explicitly pass detected sources, WCS, background, and RMS
       into photometry when they compose those stages.
-- [x] Pass no `file_id` where there is no meaningful domain identifier.
-- [x] Remove both run-shaped source-extraction adapters and the combined
+- Pass no `file_id` where there is no meaningful domain identifier.
+- Remove both run-shaped source-extraction adapters and the combined
       run-shaped photometry adapter **after** their callers have migrated.
-- [x] Remove path hashing that exists only to populate a processing-run field.
+- Remove path hashing that exists only to populate a processing-run field.
 
 **Latitude:** composition may live in the narrow consumer or in a focused domain
 helper when more than one caller shares the responsibility. It must not move back
@@ -782,23 +794,23 @@ Consumer tests verify the same results reach HR-diagram and radio workflows.
 algorithm entry points for these stages, and no caller synthesizes an execution
 id from a file path.
 
-### Phase S3 — Explicit field-calibration inputs
+### Phase S3 — Explicit field-calibration inputs — Complete
 
 **Intent:** turn field calibration into deterministic computation over supplied
 scientific data.
 
-- [x] Strengthen characterization around the real-frame calibration path and the
+- Strengthen characterization around the real-frame calibration path and the
       recorded Afterglow/Skynet parity fixtures **before** changing
       orchestration.
-- [x] Supply WCS, reference catalog rows, variable-star rows, optional detected
+- Supply WCS, reference catalog rows, variable-star rows, optional detected
       sources, settings, and an optional `file_id` directly.
-- [x] Replace the module-global dependency registry with ordinary imports of the
+- Replace the module-global dependency registry with ordinary imports of the
       deterministic extraction, coordinate, and photometry functions.
-- [x] Keep catalog-row normalization and generated ids local to one call.
-- [x] Preserve variable-star rejection, matching order, the forced
+- Keep catalog-row normalization and generated ids local to one call.
+- Preserve variable-star rejection, matching order, the forced
       `apcorr_tol=0.0` calibration behaviour, SNR selection, reference-magnitude
       resolution, `calc_solution`, and in-memory FITS keyword updates.
-- [x] Remove field calibration's ability to query catalogs or discover WCS state.
+- Remove field calibration's ability to query catalogs or discover WCS state.
 
 **Latitude:** orchestration helpers may be reorganized to clarify explicit data
 flow. Calculation order and the content of matched and calibrated source rows may
@@ -810,19 +822,19 @@ the algorithm performs no network query.**
 **Exit:** field calibration is callable with in-memory values alone, with no
 process-global wiring, remote-service lookup, or processing-run input.
 
-### Phase S4 — Tool-owned catalog and file orchestration
+### Phase S4 — Tool-owned catalog and file orchestration — Complete
 
 **Intent:** put side effects at the public tool boundary where an agent can
 observe and control them.
 
-- [x] Move calibration catalog selection and queries into `tools.photometry`.
-- [x] Query VSX in the tool layer when variable-star rejection is enabled, and
+- Move calibration catalog selection and queries into `tools.photometry`.
+- Query VSX in the tool layer when variable-star rejection is enabled, and
       pass those rows to the calibration algorithm.
-- [x] Keep recorded-source replay offline: supplied catalog rows bypass every
+- Keep recorded-source replay offline: supplied catalog rows bypass every
       remote query, VSX included.
-- [x] Share only focused tool-layer preparation between the registered photometry
+- Share only focused tool-layer preparation between the registered photometry
       tool and the standalone compatibility path.
-- [x] Preserve current structured errors, fallbacks, comparisons, diagnostic
+- Preserve current structured errors, fallbacks, comparisons, diagnostic
       payloads, and file-writing ownership.
 
 **Latitude:** choose the private helper shape and exception translation, following
@@ -834,22 +846,22 @@ existing field-calibration failure modes.
 **Exit:** tools own every network, environment, path, and persistence decision;
 algorithms receive resolved values only.
 
-### Phase S5 — Remove automated batch artifacts
+### Phase S5 — Remove automated batch artifacts — Complete
 
 **Intent:** delete the remaining Skynet execution model rather than preserving it
 under compatibility names.
 
-- [x] Delete the automated WCS/photometry/zero-point batch exporter.
-- [x] Delete `ProcessingRunRef`, the field-calibration dependency registry, the
+- Delete the automated WCS/photometry/zero-point batch exporter.
+- Delete `ProcessingRunRef`, the field-calibration dependency registry, the
       WCS state classes, and obsolete exports **after** their consumers are gone.
-- [x] Audit for other retained optical automation patterns: implicit directory
+- Audit for other retained optical automation patterns: implicit directory
       iteration, stage or progress state, broad continue-to-next-frame exception
       handling, run-scoped persistence, CSV aggregation tied to a batch, and
       generated execution identifiers.
-- [x] Remove such artifacts when they exist solely to reproduce the upstream
+- Remove such artifacts when they exist solely to reproduce the upstream
       batch harness. Keep reusable scientific algorithms and public single-call
       tools.
-- [x] Add a repository-shape test that prevents current Python APIs from
+- Add a repository-shape test that prevents current Python APIs from
       reintroducing the removed run and batch concepts.
 
 **Latitude:** decide whether a discovered helper is reusable computation or batch
@@ -860,36 +872,32 @@ current executable matches, while historical provenance remains readable.
 **Exit:** no run-shaped facade, service locator, automated optical batch driver,
 or renamed equivalent remains in current Python code.
 
-### Phase S6 — Documentation and release gate
+### Phase S6 — Documentation and release gate — Complete
 
 **Intent:** make the stateless tool boundary durable and leave the next
 broken-links phase a clean base.
 
-- [x] Update `docs/tool-architecture.md` to define one tool call as Kepler's unit
+- Update `docs/tool-architecture.md` to define one tool call as Kepler's unit
       of execution.
-- [x] Update `docs/repository-folders.md`, package documentation, and
+- Update `docs/repository-folders.md`, package documentation, and
       `tests/README.md` for the explicit APIs and the new architecture coverage.
-- [x] Update `docs/extraction.md` **without erasing provenance**: upstream run and
+- Update `docs/extraction.md` **without erasing provenance**: upstream run and
       ORM names may remain where clearly historical, while current guidance must
       not instruct callers to recreate them.
-- [x] Review the complete branch diff specifically for accidental changes to
+- Review the complete branch diff specifically for accidental changes to
       numerical expressions, constants, thresholds, source ordering, and error
       semantics.
-- [ ] Run the full repository checks on Python 3.14, and the optional
-      solver and network checks only when their prerequisites are available.
-- [x] Open and merge the PR to `dev` with parity evidence and a clear statement
+- Run the required repository checks on Python 3.14. Optional solver and
+      network validation are explicit follow-on phases with their required data.
+- Open and merge the PR to `dev` with parity evidence and a clear statement
       that this changes orchestration, not astronomy algorithms.
-- [ ] Record focused optical-suite results, any optional solver-data or network
-      run (when its prerequisites are available), and a clean audit showing no
-      diff in the protected numerical-kernel files.
+- Complete the focused optical and protected-kernel audits. Optional
+      solver-data and live-network evidence belongs to the dedicated closure
+      phases below, not to the completed stateless rollout.
 
-      **Validation record still needed:** the Python 3.14 pass/skip/warning
-      counts, focused optical-suite result, optional-check outcome, and
-      protected-kernel audit are not recorded by this document; CI success alone
-      does not establish them.
-
-**Exit:** required CI green, documentation matching the resulting code, a clean
-working tree, and a PR reviewable phase by phase.
+**Exit:** required CI green, the stateless architecture documented at the
+public boundary, and a PR reviewable phase by phase. Phase P3 reconciles
+reference-document drift discovered after the merge.
 
 ### Review checkpoints
 
@@ -931,31 +939,13 @@ nothing.
 services are not default test dependencies. Their gated tests supplement, but do
 not replace, deterministic offline characterization.
 
-### Completion audit for the stateless rollout (recorded outcome)
+### Completed stateless rollout
 
-PR #52's review and successful GitHub CI gate confirm the completed
-implementation and orchestration items below; the separately required
-validation records remain explicitly open where noted:
+PR #52 completed S0–S6. P3 corrects the remaining stale reference prose, while
+P6 and P9 separately cover solver convergence controls and optional operator
+data; neither reopens the completed stateless boundary.
 
-- `ProcessingRun`, `ProcessingRunRef`, `ensure_wcs_solution`, processing-run WCS
-  reconstruction, and field-calibration dependency wiring are absent from current
-  Python APIs.
-- The automated WCS/photometry/zero-point exporter and any equivalent retained
-  batch harness are gone.
-- No path hash is used as an optical `file_id`.
-- Algorithm modules do not open caller-selected FITS paths or query catalogs.
-- Public tools own configuration, I/O, network access, error translation, and
-  requested persistence.
-- [ ] Protected numerical-kernel files have no diff; awaiting a recorded clean
-  diff result for the protected-kernel audit.
-- Changes inside mixed modules are limited to the approved orchestration boundary
-  and typed result construction.
-- [ ] Default tests pass under Python 3.14 with no network requirement, with
-  pass/skip/warning counts recorded. This evidence remains to be recorded;
-  PR #52's CI success is not a substitute for the required Python 3.14 record.
-- The architecture and reference docs describe the code that will land.
-
-### Phase 5 — The curated pulsar periods (BL-8)
+### Phase P1 — Curated pulsar periods (BL-8)
 
 **Now unblocked by the stateless rollout merge. The phase retains its
 independent scope.**
@@ -1001,7 +991,7 @@ documentation-and-plumbing PR.
 `docs/pulsar-tool-pipeline.md` section 7 was stale and has been corrected; keep
 it in step when Stage 0 gains the curated period.
 
-### Phase 6 — Close the archive-to-analysis loop and the documentation (BL-11, BL-12)
+### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12)
 
 **Now unblocked by the stateless rollout merge. The phase retains its
 independent scope.**
@@ -1009,7 +999,8 @@ independent scope.**
 - [ ] Make the optical data directory resolve to a **list** of roots: the
       `KEPLER_OPTICAL_DATA_DIR` override or the default optical directory, plus
       `tools.config.FITS_DOWNLOAD_DIR` when it exists. Both the lister and the
-      resolver walk all of them.
+      resolver inspect every root; the download root is recursive because MAST
+      stores products below its `mastDownload/` directory.
 - [ ] Keep the existing `search_root` field reporting the primary root, and add a
       `search_roots` list to `OpticalFrameList` so a caller can see both. An
       explicit `directory` argument still means exactly that one directory.
@@ -1030,11 +1021,240 @@ independent scope.**
 
 ---
 
-## 5. Deferred: the TypeScript-backed tools (BL-9, BL-10)
+## 5. Approved remaining closure rollout
 
-**A separate subsystem needing its own plan.** Deferred deliberately, not
-overlooked: the HR diagram and the variable-star tools share a runtime decision
-this document cannot make for them.
+The decisions in this section replace the earlier deferred-work framing. Every
+phase has a testable exit. Phases P1, P4, P6, P7, P8, and P9 have no code
+dependency on one another; P2 and P3 both edit reference documentation and
+should be coordinated or landed serially. P5 begins once the maintainer has
+supplied the PARSEC grid described in its asset gate.
+
+### Phase P3 — Reconcile reference documentation (BL-13)
+
+**Intent:** make the reference documents describe the stateless architecture
+that is already in `dev`, rather than telling callers to recreate deleted
+processing-run and dependency-injection APIs.
+
+**Files:** `CLAUDE.md`, `README.md`, `docs/tool-architecture.md`,
+`docs/repository-folders.md`, `docs/extraction.md`, `tests/README.md`, and
+`docs/working/README.md`.
+
+- [ ] Replace the `algorithms.fieldcal.deps` wiring examples with the explicit
+      `perform_field_calibration` inputs and tool-owned query boundary.
+- [ ] Remove references to deleted run-shaped photometry adapters and WCS
+      reconstruction helpers; retain upstream names only in clearly historical
+      provenance text.
+- [ ] State that one public tool call is Kepler's execution boundary and list
+      the landed `optical`, `fieldcal_reference`, `photometry`, and `wcs` tools.
+- [ ] Correct the photometry documentation: target resolution is offline, but
+      default field calibration can query VizieR unless callers use the
+      documented offline/replay or no-field-calibration routes.
+- [ ] Update the working-document index to show S0–S6 complete and list these
+      remaining independently deliverable closure phases.
+
+**Validation:** `rg` finds no current instruction to import
+`algorithms.fieldcal.deps`, create `ProcessingRun`, or call a deleted adapter;
+`uv run --python 3.14 pytest tests/test_repository_shape.py -q`; and
+`git diff --check`.
+
+**Exit:** current-state documents agree with the public code and the working
+index no longer describes the completed stateless rollout as pending.
+
+### Phase P4 — Exact-parity Python variable-star runtime (BL-10)
+
+**Intent:** expose the existing variable-star light-curve, fold, and
+error-weighted periodogram algorithms through Python tools without changing the
+TypeScript mathematical behavior.
+
+**Architecture:** add `algorithms/variable_star/` as a deliberate Python port
+of `algorithms/lightcurve/variable/` and `algorithms/periodogram/variable/`.
+Its modules cover the source-pair merge, data/error models, differential
+photometry, period folding, the periodogram driver, and the error-weighted
+Lomb–Scargle helper. Keep the TypeScript extraction as provenance and mark each
+Python source with `# PORTED:` references to its TypeScript symbols. Do not
+replace formulas, defaults, row ordering, or documented quirks.
+
+**Tool surface:** add `tools/variable_star.py` and typed models in
+`tools/models.py`. Stage 0 lists and resolves the compact bundled paired-source
+CSV fixture; later tools load the CSV, create the differential light curve,
+compute the periodogram, and fold at an explicit period. Results follow the
+pulsar pattern: bounded previews inline, complete tables as artifacts, and
+typed warnings/errors at the tool boundary.
+
+- [ ] Add a compact, two-source variable-light-curve CSV fixture under
+      `test_data/variable_star/`, using the extracted parser input columns
+      `id`, `mjd`, `mag`, and `mag_error`, plus a README naming it a parity
+      fixture rather than a catalog download.
+- [ ] Port every computational variable TypeScript symbol needed by the runtime:
+      `mergeSourcesByMjd`, `errorMSE`, `VariableData`, variable-source choice,
+      differential values and error bars, JD range, period folding,
+      `getPeriodStep`, `getChartPeriodogramDataArray`, and
+      `lombScargleWithError` with its supporting vector operations.
+- [ ] Preserve the original source semantics, including the documented
+      error-weighting normalization, `errorMSE` calculation, empty-input and
+      fold-edge behavior. The public tool may reject malformed file paths and
+      invalid schema values, but must not change valid-input algorithm results.
+- [ ] Add the Stage 0 list/resolve functions, load/periodogram/fold tools,
+      registry entries, and artifact writing. Do not add browser playback,
+      Highcharts rendering, Angular/RxJS state, forms, or persistence APIs.
+- [ ] Add parity tests with complete expected rows at each stage, including
+      merge ordering, uncertainty values, differential magnitudes, period-fold
+      ordering, and the weighted periodogram samples. Pin documented quirks as
+      parity behavior rather than silently correcting them.
+
+**Validation:** focused variable-star tests; `npm run typecheck` over the
+TypeScript provenance; `uv run --python 3.14 pytest -q`; Python compilation;
+and `git diff --check`.
+
+**Exit:** a caller can discover the bundled fixture, run the entire variable
+pipeline offline, and obtain Python results with documented TypeScript parity.
+
+### Phase P5 — Complete Python HR-diagram port and local-grid operation (BL-9)
+
+**Intent:** complete the Python port of all computational HR-diagram TypeScript
+algorithms and run the existing HR tools from caller-supplied local PARSEC data
+without a network dependency.
+
+**Port boundary:** extend `algorithms/hrdiagram_py/` with ports of the remaining
+computational TypeScript surface: CMD/FSR histogram helpers, source
+serialization and field-star-result assembly, star counts, cluster summary and
+derived quantities, Galactic projections, MWSC distributions, and the
+non-browser isochrone-state calculations. Preserve TypeScript numerical
+behavior and known quirks exactly; correctness remediation remains a separate
+effort. Exclude Angular, Highcharts, form state, browser storage, and rendering.
+
+**Local-grid contract:** accept an explicit PARSEC grid path at the tool and
+algorithm boundary. A supplied grid bypasses `fetch_parsec_isochrone_grid` and
+must never make an HTTP request. M67 may appear only in tests as a compact
+fixture that exercises the local-grid flow; there is no public cluster registry,
+lookup API, or bundled cluster catalog in this phase.
+
+**Maintainer asset gate — special attention required:** supply a PARSEC grid
+with documented source URL, download date, licence/redistribution status,
+photometric filter columns, metallicity/age coverage, and checksum. The phase
+does not substitute a live download or an invented grid when this asset is not
+available.
+
+- [ ] Inventory every exported computational TypeScript HR symbol and map it to
+      a Python destination or an explicit browser/storage exclusion.
+- [ ] Port the unmapped computational functions into focused
+      `algorithms/hrdiagram_py/` modules, preserving formulas and input/output
+      shape; add `# PORTED:` provenance markers.
+- [ ] Add explicit `grid_path` plumbing to the isochrone load/fit path and
+      `tools/hr_diagram.py`; preserve the current live-fetch route only when no
+      local grid is requested.
+- [ ] Add a compact M67 test-only fixture and local PARSEC-grid test input; no
+      registry, resolver, or public fixture-discovery API is introduced.
+- [ ] Add port-parity and offline tests for every newly ported computation and
+      a test that local-grid execution makes zero HTTP requests.
+
+**Validation:** focused HR tests, `npm run typecheck`, the default Python suite,
+and an explicitly local-grid full-pipeline test. Any live Gaia/PARSEC test stays
+network-marked.
+
+**Exit:** every non-browser HR computational algorithm has a documented Python
+home, and an explicit local grid enables a deterministic offline HR execution.
+
+### Phase P6 — Explicit WCS search controls (BL-7)
+
+**Intent:** make the wired plate solver usable when an observer deliberately
+knows a bounded search region, without changing the parity default.
+
+- [ ] Extend the public `solve_astrometry` request and the internal settings
+      seam with optional search radius and minimum/maximum pixel-scale bounds.
+- [ ] Preserve the current all-sky radius and 0.1–60 arcsec/px window whenever
+      the caller supplies no overrides.
+- [ ] Validate all three explicit bounds at the tool boundary, report the
+      effective search settings in the result diagnostics, and retain timeout,
+      backend-attempt, fixture-protection, and atomic-write behavior.
+- [ ] Add deterministic settings-forwarding tests and a solver-data-gated test
+      using an explicit scale window. Do not require solver indexes for the
+      default suite.
+
+**Validation:** focused WCS tests, `ANET_INDEX_PATH=... uv run pytest -m solver`
+when the operator has indexes, the default Python suite, and `git diff --check`.
+
+**Exit:** default calls retain extracted behavior; callers can explicitly request
+a constrained, observable solve instead of waiting for an all-sky miss.
+
+### Phase P7 — Complete offline APASS replay (BL-4)
+
+**Intent:** promote field-calibration replay from a selected-row comparison to a
+complete offline catalog-selection replay.
+
+**Why this phase is necessary:** the current `fit_data.csv` holds only the 35
+catalog rows that already matched a detection. It cannot exercise candidate
+normalization and matching over the full cone response or reproduce the
+recorded `num_not_selected_by_field_cal: 263`. A full APASS response is the
+missing input between catalog query and the existing zero-point calculation.
+
+- [ ] Record the APASS cone-search response for the NGC 5128 fixture once,
+      store it as a compact versioned JSON or CSV fixture, and document query
+      coordinates, radius, catalog release, retrieval date, columns, and source
+      licence/provenance.
+- [ ] Extend `replay_catalog_sources` and the reference-comparison tool to use
+      either the selected-row fixture or the full-response fixture explicitly;
+      neither replay path may open a socket.
+- [ ] Assert catalog candidate count, selected/rejected counts, matched source
+      identity/order, reference magnitudes, and the existing recorded solution.
+- [ ] Keep the existing selected-row replay as its smaller bit-exact regression
+      case; label the full-response path as the end-to-end selection replay.
+
+**Validation:** focused `fieldcal_reference` tests with network calls forbidden,
+the default suite, and `git diff --check`.
+
+**Exit:** Kepler reproduces the complete recorded local field-calibration path,
+including catalog selection, without live VizieR access.
+
+### Phase P8 — Restore NGC 5286 B-frame end-to-end evidence
+
+**Intent:** make all four recorded zero-point cases executable from pixels,
+rather than validating three NGC 5286 B cases only at the solution level.
+
+**Maintainer asset gate:** recover `ngc5286_b_000.fits`, `_001.fits`, and
+`_002.fits`, verify their provenance against the recorded field-calibration
+references, and add them through Git LFS. Do not expand broader FITS coverage
+in this phase.
+
+- [ ] Add Git LFS tracking for only the three recovered B frames and document
+      the expected LFS checkout requirement.
+- [ ] Extend frame provenance and optical discovery tests to identify them.
+- [ ] Run the existing real-pixel calibration path against each B frame and
+      compare to the recorded reference at the established tolerance.
+
+**Validation:** LFS checkout test, focused field-calibration tests, default
+suite, and a documented LFS-free skip for contributors without the assets.
+
+**Exit:** all four recorded zero-point references have an end-to-end local
+pixel path.
+
+### Phase P9 — Validate the ATLAS WCS backend with operator data
+
+**Intent:** cover the unexercised ATLAS branch without vendoring the UCAC4/UCAC5
+catalogue.
+
+**Operator asset gate:** provide a local UCAC4 or UCAC5 tree and set
+`ATLAS_CATALOG_ROOT` and `ATLAS_CATALOG` according to the documented layout.
+
+- [ ] Document the supported catalogue layout, environment variables, expected
+      disk cost, and a preflight command that confirms the backend can load it.
+- [ ] Add an opt-in `solver_data` test that exercises ATLAS source lookup and
+      explicit pixel-scale narrowing; self-skip with an actionable message when
+      the operator data is absent.
+- [ ] Record backend attempts and acceptance diagnostics in the test assertion;
+      do not make the bulk catalogue a default or CI dependency.
+
+**Validation:** the operator-run `solver_data` test and the default suite with
+the same test self-skipping when UCAC data is absent.
+
+**Exit:** both WCS backends have a documented, executable validation route.
+
+## 6. Historical TypeScript runtime discussion (superseded)
+
+The following research record explains the original gap. It is not an active
+plan: P4 settles the variable-star Python port, and P5 settles the remaining HR
+computational port and local-grid operation. In particular, the earlier
+Node-subprocess alternative and the proposed cluster registry are rejected.
 
 | | HR diagram | Variable star |
 |---|---|---|
@@ -1043,7 +1263,7 @@ this document cannot make for them.
 | Catalog access | solvable — `algorithms/query` already queries VizieR for Gaia, 2MASS, APASS, WISE and MWSC | solvable — VizieR, ASAS-SN, ZTF |
 | Model grids | **fetched live** from the PARSEC CMD service, with no recorded fixture | not applicable |
 
-**The runtime decision, still open for BL-10.** `CLAUDE.md` is explicit that a
+**The runtime decision, now settled for BL-10.** `CLAUDE.md` is explicit that a
 Python port is not a general licence: `algorithms/pulsar/` is the one instance,
 and `docs/extraction.md` (Pulsar Sonification §5) records why it was allowed
 there and why it is not general. That port was justified because the upstream
@@ -1053,45 +1273,21 @@ extend on its own. The choice between a Node subprocess seam (mirroring the
 `solve-field` subprocess pattern `algorithms/wcs/` already uses, at the cost of
 adding Node to the runtime dependency set when `package.json` has no build step),
 a Python port marked `# PORTED:` with its divergences enumerated, and leaving it
-as typechecked source is a real architectural decision. **It requires
-brainstorming with the maintainer — do not pick one from a plan document.**
-For the HR diagram this is settled: `dev` took the port.
-
-**What the follow-on plan needs, in order:**
-
-1. **Decide the runtime** for the variable-star half.
-2. **Decide the isochrone-grid policy.** PARSEC and MIST both publish
-   downloadable grids. This is a licensing and repository-size question as much
-   as a technical one: `test_data/` is already 175 MB and `.gitignore` excludes
-   `data/`. The `ANET_INDEX_PATH` precedent — the operator supplies the bulk
-   data, the repository carries only the pointer — is the obvious model, but it is
-   the maintainer's call. `dev`'s live fetch plus local cache is a third answer
-   that works and has no offline story.
-3. **Build cluster ingest on `algorithms/query`.** A cone search returning Gaia
-   astrometry plus multi-band photometry is what the query runner already does;
-   the HR-diagram source shape is a normalization of it.
-4. **Record a cluster fixture in `test_data/`** — one well-studied open cluster
-   (M67 is the conventional choice: old enough for a clean turnoff, well covered
-   by Gaia and 2MASS) as a recorded VizieR response, plus one PARSEC grid, so the
-   field-star cut and the plot-delta computation get an offline test the way the
-   zero-point solution has one.
-5. **Then, and only then, a lookup registry** — `list_clusters` and
-   `resolve_cluster` over that fixture, mirroring the optical frame registry.
-
-Step 4 is the one that makes the original request literally true for the HR
-diagram, and it is fourth because the steps above it are its prerequisites.
+as typechecked source was a real architectural decision. The maintainer has
+chosen the Python port defined in P4. For the HR diagram, P5 extends the Python
+port already present on `dev`.
 
 ---
 
-## 6. What this document cannot fix
+## 7. Historical constraints and scope boundaries
 
-Everything below surfaced during the investigation and **no phase above closes
-it**. Each needs something this work does not have: a maintainer's decision, data
-that is not in this repository, a fixture nobody recorded, or a different topic
-entirely. Grouping them by *why* they are stuck is the point — that is what tells
-you who unblocks each one.
+Everything below surfaced during the investigation. P5–P9 now give the relevant
+items a planned resolution with explicit asset gates. The broader FITS expansion
+and independent algorithm-correctness remediation remain outside this rollout.
+This historical analysis remains for provenance; it does not supersede the
+approved phases above.
 
-### 6.1 Needs a maintainer decision, deliberately not made here
+### 7.1 Resolved architectural choices
 
 **The astrometry.net search window (BL-7).** The one that stops plate solving
 from being useful on the only frame that needs it. `solve_wcs` constructs
@@ -1103,42 +1299,39 @@ window. On `m15_globular_open_000.fits` that ran 670 seconds and returned
 nothing, on a frame whose own header states `SECPIX = 0.5864922312362758`.
 Narrowing the window to the header value would very probably make the solve
 tractable — and would be precisely the failure mode that comment warns about.
-**Phase 4 therefore bounded the run with a timeout and narrowed nothing.** Until
-this is decided, `solve_astrometry` is a tool that reaches the backend correctly
-and reports an honest non-result. Deciding it changes extracted behaviour and
-belongs in its own PR under the extraction contract.
+**Phase 4 therefore bounded the run with a timeout and narrowed nothing.** P6
+settles the follow-up: callers may explicitly opt in to a search radius and
+minimum/maximum pixel-scale bounds; omitted controls retain the all-sky defaults.
 
-**The TypeScript runtime for the variable-star tools (BL-10).** Section 5.
+**The TypeScript runtime for the variable-star tools (BL-10).** P4 selects a
+Python-only, exact-parity port with artifact output and no browser/UI rendering.
 
-**Whether Kepler carries, fetches, or requires an isochrone grid.** Section 5,
-item 2. `dev` currently fetches, which answers the capability question and not
-the offline one.
+**Whether Kepler carries, fetches, or requires an isochrone grid.** P5 requires a
+maintainer-supplied local PARSEC grid and replaces live fetching; it does not add
+a public cluster registry. M67 remains test-only.
 
-### 6.2 Needs data that is not in this repository
+### 7.2 Asset-gated inputs
 
 **Cluster photometry and variable-star light curves.** There is none in
-`test_data/`. On `dev` this bites harder than it did on `main`, because the
-HR-diagram chain exists and still cannot be exercised offline: the Gaia
-crossmatch is a live VizieR query and the isochrone grid is a live HTTP fetch, so
-no part of `tools/hr_diagram.py` can be covered by the default deterministic
-suite. A lookup registry for HR-diagram or variable-star inputs likewise has
-nothing to look up until a fixture is recorded.
+`test_data/`. P5 is specifically gated on the maintainer supplying a local PARSEC
+grid, not on recording a cluster fixture or introducing a public lookup registry.
 
 **UCAC4/UCAC5 catalog data.** Absent from this host entirely. The ATLAS triangle
 solver is therefore unreachable, and **no test the baseline phases added
 exercises that backend at all** — including its pixel-scale narrowing, which is
 the one place the pixel-scale hint actually does something. Half of
-`algorithms/wcs/`'s solver surface stays unvalidated, and no phase here changes
-that.
+`algorithms/wcs/`'s solver surface stays unvalidated until the operator performs
+the P9 validation with their local UCAC data.
 
 **The B-band frames behind three of the four recorded zero-point solves.** Three
 of them — `ngc5286_b_000`, `_001` and `_002` — describe NGC 5286 exposures in B;
 the only NGC 5286 frame bundled is `ngc5286_globular_v_000.fits`, a V frame. So
 all four solves are checked bit-exactly at the solution level, but **only NGC
 5128 B can be driven end-to-end from pixels**. Three quarters of the recorded
-ground truth is reachable as numbers and not as a pipeline.
+ground truth is reachable as numbers and not as a pipeline. P8 recovers only
+these three B frames through Git LFS.
 
-### 6.3 Needs a fixture nobody recorded upstream
+### 7.3 Missing recorded artifacts
 
 **The unmatched catalog rows (BL-4).** `fit_data.csv` recorded the 35 APASS rows
 that *matched* a detection. The cone-search rows that did not match were never
@@ -1147,42 +1340,43 @@ written down, so the recorded count of sources not selected by field calibration
 fixture, and the replay validates photometry → matching → reference magnitude →
 solve but not catalog selection. Closing this needs a live VizieR cone search
 re-recorded as a new fixture — a network operation producing a new artifact,
-against two of this document's own constraints. The tool docstring and the test
-say so, rather than letting a partial replay pass for a full one.
+against two of this document's own constraints. P7 explicitly records the full
+cone response so catalog selection, including the 263 unmatched rows, becomes
+reproducible.
 
 **The 36 frames above the 9 MB cut-off.** The Afterglow web table covers 73
 subjects (~1.5 GB); `test_data/optical/` carries the 37 under 9 MB plus the two
 OCL frames. Widening coverage means adding large incompressible binaries to plain
-git, permanently. `test_data/README.md` already names Git LFS as the answer; that
-is an infrastructure change, not a broken link.
+git, permanently. This rollout does not widen that set: P8 uses Git LFS only for
+the three NGC 5286 B frames above.
 
-### 6.4 Real problems, different topic
+### 7.4 Real problems, different topic
 
 Tracked elsewhere; this document must not quietly absorb them.
 
 **`docs/analysis/pulsar-pipeline-review.md` — open pulsar tool bugs.** Enumerated
-under Phase 5 above, where the constraint bites. All are tool-correctness bugs,
+under P1 above, where the constraint bites. All are tool-correctness bugs,
 not local-data links.
 
 **`docs/analysis/algorithm-remediation-plan.md`'s 109 findings and 7 blockers.**
 Algorithm correctness, untouched here by design. The extraction contract holds
 throughout: no phase moves a numeric expression.
 
-### 6.5 What "all phases complete" will not mean
+### 7.5 What "all phases complete" will not mean
 
 **Not full Skynet parity.** This work validates the *tool seam* — that a tool can
 find local data, run the real code path against it, and return a number
 comparable to recorded ground truth. It does not validate that Kepler's whole
 pipeline reproduces Skynet's.
 
-**Not a working plate solve.** Phase 4 demonstrated that the solver is wired,
-configured, and exercised. Whether it *converges* on the one frame that needs it
-is unresolved and, per section 6.1, may stay unresolved until the search-window
-question is answered.
+**Not a guaranteed plate solve.** P6 makes deliberate search narrowing available
+without changing the default all-sky behavior. P9 validates ATLAS only when an
+operator supplies UCAC data; neither promise guarantees convergence on every
+frame.
 
 ---
 
-## 7. References
+## 8. References
 
 * [`../tool-architecture.md`](../tool-architecture.md) — the master architecture
   this work sits under, and the document Phase S6 amends to define a tool call as
@@ -1190,15 +1384,16 @@ question is answered.
 * [`../extraction.md`](../extraction.md) — per-domain provenance; the WCS, HR
   Diagram, and Catalogs sections are the ones this work touches.
 * [`../pulsar-tool-pipeline.md`](../pulsar-tool-pipeline.md) — the Stage 0
-  pattern every registry here generalizes, and the document Phase 5 keeps in step.
+  pattern the curated-period registry generalizes, and the document P1 keeps in
+  step.
 * [`../analysis/pulsar-pipeline-review.md`](../analysis/pulsar-pipeline-review.md)
-  — the open pulsar tool bugs Phase 5 must leave alone.
+  — the open pulsar tool bugs P1 must leave alone.
 * [`../analysis/algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md)
   — algorithm correctness, deliberately out of scope.
 * `test_data/README.md` — the zero-point convention warning behind BL-5, and the
-  Git LFS note behind section 6.3.
+  Git LFS note behind section 7.3.
 * [tui-harness.md](tui-harness.md) — unblocked by the stateless rollout but
   separately scoped; it owns the photometry-pipeline rename that must operate on
   this document's result.
 * [model-backends.md](model-backends.md) — owner of the system-prompt move that
-  this document's Phase 5 must account for.
+  this document's P1 must account for.
