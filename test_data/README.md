@@ -237,6 +237,11 @@ normalized designations (`b0329`), the form `tools.pulsar` matches a scan's
 `curated_period_s`, `curated_difficulty` and `period_source` on every bundled
 scan.
 
+The file sits in this directory rather than at a path the tool hardcodes,
+because the curation belongs to the scans it describes: point
+`KEPLER_PULSAR_DATA_DIR` at another archive and that archive's own
+`curated_periods.json` is the one consulted.
+
 That closes an offline gap rather than adding a convenience: a blind period
 search succeeds on **one** of these five scans, so without a curated period the
 only route to the other four is a network call to ATNF. The file is the one

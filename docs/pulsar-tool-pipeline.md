@@ -12,14 +12,22 @@ scan path under `test_data/pulsar/` — override with `KEPLER_PULSAR_DATA_DIR` �
 returning `ToolError`s for misses and ambiguity rather than raising. It is
 optional; every stage below also accepts a bare file path.
 
-It also reports the **curated literature period** for a bundled scan
+It also reports the **curated literature period** for a scan
 (`curated_period_s`, with `curated_difficulty` and `period_source` alongside),
-read from `test_data/pulsar/curated_periods.json`. **It is a check on a measured
-period, not an input to the pipeline** — see §4, *Measure first, check second*. Offline it replaces a network
-call to ATNF for that check; it does not replace stage 2. A scan the curation
-does not cover reports `null` — not recorded, never a substituted number — and a
-missing map is a `curated_periods_unavailable` warning on the listing, not an
-import error.
+read from a `curated_periods.json` **beside the scans themselves** — so
+`KEPLER_PULSAR_DATA_DIR` points at another archive and that archive's own
+curation is what applies to it. Pinning the map to a fixed repository path
+would name-match these five periods onto someone else's files and stamp them
+with a `period_source` describing observations they are not.
+
+**It is a check on a measured period, not an input to the pipeline** — see §4,
+*Measure first, check second*. Offline it replaces a network call to ATNF for
+that check; it does not replace stage 2. A scan the curation does not cover
+reports `null` — not recorded, never a substituted number — and a map that is
+missing, unreadable or malformed is a `curated_periods_unavailable` warning
+carried on both the listing and each scan, not an import error. Rows are
+validated one by one, so a row without a numeric `period_s` is dropped rather
+than yielding a `period_source` that cites a curation for a number it lacks.
 
 ```text
    raw scan (.cal.txt)

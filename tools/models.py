@@ -335,6 +335,12 @@ class PulsarScan(KeplerToolModel):
     curated_period_s: float | None = None
     curated_difficulty: str | None = None
     period_source: str | None = None
+    #: Carried on the scan, not only on the enclosing list, because
+    #: ``resolve_pulsar_scan`` returns a bare scan on a single match -- and
+    #: "this archive has no curation" is exactly what a caller needs to tell
+    #: apart from "this source is not in the curation". Both read as a null
+    #: ``curated_period_s`` otherwise.
+    warnings: list[ToolWarning] = Field(default_factory=list)
 
 
 class PulsarScanList(KeplerToolModel):

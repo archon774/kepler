@@ -47,9 +47,23 @@ PULSAR_SCANS: dict[str, str] = {
 #: The curated tables, read from ``test_data/pulsar/curated_periods.json``
 #: rather than restated here, so the tool layer and the suite compare against
 #: one copy of each number (BL-8). The reasoning below is not in the JSON.
-_CURATED_PULSARS: dict[str, dict] = json.loads(
-    (PULSAR / "curated_periods.json").read_text(encoding="utf-8")
-)["pulsars"]
+#:
+#: Guarded the same way ``_discover_frames`` and ``_require`` are: this file is
+#: conftest, so an unguarded read would make a missing or malformed fixture
+#: uncollect the whole suite -- every WCS, photometry, fieldcal and LLM test --
+#: rather than skipping the pulsar tests that actually need it. Consumers guard
+#: on ``PULSAR_PERIODS_S`` being empty.
+def _load_curated_pulsars() -> dict[str, dict]:
+    try:
+        payload = json.loads(
+            (PULSAR / "curated_periods.json").read_text(encoding="utf-8")
+        )
+        return payload["pulsars"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+_CURATED_PULSARS: dict[str, dict] = _load_curated_pulsars()
 
 #: Reference periods (s), from ``test_data/pulsar/Curated pulsars.docx`` — the
 #: curation shipped alongside the scans, column "Period(Literature)". That
@@ -96,6 +110,13 @@ PULSAR_DIFFICULTY: dict[str, dict[str, object]] = {
     }
     for key, entry in _CURATED_PULSARS.items()
 }
+
+#: Guard for tests that read the tables above without going through
+#: ``pulsar_path`` (which skips on its own when the scans are absent).
+requires_curated_periods = pytest.mark.skipif(
+    not _CURATED_PULSARS,
+    reason="missing fixture test_data/pulsar/curated_periods.json — see test_data/README.md",
+)
 
 #: Short aliases for the frames individual tests single out, each chosen for a
 #: specific header or geometry property. See ``test_data/README.md``.
