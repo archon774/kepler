@@ -711,8 +711,12 @@ complete merged Phase 4 tool surface.
 
 - [x] Confirm PR #47 is present on `dev` and update the feature branch from
       current `dev`.
-- [x] Run the complete default suite under Python 3.14 and record pass, skip, and
+- [ ] Run the complete default suite under Python 3.14 and record pass, skip, and
       warning counts.
+
+      **Validation record still needed:** add the Python 3.14 pass, skip, and
+      warning counts from the complete default run; PR #52's CI success does
+      not establish that record here.
 - [x] Inventory every current reference to processing runs, WCS solution state,
       field-calibration dependency wiring, path-derived ids, and optical batch
       orchestration.
@@ -871,12 +875,18 @@ broken-links phase a clean base.
 - [x] Review the complete branch diff specifically for accidental changes to
       numerical expressions, constants, thresholds, source ordering, and error
       semantics.
-- [x] Run the full repository checks on Python 3.14, and the optional
+- [ ] Run the full repository checks on Python 3.14, and the optional
       solver and network checks only when their prerequisites are available.
-- [x] Open and merge the PR to `dev` with parity evidence and a clear statement that this
-      changes orchestration, not astronomy algorithms. Record focused
-      optical-suite results, any optional solver-data run, and a clean diff for
-      the protected numerical-kernel files.
+- [x] Open and merge the PR to `dev` with parity evidence and a clear statement
+      that this changes orchestration, not astronomy algorithms.
+- [ ] Record focused optical-suite results, any optional solver-data or network
+      run (when its prerequisites are available), and a clean audit showing no
+      diff in the protected numerical-kernel files.
+
+      **Validation record still needed:** the Python 3.14 pass/skip/warning
+      counts, focused optical-suite result, optional-check outcome, and
+      protected-kernel audit are not recorded by this document; CI success alone
+      does not establish them.
 
 **Exit:** required CI green, documentation matching the resulting code, a clean
 working tree, and a PR reviewable phase by phase.
@@ -937,7 +947,9 @@ PR #52's review and successful GitHub CI gate confirm the following:
 - Protected numerical-kernel files have no diff.
 - Changes inside mixed modules are limited to the approved orchestration boundary
   and typed result construction.
-- Default tests pass under Python 3.14 with no network requirement.
+- [ ] Default tests pass under Python 3.14 with no network requirement, with
+  pass/skip/warning counts recorded. This evidence remains to be recorded;
+  PR #52's CI success is not a substitute for the required Python 3.14 record.
 - The architecture and reference docs describe the code that will land.
 
 ### Phase 5 — The curated pulsar periods (BL-8)
@@ -1182,7 +1194,8 @@ question is answered.
   — algorithm correctness, deliberately out of scope.
 * `test_data/README.md` — the zero-point convention warning behind BL-5, and the
   Git LFS note behind section 6.3.
-* [tui-harness.md](tui-harness.md) — blocked on the stateless rollout, and the
-  owner of the photometry-pipeline rename that must operate on its result.
+* [tui-harness.md](tui-harness.md) — unblocked by the stateless rollout but
+  separately scoped; it owns the photometry-pipeline rename that must operate on
+  this document's result.
 * [model-backends.md](model-backends.md) — owner of the system-prompt move that
   this document's Phase 5 must account for.
