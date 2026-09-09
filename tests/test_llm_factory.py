@@ -104,6 +104,32 @@ def test_an_explicitly_paired_key_travels_to_a_non_default_base_url(monkeypatch)
     assert _auth_header(backend) == "Bearer sk-explicitly-paired"
 
 
+def test_GEMINI_API_KEY_is_not_sent_to_a_non_default_base_url(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-should-not-travel")
+    capture = CapturingTransport(
+        {"candidates": [{"content": {"parts": []}, "finishReason": "STOP"}]}
+    )
+    backend = build_backend(
+        "gemini/gemini-2.5-pro",
+        base_url="https://proxy.example.com/v1beta",
+        transport=capture(),
+    )
+
+    backend.complete(messages=(), tools=[], system="s", max_tokens=16)
+
+    assert capture.last.headers.get("x-goog-api-key") is None
+
+
+def test_OLLAMA_BASE_URL_configures_the_factory_backend(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11435/v1")
+    capture = CapturingTransport(openai_chat_response())
+    backend = build_backend("ollama/qwen3:8b", transport=capture())
+
+    backend.complete(messages=(), tools=[], system="s", max_tokens=16)
+
+    assert str(capture.last.url) == "http://127.0.0.1:11435/v1/chat/completions"
+
+
 def test_no_auth_header_over_plaintext_http_to_a_non_loopback_host():
     from tools.llm.openai_backend import OpenAIBackend
 

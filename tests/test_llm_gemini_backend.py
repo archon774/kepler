@@ -55,6 +55,20 @@ def test_the_api_key_travels_in_the_x_goog_api_key_header_only():
     assert "key=" not in str(request.url)
 
 
+def test_an_environment_key_is_not_sent_by_a_direct_custom_endpoint(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-should-not-travel")
+    capture = CapturingTransport(_fc_response())
+    backend = GeminiBackend(
+        model="gemini-2.5-pro",
+        base_url="https://proxy.example.com/v1beta",
+        transport=capture(),
+    )
+
+    backend.complete(messages=(), tools=[], system="s", max_tokens=64)
+
+    assert capture.last.headers.get("x-goog-api-key") is None
+
+
 # --- synthetic call ids -----------------------------------------
 
 
