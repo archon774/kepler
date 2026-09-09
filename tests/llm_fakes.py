@@ -189,6 +189,20 @@ def openai_chat_response(
     }
 
 
+def failing_transport(exc: Exception | None = None) -> Any:
+    """An ``httpx`` mock transport whose every request raises a connection
+    error -- for testing a backend's unreachable-daemon handling."""
+
+    import httpx
+
+    error = exc or httpx.ConnectError("connection refused")
+
+    def _raise(request: Any) -> Any:
+        raise error
+
+    return httpx.MockTransport(_raise)
+
+
 def openai_tool_call(
     name: str, arguments: str, *, call_id: str = "call_recorded"
 ) -> dict[str, Any]:

@@ -64,7 +64,13 @@ def build_backend(
     if provider == "openai":
         return _build_openai(model, api_key, base_url, transport)
 
-    # ollama (Phase 2b) and gemini (Phase 3) register their branches here.
+    if provider == "ollama":
+        from tools.llm.ollama_backend import OllamaBackend
+
+        # No api_key is ever passed to Ollama.
+        return OllamaBackend(model=model, base_url=base_url, transport=transport)
+
+    # gemini (Phase 3) registers its branch here.
     if provider in RECOGNIZED_PROVIDERS:
         raise ValueError(f"provider {provider!r} is recognized but not yet wired")
 
