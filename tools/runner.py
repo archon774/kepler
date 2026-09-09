@@ -15,6 +15,7 @@ optional: every tool works from ordinary Python without this module.
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 from tools.agent import events
@@ -39,21 +40,28 @@ def run(
 
     Returns the session manifest path when a session runs. The CLI ignores the
     return value; tests and Python callers use it to inspect the saved
-    tool-call trace. With no ``backend`` supplied it constructs the Anthropic
-    backend and behaves exactly as before; when one is supplied the ``model``
-    argument is informational -- the backend's own model wins -- but the
-    session still records it.
+    tool-call trace.
+
+    With no ``backend`` supplied: if ``KEPLER_MODEL_BACKEND`` names a
+    ``provider/model`` spec it is built through :func:`tools.llm.build_backend`,
+    otherwise the Anthropic backend is constructed as before. When a backend is
+    supplied (or built from the spec) the ``model`` argument is informational --
+    the backend's own model wins -- but the session still records it.
     """
 
     if backend is None:
-        from tools.llm.anthropic_backend import AnthropicBackend
-
+        spec = os.environ.get("KEPLER_MODEL_BACKEND")
         try:
-            backend = AnthropicBackend(model=model)
-        except BackendUnavailableError:
-            print(
-                "Set your ANTHROPIC_API_KEY environment variable to execute queries."
-            )
+            if spec:
+                from tools.llm.factory import build_backend
+
+                backend = build_backend(spec)
+            else:
+                from tools.llm.anthropic_backend import AnthropicBackend
+
+                backend = AnthropicBackend(model=model)
+        except BackendUnavailableError as exc:
+            print(f"Set your {exc.variable} environment variable to execute queries.")
             return None
 
     print(f"User: {user_message}\n" + "=" * 50)
