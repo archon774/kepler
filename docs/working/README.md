@@ -15,7 +15,7 @@ writes the code.
 | Track | Document | Status | Branch base | Prerequisites | Unblocks |
 | --- | --- | --- | --- | --- | --- |
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
-| Optical | [optical-tools.md](optical-tools.md) | Baseline phases merged; stateless rollout pending; later broken-links phases blocked behind it | `agent/remove-processing-run-architecture` off `dev` | None outstanding — the stateless rollout's prerequisite merged as PR #47 | The remaining broken-links phases and every TUI phase |
+| Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases complete; nine closure phases planned | `dev` | P5 needs a maintainer-supplied PARSEC grid; P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | Remaining local-data, documentation, WCS, variable-star, and HR-diagram gaps; the TUI stateless prerequisite is met |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 **The model track branches off `main`, not `dev`,** at the maintainer's
@@ -24,51 +24,34 @@ otherwise requires. Do not retarget either one.
 
 ## Start here
 
-**[optical-tools.md](optical-tools.md), the stateless rollout (phases S0–S6).**
+**[optical-tools.md](optical-tools.md), the approved closure rollout (phases
+P1–P9).**
 
-Two tracks are unblocked today — model and optical — and they can run at the
-same time (see below). If only one is being worked, optical is the one to pick,
-because it gates strictly more: the stateless rollout unblocks both the
-remaining broken-links phases *and* every TUI phase, while the model port
-unblocks only the TUI. TUI work starts when the later of the two finishes, so
-optical sits on more paths. It is also the only track that touches
-`algorithms/` under the extraction contract, with a parity gate on every phase
-and six review checkpoints — starting it early gives that review the time it
-needs.
-
-The TUI track cannot start at all until both of its prerequisites have merged.
+The stateless optical boundary and its TUI prerequisite have merged. The model
+and TUI tracks retain their own prerequisites. Within the optical track, start
+with any P-phase whose files and assets do not overlap with active work; the
+phase table in `optical-tools.md` states the coordination constraints.
 
 ## Implementation Sequence
 
 1. **The model port can proceed now**, independently. Its phases -1 to 3 build
    `tools/llm/` and the headless engine in `tools/agent/`.
-2. **The stateless optical rollout is the next optical step.** The merged
-   broken-links phases 1–4 are its baseline. It must merge before the remaining
-   broken-links phases or any TUI phase begins, so later work never has to
-   support both the processing-run and the stateless tool boundary.
-3. **Once the stateless rollout merges**, the remaining broken-links phases and
-   the TUI phases are unblocked. TUI phase A is owned by the model document;
-   TUI phase C additionally requires the stateless rollout.
+2. **Optical P1–P9 close the remaining broken links.** P1 (pulsar periods), P4
+   (variable-star port), P6 (WCS controls), P7 (APASS replay), P8 (B-frame
+   evidence), and P9 (ATLAS validation) are independent at the code level. P2
+   and P3 coordinate their documentation changes; P5 starts when its PARSEC
+   grid is supplied.
+3. **The TUI stateless prerequisite is satisfied.** TUI phase A remains owned
+   by the model document; TUI phase C may proceed once its model prerequisites
+   are complete.
 
 ## What can run in parallel
 
-**One pairing, and nothing else: the whole model track alongside the whole
-optical stateless rollout (phases S0–S6).**
+Optical closure phases may run in parallel when their modified files and asset
+gates do not overlap. Keep P2/P3 serial because both change the reference
+documents, and coordinate P1 with model phase 0c if the system prompt has moved
+to `tools/agent/prompt.py`.
 
-They are safe to run at once because they sit on separate branches off separate
-bases and their footprints are near-disjoint — `tools/llm/` and `tools/agent/`
-against `algorithms/wcs|fieldcal|photometry/` and the optical tools. The one
-interaction is `SYSTEM_PROMPT` moving to `tools/agent/prompt.py` in model phase
-0c, and the only phase that edits it, optical Phase 5, is blocked behind the
-stateless rollout anyway and carries a locate-before-editing step.
-
-**Everything else is serial.** Within a track, phases run in the order their
-document gives them, and no other pair of tracks overlaps. Two ordering hazards
-are worth naming here because they are easy to get wrong:
-
-- **Optical S0 → S6 is a single pull request**, phases as commits, and the
-  branch is not merged partway through. Each removal step requires its consumers
-  migrated first, so the order is a dependency rather than a convention.
 - **TUI G.1 and G.2 leave CI red between them.** They merge as a stacked pair;
   G.3 follows.
 
