@@ -998,8 +998,21 @@ gained `curated_period_s`, `curated_difficulty` and `period_source`, filled by
 containment match; a missing or malformed map is a `curated_periods_unavailable`
 warning on the listing, never an import error. All five bundled scans resolve
 with their literature period, including the B2021+51 scan whose `SRC_NAME` is
-its observing programme. The system prompt now states the offline path first,
-and `docs/pulsar-tool-pipeline.md` and `test_data/README.md` are in step.
+its observing programme.
+
+**One deliberate divergence from the checkbox above.** P1 specified that the
+curated period be "preferred over the blind search". It is not: the system
+prompt, the four affected registry tool descriptions and the tool docstrings
+state the sourcing order as measure, compare, retune, and only then fall back to
+the reference. Folding at a literature period produces a fit to a known answer
+rather than a detection, and `test_data/README.md` leans on that distinction —
+the scans carry no period in-file precisely so that a successful fold is
+independent evidence. Preferring the reference by default would convert every
+`pulse_snr` in the pipeline from evidence into a restatement of its own input.
+The recovery path the checkbox was reaching for is preserved as step 4, with a
+reporting obligation attached. Changed at the maintainer's direction during
+review of PR #57. `docs/pulsar-tool-pipeline.md` gains a "Measure first, check
+second" section, and it and `test_data/README.md` are in step.
 `tests/test_pulsar_registry.py` pins it (18 cases). Verified with the default
 no-network suite (1648 passed, 41 skipped), `compileall`, and `git diff
 --check`; no `.ts` file was touched, so `npm run typecheck` did not apply. The

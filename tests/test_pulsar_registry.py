@@ -25,7 +25,11 @@ from tests.conftest import (
 )
 from tools import pulsar as pulsar_tools
 from tools.models import PulsarScan, PulsarScanList
-from tools.pulsar import list_pulsar_scans, resolve_pulsar_scan
+from tools.pulsar import (
+    compute_pulsar_periodogram,
+    list_pulsar_scans,
+    resolve_pulsar_scan,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PULSAR = ROOT / "test_data" / "pulsar"
@@ -186,3 +190,52 @@ def test_a_malformed_fixture_is_also_survivable(tmp_path: Path) -> None:
 def test_the_listing_warns_only_when_the_map_is_missing() -> None:
     listing = list_pulsar_scans()
     assert listing.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# The reference is a check, not an input
+# ---------------------------------------------------------------------------
+
+def test_the_curated_period_cannot_bias_the_measurement(
+    pulsar_path, artifact_dir, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stage 2 measures the same period whether or not the curation exists.
+
+    This is the architectural invariant behind "measure first, check second"
+    (`docs/pulsar-tool-pipeline.md`). A fold at a measured period is a
+    detection; a fold at a literature period is a fit to a known answer. That
+    distinction only survives while nothing downstream of stage 0 can see the
+    curated value -- so if a future change wires it into the search bounds, a
+    default, or a seed, this test fails.
+
+    Deliberately run on b0329, the one scan where a blind search succeeds:
+    it is the case where a leaked reference period would be hardest to notice.
+    """
+    scan = pulsar_path("b0329")
+
+    with_curation = compute_pulsar_periodogram(scan)
+    assert with_curation.errors == []
+
+    monkeypatch.setattr(pulsar_tools, "_CURATED_PERIODS", {})
+    monkeypatch.setattr(pulsar_tools, "_CURATED_PERIOD_SOURCE", None)
+    without_curation = compute_pulsar_periodogram(scan)
+
+    assert without_curation.errors == []
+    assert without_curation.peak_period_s == with_curation.peak_period_s
+    assert without_curation.peak_fold_snr == with_curation.peak_fold_snr
+    assert without_curation.top_peaks == with_curation.top_peaks
+
+
+def test_the_measured_period_is_not_the_curated_one(pulsar_path, artifact_dir) -> None:
+    """The two agree to 0.04% and are not the same number.
+
+    Equality would mean the measurement had been replaced by the reference.
+    The gap is the evidence that stage 2 searched a grid: the periodogram
+    reports a grid peak, not a literature value.
+    """
+    result = compute_pulsar_periodogram(pulsar_path("b0329"))
+    curated = PULSAR_PERIODS_S["b0329"]
+
+    assert result.peak_period_s != curated
+    assert result.peak_period_s == pytest.approx(curated, rel=0.002)
+    assert result.peak_fold_snr > 8

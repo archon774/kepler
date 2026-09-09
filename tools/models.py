@@ -316,6 +316,11 @@ class PulsarScan(KeplerToolModel):
     no period of their own, so it comes from the curation shipped alongside
     them and is matched by source name. It is null for a scan the curation
     does not cover, which means "not recorded", never "no period".
+
+    It is a **check on** a measured period, not an input to the pipeline.
+    Folding at it produces a profile that is a fit to a known answer rather
+    than a detection, which is a different claim about the data — see
+    ``docs/pulsar-tool-pipeline.md``, "Measure first, check second".
     """
 
     path: str

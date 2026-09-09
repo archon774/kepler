@@ -391,10 +391,17 @@ def compute_pulsar_periodogram(
     Check ``top_peaks`` too — a strong peak at twice or half the listed period
     means the fundamental may be the other one.
 
+    Run this before consulting any reference period. A fold at a measured
+    period is a detection; a fold at a literature period is a fit to a known
+    answer, and the two are not interchangeable. Compare the result against a
+    reference afterwards — a bundled scan's ``curated_period_s``, or
+    ``search_atnf`` — as a check on the measurement.
+
     A blind search on one 60-second scan only works for a bright source. If it
-    fails, vary ``back_scale`` (the spurious peak often moves with it while a
-    real pulsar does not), narrow ``start``/``stop`` away from the artifact, or
-    take the period from ``search_atnf``.
+    fails, or disagrees with the reference, retry: vary ``back_scale`` (the
+    spurious peak often moves with it while a real pulsar does not), narrow
+    ``start``/``stop`` away from the artifact, raise ``steps``. Folding at the
+    reference period is the fallback for when that has still failed.
     """
     file = _describe(path)
     warnings: list[ToolWarning] = []
@@ -541,8 +548,11 @@ def fold_pulsar_lightcurve(
 
     Every rotation is stacked on the others, so a real pulse adds coherently
     while noise averages down — which is why a pulsar invisible in the raw scan
-    appears here. Get ``period_s`` from ``compute_pulsar_periodogram``, or from
-    ``search_atnf`` for a known source.
+    appears here. Get ``period_s`` from ``compute_pulsar_periodogram``. A
+    literature period — a scan's ``curated_period_s``, or ``search_atnf`` — is
+    the fallback once a retuned search has failed, and a fold at one is not an
+    independent detection: it is a fit to a number that came from outside the
+    data, and should be reported as such.
 
     ``pulse_snr`` on the result is how you tell whether the period was right:
     above ~8 is a real detection, near 1 means a wrong period or a source too
@@ -1058,9 +1068,10 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
     Reads only each file's ``#`` header, so it stays cheap.
 
     Each bundled scan comes back with the curated literature period for its
-    source. That is the offline period: a blind search finds the period on one
-    of the five, so for the rest the alternative to this number is a network
-    call to ATNF.
+    source. That is a reference to check a measurement against, not a period to
+    feed the pipeline: the scans carry none of their own, so a fold at a
+    measured period is a detection while a fold at this one is a fit to a known
+    answer.
     """
     root = Path(directory).expanduser() if directory else _pulsar_data_dir()
     errors: list[ToolError] = []
