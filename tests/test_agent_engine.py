@@ -234,6 +234,38 @@ def test_a_denied_call_never_reaches_the_tool_function(monkeypatch):
     assert not any(isinstance(e, events.ToolCallFinished) for e in stream)
 
 
+def test_junk_args_to_a_no_arg_tool_are_a_fault_not_a_crash(monkeypatch):
+    invoked: list = []
+
+    def no_args():
+        invoked.append(True)
+        return ToolResult(status="ok")
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(ToolCallBlock(call_id="c0", name="no_args", arguments={"junk": 1}),),
+            ),
+            ModelResponse(stop_reason="end_turn", text="ok"),
+        ]
+    )
+    session = _session()
+    stream = list(
+        run_session(
+            "hi",
+            backend=backend,
+            session=session,
+            tool_schemas=[{"name": "no_args", "input_schema": {"type": "object", "properties": {}}}],
+            tool_functions={"no_args": no_args},
+        )
+    )
+    assert invoked == []
+    fault = next(e for e in stream if isinstance(e, events.ProtocolFault))
+    assert fault.type == "schema_violation"
+    assert stream[-1].outcome == "end_turn"  # the run did not crash
+
+
 def test_a_stringified_null_argument_is_a_fault_and_the_tool_is_not_dispatched(monkeypatch):
     invoked: list = []
 

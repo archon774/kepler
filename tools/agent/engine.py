@@ -190,9 +190,15 @@ def _run_tool_turn(
 
         # S8: validate against the tool's own schema BEFORE dispatch. A fault
         # is recorded, an error result goes back to the model, and the loop
-        # continues -- the tool function is never called, nothing raises.
+        # continues -- the tool function is never called, nothing raises. The
+        # callable is passed too, so an empty-properties schema still faults on
+        # junk arguments (via the signature) rather than raising at dispatch.
         fault = validate_tool_call(
-            call.name, arguments, schema_index, call_id=call.call_id
+            call.name,
+            arguments,
+            schema_index,
+            call_id=call.call_id,
+            func=functions.get(call.name),
         )
         denied = fault is None and approver(proposed) is Decision.DENY
 

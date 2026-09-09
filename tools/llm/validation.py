@@ -14,7 +14,8 @@ properties. The rules and their evaluation order are
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping
+import inspect
+from typing import Any, Callable, Iterable, Mapping
 
 from tools.llm.types import ProtocolFault
 
@@ -23,6 +24,10 @@ __all__ = ["index_schemas", "validate_tool_call"]
 #: Case-folded strings a model sends when it means JSON ``null`` and gets it
 #: wrong -- the confirmed-live failure ``SYSTEM_PROMPT`` documents.
 _STRINGY_NULLS = {"none", "null", "nil"}
+
+#: Distinguishes "the caller did not pass a function" from "the function is
+#: genuinely missing" for the ``func`` argument of :func:`validate_tool_call`.
+_UNSET: Any = object()
 
 
 def index_schemas(
@@ -39,12 +44,16 @@ def validate_tool_call(
     index: Mapping[str, Mapping[str, Any]],
     *,
     call_id: str | None = None,
+    func: Callable[..., Any] | None = _UNSET,
 ) -> ProtocolFault | None:
     """Return the first :class:`ProtocolFault` a call trips, or ``None``.
 
     The checks run in the S8 order. An empty (or absent) ``properties`` object
-    means "shape unconstrained": key names and value types are not policed,
-    only ``arguments`` being a mapping and every ``required`` name present.
+    means the schema does not constrain the shape; when the tool's callable is
+    supplied as ``func``, its signature is the fallback constraint, so a no-arg
+    tool called with junk arguments still faults cleanly instead of raising a
+    ``TypeError`` at dispatch. ``func=None`` (as opposed to omitted) means the
+    name has a schema but no registered function -- an ``unknown_tool`` fault.
     """
 
     def fault(kind: str, detail: str) -> ProtocolFault:
@@ -54,6 +63,11 @@ def validate_tool_call(
 
     if name not in index:
         return fault("unknown_tool", f"{name!r} is not a registered tool")
+
+    if func is not _UNSET and func is None:
+        return fault(
+            "unknown_tool", f"{name!r} has a schema but no registered function"
+        )
 
     schema = index[name]
     if not isinstance(arguments, Mapping):
@@ -67,6 +81,14 @@ def validate_tool_call(
             )
 
     if not properties:
+        if func not in (_UNSET, None) and arguments:
+            try:
+                inspect.signature(func).bind(**arguments)
+            except TypeError as exc:
+                return fault(
+                    "schema_violation",
+                    f"{name!r} does not accept {sorted(arguments)}: {exc}",
+                )
         return None
 
     for key, value in arguments.items():

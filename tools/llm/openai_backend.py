@@ -95,6 +95,15 @@ class OpenAIBackend(BaseHTTPBackend):
     def _auth_headers(self) -> dict[str, str]:
         return {"authorization": f"Bearer {self._api_key}"}
 
+    def _token_limit_param(self) -> str:
+        # api.openai.com deprecated `max_tokens` and rejects it outright for
+        # the reasoning models, so send `max_completion_tokens` there. Every
+        # OpenAI-*compatible* server (behind a non-default base URL, Ollama
+        # included) is kept on `max_tokens`, which they all accept.
+        if self._base_url == OPENAI_DEFAULT_BASE_URL.rstrip("/"):
+            return "max_completion_tokens"
+        return "max_tokens"
+
     def complete(
         self,
         *,
@@ -108,7 +117,7 @@ class OpenAIBackend(BaseHTTPBackend):
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": _render_messages(messages, system),
-            "max_tokens": max_tokens,
+            self._token_limit_param(): max_tokens,
             "temperature": temperature,
         }
         if tools:

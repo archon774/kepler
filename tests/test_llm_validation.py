@@ -115,11 +115,38 @@ def test_a_missing_optional_property_is_fine():
     assert _fault("search_vizier", {"target": "M31"}) is None
 
 
-def test_an_empty_properties_schema_does_not_police_extra_arguments():
+def test_an_empty_properties_schema_does_not_police_extra_arguments_without_a_func():
     index = validation.index_schemas(
         [{"name": "fake_lookup", "input_schema": {"type": "object", "properties": {}}}]
     )
     assert validation.validate_tool_call("fake_lookup", {"target": "M31"}, index) is None
+
+
+def test_an_empty_properties_schema_falls_back_to_the_function_signature():
+    index = validation.index_schemas(
+        [{"name": "no_args", "input_schema": {"type": "object", "properties": {}}}]
+    )
+
+    def no_args(directory=None):
+        return None
+
+    # an accepted argument passes
+    assert validation.validate_tool_call(
+        "no_args", {"directory": "/tmp"}, index, func=no_args
+    ) is None
+    # a junk argument the callable rejects is a schema_violation, not a crash
+    fault = validation.validate_tool_call(
+        "no_args", {"bogus": 1}, index, func=no_args
+    )
+    assert fault is not None and fault.type == "schema_violation"
+
+
+def test_a_schema_with_no_registered_function_is_an_unknown_tool_fault():
+    index = validation.index_schemas(
+        [{"name": "orphan", "input_schema": {"type": "object", "properties": {}}}]
+    )
+    fault = validation.validate_tool_call("orphan", {}, index, func=None)
+    assert fault is not None and fault.type == "unknown_tool"
 
 
 def test_the_call_id_is_carried_onto_the_fault_when_given():

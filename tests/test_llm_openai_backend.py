@@ -170,6 +170,23 @@ def test_message_rendering_matches_the_openai_dialect():
     assert body["tools"][0]["function"]["name"] == "search_ned"
 
 
+def test_default_host_sends_max_completion_tokens_compatible_hosts_send_max_tokens():
+    import json as _json
+
+    on_default, capture_a = _backend(openai_chat_response())
+    on_default.complete(messages=(), tools=[], system="s", max_tokens=321)
+    assert "max_completion_tokens" in _json.loads(capture_a.last.content)
+    assert "max_tokens" not in _json.loads(capture_a.last.content)
+
+    capture_b = CapturingTransport(openai_chat_response())
+    compat = OpenAIBackend(
+        model="local", base_url="http://127.0.0.1:8000/v1", api_key="sk-x",
+        transport=capture_b(),
+    )
+    compat.complete(messages=(), tools=[], system="s", max_tokens=321)
+    assert _json.loads(capture_b.last.content)["max_tokens"] == 321
+
+
 def test_an_http_error_status_raises_rather_than_returning_a_bad_response():
     capture = CapturingTransport({"error": {"message": "bad request"}}, status_code=400)
     backend = OpenAIBackend(model="gpt-4.1", api_key="sk-x", transport=capture())
