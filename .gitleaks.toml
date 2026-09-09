@@ -7,6 +7,12 @@
 useDefault = true
 
 [[allowlists]]
+description = "Known synthetic test key; not a credential"
+regexes = [
+  '''SECRET-KEY-abc123def456''',
+]
+
+[[allowlists]]
 description = "Documented environment variable names, not credential values"
 regexes = [
   '''ADS_DEV_KEY''',
