@@ -57,8 +57,8 @@ Kepler currently has two working agent surfaces, both built on the plain
 Python functions in `tools/`:
 
 - **`tools.runner` — the astronomy research agent** (entry point:
-  `kepler-astro-query`). A bounded Anthropic tool-use loop (`max_turns=20`,
-  default model `claude-sonnet-5`) over `tools.registry.TOOL_SCHEMAS`: one
+  `kepler-astro-query`). A bounded tool-use loop (`max_turns=20`, default model
+  `claude-sonnet-5`) over `tools.registry.TOOL_SCHEMAS`: one
   schema per remote database — SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA,
   and ADS — plus SIMBAD-backed target resolution, local aperture photometry
   on a bundled FITS library (`tools.photometry`), a local pulsar pipeline
@@ -83,11 +83,15 @@ Python functions in `tools/`:
   each turn and tool call — including cache hits — under
   `artifacts/sessions/<session_id>/session_manifest.json`, so a session's
   tool-call history can be inspected or replayed after the fact
-  (`tools.sessions.list_session_manifests` / `read_session_manifest`). Run it
-  with:
+  (`tools.sessions.list_session_manifests` / `read_session_manifest`). The loop
+  itself lives in `tools/agent/` and drives a provider-neutral model port
+  (`tools/llm/`); `tools/runner.py` is the console shim over it. Run it with:
 
   ```bash
   ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
+
+  # or another provider, via a provider/model spec:
+  KEPLER_MODEL_BACKEND=ollama/qwen3:8b uv run kepler-astro-query "resolve NGC 6334"
   ```
 
 - **`tools/claude_photometry_haiku_tool.py` — the automated photometry
@@ -120,10 +124,12 @@ identical function any other caller would import and run.
 ## Highlights
 
 - **Two working agent surfaces, not just a plan.** `tools.runner`
-  (`kepler-astro-query`) runs a bounded Anthropic tool-use loop over eight
-  remote astronomy databases; `tools/claude_photometry_haiku_tool.py` runs an
-  automated FITS photometry pipeline with a live catalog-calibrated zero
-  point and a Claude-generated summary. See [The Agent](#the-agent).
+  (`kepler-astro-query`) runs a bounded, provider-neutral tool-use loop over
+  eight remote astronomy databases — Anthropic by default, or an
+  OpenAI-compatible, Ollama, or Gemini backend via `KEPLER_MODEL_BACKEND`;
+  `tools/claude_photometry_haiku_tool.py` runs an automated FITS photometry
+  pipeline with a live catalog-calibrated zero point and a Claude-generated
+  summary. See [The Agent](#the-agent).
 - **Byte-preserved extraction contract.** Every severed upstream dependency is
   marked inline with `# EXTRACTED: was <symbol>` (Python) or
   `// EXTRACTED: was …` (TypeScript) — an index of exactly what was cut and
@@ -148,7 +154,7 @@ identical function any other caller would import and run.
 | Path | Status | What it contains |
 | --- | --- | --- |
 | `tools/` | Python tools | Plain Python wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
-| `tools/runner.py`, `tools/registry.py`, `tools/sessions.py` | Python agent | The `kepler-astro-query` Anthropic tool-use loop, the tool-schema registry it runs over, and the per-run session manifest recorder. See [The Agent](#the-agent). |
+| `tools/runner.py`, `tools/agent/`, `tools/llm/`, `tools/registry.py`, `tools/sessions.py` | Python agent | The `kepler-astro-query` tool-use loop: a console shim (`runner.py`) over the headless engine (`tools/agent/`), the provider-neutral model port (`tools/llm/`: Anthropic, OpenAI-compatible, Ollama, Gemini), the tool-schema registry, and the per-run session manifest recorder. See [The Agent](#the-agent). |
 | `tools/claude_photometry_haiku_tool.py` | Python agent | Automated FITS photometry pipeline with an optional Claude-generated results summary. See [The Agent](#the-agent). |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
@@ -231,8 +237,10 @@ UCAC4/UCAC5 catalogs.
 
 ### Python Entry Points
 
-ADS queries require `ADS_DEV_KEY`. The optional Anthropic runner exposed by
-`tools.runner` requires `ANTHROPIC_API_KEY`.
+ADS queries require `ADS_DEV_KEY`. The optional agent loop exposed by
+`tools.runner` needs a model backend: `ANTHROPIC_API_KEY` for the default
+Anthropic backend, or `KEPLER_MODEL_BACKEND` plus that provider's key (see
+[Configuration](#model-backend-configuration)).
 
 The plain Python tools live under `tools`:
 
@@ -255,8 +263,8 @@ from tools.hr_diagram import run_full_hr_pipeline, run_full_hr_pipeline_from_cat
 from tools.workspace import describe_artifact, list_artifacts
 ```
 
-An optional agentic runner is available for wiring these tools into an
-Anthropic tool-use loop:
+An optional agentic runner is available for wiring these tools into a
+tool-use loop:
 
 ```bash
 ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
@@ -317,6 +325,24 @@ photometry, and calibration parity beyond the bundled pytest fixtures still
 requires solver binaries and local catalog data.
 
 ## Configuration
+
+### Model Backend Configuration
+
+The agent loop's model backend is chosen by a `provider/model` spec, split on
+the first slash only. With `KEPLER_MODEL_BACKEND` unset it uses Anthropic.
+
+- `KEPLER_MODEL_BACKEND`: e.g. `anthropic/claude-sonnet-5`, `openai/gpt-4.1`,
+  `ollama/qwen3:8b`, `gemini/gemini-2.5-pro`.
+- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`: the provider key.
+- `OPENAI_BASE_URL`: an OpenAI-compatible endpoint. A non-default base URL
+  needs its key passed explicitly alongside it — an environment
+  `OPENAI_API_KEY` is only sent to `api.openai.com`.
+- `OLLAMA_BASE_URL`: defaults to `http://localhost:11434/v1`; no key.
+
+```bash
+KEPLER_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... \
+  uv run kepler-astro-query "all historical radio data on Cassiopeia A"
+```
 
 ### Catalog Query Configuration
 

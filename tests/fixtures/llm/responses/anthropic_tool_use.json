@@ -1,0 +1,28 @@
+{
+  "id": "msg_01Fj9kQ2xsamplerecordedshape",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "I'll resolve M31 in SIMBAD first."
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01Aq9wRecordedToolUseId",
+      "name": "search_simbad",
+      "input": {
+        "target": "M31"
+      }
+    }
+  ],
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 1843,
+    "output_tokens": 92,
+    "cache_read_input_tokens": 12032,
+    "cache_creation_input_tokens": 0
+  }
+}

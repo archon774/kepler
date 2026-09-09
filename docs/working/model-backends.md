@@ -1,14 +1,20 @@
 # Model Backends and Provider Port
 
-**Status:** Design approved; implementation pending. No code exists — PR #46 was
-documentation only.
-**Date:** 2026-09-04, consolidated 2026-09-07
+**Status:** Phases −1 through 3 **implemented** (2026-09-09) on
+`agent/model-backends-impl`, off `dev` at the maintainer's instruction —
+delivered as one branch, one commit per phase. `tools/llm/` and `tools/agent/`
+exist and are wired into `tools/runner.py`. Phases 4–5 (the benchmark harness)
+remain deferred.
+**Date:** 2026-09-04, consolidated 2026-09-07, implemented 2026-09-09
 **Prerequisites:** None.
 **Unblocks:** The headless agent engine every phase of
-[tui-harness.md](tui-harness.md) depends on, and the benchmark harness deferred
-to phases 4–5 below.
-**Branch:** `agent/model-backends`, off `main` — at the maintainer's
-instruction. `CLAUDE.md` otherwise defaults to `dev`; do not retarget.
+[tui-harness.md](tui-harness.md) depends on (now built), and the benchmark
+harness deferred to phases 4–5 below.
+**Branch:** implemented on `agent/model-backends-impl`, off `dev` — the
+maintainer redirected the base from `main` to `dev` at implementation time
+(`dev` carries the current plan doc and the 49-tool registry the design
+describes). The original `agent/model-backends` branch carried PR #46
+(docs only) and is superseded.
 **Consumed by:** [tui-harness.md](tui-harness.md), the Kepler console, which
 drives this port through the headless engine in `tools/agent/`.
 
@@ -50,12 +56,14 @@ The vendor's data model is the loop's data model. `run()` is a single ~160-line
 function interleaving five concerns: the model loop, tool dispatch, the
 repeated-call cache, session recording, and printing.
 
-**`tools/registry.py` was 23 tools when this design was written and is 48 as of
-2026-09-07** — the broken-links phases added the local-data tools. The
-portability finding is unchanged and was re-checked at 48. No `anyOf`, no
-`oneOf`, no `allOf`, no `$ref`, no `additionalProperties`. One `enum`, one
-array-of-string, otherwise flat objects. Translating it to three other schema
-dialects is tractable — with exactly one exception, below.
+**`tools/registry.py` was 23 tools when this design was written, 48 on
+2026-09-07, and 49 at implementation (2026-09-09).** The portability finding
+holds: no `anyOf`/`oneOf`/`allOf`/`$ref`/`additionalProperties`, one `enum`,
+flat objects. Two corrections from the Phase 1a inventory: there are now
+**8 scalar-or-null unions, not 2** (4× `["integer","null"]`, 4×
+`["number","null"]` — the radio-source tools added the `number` ones), and
+arrays are string-, number-, *and* opaque-object-typed, not string-only.
+Translating to three other dialects is still tractable.
 
 **The one landmine.** `search_vizier.max_catalogs` (`tools/registry.py:339`) and
 `search_mast.max_observations` (`tools/registry.py:380`) are typed as the union
@@ -296,15 +304,20 @@ declared dialect.
 | Call ids | native | native | **none — adapter synthesizes** |
 | Arguments arrive as | mapping | **JSON string** (must be parsed) | mapping |
 
-**Input inventory — verified against `tools/registry.py` at 23 tools, and the
-portability finding re-checked at 48 on 2026-09-07.** No
-`anyOf`/`oneOf`/`allOf`/`$ref`/`additionalProperties`; exactly one `enum`
-(`search_ned`); exactly one array-of-string (`search_simbad`); exactly two
-integer-or-null unions (`search_vizier.max_catalogs`,
-`search_mast.max_observations`). Every schema is a flat object, and six tools
-carry no `required` key at all. The line numbers cited in this document come
-from a read of the file; **confirm property names and offsets against
-`tools/registry.py` before relying on them.**
+**Input inventory — re-verified against `tools/registry.py` at 49 tools during
+Phase 1a (2026-09-09).** No `anyOf`/`oneOf`/`allOf`/`$ref`/`additionalProperties`;
+one `enum` (`search_ned.table`); arrays of string (`search_simbad.fields` and
+2 more), number (`analyze_source_spectrum.*`), and opaque object
+(`solve_zeropoint_from_measurements.*`); **8 scalar-or-null unions** —
+`["integer","null"]` on `search_vizier.max_catalogs`,
+`search_mast.max_observations`, `plot_field_sed.max_catalogs`,
+`identify_radio_sources.max_catalogs`; `["number","null"]` on
+`plot_field_sed.{radius_arcsec,max_field_radius_arcmin}` and
+`identify_radio_sources.{radius_arcsec,max_field_radius_arcmin}`. Every schema
+is a flat object; 11 tools carry no `required` key, and several `list_*` tools
+carry an empty `properties` object (which validation reads as "shape
+unconstrained"). The golden files under `tests/fixtures/llm/schemas/` are now
+the authoritative record; regenerate them on any registry change.
 
 Three requirements the implementer must not negotiate:
 
@@ -421,6 +434,10 @@ Nine requirements, from the security review of this design. Each is an
 acceptance criterion with a test, not advice. IDs are referenced from the
 rollout in section 9.
 
+**Status (2026-09-09):** S3, S4, S8, S9 **implemented and tested** in phases
+−1–3. S1, S2, S5, S6, S7 belong to the benchmark harness (phases 4–5) and are
+**not yet built** — no judge, no fixture store, no suite loader exists.
+
 ### S1 — The judge never sees untrusted content (HIGH)
 
 The optional LLM judge emits a pass/fail verdict. Tool results are arbitrary
@@ -455,6 +472,10 @@ Record mode writes live third-party response text into committed files.
 
 ### S3 — Credential is bound to endpoint (MEDIUM)
 
+*Implemented in Phase 2a: `tools/llm/factory.py` owns the binding rule,
+`tools/llm/base.py::BaseHTTPBackend` the transport hardening; tested in
+`tests/test_llm_factory.py`.*
+
 Independently settable endpoint and credential is a key-exfiltration primitive,
 and the endpoint is the half that travels in a shared benchmark config or a
 `--base-url` flag.
@@ -473,6 +494,11 @@ and the endpoint is the half that travels in a shared benchmark config or a
   credential must not send an `Authorization` header.
 
 ### S4 — No credentials in URLs (MEDIUM)
+
+*Implemented in phases 2a/3: header auth only across all four adapters
+(`x-goog-api-key` for Gemini), cross-backend sweep in
+`tests/test_llm_gemini_backend.py`. The manifest-URL-scrub half (a recorded
+`base_url_host` stripped of userinfo) lands with manifest v2 in Phase 4.*
 
 Gemini's REST API accepts a key as a query parameter, which lands in proxy logs,
 in `httpx` exception messages (which include the URL), and in any manifest
@@ -517,6 +543,11 @@ tool code sets them.
   no file is written outside the artifact root.
 
 ### S8 — Validate arguments before dispatch (MEDIUM)
+
+*Implemented in Phase 1b: `tools/llm/validation.py` runs the rule table below
+before every dispatch; `AgentSession.record_fault` + the `protocol_faults`
+manifest key record what it catches. Tests: `tests/test_llm_validation.py`,
+`tests/test_runner_validation.py`.*
 
 `tools/runner.py` dispatches tool functions on model-supplied JSON. Today
 Anthropic's server-side schema enforcement plus Python signature binding
@@ -565,6 +596,11 @@ Two rules that are the whole point:
   crashed run measures nothing.
 
 ### S9 — Fix the stale gitleaks allowlist first (LOW-MEDIUM)
+
+*Implemented in Phase −1: the `kepler/` paths corrected to `tools/`, the
+`docs/*.md` and workflow directory wildcards replaced with exact files, a
+scoping comment added. `OPENAI_API_KEY`/`GEMINI_API_KEY` added in phases 2a/3
+next to their first uses. Probe-verified with the CI's gitleaks image.*
 
 Verified: `.gitleaks.toml` scopes its allowlist of the three
 environment-variable *names* `ADS_DEV_KEY`, `ANTHROPIC_API_KEY`, and
@@ -765,6 +801,29 @@ use it consistently across all three HTTP adapters.
 
 One PR per task, narrow, in order. Documentation, workflow, dependency, and
 behaviour changes stay separated per `CLAUDE.md`.
+
+### Status — phases −1 through 3 done (2026-09-09)
+
+Delivered as one branch (`agent/model-backends-impl`), one commit per phase,
+each with the full suite green and the Phase 0c gate (an unedited
+`tests/test_runner_session.py`) passing.
+
+| Phase | Commit | Outcome |
+| --- | --- | --- |
+| −1 gitleaks allowlist | `security(gitleaks): fix stale allowlist paths…` | stale `kepler/` paths fixed, directory wildcards removed, probe-verified |
+| 0a neutral types + protocol | `feat(llm): neutral model-port types…` | `tools/llm/types.py`, `base.py` |
+| 0b Anthropic adapter | `feat(llm): the Anthropic Messages API adapter` | `anthropic_backend.py`, streaming preserved |
+| 0c move the loop | `refactor(agent): move the loop into tools/agent/…` | `tools/agent/` engine + events; `runner.py` a shim; gate empty-diff |
+| 1a schema translation | `feat(llm): tool-schema translation into all four dialects` | `schema.py` + 4 byte-stable golden files; **8 unions found, not 2** |
+| 1b argument validation | `feat(llm): validate tool arguments…before dispatch (S8)` | `validation.py`; `protocol_faults` manifest key (schema still v1) |
+| 2a OpenAI + factory + HTTP base | `feat(llm): OpenAI-compatible backend, the factory…(S3, S4)` | `openai_backend.py`, `factory.py`, `BaseHTTPBackend`; markers added |
+| 2b Ollama + live check | `feat(llm): Ollama backend, and the live OpenAI-compat measurement` | `ollama_backend.py`; section 11 Q2 measured (below) |
+| 3 Gemini | `feat(llm): Gemini backend — synthetic call ids…(S4)` | `gemini_backend.py`; `call_id_mismatch` raises; cross-backend sweep |
+| — KEPLER_MODEL_BACKEND wiring | `feat(runner): honor KEPLER_MODEL_BACKEND in the console shim` | the shim builds a spec through `build_backend` when the var is set |
+| docs | this commit | this document, `tool-architecture.md` §10, `README.md`, `CLAUDE.md` |
+
+Not done (deferred): phases 4–5, the benchmark harness (section 6) and manifest
+v2 (section 7), which carry S1, S2, S5, S6, S7.
 
 ### Global constraints
 
@@ -1180,24 +1239,33 @@ visible in all four dialects.
 
 ## 11. Open Questions
 
-Reviewed at the implementation design gate, 2026-09-04. Two are resolved
-outright, one provisionally, and two remain open — each named against the phase
-that will close it.
+Reviewed at the implementation design gate, 2026-09-04; questions 1 and 2
+closed by the Phase 2b measurement, 2026-09-09.
 
-**1. Which local models are the reference set?** *Provisionally resolved.*
-`qwen3:8b` is the small tier — reliable tool calling at 8B, which is the tier the
-null probe most needs to discriminate. It is named once, as a constant in the
-Ollama backend's test module, so later work imports a name rather than a literal.
-The frontier tier is chosen when the benchmark phases land and there is something
-to compare against. Closed by Phase 2b.
+**1. Which local models are the reference set?** *Resolved.* The plan's
+`qwen3:8b` was not available on the implementation host; the Phase 2b
+measurement used **`qwen3.8:27b-mlx`** instead — the same qwen3.x
+tool-calling tier — and it completed a live tool-using loop. The name is
+`OLLAMA_REFERENCE_MODEL` in `tests/test_llm_ollama_backend.py`, a single
+constant later work imports. The frontier tier is still chosen when the
+benchmark phases land.
 
 **2. Does the Ollama OpenAI-compatibility endpoint faithfully carry union types
-and parallel tool calls?** *Open — resolved by measurement.* Phase 2b runs a live
-reference-model loop and records three findings: what the model emits for a
-union-typed `max_catalogs`, whether arguments arrive as a JSON string or an
-object, and whether parallel calls return in one message. If the compatibility
-layer proves lossy, the native chat endpoint is the documented fallback and
-taking it is a decision, not a silent implementation choice.
+and parallel tool calls?** *Resolved by measurement — the layer is faithful,
+so the native chat endpoint fallback was NOT taken.* The Phase 2b live loop
+against `qwen3.8:27b-mlx` recorded three findings:
+
+> 1. **Union survival:** prompted for an uncapped query against the real
+>    `["integer","null"]` `max_catalogs` schema, the model emitted
+>    `max_catalogs` as **JSON `null`**. The union reaches the model intact;
+>    no transport-level rejection.
+> 2. **Argument form:** tool-call `arguments` arrive as a **JSON string** (the
+>    OpenAI wire format), parsed by the adapter — not an object.
+> 3. **Parallel calls:** prompted for two lookups, **2 tool calls came back in
+>    one assistant message**.
+
+None of the three is lossy, so `OllamaBackend` stays a thin `OpenAIBackend`
+subclass over `/v1/chat/completions`.
 
 **3. Is the price table maintainable?** *Open — belongs to the benchmark
 phases.* A stale price table produces confident wrong cost numbers. Leaning

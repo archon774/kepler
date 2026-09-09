@@ -389,15 +389,25 @@ def atlas_catalog_root() -> str | None:
 
 
 def pytest_collection_modifyitems(config, items):
-    """Deselect ``network`` tests unless ``KEPLER_TEST_NETWORK=1``.
+    """Deselect the opt-in live markers unless their environment gate is set.
 
-    A marker alone would still let ``-m network`` fire live queries by accident
-    in CI; requiring the environment variable too makes the opt-in explicit, as
-    CLAUDE.md asks for remote astronomy calls.
+    A marker alone would still let ``-m network`` (or ``-m model_api``) fire a
+    live call by accident in CI; requiring the environment variable too makes
+    the opt-in explicit, as CLAUDE.md asks for remote calls.
     """
-    if os.environ.get("KEPLER_TEST_NETWORK") == "1":
-        return
-    skip = pytest.mark.skip(reason="live catalog query; set KEPLER_TEST_NETWORK=1 to run")
+    net_on = os.environ.get("KEPLER_TEST_NETWORK") == "1"
+    model_on = os.environ.get("KEPLER_TEST_MODEL_API") == "1"
+
+    net_skip = pytest.mark.skip(
+        reason="live catalog query; set KEPLER_TEST_NETWORK=1 to run"
+    )
+    model_skip = pytest.mark.skip(
+        reason="live model provider; set KEPLER_TEST_MODEL_API=1 to run"
+    )
     for item in items:
-        if "network" in item.keywords:
-            item.add_marker(skip)
+        if not net_on and "network" in item.keywords:
+            item.add_marker(net_skip)
+        if not model_on and (
+            "model_api" in item.keywords or "ollama" in item.keywords
+        ):
+            item.add_marker(model_skip)

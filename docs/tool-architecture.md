@@ -42,8 +42,10 @@ tools/
   casda.py            # CASDA archive tools
   resolve.py          # SIMBAD-backed target resolution
   registry.py         # optional agent/tool schema registry
-  runner.py           # optional Anthropic agent loop
-  sessions.py         # per-run session manifest recording + the runner's cache-key helper
+  runner.py           # thin console shim over tools/agent/ (kept for kepler-astro-query)
+  sessions.py         # per-run session manifest recording + the loop's cache-key helper
+  agent/              # headless agent loop: run_session, events, the moved SYSTEM_PROMPT
+  llm/                # provider-neutral model port -- see section 10
   workspace.py        # local artifact helpers
   models.py           # shared result, warning/error, WCS, catalog, artifact models
   config.py           # small environment-backed settings helpers
@@ -370,3 +372,42 @@ TypeScript algorithms currently have no build manifest. Add `package.json` and
 - No remote-provider live tests in default checks.
 - No large model tree before public tools need it.
 - No TypeScript runtime redesign before TypeScript-backed tools are in scope.
+
+---
+
+## 10. The Agent Loop and Model Port
+
+Serving/agent-loop code stays optional (section 7): every tool is callable
+from plain Python without any of this. When an agent loop *is* wanted, it is
+built in two layers.
+
+`tools/agent/` is the headless loop. `run_session()` drives a model backend
+over the tool registry and yields a stream of events (`SessionStarted`,
+`TurnStarted`, `TextDelta`, `ToolCallProposed`/`Started`/`Finished`/`Denied`,
+`ProtocolFault`, `TurnFinished`, `SessionFinished`); a `Decision` flows back in
+through an approver callable. It imports no UI toolkit. `SYSTEM_PROMPT` lives
+in `tools/agent/prompt.py`. `tools/runner.py` is now a thin shim that iterates
+`run_session()` and prints, kept so the `kepler-astro-query` console script and
+its output are unchanged.
+
+`tools/llm/` is the provider-neutral **model port**. Two rules govern it:
+
+> The core owns the loop; adapters own the dialect.
+>
+> Replay the tools, never the model.
+
+- A backend is named by a `provider/model` spec, split on the **first slash
+  only** (`ollama/llama3.1:8b`, `openai/meta-llama/Llama-3-8b`). Recognized
+  providers: `anthropic`, `openai`, `ollama`, `gemini`. `build_backend(spec)`
+  constructs one; `spec` defaults to `KEPLER_MODEL_BACKEND`.
+- Environment: `KEPLER_MODEL_BACKEND` (default spec), `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY` / `OPENAI_BASE_URL`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`. A
+  provider key from the environment reaches only that provider's default host;
+  a non-default base URL needs a key passed explicitly with it.
+- `complete()` is the **only required method** of a `ModelBackend`, and it is
+  non-streaming. Streaming is a capability flag with a one-shot fallback.
+  Schema translation into a backend's dialect and pre-dispatch argument
+  validation are the caller's job (`tools/llm/schema.py`,
+  `tools/llm/validation.py`), so adapters never import `tools/registry.py`.
+- Zero new third-party dependencies: the `anthropic` SDK is reused; the OpenAI,
+  Ollama, and Gemini adapters are raw `httpx`.
