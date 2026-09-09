@@ -165,6 +165,32 @@ def test_max_turns_is_a_terminal_outcome(monkeypatch):
     assert sum(isinstance(e, events.TurnStarted) for e in stream) == 3
 
 
+def test_an_error_tool_result_is_flagged_is_error_in_the_neutral_history(monkeypatch):
+    def failing(**kwargs):
+        return ToolResult(status="error")
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="ok"),
+        ]
+    )
+    session = _session()
+    list(
+        run_session(
+            "hi",
+            backend=backend,
+            session=session,
+            tool_schemas=[{"name": "lookup", "input_schema": {"type": "object", "properties": {}}}],
+            tool_functions={"lookup": failing},
+        )
+    )
+    # the assistant message is history[1]; the tool-result user message is [2]
+    result_msg = backend.calls[1]["messages"][2]
+    assert result_msg.role == "user"
+    assert result_msg.blocks[0].is_error is True
+
+
 def test_an_unknown_tool_is_caught_by_validation_not_dispatched(monkeypatch):
     backend = StubBackend(
         [

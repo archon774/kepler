@@ -106,6 +106,20 @@ def test_finish_reason_length_with_a_tool_call_records_truncated_output():
     assert "truncated_output" in [f.type for f in response.faults]
 
 
+def test_a_stop_finish_reason_alongside_tool_calls_is_still_a_tool_use_turn():
+    backend, _ = _backend(
+        openai_chat_response(
+            text=None,
+            finish_reason="stop",  # a quirky compatible server
+            tool_calls=[openai_tool_call("search_ned", '{"name": "M31"}')],
+        )
+    )
+    response = backend.complete(messages=(), tools=[], system="s", max_tokens=50)
+    assert response.stop_reason == "tool_use"
+    assert response.raw_stop_reason == "stop"
+    assert len(response.tool_calls) == 1
+
+
 def test_finish_reason_content_filter_maps_to_refusal():
     backend, _ = _backend(openai_chat_response(text="", finish_reason="content_filter"))
     response = backend.complete(messages=(), tools=[], system="s", max_tokens=5)

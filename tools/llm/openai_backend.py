@@ -205,6 +205,12 @@ def _to_model_response(data: Mapping[str, Any], latency_ms: float) -> ModelRespo
             )
         )
 
+    # A quirky compatible server can return finish_reason "stop" alongside
+    # tool_calls; treat any parsed call as a tool-use turn so the loop
+    # dispatches it rather than silently dropping it.
+    if tool_calls and stop_reason == "end_turn":
+        stop_reason = "tool_use"
+
     if stop_reason == "tool_use" and not tool_calls:
         faults.append(
             ProtocolFault(

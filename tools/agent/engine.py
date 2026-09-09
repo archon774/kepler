@@ -260,6 +260,7 @@ def _run_tool_turn(
                 call_id=call.call_id,
                 name=call.name,
                 content=json.dumps(result, default=str),
+                is_error=result.get("status") == "error",
             )
         )
 
