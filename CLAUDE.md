@@ -73,8 +73,10 @@ There is **no linter or formatter configured**. Match the surrounding file's sty
 
 Other workflows: `secret-scan.yml` (gitleaks over tree and full history) and
 `workflow-safety.yml` (actionlint + zizmor). The `.gitleaks.toml` allowlist for env-var
-names is **path-scoped** — referencing `ADS_DEV_KEY`/`ANTHROPIC_API_KEY`/`NASA_API_KEY`
-from a file outside that path list may need a new allowlist entry.
+names is **path-scoped to exact files** (never directory wildcards) — referencing
+`ADS_DEV_KEY`/`ANTHROPIC_API_KEY`/`NASA_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY`
+from a file outside that list needs a new allowlist entry. A `paths` entry
+disables secret detection for the whole file, so keep each one specific.
 
 `pyproject.toml` pins every dependency with `==`. Adding one means editing the pin and
 re-running `uv lock`.
@@ -160,6 +162,35 @@ queries elsewhere.
 Call sites in `field_cal.py` deliberately use `deps.<name>(...)` rather than a
 `from .deps import <name>` binding, so late injection works. Preserve that pattern.
 
+### The agent loop and the model port
+
+`tools/agent/` owns the headless agent loop and nothing else: `run_session()`
+(an iterator of events, with a `Decision` flowing back through an approver),
+the ten event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved verbatim
+from `tools/runner.py` — `runner.py` re-exports it). It imports no UI toolkit.
+`tools/runner.py` is now a thin console shim over it.
+
+`tools/llm/` owns the provider-neutral **model port** and nothing else:
+neutral types, the `ModelBackend` protocol (`complete()` is the only required
+method), schema translation (`schema.py`), pre-dispatch argument validation
+(`validation.py`, S8), the `provider/model` spec factory (`factory.py`), and
+the four adapters. Its rules:
+
+- **Adapters never import `tools/registry.py`.** Translating the registry
+  schemas into a backend's dialect is the caller's job (the engine does it
+  once before the turn loop); the same holds for validation.
+- **Nothing under `algorithms/` imports `tools/llm/` or `tools/agent/`.** The
+  dependency runs one way: tools/agent → tools/llm → tools/registry.
+- Zero new third-party dependencies: the `anthropic` SDK is reused, the other
+  three adapters are raw `httpx`. Never disable TLS verification, never follow
+  redirects, always an explicit timeout; header auth only, no key in a URL.
+- The integer/number-or-null union is never downgraded to a plain scalar to
+  make a weak model's life easier (`schema.py`); the string `"None"` is never
+  coerced to `None` (`validation.py`).
+
+`docs/working/model-backends.md` is the full design; `docs/tool-architecture.md`
+section 10 is the summary.
+
 ### Vendored `skylib` is consolidated
 
 The WCS, photometry, and field-calibration extractions originally carried
@@ -229,6 +260,8 @@ were removed. Ownership is likewise strict and cross-cutting:
   Default checks must stay deterministic and bounded.
 - Do not commit downloaded FITS products, generated plots, caches, or large datasets
   (`.gitignore` already covers `fits_downloads/`, `artifacts/`, `data/`, etc.).
-- ADS-backed tools require `ADS_DEV_KEY`; the optional `tools.runner` Anthropic loop
-  requires `ANTHROPIC_API_KEY`. Remote astronomy service calls stay out of default
-  checks and should return bounded previews plus artifact paths for complete results.
+- ADS-backed tools require `ADS_DEV_KEY`; the optional `tools.runner` agent loop
+  requires a model backend — `ANTHROPIC_API_KEY` by default, or
+  `KEPLER_MODEL_BACKEND=provider/model` plus that provider's key. Remote
+  astronomy service calls stay out of default checks and should return bounded
+  previews plus artifact paths for complete results.
