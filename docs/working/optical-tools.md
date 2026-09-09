@@ -1,15 +1,15 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
-**Status:** Baseline phases merged; stateless rollout approved and pending;
-remaining broken-links phases blocked behind it.
+**Status:** Baseline phases merged; stateless rollout merged as PR #52;
+remaining broken-links phases are unblocked and retain their independent scope.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation)
 **Prerequisites:** None outstanding. The stateless rollout's prerequisite —
 broken-links Phase 4 — merged as PR #47.
 **Unblocks:** The remaining broken-links phases below, and every phase of
 [tui-harness.md](tui-harness.md).
-**Branch:** `agent/remove-processing-run-architecture`, off `dev`, for the
-stateless rollout. Later phases branch off `dev` after it merges.
+**Merged at:** `dev` commit `33617a4adaf89aadd006ec8be11fe6678f19d0cd` (PR #52,
+"Refactor optical processing to stateless S0–S6 contracts").
 **Scope:** the seam between the public `tools/` surface and the local data in
 `test_data/`, and the execution architecture behind that seam. **Not** algorithm
 correctness — that is
@@ -610,11 +610,32 @@ the batch driver as deliberately removed from the maintained architecture.
 
 ## 4. Rollout
 
-**Order is a dependency, not a preference.** The stateless rollout (phases S0–S6)
-merges as one focused PR before broken-links Phase 5 or 6 begins, and before any
+**The rollout is complete.** The stateless rollout (phases S0–S6) merged as one
+focused PR before broken-links Phase 5 or 6 begins, and before any
 [tui-harness.md](tui-harness.md) phase. The TUI's later photometry-pipeline
 rename therefore operates on the stateless pipeline; it must not preserve,
 recreate, or rename the removed processing-run or batch architecture.
+
+### Rollout outcome
+
+PR #52 delivered the stateless boundaries: WCS solving now returns immutable
+results, extraction and photometry receive explicit inputs, field calibration is
+deterministic over supplied data, and tools own catalog queries, configuration,
+file I/O, error translation, and persistence. The processing-run state,
+dependency registry, and automated optical batch exporter were removed, and the
+architecture, extraction, repository-layout, package, and test documentation
+was updated accordingly.
+
+The remaining broken-links phases are now unblocked by this merge, but their
+scope is independent: Phase 5 still adds curated pulsar-period data and Phase 6
+still closes the archive-download loop and documents the TypeScript typecheck
+prerequisite. The deferred TypeScript-backed tools and the maintainer/data
+decisions in sections 5 and 6 remain out of this rollout.
+
+PR #52's GitHub CI checks, including `python tests`, succeeded. This completion
+record does not claim that optional local solver-data or live-network checks ran;
+those remain gated by their prerequisites, with CI as the authoritative full-suite
+gate.
 
 ### Global constraints
 
@@ -688,16 +709,20 @@ allowed only inside an uncommitted red-green-refactor cycle.
 **Intent:** establish the comparison point and confirm the branch carries the
 complete merged Phase 4 tool surface.
 
-- [ ] Confirm PR #47 is present on `dev` and update the feature branch from
+- [x] Confirm PR #47 is present on `dev` and update the feature branch from
       current `dev`.
 - [ ] Run the complete default suite under Python 3.14 and record pass, skip, and
       warning counts.
-- [ ] Inventory every current reference to processing runs, WCS solution state,
+
+      **Validation record still needed:** add the Python 3.14 pass, skip, and
+      warning counts from the complete default run; PR #52's CI success does
+      not establish that record here.
+- [x] Inventory every current reference to processing runs, WCS solution state,
       field-calibration dependency wiring, path-derived ids, and optical batch
       orchestration.
-- [ ] Classify each match as current executable architecture, historical
+- [x] Classify each match as current executable architecture, historical
       provenance, or an active planning reference.
-- [ ] Identify mixed modules where plumbing may change but numerical blocks must
+- [x] Identify mixed modules where plumbing may change but numerical blocks must
       remain untouched.
 
 **Parity gate:** the branch starts green, and the inventory accounts for all
@@ -710,17 +735,17 @@ about which files hold source-of-truth mathematics.
 **Intent:** remove run-owned WCS state while retaining the solver's current
 scientific and operational behaviour.
 
-- [ ] Characterize successful, unsuccessful, and backend-failure solve outputs
+- [x] Characterize successful, unsuccessful, and backend-failure solve outputs
       **before** changing the interface.
-- [ ] Introduce the immutable result and metadata contract of section 3.3.
-- [ ] Change WCS solving to accept header, image data, temporary storage,
+- [x] Introduce the immutable result and metadata contract of section 3.3.
+- [x] Change WCS solving to accept header, image data, temporary storage,
       configuration, diagnostic channels, and an optional `file_id` explicitly.
-- [ ] Preserve in-memory header updates — later calculations in the same tool
+- [x] Preserve in-memory header updates — later calculations in the same tool
       call depend on them.
-- [ ] Migrate `tools.wcs.solve_astrometry` to consume the returned result while
+- [x] Migrate `tools.wcs.solve_astrometry` to consume the returned result while
       preserving its error handling, backend reporting, fixture protection,
       concurrent-write guard, and atomic header persistence.
-- [ ] Remove the processing-run WCS reconstruction helpers and the WCS state
+- [x] Remove the processing-run WCS reconstruction helpers and the WCS state
       module once all consumers use returned or header WCS values directly.
 
 **Latitude:** choose the smallest internal refactor that produces the approved
@@ -737,15 +762,15 @@ and the Phase 4 tool behaves identically at its public boundary.
 **Intent:** make the already-stateless numerical entry points the only supported
 algorithm APIs.
 
-- [ ] Migrate WCS, HR-diagram observation extraction, radio-source extraction,
+- [x] Migrate WCS, HR-diagram observation extraction, radio-source extraction,
       and any other consumers to call source extraction with an explicit
       `file_id`.
-- [ ] Make callers explicitly pass detected sources, WCS, background, and RMS
+- [x] Make callers explicitly pass detected sources, WCS, background, and RMS
       into photometry when they compose those stages.
-- [ ] Pass no `file_id` where there is no meaningful domain identifier.
-- [ ] Remove both run-shaped source-extraction adapters and the combined
+- [x] Pass no `file_id` where there is no meaningful domain identifier.
+- [x] Remove both run-shaped source-extraction adapters and the combined
       run-shaped photometry adapter **after** their callers have migrated.
-- [ ] Remove path hashing that exists only to populate a processing-run field.
+- [x] Remove path hashing that exists only to populate a processing-run field.
 
 **Latitude:** composition may live in the narrow consumer or in a focused domain
 helper when more than one caller shares the responsibility. It must not move back
@@ -762,18 +787,18 @@ id from a file path.
 **Intent:** turn field calibration into deterministic computation over supplied
 scientific data.
 
-- [ ] Strengthen characterization around the real-frame calibration path and the
+- [x] Strengthen characterization around the real-frame calibration path and the
       recorded Afterglow/Skynet parity fixtures **before** changing
       orchestration.
-- [ ] Supply WCS, reference catalog rows, variable-star rows, optional detected
+- [x] Supply WCS, reference catalog rows, variable-star rows, optional detected
       sources, settings, and an optional `file_id` directly.
-- [ ] Replace the module-global dependency registry with ordinary imports of the
+- [x] Replace the module-global dependency registry with ordinary imports of the
       deterministic extraction, coordinate, and photometry functions.
-- [ ] Keep catalog-row normalization and generated ids local to one call.
-- [ ] Preserve variable-star rejection, matching order, the forced
+- [x] Keep catalog-row normalization and generated ids local to one call.
+- [x] Preserve variable-star rejection, matching order, the forced
       `apcorr_tol=0.0` calibration behaviour, SNR selection, reference-magnitude
       resolution, `calc_solution`, and in-memory FITS keyword updates.
-- [ ] Remove field calibration's ability to query catalogs or discover WCS state.
+- [x] Remove field calibration's ability to query catalogs or discover WCS state.
 
 **Latitude:** orchestration helpers may be reorganized to clarify explicit data
 flow. Calculation order and the content of matched and calibrated source rows may
@@ -790,14 +815,14 @@ process-global wiring, remote-service lookup, or processing-run input.
 **Intent:** put side effects at the public tool boundary where an agent can
 observe and control them.
 
-- [ ] Move calibration catalog selection and queries into `tools.photometry`.
-- [ ] Query VSX in the tool layer when variable-star rejection is enabled, and
+- [x] Move calibration catalog selection and queries into `tools.photometry`.
+- [x] Query VSX in the tool layer when variable-star rejection is enabled, and
       pass those rows to the calibration algorithm.
-- [ ] Keep recorded-source replay offline: supplied catalog rows bypass every
+- [x] Keep recorded-source replay offline: supplied catalog rows bypass every
       remote query, VSX included.
-- [ ] Share only focused tool-layer preparation between the registered photometry
+- [x] Share only focused tool-layer preparation between the registered photometry
       tool and the standalone compatibility path.
-- [ ] Preserve current structured errors, fallbacks, comparisons, diagnostic
+- [x] Preserve current structured errors, fallbacks, comparisons, diagnostic
       payloads, and file-writing ownership.
 
 **Latitude:** choose the private helper shape and exception translation, following
@@ -814,17 +839,17 @@ algorithms receive resolved values only.
 **Intent:** delete the remaining Skynet execution model rather than preserving it
 under compatibility names.
 
-- [ ] Delete the automated WCS/photometry/zero-point batch exporter.
-- [ ] Delete `ProcessingRunRef`, the field-calibration dependency registry, the
+- [x] Delete the automated WCS/photometry/zero-point batch exporter.
+- [x] Delete `ProcessingRunRef`, the field-calibration dependency registry, the
       WCS state classes, and obsolete exports **after** their consumers are gone.
-- [ ] Audit for other retained optical automation patterns: implicit directory
+- [x] Audit for other retained optical automation patterns: implicit directory
       iteration, stage or progress state, broad continue-to-next-frame exception
       handling, run-scoped persistence, CSV aggregation tied to a batch, and
       generated execution identifiers.
-- [ ] Remove such artifacts when they exist solely to reproduce the upstream
+- [x] Remove such artifacts when they exist solely to reproduce the upstream
       batch harness. Keep reusable scientific algorithms and public single-call
       tools.
-- [ ] Add a repository-shape test that prevents current Python APIs from
+- [x] Add a repository-shape test that prevents current Python APIs from
       reintroducing the removed run and batch concepts.
 
 **Latitude:** decide whether a discovered helper is reusable computation or batch
@@ -840,22 +865,28 @@ or renamed equivalent remains in current Python code.
 **Intent:** make the stateless tool boundary durable and leave the next
 broken-links phase a clean base.
 
-- [ ] Update `docs/tool-architecture.md` to define one tool call as Kepler's unit
+- [x] Update `docs/tool-architecture.md` to define one tool call as Kepler's unit
       of execution.
-- [ ] Update `docs/repository-folders.md`, package documentation, and
+- [x] Update `docs/repository-folders.md`, package documentation, and
       `tests/README.md` for the explicit APIs and the new architecture coverage.
-- [ ] Update `docs/extraction.md` **without erasing provenance**: upstream run and
+- [x] Update `docs/extraction.md` **without erasing provenance**: upstream run and
       ORM names may remain where clearly historical, while current guidance must
       not instruct callers to recreate them.
-- [ ] Review the complete branch diff specifically for accidental changes to
+- [x] Review the complete branch diff specifically for accidental changes to
       numerical expressions, constants, thresholds, source ordering, and error
       semantics.
 - [ ] Run the full repository checks on Python 3.14, and the optional
       solver and network checks only when their prerequisites are available.
-- [ ] Open the PR to `dev` with parity evidence and a clear statement that this
-      changes orchestration, not astronomy algorithms. Record focused
-      optical-suite results, any optional solver-data run, and a clean diff for
-      the protected numerical-kernel files.
+- [x] Open and merge the PR to `dev` with parity evidence and a clear statement
+      that this changes orchestration, not astronomy algorithms.
+- [ ] Record focused optical-suite results, any optional solver-data or network
+      run (when its prerequisites are available), and a clean audit showing no
+      diff in the protected numerical-kernel files.
+
+      **Validation record still needed:** the Python 3.14 pass/skip/warning
+      counts, focused optical-suite result, optional-check outcome, and
+      protected-kernel audit are not recorded by this document; CI success alone
+      does not establish them.
 
 **Exit:** required CI green, documentation matching the resulting code, a clean
 working tree, and a PR reviewable phase by phase.
@@ -900,9 +931,11 @@ nothing.
 services are not default test dependencies. Their gated tests supplement, but do
 not replace, deterministic offline characterization.
 
-### Completion audit for the stateless rollout
+### Completion audit for the stateless rollout (recorded outcome)
 
-Before the PR is declared ready, confirm all of the following:
+PR #52's review and successful GitHub CI gate confirm the completed
+implementation and orchestration items below; the separately required
+validation records remain explicitly open where noted:
 
 - `ProcessingRun`, `ProcessingRunRef`, `ensure_wcs_solution`, processing-run WCS
   reconstruction, and field-calibration dependency wiring are absent from current
@@ -913,15 +946,19 @@ Before the PR is declared ready, confirm all of the following:
 - Algorithm modules do not open caller-selected FITS paths or query catalogs.
 - Public tools own configuration, I/O, network access, error translation, and
   requested persistence.
-- Protected numerical-kernel files have no diff.
+- [ ] Protected numerical-kernel files have no diff; awaiting a recorded clean
+  diff result for the protected-kernel audit.
 - Changes inside mixed modules are limited to the approved orchestration boundary
   and typed result construction.
-- Default tests pass under Python 3.14 with no network requirement.
+- [ ] Default tests pass under Python 3.14 with no network requirement, with
+  pass/skip/warning counts recorded. This evidence remains to be recorded;
+  PR #52's CI success is not a substitute for the required Python 3.14 record.
 - The architecture and reference docs describe the code that will land.
 
 ### Phase 5 — The curated pulsar periods (BL-8)
 
-**Blocked until the stateless rollout merges.**
+**Now unblocked by the stateless rollout merge. The phase retains its
+independent scope.**
 
 - [ ] Create `test_data/pulsar/curated_periods.json`, transcribed from
       `tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and
@@ -966,7 +1003,8 @@ it in step when Stage 0 gains the curated period.
 
 ### Phase 6 — Close the archive-to-analysis loop and the documentation (BL-11, BL-12)
 
-**Blocked until the stateless rollout merges.**
+**Now unblocked by the stateless rollout merge. The phase retains its
+independent scope.**
 
 - [ ] Make the optical data directory resolve to a **list** of roots: the
       `KEPLER_OPTICAL_DATA_DIR` override or the default optical directory, plus
@@ -1159,7 +1197,8 @@ question is answered.
   — algorithm correctness, deliberately out of scope.
 * `test_data/README.md` — the zero-point convention warning behind BL-5, and the
   Git LFS note behind section 6.3.
-* [tui-harness.md](tui-harness.md) — blocked on the stateless rollout, and the
-  owner of the photometry-pipeline rename that must operate on its result.
+* [tui-harness.md](tui-harness.md) — unblocked by the stateless rollout but
+  separately scoped; it owns the photometry-pipeline rename that must operate on
+  this document's result.
 * [model-backends.md](model-backends.md) — owner of the system-prompt move that
   this document's Phase 5 must account for.
