@@ -77,15 +77,22 @@ class GeminiBackend(BaseHTTPBackend):
         base_url: str | None = None,
         transport: Any = None,
     ) -> None:
-        resolved_key = (
-            api_key if api_key is not None else os.environ.get("GEMINI_API_KEY")
-        )
-        if not resolved_key:
+        resolved_base = (base_url or self._DEFAULT_BASE_URL).rstrip("/")
+        on_default_host = resolved_base == self._DEFAULT_BASE_URL.rstrip("/")
+        if api_key is not None:
+            resolved_key: str | None = api_key
+        elif on_default_host:
+            resolved_key = os.environ.get("GEMINI_API_KEY")
+        else:
+            # S3: a custom endpoint must be explicitly paired with its key;
+            # never read GEMINI_API_KEY for it.
+            resolved_key = None
+        if not resolved_key and on_default_host:
             raise BackendUnavailableError(
                 "GEMINI_API_KEY", "pass api_key=... or set the variable"
             )
         super().__init__(
-            base_url=base_url or self._DEFAULT_BASE_URL,
+            base_url=resolved_base,
             api_key=resolved_key,
             transport=transport,
         )

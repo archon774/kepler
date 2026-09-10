@@ -68,14 +68,14 @@ def build_backend(
         from tools.llm.ollama_backend import OllamaBackend
 
         # No api_key is ever passed to Ollama.
-        return OllamaBackend(model=model, base_url=base_url, transport=transport)
+        return OllamaBackend(
+            model=model,
+            base_url=base_url or os.environ.get("OLLAMA_BASE_URL"),
+            transport=transport,
+        )
 
     if provider == "gemini":
-        from tools.llm.gemini_backend import GeminiBackend
-
-        return GeminiBackend(
-            model=model, api_key=api_key, base_url=base_url, transport=transport
-        )
+        return _build_gemini(model, api_key, base_url, transport)
 
     raise ValueError(
         f"unknown provider {provider!r}; recognized: {', '.join(RECOGNIZED_PROVIDERS)}"
@@ -106,5 +106,31 @@ def _build_openai(
         model=model,
         base_url=resolved_base,
         api_key=resolved_key,
+        transport=transport,
+    )
+
+
+def _build_gemini(
+    model: str, api_key: str | None, base_url: str | None, transport: Any
+) -> ModelBackend:
+    from tools.llm.gemini_backend import GEMINI_DEFAULT_BASE_URL, GeminiBackend
+
+    on_default_host = (
+        base_url is None
+        or base_url.rstrip("/") == GEMINI_DEFAULT_BASE_URL
+    )
+    if api_key is not None:
+        resolved_key: str | None = api_key
+    elif on_default_host:
+        resolved_key = os.environ.get("GEMINI_API_KEY")
+    else:
+        # S3: an environment key never travels to a non-default host. Pairing
+        # requires api_key= and base_url= to be supplied together.
+        resolved_key = None
+
+    return GeminiBackend(
+        model=model,
+        api_key=resolved_key,
+        base_url=base_url,
         transport=transport,
     )
