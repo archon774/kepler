@@ -1161,7 +1161,69 @@ checkbox does not mention extensions, and widening the glob touches `_summary`'s
 `"x.fits"`), so it is recorded here rather than guessed at. A phase that wants
 the loop to close for every MAST mission should start there.
 
-**Verified:** default no-network suite **1666 passed, 41 skipped** (13 new
+**Review.** A `high`-effort code review and a security review both ran against
+the PR diff. The security review returned no findings: the phase adds no
+privilege boundary, no subprocess, no new network call, no deserialization and
+no secret handling; the path handling it does add reaches nothing that
+`resolve_optical_frame`'s pre-existing "explicit path" contract did not already
+reach, and `KEPLER_FITS_DOWNLOAD_DIR` is a trusted operator input. One new data
+flow was noted rather than flagged: `list_optical_frames()` now parses FITS
+headers from archive-fetched files automatically, and those header strings
+reach the model. That is the same trust level as every existing remote tool
+result, but it is the first time an archive download joins it.
+
+The code review's six substantive findings were fixed rather than deferred:
+
+- **The documented override only moved half the loop.** `tools/optical.py`
+  reads `config.FITS_DOWNLOAD_DIR` through the module, but `tools/mast.py` and
+  `tools/casda.py` bound it with a `from`-import. A host application that
+  reassigned it downloaded to one directory while the registry searched another
+  — BL-11 again, with the new warning actively claiming otherwise. The env-var
+  path worked for both, which is why nothing caught it. Both archive tools read
+  it late now.
+- **A downloaded frame could not be resolved by its filename.** The `root /
+  name` probe is flat and cannot reach a nested download; normalized matching
+  turns `"x.fits"` into `"xfits"`, which is not a substring of the stem `"x"`.
+  The docstring and the registry schema both advertise "filename", and a
+  filename is exactly what a caller copies out of an archive manifest. The
+  original test missed it by writing its frame flat in the download root.
+- **`list_photometry_targets` began advertising downloads as bundled targets**,
+  contradicting its own registry description ("no live image archive behind
+  photometry … a small, fixed set of bundled test frames"), `list_bundled_targets`'s
+  docstring, and `PhotometryTargetLibrary`'s. A CASDA radio cube in an optical
+  photometry target list is simply wrong. Scoped to the primary root through a
+  new public `primary_optical_data_dir()`.
+- **`FITS_DOWNLOAD_DIR` was never resolved**, unlike `ARTIFACT_DIR`, whose
+  comment explains precisely why a bare relative path is a hazard for something
+  handed to another caller. Now that these paths *are* the frame paths the
+  image tools take, resolved at import like its neighbour.
+- **Duplicate roots were reported twice** in `search_roots`. Collapsed, with
+  recursion **OR-ed** rather than taken from the first entry — inheriting the
+  primary root's flat search would have silently stopped finding nested
+  downloads.
+- **The isolation fixture was module-scoped**, so `test_fieldcal_reference` and
+  `test_photometry_tool_smoke` still resolved frames against whatever untracked
+  `fits_downloads/` the developer had. Moved to `tests/conftest.py`.
+
+A seventh finding is **recorded, not fixed**: `rglob` over the download root is
+unbounded, and the whole `OpticalFrameList` is serialized into the model's
+context by `tools/agent/engine.py`. After a bulk `download=True` — and
+`search_mast`'s own docstring records 121,515 products for Cas A — one
+`list_optical_frames()` call reads thousands of headers and emits a payload
+that can exhaust the context window. The exposure is real and this phase
+created it, but the fix is a `limit`/`max_frames` parameter with a truncation
+warning, mirroring `max_observations`; that changes a public tool schema and is
+a maintainer's call, not a review cleanup. **It should be the first item of
+whichever phase touches this tool next.**
+
+One earlier self-audit finding, fixed before review: `_resolve_roots` tested
+`directory is not None` where the single-root code it replaced tested `if
+directory`. `Path("")` is `Path(".")`, so an empty string — an ordinary thing
+for a model to send for an optional parameter — went from "use the defaults" to
+"search the working directory", returning an empty listing with `search_root`
+`"."`.
+
+**Verified:** default no-network suite **1672 passed, 41 skipped** (19 new
 cases in `tests/test_optical_registry.py`); `compileall` over `tools algorithms
 tests`; `git diff --check`. No `.ts` file was touched, so `npm run typecheck`
 did not apply — though BL-12's claim was confirmed directly while documenting
