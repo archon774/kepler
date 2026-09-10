@@ -282,10 +282,11 @@ def calibrate_zeropoint(
 
     ``catalog_sources`` (from
     ``tools.fieldcal_reference.replay_catalog_sources``) is the offline path:
-    the recorded APASS rows are injected, so ``deps.query_catalogs`` is never
-    reached and the variable-star cross-check (which would query VSX) is
-    disabled. Without it, the tool-owned calibration-input helper queries a reference catalog over the
-    network, exactly as ``run_photometry_on_target(use_field_cal=True)`` does.
+    the recorded APASS rows are passed in, so no catalog query is reached and
+    the variable-star cross-check (which would query VSX) is disabled. Without
+    it, the tool-owned calibration-input helper queries a reference catalog
+    over the network, exactly as
+    ``run_photometry_on_target(use_field_cal=True)`` does.
 
     ``compare_to`` names a recorded solve (e.g. ``"ngc5128_b_002"``); the
     result is a :class:`~tools.models.ZeropointComparison` against it. Omit it

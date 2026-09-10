@@ -29,11 +29,20 @@ follow from this:
 - **Every severed upstream dependency is marked inline** with `# EXTRACTED: was <symbol>`
   (Python) or `// EXTRACTED: was …` (TypeScript). These markers are the index of what was
   cut and why. Preserve them; add one whenever you cut another dependency.
-- **Documented parity quirks are deliberate.** Example: `algorithms/wcs/state.py` is a non-`slots`
-  dataclass *specifically* so `_clear_wcs_solution_fields()` reproduces upstream's silent
-  no-op on unmapped attribute names (`docs/extraction.md`, WCS §5.2).
+- **Documented parity quirks are deliberate.** Example: `algorithms/catalogs/`
+  ships two registries that disagree on purpose — `CATALOGS` (11 catalogs) and
+  `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
+  resolution). Merging them silently changes which reference band a narrowband
+  or unfiltered image calibrates against (`docs/extraction.md`, Catalogs §4).
   `algorithms/hrdiagram/` preserves several flagged upstream bugs. Do not "fix"
   these unless the task is explicitly to diverge from Skynet/Astromancer.
+
+  The quirk that used to head this list is gone rather than preserved:
+  `algorithms/wcs/state.py` was a non-`slots` dataclass specifically so
+  `_clear_wcs_solution_fields()` reproduced upstream's silent no-op on unmapped
+  attribute names, and the stateless rollout (S0–S6) deleted the module along
+  with the processing-run objects it stood in for. `_clear_wcs_solution_fields`
+  is now on `tests/test_repository_shape.py`'s forbidden-API list.
 
 `docs/extraction.md` carries one section per domain with exact provenance (source path,
 line ranges, per-file diff fidelity), the list of seams, dependency requirements, and what
@@ -226,7 +235,10 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   `ATLAS_TIMEOUT_S` from the environment. `solve_wcs(..., solver_settings=...)`
   accepts a per-call settings object; callers using the builders directly can
   likewise pass any object exposing the relevant attributes.
-- `algorithms/wcs/state.py` — plain dataclasses replacing SQLAlchemy rows; persistence dropped.
+- `algorithms/wcs/results.py` — solve output as two *frozen* dataclasses,
+  `WcsSolveMetadata` and `WcsSolveResult`. This replaced `state.py`, which held
+  plain-dataclass stand-ins for the Skynet ORM rows; the stateless rollout
+  (S0–S6) deleted it and dropped persistence with it.
 - `algorithms/query/config.py` — `QuerySettings` reads `VIZIER_SERVER`, `VIZIER_CACHE_ENABLED`
   and `VIZIER_CACHE_AGE_DAYS` from the environment, replacing Afterglow's Flask
   `current_app.config` reads and Skynet's five-line literal module. Callers with

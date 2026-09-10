@@ -528,7 +528,9 @@ Important files and subfolders:
 - `header_utils.py`: pixel-scale and RA/Dec guessing from FITS headers.
 - `schemas.py`: WCS settings and data models.
 - `config.py`: environment-backed solver configuration seam.
-- `state.py`: dataclass stand-ins for the Skynet ORM rows touched by WCS.
+- `results.py`: `WcsSolveMetadata` and `WcsSolveResult`, the frozen dataclasses
+  a solve returns. Replaced `state.py` (ORM-row stand-ins), which the stateless
+  rollout deleted along with persistence.
 - `algorithms.skylib_lite`: vendored astrometry stack, including astrometry.net and
   ATLAS backends.
 - [extraction.md](extraction.md), WCS: full provenance, backend requirements,

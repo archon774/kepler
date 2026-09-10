@@ -73,6 +73,8 @@ algorithms/wcs/
 ├── header_utils.py          pixel-scale + RA/Dec guesses from FITS keywords
 ├── config.py                SEAM: backend configuration (was Dynaconf)
 └── state.py                 SEAM: plain objects for the ORM rows
+                             (deleted since, by the stateless rollout S0–S6;
+                             solve output is algorithms/wcs/results.py now)
 algorithms/skylib_lite/
 ├── astrometry/              the whole solver stack
 │   ├── main.py, types.py
@@ -351,8 +353,11 @@ data installed.
 
 7. **The `_clear_wcs_solution_fields` name mismatch was preserved, not fixed**
    (§5.2). It is an upstream behaviour that a plain-dataclass port could easily
-   have converted into a crash or a silent behaviour change; `state.py` is
-   shaped to reproduce it.
+   have converted into a crash or a silent behaviour change; `state.py` was
+   shaped to reproduce it. *Superseded:* the stateless rollout (S0–S6) deleted
+   both, and `_clear_wcs_solution_fields` is now on the forbidden-API list in
+   `tests/test_repository_shape.py`. The extraction-time decision above stands
+   as a record of what was extracted, not of what the tree holds today.
 
 ---
 
