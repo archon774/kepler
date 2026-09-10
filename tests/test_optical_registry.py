@@ -511,3 +511,19 @@ def test_a_truncated_listing_warns_on_the_frame_it_resolves(monkeypatch):
 
     assert isinstance(frame, OpticalFrame)
     assert "listing_truncated" in [w.code for w in frame.warnings]
+
+
+def test_a_miss_in_a_truncated_listing_says_the_search_was_partial(monkeypatch):
+    """"39 frames are available" would be a lie when only 5 were read, and it
+    reads as "it is not here" -- the wrong conclusion in exactly the case the
+    cap creates."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
+    result = resolve_optical_frame("ngc7293")
+
+    assert isinstance(result, OpticalFrameList)
+    message = result.errors[0].message
+    assert "Only the first 5 frames were read" in message
+    assert "KEPLER_MAX_FRAMES" in message
+    assert "listing_truncated" in [w.code for w in result.warnings]

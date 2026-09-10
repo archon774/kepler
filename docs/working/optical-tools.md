@@ -1219,6 +1219,11 @@ warning, mirroring `max_observations`; that changes a public tool schema and is
 a maintainer's call, not a review cleanup. **It should be the first item of
 whichever phase touches this tool next.**
 
+> **Closed** by the data-root phase below (§5, "Data root and bounded frame
+> discovery"). The maintainer chose a boundary over a parameter: recursion is
+> confined to the data directory and the cap is an operator setting
+> (`KEPLER_MAX_FRAMES`), so the public tool schema is unchanged.
+
 One earlier self-audit finding, fixed before review: `_resolve_roots` tested
 `directory is not None` where the single-root code it replaced tested `if
 directory`. `Path("")` is `Path(".")`, so an empty string — an ordinary thing
@@ -1239,7 +1244,7 @@ would otherwise see the bundled-frame counts move under them.
 
 **Not touched:** the BL-8 row in the status summary above still reads
 "planned — Phase P1" although P1 is complete. It belongs to that phase's
-record, not this one.
+record, not this one. *(Corrected during P3, at the maintainer's direction.)*
 
 ---
 
@@ -1328,6 +1333,76 @@ it stands; see the note in P1 above.
 construct a `ProcessingRun`, or call a deleted adapter outside clearly
 historical provenance text; `uv run --python 3.14 pytest -q`;
 `python3 -m compileall tools algorithms tests`; `git diff --check`.
+
+**Audited afterwards, and it missed one.** Re-running P3's check in a
+generalised form — import every dotted `algorithms.*`/`tools.*` symbol the
+top-level documents name, and stat every in-repo path they reference — found
+`algorithms/wcs/state.py`, which the stateless rollout deleted alongside
+`algorithms/fieldcal/deps.py`. P3 chased the second and never looked for the
+first. It was cited in three current-state places, the worst being `CLAUDE.md`'s
+extraction contract, where it was the **flagship example** of a parity quirk not
+to "fix" — and the function it named, `_clear_wcs_solution_fields`, is on
+`tests/test_repository_shape.py`'s forbidden-API list. Corrected, with a live
+example substituted (the two deliberately disagreeing catalog registries) and
+the dead one kept as a record of a quirk that is gone rather than preserved.
+`docs/repository-folders.md` listed `state.py` among `algorithms/wcs/`'s current
+files and omitted `results.py`, so that list was wrong in both directions. A
+`deps.query_catalogs` mention also survived in `tools/photometry.py`'s
+docstring: P3 swept the documentation tree and not tool docstrings. The lesson
+for later phases is in the method — a reconciliation that greps for the symbol
+it already knows about will only ever find that symbol.
+
+### Data root and bounded frame discovery — Complete
+
+**Not a numbered phase.** This closes the finding P2 recorded and deferred (see
+the block quote in §4), on the maintainer's instruction to bind the recursive
+walk to the data directory, and renames that directory in the same breath.
+
+`test_data/` is now `data/`: it holds the archive download root, so naming it
+after the test suite had stopped being true. The rename carried a trap worth
+recording. `.gitignore` already contained a bare `data/` for local scratch, so
+renaming into it would have made git ignore the whole ~175 MB fixture tree —
+and because files already tracked stay tracked, nothing would have looked wrong
+until someone added a fixture that silently never got committed.
+`tests/test_repository_shape.py` now asserts no such pattern exists, and
+`.gitignore` carries a comment saying why.
+
+The bound is two settings, both operator-level rather than tool parameters:
+
+- **`KEPLER_DATA_DIR`** (default `<repo>/data`) is the data root *and* the
+  recursion boundary. `KEPLER_FITS_DOWNLOAD_DIR` defaults inside it, rather
+  than to a working-directory-relative `fits_downloads` that moved with
+  whatever directory the process started in. `tools/optical.py` walks the
+  download root recursively only while it resolves inside the data root;
+  outside it the directory is still *searched*, but flat, with a
+  `download_root_outside_data_dir` warning. Downgrading rather than refusing is
+  deliberate: CASDA's `download_files` writes flat, so a refusal would lose
+  those products. Containment is decided on the resolved path, so a symlink out
+  of the tree does not buy a walk of wherever it lands.
+- **`KEPLER_MAX_FRAMES`** (default 200) caps how many frames one listing reads
+  headers for and returns, with a `listing_truncated` warning naming the total.
+  It is applied *before* `_summary`, so it bounds the FITS header reads rather
+  than trimming the result after paying for them. A lone match resolved out of a
+  truncated listing carries the warning onto the frame — it was found among the
+  frames that were read, not the frames that exist.
+
+Keeping both out of the tool schema is what let the four LLM schema goldens stay
+structurally unchanged; only two description strings moved.
+
+**One consequence the plan did not anticipate.** `tools/wcs.py` refuses to write
+a solved header back into a bundled fixture, and that guard was the entire
+`test_data/` tree. With the download root moving *inside* `data/`, it would have
+begun refusing writes to downloaded frames — reporting an archive product as a
+bundled fixture, and closing the archive → analysis loop BL-11 exists to open.
+The guard is now `<repo>/data` **minus** the download root, and is pinned to the
+repository rather than following `KEPLER_DATA_DIR`: pointing that setting at an
+operator's own archive does not make that archive a tree of fixtures, nor make
+this repository's frames writable. Both directions are pinned by tests.
+
+**Verified:** default no-network suite **1683 passed, 41 skipped** (11 new
+cases); `compileall` over `tools algorithms tests`; `git diff --check`;
+`git check-ignore` confirming a download product under `data/fits_downloads/` is
+ignored while `data/optical/*.fits` and `data/README.md` are not.
 
 ### Phase P4 — Exact-parity Python variable-star runtime (BL-10)
 

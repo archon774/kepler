@@ -439,12 +439,25 @@ def resolve_optical_frame(
         return frame
 
     if not matches:
+        # Say when the search was partial. Reporting the capped count as though
+        # it were the total is worst in exactly the case the cap creates: after
+        # a bulk download the wanted frame is the one likely to have fallen
+        # past it, and "N frames are available" reads as "it is not here".
+        truncated = any(w.code == "listing_truncated" for w in listing.warnings)
+        scope = (
+            f"Only the first {listing.count} frames were read"
+            if truncated
+            else f"{listing.count} frames are available"
+        )
+        hint = (
+            "narrow with directory= or raise KEPLER_MAX_FRAMES"
+            if truncated
+            else "call list_optical_frames to see them"
+        )
         listing.errors.append(
             ToolError(
                 code="not_found",
-                message=f"No local frame matches {name!r}. "
-                f"{listing.count} frames are available; call list_optical_frames "
-                f"to see them.",
+                message=f"No local frame matches {name!r}. {scope}; {hint}.",
             )
         )
         return listing
