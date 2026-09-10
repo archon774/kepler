@@ -24,6 +24,7 @@ All four are local: no network, no solver data, no external binaries.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -390,10 +391,17 @@ def compute_pulsar_periodogram(
     Check ``top_peaks`` too — a strong peak at twice or half the listed period
     means the fundamental may be the other one.
 
+    Run this before consulting any reference period. A fold at a measured
+    period is a detection; a fold at a literature period is a fit to a known
+    answer, and the two are not interchangeable. Compare the result against a
+    reference afterwards — a bundled scan's ``curated_period_s``, or
+    ``search_atnf`` — as a check on the measurement.
+
     A blind search on one 60-second scan only works for a bright source. If it
-    fails, vary ``back_scale`` (the spurious peak often moves with it while a
-    real pulsar does not), narrow ``start``/``stop`` away from the artifact, or
-    take the period from ``search_atnf``.
+    fails, or disagrees with the reference, retry: vary ``back_scale`` (the
+    spurious peak often moves with it while a real pulsar does not), narrow
+    ``start``/``stop`` away from the artifact, raise ``steps``. Folding at the
+    reference period is the fallback for when that has still failed.
     """
     file = _describe(path)
     warnings: list[ToolWarning] = []
@@ -540,8 +548,11 @@ def fold_pulsar_lightcurve(
 
     Every rotation is stacked on the others, so a real pulse adds coherently
     while noise averages down — which is why a pulsar invisible in the raw scan
-    appears here. Get ``period_s`` from ``compute_pulsar_periodogram``, or from
-    ``search_atnf`` for a known source.
+    appears here. Get ``period_s`` from ``compute_pulsar_periodogram``. A
+    literature period — a scan's ``curated_period_s``, or ``search_atnf`` — is
+    the fallback once a retuned search has failed, and a fold at one is not an
+    independent detection: it is a fit to a number that came from outside the
+    data, and should be reported as such.
 
     ``pulse_snr`` on the result is how you tell whether the period was right:
     above ~8 is a real detection, near 1 means a wrong period or a source too
@@ -943,6 +954,77 @@ def _pulsar_data_dir() -> Path:
     )
 
 
+#: The curated literature periods, read from beside the scans they describe.
+#: A scan file carries no ``P_topo`` header -- that field appears on prefolded
+#: "standard" files, none of which ship here -- so the period always comes from
+#: outside the data. ``test_data/README.md`` records the rest, including that
+#: ``Curated pulsars.docx``, not ATNF, is the reference the tests compare
+#: against.
+#:
+#: It lives beside the scans rather than at a fixed repo path so that the
+#: curation and the data it describes stay together: ``KEPLER_PULSAR_DATA_DIR``
+#: points the tools at another archive, and that archive's own map is what
+#: applies to it. Attaching this repository's five periods to someone else's
+#: files by name would put a ``period_source`` on them naming a document that
+#: describes a different observation.
+CURATED_PERIODS_FILENAME = "curated_periods.json"
+
+#: One parse per directory. Directories are few and the map is small.
+_CURATED_CACHE: dict[Path, tuple[dict[str, dict[str, Any]], Optional[str]]] = {}
+
+
+def _load_curated_periods(
+    path: str | Path,
+) -> tuple[dict[str, dict[str, Any]], Optional[str]]:
+    """Read one curated period map, or report that there is no usable one.
+
+    Guarded because ``tools/`` has to import and run wherever it is installed,
+    with or without this repository's ``test_data/``. A missing, unreadable or
+    malformed map costs the curated period, not the pipeline: the scan still
+    resolves, and the caller is told the period has to be measured or fetched
+    instead.
+
+    Rows are validated individually, not just the envelope. A row without a
+    numeric ``period_s`` is dropped rather than carried, so no scan can come
+    back with a ``period_source`` citing a curation for a number that is not
+    in it.
+    """
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        entries = payload["pulsars"]
+        source = payload["period_source"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}, None
+    if not isinstance(entries, dict) or not isinstance(source, str):
+        return {}, None
+
+    usable = {
+        key: entry
+        for key, entry in entries.items()
+        if isinstance(key, str)
+        and isinstance(entry, dict)
+        and isinstance(entry.get("period_s"), (int, float))
+        and not isinstance(entry.get("period_s"), bool)
+    }
+    if not usable:
+        return {}, None
+    return usable, source
+
+
+def _curated_map(
+    directory: Path,
+) -> tuple[dict[str, dict[str, Any]], Optional[str]]:
+    """The curation that applies to scans in ``directory``, parsed once."""
+
+    try:
+        key = directory.resolve()
+    except OSError:  # pragma: no cover - unresolvable path
+        key = directory
+    if key not in _CURATED_CACHE:
+        _CURATED_CACHE[key] = _load_curated_periods(key / CURATED_PERIODS_FILENAME)
+    return _CURATED_CACHE[key]
+
+
 def _normalize_pulsar_name(name: str) -> str:
     """Reduce a pulsar designation to comparable characters.
 
@@ -958,8 +1040,50 @@ def _normalize_pulsar_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", lowered)
 
 
-def _scan_summary(path: Path) -> PulsarScan:
-    """Read one scan's ``#`` header without parsing its samples."""
+def _curated_entry(
+    entries: dict[str, dict[str, Any]], source_name: Optional[str], filename: str
+) -> dict[str, Any] | None:
+    """Match a scan to its curated row, by source name then by filename.
+
+    The filename is the fallback because Skynet does not always write a bare
+    designation into ``SRC_NAME`` -- the B2021+51 scan's is
+    ``3_Pulsar_Team_B2021+51_ERIRA``, the observing programme. Containment
+    rather than equality is what makes that one resolve, and it is why the
+    curation is read from beside the scans: a loose match against someone
+    else's archive would attach this curation's periods to files it does not
+    describe.
+    """
+    for candidate in (source_name or "", filename):
+        haystack = _normalize_pulsar_name(candidate)
+        if not haystack:
+            continue
+        for key, entry in entries.items():
+            if key in haystack:
+                return entry
+    return None
+
+
+def _curated_unavailable(directory: Path) -> ToolWarning:
+    """Say the curation is unusable without claiming to know why.
+
+    A map can be absent, unreadable, invalid JSON, or shaped wrongly, and the
+    loader cannot tell a caller which without re-reading it. Naming the
+    directory it looked in is the part that helps.
+    """
+    return ToolWarning(
+        code="curated_periods_unavailable",
+        message=f"No usable {CURATED_PERIODS_FILENAME} in {directory}, so scans "
+        "there report no curated_period_s. A period has to be measured "
+        "(compute_pulsar_periodogram) or fetched (search_atnf).",
+    )
+
+
+def _scan_summary(path: Path, directory: Path | None = None) -> PulsarScan:
+    """Read one scan's ``#`` header without parsing its samples.
+
+    ``directory`` is where the curation for this scan is looked for, defaulting
+    to the scan's own parent -- which is what an explicitly pathed scan wants.
+    """
 
     header: dict[str, str] = {}
     with path.open("r", encoding="utf-8", errors="replace") as handle:
@@ -976,6 +1100,10 @@ def _scan_summary(path: Path) -> PulsarScan:
         except (KeyError, TypeError, ValueError):
             return None
 
+    root = directory if directory is not None else path.parent
+    entries, source = _curated_map(root)
+    curated = _curated_entry(entries, header.get("SRC_NAME"), path.name)
+
     return PulsarScan(
         path=str(path),
         source_name=header.get("SRC_NAME"),
@@ -986,6 +1114,10 @@ def _scan_summary(path: Path) -> PulsarScan:
         dec_deg=_float("DEC(deg)"),
         duration_s=_float("DURATION"),
         size_bytes=path.stat().st_size,
+        curated_period_s=curated.get("period_s") if curated else None,
+        curated_difficulty=curated.get("difficulty") if curated else None,
+        period_source=source if curated else None,
+        warnings=[] if entries else [_curated_unavailable(root)],
     )
 
 
@@ -998,6 +1130,12 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
     out what is actually on hand instead of guessing a path.
 
     Reads only each file's ``#`` header, so it stays cheap.
+
+    Each bundled scan comes back with the curated literature period for its
+    source. That is a reference to check a measurement against, not a period to
+    feed the pipeline: the scans carry none of their own, so a fold at a
+    measured period is a detection while a fold at this one is a fit to a known
+    answer.
     """
     root = Path(directory).expanduser() if directory else _pulsar_data_dir()
     errors: list[ToolError] = []
@@ -1012,8 +1150,12 @@ def list_pulsar_scans(directory: str | Path | None = None) -> PulsarScanList:
         )
         return PulsarScanList(scans=[], search_root=str(root), count=0, errors=errors)
 
-    scans = [_scan_summary(p) for p in sorted(root.glob("*.txt")) if p.is_file()]
-    return PulsarScanList(scans=scans, search_root=str(root), count=len(scans))
+    scans = [_scan_summary(p, root) for p in sorted(root.glob("*.txt")) if p.is_file()]
+    entries, _ = _curated_map(root)
+    warnings = [] if entries else [_curated_unavailable(root)]
+    return PulsarScanList(
+        scans=scans, search_root=str(root), count=len(scans), warnings=warnings
+    )
 
 
 def resolve_pulsar_scan(
@@ -1036,9 +1178,9 @@ def resolve_pulsar_scan(
 
     direct = Path(name).expanduser()
     if direct.is_file():
-        return _scan_summary(direct)
+        return _scan_summary(direct)  # curation read from beside that file
     if (root / name).is_file():
-        return _scan_summary(root / name)
+        return _scan_summary(root / name, root)
 
     listing = list_pulsar_scans(root)
     if listing.errors:

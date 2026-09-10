@@ -1,8 +1,9 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`. The remaining closure phases are planned below; they are independently
-deliverable unless a phase states an asset prerequisite.
+`dev`, and closure phase P1 is complete. The remaining closure phases are
+planned below; they are independently deliverable unless a phase states an
+asset prerequisite.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation), 2026-09-09 (completion audit and approved closure rollout)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
@@ -945,30 +946,27 @@ PR #52 completed S0–S6. P3 corrects the remaining stale reference prose, while
 P6 and P9 separately cover solver convergence controls and optional operator
 data; neither reopens the completed stateless boundary.
 
-### Phase P1 — Curated pulsar periods (BL-8)
+### Phase P1 — Curated pulsar periods (BL-8) — Complete
 
-**Now unblocked by the stateless rollout merge. The phase retains its
-independent scope.**
-
-- [ ] Create `test_data/pulsar/curated_periods.json`, transcribed from
+- [x] Create `test_data/pulsar/curated_periods.json`, transcribed from
       `tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and
       `PULSAR_DIFFICULTY` tables — themselves the literature-period column of
       `Curated pulsars.docx`. The file carries a comment recording that **that
       document, not ATNF, is the reference the tests compare against**, and that
       the scan files carry no topocentric-period header, so the period always
       comes from outside the data.
-- [ ] Add three optional fields to `PulsarScan`: `curated_period_s`,
+- [x] Add three optional fields to `PulsarScan`: `curated_period_s`,
       `curated_difficulty`, and `period_source`.
-- [ ] Load the fixture once at module level in `tools/pulsar.py`, guarded so a
+- [x] Load the fixture once at module level in `tools/pulsar.py`, guarded so a
       missing file is a warning rather than an import error, and match a scan to a
       key using the existing `_normalize_pulsar_name` — the keys are already in
       normalized form (`b0329`), so a containment test against the normalized
       source name is the lookup.
-- [ ] Repoint `tests/conftest.py`'s `PULSAR_PERIODS_S` at the fixture so the
+- [x] Repoint `tests/conftest.py`'s `PULSAR_PERIODS_S` at the fixture so the
       number lives in one place. **Keep the surrounding comment block** — it
       explains why the document and not ATNF is the arbiter, and that reasoning
       is not in the JSON.
-- [ ] Amend the system prompt so the offline path is stated first: the scan
+- [x] Amend the system prompt so the offline path is stated first: the scan
       resolver reports a curated literature period for every bundled scan, and
       it is preferred over the blind search, which succeeds on only one of the
       five. **Locate the prompt before editing it** — it moves to
@@ -990,6 +988,105 @@ documentation-and-plumbing PR.
 
 `docs/pulsar-tool-pipeline.md` section 7 was stale and has been corrected; keep
 it in step when Stage 0 gains the curated period.
+
+**Outcome.** Delivered as PR #57 (`feat/pulsar-curated-periods` -> `dev`), three
+commits: the tool change, its documentation, and a policy correction made during
+review.
+
+`test_data/pulsar/curated_periods.json` is the single copy of the curated
+periods, difficulty ratings and ATNF cross-check; `tests/conftest.py`'s
+`PULSAR_PERIODS_S`, `PULSAR_ATNF` and `PULSAR_DIFFICULTY` read it rather than
+restating it, with their comment blocks kept. `PulsarScan` gained
+`curated_period_s`, `curated_difficulty`, `period_source` and a `warnings` list,
+filled by a `_normalize_pulsar_name` containment match. All five bundled scans
+resolve with their literature period, including the B2021+51 scan whose
+`SRC_NAME` is its observing programme.
+
+**Two divergences from the checkboxes above**, both deliberate.
+
+*The curated period is a check, not an input.* P1 specified that it be
+"preferred over the blind search". It is not: the system prompt, the four
+affected registry tool descriptions and the tool docstrings state the sourcing
+order as measure, compare, retune, and only then fall back to the reference.
+Folding at a literature period produces a fit to a known answer rather than a
+detection, and `test_data/README.md` leans on that distinction — the scans carry
+no period in-file precisely so that a successful fold is independent evidence.
+Preferring the reference by default would convert every `pulse_snr` in the
+pipeline from evidence into a restatement of its own input. The recovery path
+the checkbox was reaching for survives as step 4, with a reporting obligation
+attached. Changed at the maintainer's direction during review.
+`docs/pulsar-tool-pipeline.md` gains a "Measure first, check second" section.
+
+*The map is read from beside the scans, not from a fixed repository path.* P1
+said "load the fixture once at module level". It is loaded once per scan
+directory instead, because `KEPLER_PULSAR_DATA_DIR` points the tools at another
+archive: a hardcoded path would name-match these five periods onto an operator's
+own files and stamp them with a `period_source` naming a document that describes
+different observations. The bundled case is unchanged — the map is in the
+bundled directory — and `tools/` still imports with no `test_data/` present.
+
+**Review.** A `high`-effort code review and a security review both ran against
+the PR diff. The security review returned no findings: the PR adds no privilege
+boundary, no new external input reaching a sensitive sink, and no change to
+path, subprocess, network, crypto or secret-handling code; the new parse is
+`json.loads` of a repo-controlled file whose path derives from `__file__`, and
+the untrusted `SRC_NAME` a scan header carries is only ever the haystack of a
+containment test against repo-controlled keys. The code review's substantive
+findings were fixed rather than deferred:
+
+- `_load_curated_periods` validated only the envelope, so a row that was not a
+  dict raised `AttributeError` out of `list_pulsar_scans` and a non-numeric
+  `period_s` raised a pydantic `ValidationError` — both contradicting the
+  function's own "a missing or unreadable map costs the curated period, not the
+  pipeline". Rows are now validated individually and unusable ones dropped, so a
+  row without a numeric `period_s` can no longer yield a `period_source` citing
+  a curation for a number it lacks.
+- The `curated_periods_unavailable` warning existed only on `PulsarScanList`, so
+  `resolve_pulsar_scan` — the tool the prompt names first — dropped it on both
+  single-match returns, leaving "this archive has no curation" indistinguishable
+  from "this source is not curated". `PulsarScan` now carries `warnings`, as
+  `OpticalFrame` already does.
+- The warning asserted the file was absent when it may be present-but-malformed,
+  and named a repo path even for a caller-supplied directory. It now names the
+  directory searched and claims nothing about the cause.
+- `tests/conftest.py` read the fixture unguarded at import, so a missing or
+  malformed file would uncollect the entire suite rather than skip the pulsar
+  tests. Guarded like `_discover_frames`/`_require`, with a
+  `requires_curated_periods` skip marker for the tests that read the tables
+  directly.
+- The listing test compared a *set* of periods, so a regression permuting the
+  scan-to-period assignment would still have passed. It compares a filename ->
+  period mapping now.
+- The bias test ran two full-default periodograms and asserted only determinism.
+  It now plants a deliberately wrong curated period beside a copied scan, so a
+  leak would move the answer rather than merely confirm it, over a narrowed grid.
+
+Findings dismissed with reasons: `test_data/` not being packaged makes
+`curated_period_s` null in an installed copy, but the scans are not packaged
+either and `_pulsar_data_dir()` already defaults inside `test_data/`, so an
+installed copy has no scans to attach a period to — a pre-existing repository
+property, not one this phase introduced. The "programme SRC_NAME collides"
+scenario does not hold: `3_Pulsar_Team_B2021+51_ERIRA` embeds its own target
+designation, so a different target under the same programme carries a different
+`SRC_NAME` and matches nothing. Renaming `period_source` to
+`curated_period_source` was declined: the plan names the field, and `PulsarScan`
+is a Stage 0 object that never holds a measured period. The `observation` number
+is provenance from the curation's own archival records, not a join key to these
+files, and is deliberately unread.
+
+**Still open, by maintainer decision:** `CLAUDE.md`'s pulsar section still says
+catalogued periods "beat anything a 60-second scan measures", and P1's checkbox
+above still reads "preferred over the blind search". Both now contradict the
+shipped prompt and tool descriptions; the code review flagged the `CLAUDE.md`
+line independently as the cheapest way to stop the contradiction propagating.
+
+**Verified:** default no-network suite **1653 passed, 41 skipped**;
+`compileall` over `tools algorithms tests`; `git diff --check`; all seven GitHub
+CI checks green on the pre-review commit. `tests/test_pulsar_registry.py` pins
+the phase in **23 cases**. No `.ts` file was touched, so `npm run typecheck` did
+not apply. The four LLM schema goldens were regenerated; the diff is four
+description strings per dialect with no schema shape change. The open
+tool-correctness bugs listed above were left alone.
 
 ### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12)
 

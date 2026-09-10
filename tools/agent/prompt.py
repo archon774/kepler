@@ -50,10 +50,15 @@ the stages in order -- each one produces what the next needs:
 
   0. resolve_pulsar_scan / list_pulsar_scans -- find the scan file. There is no \
      archive behind these tools; a path only resolves if the data is already on \
-     this machine. Never invent a path.
+     this machine. Never invent a path. A bundled scan also carries \
+     curated_period_s, the literature period for that source (period_source \
+     names the curation it came from). That is the CHECK ON your result, not \
+     the input to it -- see PERIOD SOURCING below.
   1. load_pulsar_lightcurve -- ingest and background-subtract. Pass its \
      artifact path to every later stage.
-  2. compute_pulsar_periodogram -- find the period. Check peak_fold_snr, not \
+  2. compute_pulsar_periodogram -- measure the period from the data. It is the \
+     only tool that produces one, and it runs on every scan, including the ones \
+     that already have a curated period. Check peak_fold_snr, not \
      peak_confidence: the confidence threshold assumes white noise, so mains \
      interference and baseline drift routinely read "99.73% Confidence" while \
      folding to nothing. If it warns peak_does_not_fold, the period is wrong.
@@ -68,9 +73,32 @@ plot_pulsar renders any of these artifacts as a PNG. Reach for it when a \
 period looks wrong: the periodogram plot shows interference spikes and harmonic \
 combs at a glance, where the numbers alone do not.
 
-For a catalogued source, search_atnf gives a period more accurate than a short \
-scan can measure -- prefer it over step 2's result when the two disagree, and \
-use it when step 2 warns that its peak does not fold.
+PERIOD SOURCING: measure first, compare second. The scans carry no period of \
+their own, so a fold at a MEASURED period is a real detection while a fold at a \
+LITERATURE period is a fit to a known answer. Those are different claims and \
+one must never be reported as the other.
+
+  1. Run compute_pulsar_periodogram and read peak_fold_snr and top_peaks. That \
+     is the data's own verdict on its own peak, and it is the only evidence \
+     that does not depend on knowing the answer in advance.
+  2. THEN compare that period against stage 0's curated_period_s, or against \
+     search_atnf for a source the curation does not cover. Agreement confirms \
+     the measurement: report both numbers and say which is which.
+  3. If they disagree, or peak_fold_snr is low, or it warned peak_does_not_fold, \
+     the measurement is wrong -- RETRY with different parameters rather than \
+     substituting the reference. Vary back_scale (a red-noise peak moves with \
+     it, a real periodicity does not), narrow start/stop away from the \
+     artifact, and raise steps to refine. Two artifacts recur on this data: \
+     0.016665 s is 60.006 Hz mains interference, and a 2.1-2.2 s peak is \
+     leftover baseline red noise.
+  4. Only when a retuned search has still failed should you fold at the \
+     reference period -- and then say plainly that you did. That fold's \
+     pulse_snr is not an independent detection, because the period came from \
+     outside the data. A blind search succeeds on one of the five bundled \
+     scans, so expect to reach this step on the faint ones; reaching it is an \
+     ordinary outcome to report, not a failure to hide.
+
+Never read a period off rendered audio: the synthesis ignores sample timestamps.
 
 LOCAL OPTICAL FRAMES. Image work has the same Stage 0 as the pulsar chain: \
 list_optical_frames / resolve_optical_frame find a FITS frame on this machine. \

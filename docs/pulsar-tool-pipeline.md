@@ -12,6 +12,23 @@ scan path under `test_data/pulsar/` — override with `KEPLER_PULSAR_DATA_DIR` �
 returning `ToolError`s for misses and ambiguity rather than raising. It is
 optional; every stage below also accepts a bare file path.
 
+It also reports the **curated literature period** for a scan
+(`curated_period_s`, with `curated_difficulty` and `period_source` alongside),
+read from a `curated_periods.json` **beside the scans themselves** — so
+`KEPLER_PULSAR_DATA_DIR` points at another archive and that archive's own
+curation is what applies to it. Pinning the map to a fixed repository path
+would name-match these five periods onto someone else's files and stamp them
+with a `period_source` describing observations they are not.
+
+**It is a check on a measured period, not an input to the pipeline** — see §4,
+*Measure first, check second*. Offline it replaces a network call to ATNF for
+that check; it does not replace stage 2. A scan the curation does not cover
+reports `null` — not recorded, never a substituted number — and a map that is
+missing, unreadable or malformed is a `curated_periods_unavailable` warning
+carried on both the listing and each scan, not an import error. Rows are
+validated one by one, so a row without a numeric `period_s` is dropped rather
+than yielding a `period_source` that cites a curation for a number it lacks.
+
 ```text
    raw scan (.cal.txt)
           │
@@ -58,12 +75,14 @@ marking it as wrong. That is why:
   `peak_confidence`, but that is **not** the validity check — see §4, where
   four of five bundled scans return a confident artifact;
 - `sonify_pulsar` warns (`unfolded_rendering`) when called without a period;
-- every stage's schema says to prefer `search_atnf` for a known source, whose
-  catalogued period beats anything a 60-second scan can measure.
+- every stage's schema says to compare the measured period against a reference —
+  stage 0's `curated_period_s` for a bundled scan, `search_atnf` for anything
+  else — and to retune rather than substitute when the two disagree.
 
-Stage 4 can run without stage 2, and stage 3 can take a period from
-`search_atnf` instead. Those are the two legitimate shortcuts; both are
-documented on the tools themselves.
+Stage 4 can run without stage 2, and stage 3 can take a reference period from
+stage 0's `curated_period_s` or from `search_atnf` instead of a measured one.
+Both are documented on the tools themselves — the second is a fallback with a
+reporting obligation attached, not a shortcut.
 
 ---
 
@@ -166,14 +185,48 @@ consequences for tool design are the load-bearing part:
    B1133+16 the spurious ~2.18 s peak appears at `back_scale` 3, 12 and 30 but
    the true 1.19 s period wins at 1 and 6. Varying it is the cheapest
    diagnostic available.
-4. **For any known source, `search_atnf` beats measuring.** A catalogued period
-   turns four of these five scans from failures into usable folds.
+4. **A reference period rescues a failed search, and costs the detection
+   claim.** A catalogued period turns four of these five scans from failures
+   into usable folds — offline for these five, via `curated_periods.json`, and
+   through `search_atnf` for any other source. What it cannot do is stand in for
+   the measurement.
 
 B1933+16 resists even a tuned search, for a physical reason worth recording:
 `DM = 158.6` smears its pulse across ~11% of its 359 ms period over the 80 MHz
 effective band. It is the brightest of the four faint scans and still the
 hardest, and no amount of tuning fixes it — **dedispersion would**, and this
 pipeline has none.
+
+### Measure first, check second
+
+The curated period and ATNF's `P0` are **references to check a result against**,
+not inputs to the pipeline. The ordering the tools and the system prompt state:
+
+1. **Measure.** Run `compute_pulsar_periodogram`; read `peak_fold_snr` and
+   `top_peaks`. This is the only evidence that does not depend on already
+   knowing the answer.
+2. **Compare.** Against stage 0's `curated_period_s`, or `search_atnf` for a
+   source the curation does not cover. Agreement confirms the measurement, and
+   both numbers get reported with their provenance.
+3. **Retune, do not substitute.** On a disagreement, a low `peak_fold_snr`, or a
+   `peak_does_not_fold` warning: vary `back_scale`, narrow `start`/`stop` away
+   from the artifact, raise `steps`. The two artifacts on this data are
+   0.016665 s (60.006 Hz mains) and a 2.1–2.2 s red-noise peak.
+4. **Fall back, and say so.** Only once a retuned search has failed, fold at the
+   reference period — and report that the period came from outside the data, so
+   that profile's `pulse_snr` is not an independent detection.
+
+The distinction is the whole reason the fixtures are usable as verification.
+`test_data/README.md`: the scans carry no period in-file, so **a successful fold
+is a real detection rather than a fit to a known answer** — which holds only
+while the period being folded at was measured. Seeding the fold from the
+literature by default would quietly convert every `pulse_snr` in the pipeline
+from evidence into a restatement of the input, and `peak_fold_snr` — which folds
+at the periodogram's *own* peak — would be the only number left that still meant
+anything.
+
+Expect step 4 on the four faint scans. Reaching it is an ordinary outcome for
+60 seconds on a 20 m dish, and reporting it plainly is the point.
 
 ---
 
@@ -276,7 +329,13 @@ can report them and continue.
   differ from an ATNF `P0` in the fourth decimal.
 - **No period uncertainty.** The periodogram reports a grid peak, not a fitted
   period with an error bar. Refine by re-running with a narrow `start`/`stop`
-  and more `steps`.
+  and more `steps`. The curated period stage 0 reports carries no error bar
+  either — it is a transcribed literature value, and it is barycentric while
+  the scans are topocentric.
+- **No curated period beyond the bundled five.** `curated_periods.json` covers
+  the scans in this repository and nothing else. A scan from elsewhere resolves
+  with `curated_period_s` null, and its period has to be measured or fetched
+  from ATNF.
 - **`sonificationBrowser` is not ported** — it drives an `AudioContext`, which
   a file-writing tool has no use for. It remains extracted in TypeScript.
 

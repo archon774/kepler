@@ -659,7 +659,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "scan is already on this machine. Call this (or resolve_pulsar_scan) "
         "first when asked to work on a pulsar, instead of guessing a path. "
         "Returns each scan's path, source name, pointing and receiver, read from "
-        "the file header.",
+        "the file header, plus 'curated_period_s' -- the literature period for "
+        "that source, which is NOT in the file. Treat it as the check on a "
+        "period you measured, not as the input to the pipeline: measure with "
+        "compute_pulsar_periodogram first, then compare.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
@@ -672,7 +675,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "load_pulsar_lightcurve, compute_pulsar_periodogram, "
         "fold_pulsar_lightcurve and sonify_pulsar. An unmatched or ambiguous "
         "name comes back with the available scans listed, so pick from those "
-        "rather than inventing a path.",
+        "rather than inventing a path. A bundled scan also carries "
+        "'curated_period_s' and 'period_source': the literature period for that "
+        "source, which the scan file itself does not contain. It is the check on "
+        "a measured period, not a shortcut past measuring one.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -732,11 +738,17 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "interference and baseline red noise routinely read '99.73% Confidence' "
         "while folding to nothing. Also check 'top_peaks': pulsars produce "
         "strong harmonics, so a peak at an integer multiple or fraction of the "
-        "reported period may be the real fundamental. A blind search on a single "
-        "60-second scan only succeeds for a bright source; if it fails, vary "
-        "back_scale, narrow start/stop away from the artifact, or -- for any "
-        "known source -- just use search_atnf, which is more accurate than "
-        "anything a short scan can measure.",
+        "reported period may be the real fundamental. Run this BEFORE consulting "
+        "any reference period: a fold at a measured period is a detection, a "
+        "fold at a literature period is a fit to a known answer. Compare the "
+        "result against a reference afterwards (a bundled scan's "
+        "'curated_period_s' from stage 0, or search_atnf) as a CHECK. A blind "
+        "search on a single 60-second scan only succeeds for a bright source; if "
+        "it fails or disagrees with the reference, retry -- vary back_scale (a "
+        "red-noise peak moves with it, a real periodicity does not), narrow "
+        "start/stop away from the artifact, raise steps. Fold at the reference "
+        "period only after a retuned search has still failed, and say so when "
+        "you do.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -781,8 +793,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "a period into a pulse profile: every rotation is stacked on the others, "
         "so a real pulse adds up while noise averages down. This is what makes a "
         "pulsar that is invisible in the raw scan clearly visible. Needs a period "
-        "-- get it from compute_pulsar_periodogram, or search_atnf for a known "
-        "source. Local only -- no network. "
+        "-- measure it with compute_pulsar_periodogram first. A literature period "
+        "(a scan's 'curated_period_s', or search_atnf) is the fallback for when a "
+        "retuned search has still failed, and a fold at one is not an independent "
+        "detection: report which kind of period you folded at. Local only -- no "
+        "network. "
         "IMPORTANT: folding at the WRONG period returns a flat profile, not an "
         "error. Read 'pulse_snr' to judge: above ~8 is a real detection, near 1 "
         "means the period is wrong or the source is too faint in this scan.",
