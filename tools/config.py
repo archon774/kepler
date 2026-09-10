@@ -35,9 +35,13 @@ def env_path(name: str, default: str | Path | None = None) -> Path | None:
 # each of those. This also keeps ArtifactRef.path consistent with
 # FileMetadata.path, which describe_file() has always resolved.
 ARTIFACT_DIR = (env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")).resolve()
-FITS_DOWNLOAD_DIR = env_path(FITS_DOWNLOAD_DIR_ENV, "fits_downloads") or Path(
-    "fits_downloads"
-)
+# Resolved for the same reason ARTIFACT_DIR is, and it matters more now that
+# tools.optical searches this directory: a frame's reported path is handed back
+# to a caller who will pass it to another tool, and a bare "fits_downloads/..."
+# resolves against whatever working directory that next call happens to have.
+FITS_DOWNLOAD_DIR = (
+    env_path(FITS_DOWNLOAD_DIR_ENV, "fits_downloads") or Path("fits_downloads")
+).resolve()
 PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
 DEFAULT_MAX_CATALOGS = int(env_value("KEPLER_MAX_CATALOGS", "20") or "20")
 DEFAULT_MAX_OBSERVATIONS = int(

@@ -183,6 +183,28 @@ def _require(path: Path) -> Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def download_root(tmp_path, monkeypatch):
+    """Point the archive download root at an empty tmp path for every test.
+
+    ``fits_downloads/`` is gitignored but real: a developer who has ever run
+    ``search_mast(..., download=True)`` has one in the working tree. It is now
+    a genuine second search root for ``tools.optical``, so without this any
+    test that resolves a frame -- test_optical_registry, test_fieldcal_reference,
+    test_photometry_tool_smoke -- depends on untracked local state. A
+    downloaded frame whose name normalizes to contain a probed name turns a
+    clean resolve into an ``ambiguous`` error.
+
+    Patched on ``tools.config`` rather than the environment because
+    ``FITS_DOWNLOAD_DIR`` is computed at import.
+    """
+    from tools import config
+
+    root = tmp_path / "fits_downloads"
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", root)
+    return root
+
+
 @pytest.fixture(scope="session")
 def test_data_dir() -> Path:
     return _require(TEST_DATA)

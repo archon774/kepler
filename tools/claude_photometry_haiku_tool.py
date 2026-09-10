@@ -188,11 +188,18 @@ def list_bundled_targets() -> dict[str, list[str]]:
     Delegates to ``tools.optical.list_optical_frames``; the category is the
     second token of each stem, per the <object>_<category>_<filter>_<seq>
     convention documented in test_data/README.md.
+
+    Scoped to the primary root on purpose. ``list_photometry_targets`` tells
+    its caller this is a small fixed set of bundled frames with no archive
+    behind it, so the archive download root is deliberately excluded -- a
+    downloaded product has no category token to parse and a CASDA radio cube
+    is not an optical photometry target. Downloaded frames stay reachable
+    through ``list_optical_frames``/``resolve_optical_frame`` and by path.
     """
-    from tools.optical import list_optical_frames
+    from tools.optical import list_optical_frames, primary_optical_data_dir
 
     targets: dict[str, list[str]] = {}
-    for frame in list_optical_frames().frames:
+    for frame in list_optical_frames(primary_optical_data_dir()).frames:
         targets.setdefault(frame.category or "uncategorized", []).append(
             Path(frame.path).stem
         )

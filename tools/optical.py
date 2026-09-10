@@ -36,6 +36,7 @@ from tools.models import OpticalFrame, OpticalFrameList, ToolError, ToolWarning
 __all__ = [
     "OPTICAL_DATA_DIR_ENV",
     "list_optical_frames",
+    "primary_optical_data_dir",
     "resolve_optical_frame",
 ]
 
@@ -46,7 +47,13 @@ OPTICAL_DATA_DIR_ENV = "KEPLER_OPTICAL_DATA_DIR"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def _optical_data_dir() -> Path:
+def primary_optical_data_dir() -> Path:
+    """The bundled/override root alone, excluding the archive download root.
+
+    Public because a caller whose contract is "a fixed, bundled set" has to be
+    able to say so -- ``list_photometry_targets`` advertises exactly that, and
+    would otherwise start offering archive downloads as bundled targets.
+    """
     from tools.config import env_path
 
     default = _REPO_ROOT / "test_data" / "optical"
@@ -73,11 +80,29 @@ def _optical_data_roots() -> list[tuple[Path, bool]]:
     """
     from tools import config
 
-    roots: list[tuple[Path, bool]] = [(_optical_data_dir(), False)]
+    roots: list[tuple[Path, bool]] = [(primary_optical_data_dir(), False)]
     download_dir = config.FITS_DOWNLOAD_DIR
     if download_dir is not None:
         roots.append((Path(download_dir).expanduser(), True))
-    return roots
+
+    # One entry per distinct directory. Both env vars can name the same place,
+    # and reporting it twice in search_roots reads as a bug. Recursion is OR-ed
+    # rather than taken from the first entry: collapsing to the primary root's
+    # flat search would silently stop finding nested downloads.
+    collapsed: list[tuple[Path, bool]] = []
+    index: dict[Path, int] = {}
+    for root, recursive in roots:
+        try:
+            key = root.resolve()
+        except OSError:  # pragma: no cover - symlink loop, unreadable mount
+            key = root
+        if key in index:
+            existing_root, existing_recursive = collapsed[index[key]]
+            collapsed[index[key]] = (existing_root, existing_recursive or recursive)
+            continue
+        index[key] = len(collapsed)
+        collapsed.append((root, recursive))
+    return collapsed
 
 
 def _resolve_roots(directory: str | Path | None) -> list[tuple[Path, bool]]:
@@ -305,10 +330,15 @@ def resolve_optical_frame(
         )
         return listing
 
+    # The full filename is matched as well as the stem. A flat root resolves
+    # "x.fits" through the root/name probe above, but a nested one cannot, and
+    # a filename is exactly what a caller copies out of an archive manifest --
+    # _normalize("x.fits") is "xfits", which is not a substring of "x".
     matches = [
         frame
         for frame in listing.frames
         if wanted in _normalize(Path(frame.path).stem)
+        or wanted in _normalize(Path(frame.path).name)
         or wanted in _normalize(frame.object_name or "")
     ]
 

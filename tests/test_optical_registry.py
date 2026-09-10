@@ -141,22 +141,6 @@ def test_the_cli_resolver_still_raises_for_its_own_callers():
 # MAST products out under mastDownload/<mission>/<obs_id>/ rather than flat.
 
 
-@pytest.fixture(autouse=True)
-def download_root(tmp_path, monkeypatch):
-    """Point the download root at an empty tmp path for every test here.
-
-    ``fits_downloads/`` is gitignored but real: a developer who has ever run
-    ``search_mast(..., download=True)`` has one in the working tree. Now that
-    it is a genuine second search root, a stray download would otherwise move
-    the bundled-frame counts the assertions above pin.
-    """
-    from tools import config
-
-    root = tmp_path / "fits_downloads"
-    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", root)
-    return root
-
-
 def _write_frame(path: Path, *, object_name: str, image_filter: str) -> Path:
     """A minimal well-formed FITS frame; header-only, so no WCS."""
     import numpy as np
@@ -249,7 +233,90 @@ def test_a_frame_reachable_through_two_roots_is_listed_once(monkeypatch, downloa
 
     listing = list_optical_frames()
     assert listing.count == 1
-    assert [Path(r) for r in listing.search_roots] == [download_root, download_root]
+    # Reported once, not twice: the same directory named by both env vars is
+    # one root, and duplicating it in search_roots reads as a bug.
+    assert [Path(r) for r in listing.search_roots] == [download_root]
+
+
+def test_collapsing_two_roots_into_one_keeps_the_recursive_search(
+    monkeypatch, download_root
+):
+    """The collapse must not inherit the primary root's flat search.
+
+    Taking the first entry's recursion flag would silently stop finding nested
+    downloads the moment an operator pointed both env vars at one directory.
+    """
+    download_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(download_root))
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "obs" / "nested.fits",
+        object_name="Nested",
+        image_filter="V",
+    )
+
+    listing = list_optical_frames()
+    assert [Path(f.path).name for f in listing.frames] == ["nested.fits"]
+
+
+def test_a_downloaded_frame_resolves_by_its_filename(download_root):
+    """A filename is what a caller copies out of an archive manifest.
+
+    The flat root/name probe cannot reach a nested download, so this falls
+    through to normalized matching -- where _normalize("x.fits") is "xfits",
+    not a substring of the stem "x". The full filename is matched too.
+    """
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+    frame = resolve_optical_frame("idxq01010_drz.fits")
+
+    assert isinstance(frame, OpticalFrame)
+    assert Path(frame.path).name == "idxq01010_drz.fits"
+
+
+def test_the_download_root_is_reported_as_an_absolute_path(download_root):
+    """A frame path is handed to the next tool, which may have another cwd."""
+    _write_frame(download_root / "one.fits", object_name="One", image_filter="V")
+    listing = list_optical_frames()
+
+    assert all(Path(r).is_absolute() for r in listing.search_roots)
+    assert all(Path(f.path).is_absolute() for f in listing.frames)
+
+
+def test_photometry_targets_exclude_the_archive_download_root(download_root):
+    """list_photometry_targets advertises a fixed bundled set, so it stays one.
+
+    A downloaded product has no <object>_<category>_<filter>_<seq> token to
+    parse, and a CASDA radio cube is not an optical photometry target.
+    """
+    from tools.claude_photometry_haiku_tool import list_bundled_targets
+
+    _write_frame(
+        download_root / "idxq01010_drz.fits", object_name="NGC 1234", image_filter="F606W"
+    )
+    stems = {stem for stems in list_bundled_targets().values() for stem in stems}
+
+    assert "idxq01010_drz" not in stems
+    assert "ngc5128_galaxy_b_001" in stems
+    # Still reachable through the frame registry, just not as a "target".
+    assert isinstance(resolve_optical_frame("idxq01010_drz"), OpticalFrame)
+
+
+def test_the_archive_tools_and_the_registry_agree_on_the_download_root(download_root):
+    """A late reassignment has to move both, or BL-11 comes straight back.
+
+    tools.optical reads config.FITS_DOWNLOAD_DIR through the module; a
+    from-import in tools.mast/tools.casda would bind it at import and send
+    downloads somewhere the registry never looks.
+    """
+    from tools import casda, config, mast
+
+    assert mast.__dict__.get("FITS_DOWNLOAD_DIR") is None
+    assert casda.__dict__.get("FITS_DOWNLOAD_DIR") is None
+    assert mast.config.FITS_DOWNLOAD_DIR == download_root
+    assert casda.config.FITS_DOWNLOAD_DIR == config.FITS_DOWNLOAD_DIR
 
 
 def test_a_missing_primary_root_is_not_an_error_when_a_download_root_has_frames(
