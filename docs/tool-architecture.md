@@ -90,10 +90,23 @@ Tools are the public surface. They should stay thin:
 
 The first local, no-network tools are:
 
+- `tools.optical.list_optical_frames(directory=None, image_filter=None)` /
+  `tools.optical.resolve_optical_frame(name, directory=None)` -- Stage 0 for
+  image work. Searches the primary optical root *and* the archive download
+  root, so a product fetched by `tools.mast`/`tools.casda` resolves by name
+  through the same registry every image tool already takes a path from.
 - `tools.astrometry.describe_image_wcs(path)`
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`
 - `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `tools.photometry.calibrate_zeropoint(path, catalog_sources=None, catalogs=None, compare_to=None)`
+  -- extraction -> photometry -> catalog match -> reference magnitude ->
+  `calc_solution`. Local only when `catalog_sources` is injected; without it
+  the calibration-input helper queries a reference catalog over the network.
+- `tools.fieldcal_reference.list_zeropoint_references()` /
+  `load_zeropoint_reference(field)` / `compare_zeropoint_to_reference(...)` --
+  the four recorded Skynet zero-point solves, and the offline replay
+  (`replay_catalog_sources`) that drives a real solve against them.
 - `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`
@@ -178,9 +191,11 @@ Next Python tools should follow the same pattern before adding new layers:
 
 - `extract_sources(path, settings=None)`
 - `measure_photometry(path, sources, settings=None)`
-- `calibrate_zeropoint(path, settings=None)`
 - `search_catalog(catalog, region, limit=50)`
 - `search_catalogs_for_image(path, limit=50)`
+
+`calibrate_zeropoint` and `solve_astrometry` were on this list and have since
+landed; both are above.
 
 TypeScript-backed tools should come after the TypeScript package/runtime story
 is explicit. Their first wrapper should be simple: JSON in, existing algorithm

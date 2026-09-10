@@ -54,9 +54,15 @@ enumerated in `docs/extraction.md` (Pulsar Sonification §6).
 uv sync                                  # create .venv and install pinned deps
 uv run pytest                            # the test suite (no network by default)
 python3 -m compileall tools algorithms   # local package syntax smoke
+npm install                              # once; node_modules/ is not in a fresh checkout
 npm run typecheck                        # tsc --noEmit over the TypeScript folders
 git diff --check                         # whitespace check
 ```
+
+`npm run typecheck` needs `npm install` first — `node_modules/` is absent from
+a fresh checkout and `tsc` is not on `PATH` without it. Nothing installs it for
+you: the typecheck is not a CI job, so this is the only thing that runs it
+(BL-12).
 
 CI (`.github/workflows/ci.yml`) gates three jobs: `compileall` over `tools algorithms
 tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that

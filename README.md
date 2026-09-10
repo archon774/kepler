@@ -111,7 +111,22 @@ Python functions in `tools/`:
 
   `--list-targets` lists the bundled `test_data/optical` targets it can run
   against with no live archive query; `--check-only` resolves a target
-  without running the pipeline. Neither this nor `tools.photometry` calibrates
+  without running the pipeline. **Listing and resolving a target are offline;
+  running one is not.** Field calibration is on by default
+  (`--no-field-cal` to turn it off, `run_photometry_on_target(use_field_cal=...)`
+  defaults to `True`), and it queries VizieR for reference magnitudes — so a
+  bundled target gets a *verified* zero point only over the network. Three
+  ways to a zero point without one: `--no-field-cal` (uncalibrated
+  instrumental magnitudes, or whatever the header already carries),
+  `--zero-point` (apply a value you already trust), or the recorded-solve
+  replay — `tools.photometry.calibrate_zeropoint(path,
+  catalog_sources=tools.fieldcal_reference.replay_catalog_sources(field))`
+  injects the APASS rows Skynet actually matched, so extraction → photometry →
+  matching → reference magnitude → solve all run for real with no socket
+  opened, and `compare_to="ngc5128_b_002"` checks the answer against the
+  recorded Skynet solve. Only `ngc5128_galaxy_b_001.fits` can be driven that
+  way end to end; the three NGC 5286 solves have no bundled frame. Neither
+  this nor `tools.photometry` calibrates
   against Gaia or fits an isochrone — for that, see `tools.hr_diagram` above;
   `run_photometry_on_target(..., write_source_table=True)` writes a CSV in the
   column shape `tools.hr_diagram.crossmatch_gaia` expects, as a bridge between
@@ -153,7 +168,7 @@ identical function any other caller would import and run.
 
 | Path | Status | What it contains |
 | --- | --- | --- |
-| `tools/` | Python tools | Plain Python wrappers for WCS description, catalog metadata, reference-band resolution, zero-point solving, local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
+| `tools/` | Python tools | Plain Python wrappers for local frame discovery (`tools/optical.py`), WCS description and plate solving (`tools/astrometry.py`, `tools/wcs.py`), catalog metadata, reference-band resolution, zero-point solving and the recorded-solve references (`tools/fieldcal_reference.py`), local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
 | `tools/runner.py`, `tools/agent/`, `tools/llm/`, `tools/registry.py`, `tools/sessions.py` | Python agent | The `kepler-astro-query` tool-use loop: a console shim (`runner.py`) over the headless engine (`tools/agent/`), the provider-neutral model port (`tools/llm/`: Anthropic, OpenAI-compatible, Ollama, Gemini), the tool-schema registry, and the per-run session manifest recorder. See [The Agent](#the-agent). |
 | `tools/claude_photometry_haiku_tool.py` | Python agent | Automated FITS photometry pipeline with an optional Claude-generated results summary. See [The Agent](#the-agent). |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
@@ -245,10 +260,17 @@ Anthropic backend, or `KEPLER_MODEL_BACKEND` plus that provider's key (see
 The plain Python tools live under `tools`:
 
 ```python
+from tools.optical import list_optical_frames, resolve_optical_frame
 from tools.astrometry import describe_image_wcs
 from tools.wcs import solve_astrometry
 from tools.catalogs import list_photometric_catalogs, resolve_reference_band
 from tools.calibration import solve_zeropoint_from_measurements
+from tools.fieldcal_reference import (
+    compare_zeropoint_to_reference,
+    list_zeropoint_references,
+    load_zeropoint_reference,
+    replay_catalog_sources,
+)
 from tools.simbad import search_simbad
 from tools.vizier import search_vizier
 from tools.ned import search_ned
@@ -257,7 +279,11 @@ from tools.mast import search_mast
 from tools.mpc import search_mpc
 from tools.atnf import search_atnf
 from tools.casda import search_casda
-from tools.photometry import list_photometry_targets, run_photometry_on_target
+from tools.photometry import (
+    calibrate_zeropoint,
+    list_photometry_targets,
+    run_photometry_on_target,
+)
 from tools.pulsar import load_pulsar_lightcurve, compute_pulsar_periodogram
 from tools.hr_diagram import run_full_hr_pipeline, run_full_hr_pipeline_from_catalog
 from tools.workspace import describe_artifact, list_artifacts
@@ -313,7 +339,9 @@ uv run pytest
 git diff --check
 ```
 
-For TypeScript changes, also run:
+For TypeScript changes, also run (after `npm install` — see
+[TypeScript Extracts](#typescript-extracts); `node_modules/` is not in a fresh
+checkout, and this is not a CI job):
 
 ```bash
 npm run typecheck
