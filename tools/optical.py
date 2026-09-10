@@ -10,6 +10,13 @@ Modelled directly on ``tools.pulsar``'s scan discovery: an env-overridable
 data directory, punctuation-insensitive name matching, and ambiguity returned
 as a candidate list with a ``ToolError`` rather than raised.
 
+Two directories are searched: the bundled optical directory (or the
+``KEPLER_OPTICAL_DATA_DIR`` override), and the archive download directory
+``tools.mast``/``tools.casda`` write into, once anything has been downloaded
+there. That second root is what joins **find data -> measure -> calibrate**:
+before it, a downloaded product was invisible to every tool that resolves a
+frame through this module (BL-11).
+
 Reads only each file's primary header, so listing all 39 bundled frames does
 not touch pixel data.
 """
@@ -44,6 +51,67 @@ def _optical_data_dir() -> Path:
 
     default = _REPO_ROOT / "test_data" / "optical"
     return env_path(OPTICAL_DATA_DIR_ENV, default) or default
+
+
+def _optical_data_roots() -> list[tuple[Path, bool]]:
+    """Every directory a frame may live in, primary first, each with whether
+    it is searched recursively.
+
+    The second root is the archive download directory ``tools.mast`` and
+    ``tools.casda`` write into. Without it a downloaded product was invisible
+    to the registry every image tool resolves through, so ``search_mast(...,
+    download=True)`` dead-ended at the file it had just fetched (BL-11).
+
+    It is recursive because astroquery does not write products flat: MAST
+    products land under ``mastDownload/<mission>/<obs_id>/``. The primary root
+    stays non-recursive -- ``test_data/optical`` is flat, and so is the
+    caller-supplied archive ``KEPLER_OPTICAL_DATA_DIR`` names.
+
+    ``tools.config.FITS_DOWNLOAD_DIR`` is read through the module rather than
+    bound at import so a caller that reassigns it is honoured, matching how
+    ``tools.artifacts.ARTIFACT_DIR`` is already overridden.
+    """
+    from tools import config
+
+    roots: list[tuple[Path, bool]] = [(_optical_data_dir(), False)]
+    download_dir = config.FITS_DOWNLOAD_DIR
+    if download_dir is not None:
+        roots.append((Path(download_dir).expanduser(), True))
+    return roots
+
+
+def _resolve_roots(directory: str | Path | None) -> list[tuple[Path, bool]]:
+    """An explicit ``directory`` means exactly that one directory, flat."""
+
+    if directory is not None:
+        return [(Path(directory).expanduser(), False)]
+    return _optical_data_roots()
+
+
+def _iter_fits(roots: list[tuple[Path, bool]]) -> list[Path]:
+    """Frames across every root, primary first, each file listed once.
+
+    Nothing stops a caller pointing ``KEPLER_OPTICAL_DATA_DIR`` and
+    ``KEPLER_FITS_DOWNLOAD_DIR`` at the same directory, or nesting one inside
+    the other, so identity is the resolved path rather than the root it came
+    from.
+    """
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for root, recursive in roots:
+        matches = root.rglob("*.fits") if recursive else root.glob("*.fits")
+        for path in sorted(matches):
+            if not path.is_file():
+                continue
+            try:
+                key = path.resolve()
+            except OSError:  # pragma: no cover - broken symlink, unreadable mount
+                key = path
+            if key in seen:
+                continue
+            seen.add(key)
+            paths.append(path)
+    return paths
 
 
 def _normalize(name: str) -> str:
@@ -164,30 +232,38 @@ def list_optical_frames(
     Pass ``image_filter`` to narrow to one FILTER value (case-insensitive).
     Reads headers only, so this stays cheap over the whole fixture set.
     """
-    root = Path(directory).expanduser() if directory else _optical_data_dir()
+    roots = _resolve_roots(directory)
+    primary = roots[0][0]
+    searched = [(root, recursive) for root, recursive in roots if root.is_dir()]
 
-    if not root.is_dir():
+    if not searched:
+        tried = " or ".join(str(root) for root, _ in roots)
         return OpticalFrameList(
             frames=[],
-            search_root=str(root),
+            search_root=str(primary),
+            search_roots=[],
             count=0,
             errors=[
                 ToolError(
                     code="directory_not_found",
-                    message=f"No optical data directory at {root}. Set "
+                    message=f"No optical data directory at {tried}. Set "
                     f"{OPTICAL_DATA_DIR_ENV} to point at one.",
                 )
             ],
         )
 
-    frames = [_summary(p) for p in sorted(root.glob("*.fits")) if p.is_file()]
+    frames = [_summary(p) for p in _iter_fits(searched)]
     if image_filter is not None:
         wanted = image_filter.strip().lower()
         frames = [f for f in frames if (f.image_filter or "").lower() == wanted]
 
     filters = sorted({f.image_filter for f in frames if f.image_filter})
     return OpticalFrameList(
-        frames=frames, search_root=str(root), count=len(frames), filters=filters
+        frames=frames,
+        search_root=str(primary),
+        search_roots=[str(root) for root, _ in searched],
+        count=len(frames),
+        filters=filters,
     )
 
 
@@ -202,16 +278,17 @@ def resolve_optical_frame(
     :class:`~tools.models.OpticalFrameList` of the candidates with an
     ``ambiguous`` error, so the caller chooses rather than the tool guessing.
     """
-    root = Path(directory).expanduser() if directory else _optical_data_dir()
+    roots = _resolve_roots(directory)
 
     direct = Path(name).expanduser()
     if direct.is_file():
         return _summary(direct)
-    for candidate in (root / name, root / f"{name}.fits"):
-        if candidate.is_file():
-            return _summary(candidate)
+    for root, _ in roots:
+        for candidate in (root / name, root / f"{name}.fits"):
+            if candidate.is_file():
+                return _summary(candidate)
 
-    listing = list_optical_frames(root)
+    listing = list_optical_frames(directory)
     if listing.errors:
         return listing
 

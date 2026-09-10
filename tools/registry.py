@@ -401,7 +401,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "search_mast",
         "description": "Search the MAST archive for observations of an object and "
         "list their data products. Set download=true to fetch matched products "
-        "to local disk.",
+        "to local disk; downloaded frames then resolve through "
+        "list_optical_frames/resolve_optical_frame, so the image tools can take "
+        "them by path.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1163,7 +1165,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "directory": {
                     "type": "string",
                     "description": "Directory to search. Defaults to "
-                    "KEPLER_OPTICAL_DATA_DIR, then the bundled test_data/optical.",
+                    "KEPLER_OPTICAL_DATA_DIR (or the bundled test_data/optical) "
+                    "plus the archive download directory, so anything fetched by "
+                    "search_mast/search_casda is listed too. Passing a directory "
+                    "searches only that one.",
                 },
                 "image_filter": {
                     "type": "string",

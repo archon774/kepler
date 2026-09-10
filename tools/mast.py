@@ -57,7 +57,9 @@ def search_mast(
     products). ``mrp_only``/``extension``/``product_type`` narrow the product
     list via ``filter_products`` (e.g. ``product_type="SCIENCE"``) rather than
     downloading indiscriminately. ``download=True`` fetches the filtered
-    products into ``fits_downloads/``.
+    products into ``fits_downloads/``, which the local frame registry
+    (``tools.optical``) also searches, so a downloaded frame is immediately
+    resolvable by name or path for the image tools.
     """
     if not name or not name.strip():
         return ToolResult(
@@ -145,7 +147,12 @@ def search_mast(
             local_paths = (
                 list(manifest["Local Path"]) if "Local Path" in manifest.colnames else []
             )
-            warnings.append(f"downloaded {len(local_paths)} file(s) to {FITS_DOWNLOAD_DIR}")
+            warnings.append(
+                f"downloaded {len(local_paths)} file(s) to {FITS_DOWNLOAD_DIR}; "
+                "they now resolve through the local frame registry -- call "
+                "list_optical_frames or resolve_optical_frame to pick one up, "
+                "then the image tools take it by path"
+            )
 
     return ToolResult(
         status="ok" if len(obs_for_products) == len(obs_table) else "partial",
