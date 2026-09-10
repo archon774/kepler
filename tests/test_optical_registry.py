@@ -285,3 +285,15 @@ def test_an_absent_download_root_is_skipped_without_a_warning(download_root):
     assert listing.warnings == []
     assert listing.errors == []
     assert [Path(r) for r in listing.search_roots] == [OPTICAL]
+
+
+def test_an_empty_directory_string_falls_back_to_the_default_roots():
+    """Path("") is Path("."), so `is not None` would search the CWD instead.
+
+    An optional string parameter arriving as "" rather than omitted is an
+    ordinary thing for a model to do, and the failure is silent: an empty
+    listing rather than the bundled frames.
+    """
+    listing = list_optical_frames("")
+    assert listing.count == 39
+    assert Path(listing.search_root) == OPTICAL

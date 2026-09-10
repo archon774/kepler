@@ -81,9 +81,15 @@ def _optical_data_roots() -> list[tuple[Path, bool]]:
 
 
 def _resolve_roots(directory: str | Path | None) -> list[tuple[Path, bool]]:
-    """An explicit ``directory`` means exactly that one directory, flat."""
+    """An explicit ``directory`` means exactly that one directory, flat.
 
-    if directory is not None:
+    Falsy rather than ``is not None``, matching the single-root code this
+    replaced: ``Path("")`` is ``Path(".")``, so treating an empty string as an
+    explicit choice would silently search the working directory instead of
+    falling back to the default roots. A model filling in an optional string
+    parameter is exactly where that arrives.
+    """
+    if directory:
         return [(Path(directory).expanduser(), False)]
     return _optical_data_roots()
 
