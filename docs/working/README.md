@@ -15,7 +15,7 @@ writes the code.
 | Track | Document | Status | Branch base | Prerequisites | Unblocks |
 | --- | --- | --- | --- | --- | --- |
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
-| Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases complete; nine closure phases planned | `dev` | P5 needs a maintainer-supplied PARSEC grid; P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | Remaining local-data, documentation, WCS, variable-star, and HR-diagram gaps; the TUI stateless prerequisite is met |
+| Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P3 complete; P4–P9 remain | `dev` | P5 needs a maintainer-supplied PARSEC grid; P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | Remaining local-data, WCS, variable-star, and HR-diagram gaps; the TUI stateless prerequisite is met |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 **The model track was implemented on `dev`** (the maintainer redirected the
@@ -27,22 +27,24 @@ shim over them. The remaining model work is the deferred benchmark harness
 ## Start here
 
 **[optical-tools.md](optical-tools.md), the approved closure rollout (phases
-P1–P9).**
+P4–P9 remaining).**
 
-The stateless optical boundary and its TUI prerequisite have merged. The model
-and TUI tracks retain their own prerequisites. Within the optical track, start
-with any P-phase whose files and assets do not overlap with active work; the
-phase table in `optical-tools.md` states the coordination constraints.
+The stateless optical boundary and its TUI prerequisite have merged. P1 landed
+as PR #57 and P2/P3 together as PR #59, so the documentation reconciliation is
+done and no closure phase now blocks another on reference-document conflicts.
+The model and TUI tracks retain their own prerequisites. Within the optical
+track, start with any P-phase whose files and assets do not overlap with active
+work; the phase table in `optical-tools.md` states the coordination constraints.
 
 ## Implementation Sequence
 
 1. **The model port can proceed now**, independently. Its phases -1 to 3 build
    `tools/llm/` and the headless engine in `tools/agent/`.
-2. **Optical P1–P9 close the remaining broken links.** P1 (pulsar periods), P4
+2. **Optical P4–P9 close the remaining broken links.** P1 (pulsar periods) and
+   P2/P3 (archive loop and documentation reconciliation) have landed. P4
    (variable-star port), P6 (WCS controls), P7 (APASS replay), P8 (B-frame
-   evidence), and P9 (ATLAS validation) are independent at the code level. P2
-   and P3 coordinate their documentation changes; P5 starts when its PARSEC
-   grid is supplied.
+   evidence), and P9 (ATLAS validation) are independent at the code level; P5
+   starts when its PARSEC grid is supplied.
 3. **The TUI stateless prerequisite is satisfied.** TUI phase A remains owned
    by the model document; TUI phase C may proceed once its model prerequisites
    are complete.
@@ -50,9 +52,10 @@ phase table in `optical-tools.md` states the coordination constraints.
 ## What can run in parallel
 
 Optical closure phases may run in parallel when their modified files and asset
-gates do not overlap. Keep P2/P3 serial because both change the reference
-documents, and coordinate P1 with model phase 0c if the system prompt has moved
-to `tools/agent/prompt.py`.
+gates do not overlap. The P2/P3 constraint is discharged — both changed the
+reference documents, so they were coordinated into one PR rather than landed
+serially. P1's system-prompt edit likewise landed against
+`tools/agent/prompt.py`, where model phase 0c moved it.
 
 - **TUI G.1 and G.2 leave CI red between them.** They merge as a stacked pair;
   G.3 follows.

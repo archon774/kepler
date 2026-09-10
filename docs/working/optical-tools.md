@@ -79,12 +79,12 @@ Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
 | BL-5 | `ZeropointSolution.zero_point_corr` held an absolute zero point | **closed** — Phase 1 renamed it to `zero_point` | was High |
 | BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `test_data/frame_provenance.json` | was Medium |
 | BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **wiring closed; convergence planned** — Phase P6 adds explicit opt-in search bounds while retaining the parity default | was Medium |
-| BL-8 | Curated pulsar periods unreachable from the tool layer | **planned** — Phase P1 | Medium |
+| BL-8 | Curated pulsar periods unreachable from the tool layer | **closed** — Phase P1 added the curated-period map and the measure-first sourcing order | was Medium |
 | BL-9 | HR diagram: no offline path and an incomplete Python port | **planned** — Phase P5 provides explicit local-grid input and ports the remaining computational TypeScript surface | Medium |
 | BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **planned** — Phase P4 is an exact-parity Python runtime port | Medium |
 | BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **closed** — Phase P2 made the archive download directory a second, recursive frame-registry root | was Medium |
 | BL-12 | `npm run typecheck` cannot run from a fresh checkout | **closed** — Phase P2 recorded the `npm install` prerequisite in `CLAUDE.md` | was Low |
-| BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **planned** — Phase P3 reconciles reference documents with the landed architecture | Medium |
+| BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **closed** — Phase P3 reconciled `CLAUDE.md`, `README.md`, the reference docs and the working index with the landed architecture | was Medium |
 
 ### BL-1 — `describe_image_wcs` raised on almost every bundled frame
 
@@ -1079,6 +1079,9 @@ catalogued periods "beat anything a 60-second scan measures", and P1's checkbox
 above still reads "preferred over the blind search". Both now contradict the
 shipped prompt and tool descriptions; the code review flagged the `CLAUDE.md`
 line independently as the cheapest way to stop the contradiction propagating.
+**P3 deliberately did not touch either** — the standing decision was to leave
+them, and reconciling stale documentation is not licence to reverse a
+maintainer's explicit call. Reverse it by asking, not by tidying.
 
 **Verified:** default no-network suite **1653 passed, 41 skipped**;
 `compileall` over `tools algorithms tests`; `git diff --check`; all seven GitHub
@@ -1248,7 +1251,7 @@ dependency on one another; P2 and P3 both edit reference documentation and
 should be coordinated or landed serially. P5 begins once the maintainer has
 supplied the PARSEC grid described in its asset gate.
 
-### Phase P3 — Reconcile reference documentation (BL-13)
+### Phase P3 — Reconcile reference documentation (BL-13) — Complete
 
 **Intent:** make the reference documents describe the stateless architecture
 that is already in `dev`, rather than telling callers to recreate deleted
@@ -1258,17 +1261,17 @@ processing-run and dependency-injection APIs.
 `docs/repository-folders.md`, `docs/extraction.md`, `tests/README.md`, and
 `docs/working/README.md`.
 
-- [ ] Replace the `algorithms.fieldcal.deps` wiring examples with the explicit
+- [x] Replace the `algorithms.fieldcal.deps` wiring examples with the explicit
       `perform_field_calibration` inputs and tool-owned query boundary.
-- [ ] Remove references to deleted run-shaped photometry adapters and WCS
+- [x] Remove references to deleted run-shaped photometry adapters and WCS
       reconstruction helpers; retain upstream names only in clearly historical
       provenance text.
-- [ ] State that one public tool call is Kepler's execution boundary and list
+- [x] State that one public tool call is Kepler's execution boundary and list
       the landed `optical`, `fieldcal_reference`, `photometry`, and `wcs` tools.
-- [ ] Correct the photometry documentation: target resolution is offline, but
+- [x] Correct the photometry documentation: target resolution is offline, but
       default field calibration can query VizieR unless callers use the
       documented offline/replay or no-field-calibration routes.
-- [ ] Update the working-document index to show S0–S6 complete and list these
+- [x] Update the working-document index to show S0–S6 complete and list these
       remaining independently deliverable closure phases.
 
 **Validation:** `rg` finds no current instruction to import
@@ -1278,6 +1281,53 @@ processing-run and dependency-injection APIs.
 
 **Exit:** current-state documents agree with the public code and the working
 index no longer describes the completed stateless rollout as pending.
+
+**Outcome.** Landed with P2 in PR #59, at the maintainer's direction — the phase
+table said P2 and P3 "should be coordinated or landed serially", and P2 had
+already completed two of P3's five checkboxes (the photometry offline/VizieR
+correction outright, and part of the landed-tool listing), so coordinating them
+into one PR discharged the constraint rather than deferring it.
+
+`algorithms/fieldcal/deps.py` is **gone** — verified against the tree, not
+inferred: `algorithms/fieldcal/` is now `field_cal.py`, `ref_mag.py`,
+`schemas.py`, `solution.py`, `__init__.py`. The `deps` wiring example in
+`CLAUDE.md` and the two paragraphs in `README.md` are replaced by the real
+signature: `perform_field_calibration(header, data, *, wcs=, catalog_sources=,
+variable_sources=, extraction_settings=|detected_sources=, photometry_settings=,
+field_cal_settings=)`. The catalog query did not move behind a different seam —
+it left the package. There is no `deps.query_catalogs` and no lazy import of
+`algorithms.query`; `algorithms/fieldcal/` opens no socket, and the tool layer
+(`tools.photometry.calibrate_zeropoint`) is the caller that queries.
+
+Two stale symbol claims were found while checking the rest:
+`algorithms.photometry.photometry.perform_photometry` does not exist —
+`run_photometry` is the module's entire `__all__` — and
+`build_wcs_for_processing_run` does not exist, `build_wcs_from_header` does.
+Both were named in `CLAUDE.md` as current API. `get_source_radec` and
+`run_source_extraction`, also named in the deleted `deps` block, do still exist
+and are now listed against the module that owns them.
+
+`docs/extraction.md` needed one current-state correction (a "now reaches the
+network through `deps.query_catalogs`" claim) and two severed-dependency rows
+reworded so "reached via `deps`" reads as what was true at extraction time
+rather than as current structure. The upstream Skynet names in that document are
+untouched — that is the provenance record.
+
+The execution-boundary statement (checkbox 3) is now in `CLAUDE.md`,
+`README.md`'s domain-ownership highlight, and `docs/tool-architecture.md`
+section 2, not only in the `solve_astrometry` paragraph where it originally
+appeared.
+
+**Deliberately not touched.** `CLAUDE.md`'s pulsar section still says catalogued
+periods "beat anything a 60-second scan measures", contradicting the shipped
+prompt. P1's outcome records that as left open **by maintainer decision**.
+Reconciling stale documentation is not licence to reverse an explicit call, so
+it stands; see the note in P1 above.
+
+**Verified:** `rg` finds no instruction to import `algorithms.fieldcal.deps`,
+construct a `ProcessingRun`, or call a deleted adapter outside clearly
+historical provenance text; `uv run --python 3.14 pytest -q`;
+`python3 -m compileall tools algorithms tests`; `git diff --check`.
 
 ### Phase P4 — Exact-parity Python variable-star runtime (BL-10)
 

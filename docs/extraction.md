@@ -828,8 +828,9 @@ have since been extracted into `algorithms/query/`, so the network path
 described in §4.4 is no longer inert.
 
 Field calibration now reads catalog metadata by importing `algorithms.catalogs`
-directly (pure data, no network stack) and reaches the network through
-`deps.query_catalogs`.
+directly (pure data, no network stack) and does not reach the network at all:
+the stateless rollout removed `deps.query_catalogs` along with the rest of
+`algorithms/fieldcal/deps.py`, and the caller passes `catalog_sources` in.
 
 ##### Vendored skylib subset (`algorithms/skylib_lite/`)
 
@@ -862,8 +863,8 @@ the WCS, photometry, and field-calibration folders. They now share the single
 | `skynet_db.models.File`, S3 asset download (`_download_to_path`), `write_image_product_fits`, `get_worker_tmp_file_path` (`utils.py`) | Object storage / temp-file plumbing. Never reached from field calibration. |
 | `skynet_sdk.schemas.SkynetBaseModel` registry (`model_registry`, `register_union`, `rebuild_all_models`) | FastAPI/SDK schema-generation infrastructure. |
 | The other ~700 lines of `utils.py` (header parsing, pixel-scale estimation, RA/Dec guessing, trig helpers, DB session use) | Not field calibration. Only `calc_solution` and `resolve_ref_mag_for_filter` are reached. Its VizieR cache pruning, `query_catalogs_for_image` and WCS box helpers went to `algorithms/query/` — see the Query section of this document. |
-| `OPD/photometry.py`, `OPD/source_extraction.py` | Photometry / SEP extraction — `algorithms/photometry/`. Reached via `deps`. |
-| `OPD/wcs.py` (astrometry.net / ATLAS plate solving, 36 KB) | Plate solving — `algorithms/wcs/`. Reached via `deps`. |
+| `OPD/photometry.py`, `OPD/source_extraction.py` | Photometry / SEP extraction — `algorithms/photometry/`. Reached at extraction time via the since-deleted `deps` seam; callers now pass `detected_sources`/settings in. |
+| `OPD/wcs.py` (astrometry.net / ATLAS plate solving, 36 KB) | Plate solving — `algorithms/wcs/`. Reached at extraction time via the since-deleted `deps` seam; callers now pass `wcs=` in. |
 | `OPD/catalogs/*`, the SDSS SQL backend | Catalogs and their query backends — now `algorithms/catalogs/` and `algorithms/query/`. See §6. |
 | `common/schemas.py`: `WcsCalibrationSettings`, `Photometry`, `ImageProperties` | Not field-cal settings or results. |
 | `skylib` beyond `util/{stats,angle,fits}.py` | Not reached from field calibration. |

@@ -79,6 +79,14 @@ package data such as
 
 ## 2. Public Tool Layer
 
+**One public tool call is Kepler's execution boundary.** No run, stage, session,
+or batch object spans two calls; no tool writes state another tool reads. A
+caller that needs a value from an earlier step passes it in, or passes the
+artifact path the earlier call returned. The processing-run architecture that
+used to carry that state was removed by the stateless rollout (S0–S6), along
+with `algorithms/fieldcal/deps.py` — cross-domain values are explicit function
+arguments now, not injected module-level names.
+
 Tools are the public surface. They should stay thin:
 
 - accept normal Python values, file paths, or small Pydantic models;

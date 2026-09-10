@@ -107,8 +107,9 @@ see below. Ownership is strict:
   triangle solver against local UCAC4/UCAC5, validates against parity/pointing hints,
   writes the accepted solution into the FITS header.
 - `algorithms/photometry/` owns SEP source extraction and aperture photometry —
-  `algorithms.photometry.photometry.{run_photometry, perform_photometry}` and
-  `algorithms.photometry.source_extraction.run_source_extraction`.
+  `algorithms.photometry.photometry.run_photometry` and
+  `algorithms.photometry.source_extraction.{run_source_extraction, get_source_xy,
+  get_source_radec, build_wcs_from_header}`.
 - `algorithms/fieldcal/` owns the photometric zero-point solve —
   `perform_field_calibration` and `calc_solution`. It does **not** own catalogs.
 - `algorithms/catalogs/` owns photometric catalog declarations plus provider
@@ -148,25 +149,35 @@ and `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
 resolution). Merging them silently changes which reference band a narrowband or
 unfiltered image calibrates against. See `docs/extraction.md`, Catalogs §4.
 
-`algorithms.fieldcal` needs WCS, source extraction, and photometry but does not own them. The seam is
-`algorithms/fieldcal/deps.py`: module-level names that default to stubs raising
-`FieldCalDependencyError`. A caller wires them by assignment before use:
+`algorithms.fieldcal` needs WCS, source extraction, and photometry but does not
+own them. **There is no dependency-injection seam.** The stateless rollout
+(S0–S6, PR #52) deleted `algorithms/fieldcal/deps.py` along with the
+processing-run objects it existed to service; callers pass everything in:
 
 ```python
-from algorithms.fieldcal import deps
-deps.run_photometry = ...                # from algorithms/photometry/
-deps.run_source_extraction = ...         # from algorithms/photometry/
-deps.get_source_radec = ...              # from algorithms/photometry/
-deps.build_wcs_for_processing_run = ...  # from algorithms/wcs/
+from algorithms.fieldcal import perform_field_calibration
+
+zero_point, result = perform_field_calibration(
+    header,
+    data,                        # the image array
+    wcs=wcs,                     # built by the caller, e.g. build_wcs_from_header
+    catalog_sources=rows,        # fetched by the caller — see below
+    variable_sources=vsx_rows,   # optional; omit and the VSX check is skipped
+    extraction_settings=...,     # or pass detected_sources= directly
+    photometry_settings=...,
+    field_cal_settings=...,
+)
 ```
 
-`deps.query_catalogs` is the one entry with a working default — it lazily imports
-`algorithms.query.runner.query_catalogs`, so catalog fetching needs no wiring and
-`import algorithms.fieldcal` still costs no astroquery. Override it to route
-queries elsewhere.
+**The catalog query moved out of the algorithm package entirely.** There is no
+`deps.query_catalogs` and no lazy import of `algorithms.query` — `algorithms/fieldcal/`
+opens no socket at all, and fetching the rows is the caller's job. In this repo
+that caller is the tool layer: `tools.photometry.calibrate_zeropoint` does the
+query, and passing it `catalog_sources=` (from
+`tools.fieldcal_reference.replay_catalog_sources`) makes the whole solve offline.
 
-Call sites in `field_cal.py` deliberately use `deps.<name>(...)` rather than a
-`from .deps import <name>` binding, so late injection works. Preserve that pattern.
+One public tool call is Kepler's execution boundary: no run, stage, or session
+state is retained between calls, and no tool writes state another tool reads.
 
 ### The agent loop and the model port
 

@@ -176,9 +176,9 @@ Extracted Python photometric field-calibration code from Skynet.
 Primary responsibilities:
 
 - Match catalog sources to detected image sources.
-- Reject known variable stars through the VSX path when wired.
+- Reject known variable stars from the variable-source rows the caller supplies.
 - Resolve reference magnitudes for the image filter.
-- Run aperture photometry on matched sources through injected dependencies.
+- Run aperture photometry on matched sources.
 - Solve the photometric zero point with Chauvenet rejection.
 - Write `PHOT_M0`, `PHOT_M0E`, and `PHOT_CAL` into the FITS header when possible.
 

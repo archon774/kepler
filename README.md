@@ -161,8 +161,9 @@ identical function any other caller would import and run.
   and `algorithms/fieldcal/` deliberately do not import each other; the same
   discipline holds between `algorithms/catalogs/` (declarations, no network)
   and `algorithms/query/` (the only layer that opens a socket). Cross-domain
-  calls go through explicit dependency-injection seams, e.g.
-  `algorithms/fieldcal/deps.py`.
+  values are passed in explicitly by the caller rather than injected through a
+  seam, and one public tool call is the whole execution boundary — no run,
+  stage, or session state survives it.
 
 ## Current Contents
 
@@ -300,18 +301,22 @@ Advanced callers can still import the extracted algorithm packages directly:
 
 ```python
 from algorithms.wcs.wcs import solve_wcs
-from algorithms.photometry.photometry import run_photometry, perform_photometry
+from algorithms.photometry.photometry import run_photometry
 from algorithms.photometry.source_extraction import run_source_extraction
 from algorithms.fieldcal import perform_field_calibration, calc_solution
 from algorithms.query.runner import query_catalogs
 from algorithms.query.simbad import resolve_simbad
 ```
 
-`fieldcal` deliberately does not own WCS, photometry, or catalogs. Before using
-`perform_field_calibration`, wire the cross-domain callables in
-`algorithms.fieldcal.deps` to the implementations from `algorithms.wcs` and
-`algorithms.photometry`. Catalogs are the exception:
-`algorithms.fieldcal.deps.query_catalogs` already defaults to `algorithms.query`.
+`fieldcal` deliberately does not own WCS, photometry, or catalogs, and it has no
+dependency-injection seam to wire: `perform_field_calibration` takes the header,
+the image array, and then `wcs`, `catalog_sources`, optional `variable_sources`,
+and any extraction/photometry/calibration settings as explicit keyword
+arguments. Fetching the catalog rows is the caller's job — `algorithms/fieldcal/`
+opens no socket — which is what keeps the zero-point solve runnable with no
+network stack installed. In this repo the tool layer is that caller; see
+`tools.photometry.calibrate_zeropoint`, and pass it `catalog_sources=` from
+`tools.fieldcal_reference.replay_catalog_sources` for a fully offline solve.
 
 Catalog metadata and catalog access are separate on purpose. Import
 `algorithms.catalogs` for band tables, colour transforms, and provider

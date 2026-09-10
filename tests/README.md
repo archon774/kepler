@@ -39,7 +39,7 @@ Three consequences shape everything here:
 | `test_fieldcal_solution.py` | **`calc_solution` bit-exact parity** against four recorded Skynet fits |
 | `test_fieldcal_afterglow_parity.py` | Cross-implementation parity vs the Afterglow web service |
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms, the `eval` guardrail |
-| `test_fieldcal_pipeline.py` | The `deps` seam, source matching, end-to-end calibration on a real frame |
+| `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
 | `test_catalogs_registries.py` | Declarations, the two-registry divergence, no-network guarantee |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |
