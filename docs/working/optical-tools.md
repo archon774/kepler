@@ -82,8 +82,8 @@ Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
 | BL-8 | Curated pulsar periods unreachable from the tool layer | **planned** — Phase P1 | Medium |
 | BL-9 | HR diagram: no offline path and an incomplete Python port | **planned** — Phase P5 provides explicit local-grid input and ports the remaining computational TypeScript surface | Medium |
 | BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **planned** — Phase P4 is an exact-parity Python runtime port | Medium |
-| BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **planned** — Phase P2 | Medium |
-| BL-12 | `npm run typecheck` cannot run from a fresh checkout | **planned** — Phase P2 | Low |
+| BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **closed** — Phase P2 made the archive download directory a second, recursive frame-registry root | was Medium |
+| BL-12 | `npm run typecheck` cannot run from a fresh checkout | **closed** — Phase P2 recorded the `npm install` prerequisite in `CLAUDE.md` | was Low |
 | BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **planned** — Phase P3 reconciles reference documents with the landed architecture | Medium |
 
 ### BL-1 — `describe_image_wcs` raised on almost every bundled frame
@@ -1088,33 +1088,93 @@ not apply. The four LLM schema goldens were regenerated; the diff is four
 description strings per dialect with no schema shape change. The open
 tool-correctness bugs listed above were left alone.
 
-### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12)
+### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12) — Complete
 
-**Now unblocked by the stateless rollout merge. The phase retains its
-independent scope.**
-
-- [ ] Make the optical data directory resolve to a **list** of roots: the
+- [x] Make the optical data directory resolve to a **list** of roots: the
       `KEPLER_OPTICAL_DATA_DIR` override or the default optical directory, plus
       `tools.config.FITS_DOWNLOAD_DIR` when it exists. Both the lister and the
       resolver inspect every root; the download root is recursive because MAST
       stores products below its `mastDownload/` directory.
-- [ ] Keep the existing `search_root` field reporting the primary root, and add a
+- [x] Keep the existing `search_root` field reporting the primary root, and add a
       `search_roots` list to `OpticalFrameList` so a caller can see both. An
       explicit `directory` argument still means exactly that one directory.
-- [ ] Extend the archive tools' existing download warning so it names the next
+- [x] Extend the archive tools' existing download warning so it names the next
       step — that the downloaded files are now resolvable through the frame
       registry.
-- [ ] `README.md`: the photometry-tool section says the target listing covers
+- [x] `README.md`: the photometry-tool section says the target listing covers
       targets it can run against with no live archive query. True of *resolution*,
       but field calibration is on by default and queries VizieR. State that the
       zero point needs either `--no-field-cal`, a `--zero-point` override, or the
       offline `compare_to` path.
-- [ ] `README.md` and `docs/tool-architecture.md` section 2: add the tools the
+- [x] `README.md` and `docs/tool-architecture.md` section 2: add the tools the
       baseline phases landed to the local-tool lists, and strike
       `solve_astrometry` from "next tools" now that it exists.
-- [ ] `CLAUDE.md` Commands: note that `npm run typecheck` needs `npm install`
+- [x] `CLAUDE.md` Commands: note that `npm run typecheck` needs `npm install`
       first — `node_modules/` is not present in a fresh checkout and the typecheck
       is not a CI job (BL-12). `README.md` already says so; `CLAUDE.md` does not.
+
+
+**Outcome.** Delivered on `feat/archive-frame-registry` -> `dev`, three
+commits: the tool change, the documentation corrections, and this record.
+
+`tools/optical.py` resolves a **list** of roots. The primary root is unchanged
+and `search_root` still reports it, present or not; `OpticalFrameList` gains
+`search_roots`, every root actually inspected, so a caller can tell "nothing
+downloaded yet" from "the primary root is gone". The archive download root is
+appended when it exists and searched recursively; the primary root stays flat.
+`directory_not_found` now fires only when no root exists and names each root it
+tried. A file reachable through two roots is listed once, keyed on the resolved
+path, because nothing stops an operator pointing both env vars at one place.
+An explicit `directory` argument still means exactly that one directory.
+
+**Three divergences from the checkboxes above.**
+
+*`solve_astrometry` was already struck.* P2 asked for it to come off the "next
+tools" list in `docs/tool-architecture.md` section 2. It had already been
+removed when it landed, and has its own paragraph there. The entry that was
+actually stale was `calibrate_zeropoint`, which exists as
+`tools.photometry.calibrate_zeropoint`; that is what was struck, with a line
+recording that both have landed.
+
+*`tools/casda.py` was fixed, not just its warning.* Checkbox 3 asks the archive
+tools' download warning to name the next step. For CASDA that statement would
+have been false: `download_files` was passed a literal `savedir="fits_downloads"`
+rather than `FITS_DOWNLOAD_DIR`, so an operator who set
+`KEPLER_FITS_DOWNLOAD_DIR` got downloads in one directory and a frame registry
+searching another. It uses `FITS_DOWNLOAD_DIR` now. This is a behaviour change
+in a phase that is otherwise plumbing and documentation; it is here because the
+warning cannot be made true without it.
+
+*The registry descriptions and the system prompt were amended.* Not in the
+checkboxes, but `list_optical_frames`'s `directory` parameter documented one
+default root and now has two, and the prompt's LOCAL OPTICAL FRAMES paragraph
+told the model "there is no archive behind them" with no hint that
+`search_mast(download=true)` can put a frame within reach — which is the whole
+point of the phase. The four LLM schema goldens were regenerated: two
+description strings per dialect, no schema shape change.
+
+**Scope deliberately not taken.** The glob stays `*.fits`. Astroquery can
+deliver gzipped products, and a `.fits.gz` under the download root is still
+invisible to the registry. Nothing in this repository exercises that path, the
+checkbox does not mention extensions, and widening the glob touches `_summary`'s
+`<object>_<category>_<filter>_<seq>` stem parse (`Path("x.fits.gz").stem` is
+`"x.fits"`), so it is recorded here rather than guessed at. A phase that wants
+the loop to close for every MAST mission should start there.
+
+**Verified:** default no-network suite **1666 passed, 41 skipped** (13 new
+cases in `tests/test_optical_registry.py`); `compileall` over `tools algorithms
+tests`; `git diff --check`. No `.ts` file was touched, so `npm run typecheck`
+did not apply — though BL-12's claim was confirmed directly while documenting
+it: with no `node_modules/`, the command fails with `tsc: command not found`.
+
+The new tests use an autouse fixture that points the download root at an empty
+tmp path. `fits_downloads/` is gitignored but real, and now that it is a genuine
+second search root a developer who had ever run `search_mast(..., download=True)`
+would otherwise see the bundled-frame counts move under them.
+
+**Not touched:** the BL-8 row in the status summary above still reads
+"planned — Phase P1" although P1 is complete. It belongs to that phase's
+record, not this one.
 
 ---
 
