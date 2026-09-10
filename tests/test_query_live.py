@@ -6,7 +6,7 @@ Skynet's and Afterglow's recorded numbers exactly, from *recorded* per-star inpu
 live pipeline (source extraction -> aperture photometry -> live catalog
 cross-match -> ``calc_solution``) against a real, current reference catalog, and
 checking the solved zero point against
-``test_data/afterglow/afterglow_web_values_master.csv`` -- a number Afterglow's
+``data/afterglow/afterglow_web_values_master.csv`` -- a number Afterglow's
 own hosted service produced independently, by a different implementation, at a
 different time.
 
@@ -16,7 +16,7 @@ live remote astronomy service calls out of default checks." Requires
 ``KEPLER_TEST_NETWORK=1`` (and, to select only these, ``-m network``).
 
 Only frames the tool can actually resolve are covered here --
-``test_data/optical/``, not ``test_subjects/``, which nothing in ``tools/`` reads
+``data/optical/``, not ``test_subjects/``, which nothing in ``tools/`` reads
 (see ``docs/repository-folders.md``). That's 37 of the masterlist's 73 rows as of
 this writing; the target list is discovered dynamically (same rationale as
 ``conftest.py``'s ``_discover_frames``) so a newly bundled frame with a masterlist
@@ -45,8 +45,8 @@ import pytest
 from tools.photometry import run_photometry_on_target
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OPTICAL = REPO_ROOT / "test_data" / "optical"
-MASTERLIST = REPO_ROOT / "test_data" / "afterglow" / "afterglow_web_values_master.csv"
+OPTICAL = REPO_ROOT / "data" / "optical"
+MASTERLIST = REPO_ROOT / "data" / "afterglow" / "afterglow_web_values_master.csv"
 
 #: More than this many combined-sigma from the web value is a hard failure.
 #: Below it but at or above 2.0 is a printed warning only -- see module

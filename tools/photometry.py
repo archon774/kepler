@@ -112,7 +112,7 @@ def list_photometry_targets() -> PhotometryTargetLibrary:
     """List the local FITS library photometry can actually run on.
 
     This has no live archive query behind it -- ``run_photometry_on_target``
-    only resolves a target name that ships in ``test_data/optical/``. This is
+    only resolves a target name that ships in ``data/optical/``. This is
     the discovery step for what's actually on hand, so a caller isn't left
     guessing or hitting a bare "not found" for a target that was never
     bundled.

@@ -58,9 +58,12 @@ def search_mast(
     products). ``mrp_only``/``extension``/``product_type`` narrow the product
     list via ``filter_products`` (e.g. ``product_type="SCIENCE"``) rather than
     downloading indiscriminately. ``download=True`` fetches the filtered
-    products into ``fits_downloads/``, which the local frame registry
-    (``tools.optical``) also searches, so a downloaded frame is immediately
-    resolvable by name or path for the image tools.
+    products into the archive download directory under ``data/``, which the
+    local frame registry (``tools.optical``) also searches, so a downloaded
+    frame is immediately resolvable by name or path for the image tools.
+    Bear in mind that one ``list_optical_frames`` call reads a bounded number
+    of frames, so a bulk download is better narrowed with the product filters
+    above than sorted out afterwards.
     """
     if not name or not name.strip():
         return ToolResult(

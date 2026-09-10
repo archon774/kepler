@@ -330,7 +330,7 @@ def test_ocl_filters_are_the_one_place_the_two_registries_disagree(image_filter)
     * a caller passing ``strict_filter_parity=True`` gets ``(None, None)`` for
       every OCL frame and calibrates nothing;
     * the OCL substitution recorded in
-      ``test_data/fieldcal/ocl_filter_report.json`` trials V, r' and R and picks
+      ``data/fieldcal/ocl_filter_report.json`` trials V, r' and R and picks
       the lowest slop — a policy the fallback's fixed V-first order cannot
       express.
 

@@ -22,8 +22,8 @@ from tools.wcs import solve_astrometry
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OPEN_FRAME = ROOT / "test_data" / "optical" / "m15_globular_open_000.fits"
-SOLVED_FRAME = ROOT / "test_data" / "optical" / "ngc5128_galaxy_b_001.fits"
+OPEN_FRAME = ROOT / "data" / "optical" / "m15_globular_open_000.fits"
+SOLVED_FRAME = ROOT / "data" / "optical" / "ngc5128_galaxy_b_001.fits"
 
 solver_available = pytest.mark.skipif(
     shutil.which("solve-field") is None or not os.environ.get("ANET_INDEX_PATH"),
@@ -44,7 +44,7 @@ def _configure_fake_anet(monkeypatch, tmp_path: Path) -> Path:
 
 
 def test_a_missing_file_returns_an_error_not_an_exception():
-    summary = solve_astrometry(ROOT / "test_data" / "optical" / "does_not_exist.fits")
+    summary = solve_astrometry(ROOT / "data" / "optical" / "does_not_exist.fits")
 
     assert summary.has_wcs is False
     assert [error.code for error in summary.errors] == ["file_not_found"]
@@ -240,6 +240,38 @@ def test_write_header_refuses_to_modify_a_bundled_fixture():
     assert [error.code for error in summary.errors] == [
         "refusing_to_modify_fixture"
     ]
+
+
+def test_the_fixture_guard_exempts_the_archive_download_root(monkeypatch):
+    """The download root moved inside ``data/`` when the fixture tree was
+    renamed. Guarding the whole tree would refuse to write a solved header
+    back into a *downloaded* frame -- reporting an archive product as a
+    bundled fixture, and closing the archive -> analysis loop BL-11 opened.
+    """
+    from tools import config
+    from tools.wcs import _under_fixture_root
+
+    downloads = ROOT / "data" / "fits_downloads"
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", downloads)
+
+    assert _under_fixture_root(SOLVED_FRAME)
+    assert not _under_fixture_root(
+        downloads / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits"
+    )
+
+
+def test_the_fixture_guard_does_not_travel_with_the_data_dir_setting(monkeypatch):
+    """KEPLER_DATA_DIR points at where downloads land and how far a search may
+    walk. Pointing it at an operator's own archive does not make that archive a
+    tree of fixtures, nor make this repository's frames writable.
+    """
+    from tools import config
+    from tools.wcs import _under_fixture_root
+
+    monkeypatch.setattr(config, "DATA_DIR", Path("/somewhere/else"))
+
+    assert _under_fixture_root(SOLVED_FRAME)
+    assert not _under_fixture_root(Path("/somewhere/else/optical/frame.fits"))
 
 
 def test_write_header_persists_a_successful_solution(monkeypatch, tmp_path):

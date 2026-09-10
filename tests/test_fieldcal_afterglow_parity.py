@@ -4,7 +4,7 @@
 reproduces *Skynet's* recorded output bit-for-bit. That is a parity check
 against one implementation. This file closes the loop against a second,
 independent one: the hosted Afterglow field-calibration service, whose results
-are in ``test_data/afterglow/``.
+are in ``data/afterglow/``.
 
 The chain of custody for NGC 5128 B runs:
 
@@ -266,7 +266,7 @@ def test_ocl_frames_are_absent_from_the_web_table(afterglow_web_zero_points):
     assert "m15_globular_open_000.fits" not in afterglow_web_zero_points
 
 
-def test_web_table_is_the_union_of_the_per_filter_tables(test_data_dir):
+def test_web_table_is_the_union_of_the_per_filter_tables(data_dir):
     """``build_master_table.py``'s contract: master == bvr + narrowband + sdss.
 
     The merge is by ``file`` key with last-write-wins, so a duplicate across two
@@ -275,7 +275,7 @@ def test_web_table_is_the_union_of_the_per_filter_tables(test_data_dir):
     """
     import csv
 
-    base = test_data_dir / "afterglow"
+    base = data_dir / "afterglow"
     union: dict[str, dict] = {}
     for category in ("bvr", "narrowband", "sdss"):
         with open(base / f"afterglow_web_values_{category}.csv", newline="") as fh:

@@ -233,6 +233,30 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   their own configuration assign `query.config.settings`. Note that enabling the
   cache snaps query regions to a fixed grid, which is observable near a field
   edge (`docs/extraction.md`, Query §5.1).
+- `tools/config.py` — `KEPLER_DATA_DIR` (default `<repo>/data`) is the data
+  root: the fixture frames, the recorded reference solves, and the archive
+  download root `KEPLER_FITS_DOWNLOAD_DIR` (default `<data root>/fits_downloads`)
+  that `tools/mast.py` and `tools/casda.py` write into.
+
+  It is also a **boundary**. `tools/optical.py` walks the download root
+  recursively — astroquery nests MAST products under
+  `mastDownload/<mission>/<obs_id>/` — and only does so while that root
+  resolves *inside* the data root; outside it the directory is searched flat
+  and the listing carries a `download_root_outside_data_dir` warning.
+  Containment is decided on the resolved path, so a symlink out of the tree
+  does not buy a walk of wherever it lands. Overriding `KEPLER_DATA_DIR` moves
+  the download root and the boundary, not the bundled frame library — that has
+  its own override, `KEPLER_OPTICAL_DATA_DIR`.
+
+  `KEPLER_MAX_FRAMES` (default 200) bounds how many frames one
+  `list_optical_frames` call reads headers for and returns; over the cap the
+  listing carries a `listing_truncated` warning naming the total. It is not a
+  tool parameter, so raising it is an operator decision, not a model's.
+
+  `tools/wcs.py` refuses to write a solved header back into a bundled fixture.
+  That guard is `<repo>/data` **minus** the download root — pinned to this
+  repository rather than following `KEPLER_DATA_DIR` — because a downloaded
+  product living under `data/` is not a fixture and must stay writable.
 
 ### Runtime dependencies that are not optional
 
@@ -276,7 +300,11 @@ were removed. Ownership is likewise strict and cross-cutting:
 - Keep live remote astronomy service calls out of default checks — gate them explicitly.
   Default checks must stay deterministic and bounded.
 - Do not commit downloaded FITS products, generated plots, caches, or large datasets
-  (`.gitignore` already covers `fits_downloads/`, `artifacts/`, `data/`, etc.).
+  (`.gitignore` covers `fits_downloads/`, `artifacts/`, `cache/`, `work/`, etc.).
+  **`data/` itself is tracked** — it is the fixture tree, ~175 MB of it — so
+  there is deliberately no `data/` pattern in `.gitignore`, and adding one back
+  would ignore every fixture. The untracked part is `data/fits_downloads/`,
+  matched by the depth-independent `fits_downloads/` pattern.
 - ADS-backed tools require `ADS_DEV_KEY`; the optional `tools.runner` agent loop
   requires a model backend — `ANTHROPIC_API_KEY` by default, or
   `KEPLER_MODEL_BACKEND=provider/model` plus that provider's key. Remote

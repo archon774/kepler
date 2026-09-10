@@ -30,3 +30,19 @@ def test_current_python_has_no_optical_run_or_batch_api():
                     matches.append(f"{path.relative_to(ROOT)}: {forbidden}")
 
     assert matches == []
+
+
+def test_gitignore_does_not_ignore_the_data_fixture_tree():
+    """``data/`` was ``test_data/`` until the data-directory refactor, and a
+    bare ``data/`` pattern was already in ``.gitignore`` for local scratch.
+    Renaming into it would have made git ignore the whole ~175 MB fixture tree
+    -- silently, since files already tracked stay tracked, so the breakage
+    would surface only when someone added a fixture that never got committed.
+    """
+    patterns = {
+        line.strip()
+        for line in (ROOT / ".gitignore").read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+
+    assert not patterns & {"data", "data/", "/data", "/data/"}

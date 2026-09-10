@@ -155,7 +155,7 @@ class ZeropointSolution(KeplerToolModel):
     #: returns it. Afterglow's API instead fixes ``zero_point = 20`` and
     #: reports a ``zero_point_correction``; adding the two gives this number.
     #: Confusing the conventions is a clean, plausible 20-magnitude error --
-    #: see test_data/README.md.
+    #: see data/README.md.
     zero_point: float | None = None
     zero_point_error_mag: float | None = None
     zero_point_slop: float | None = None
@@ -174,7 +174,7 @@ class ZeropointReference(KeplerToolModel):
     absolute magnitudes, while Afterglow's API fixes a base of 20.0 and reports
     a correction. ``afterglow_zero_point`` is the sum, already computed, so a
     caller never has to remember which side the 20 goes on -- getting that
-    wrong is a clean, plausible 20-magnitude error (test_data/README.md).
+    wrong is a clean, plausible 20-magnitude error (data/README.md).
 
     Only ``ngc5128_b_002`` carries the Afterglow and web-table numbers; the
     three NGC 5286 B solves are the leaner "bad values" fixture and populate
@@ -225,7 +225,7 @@ class PhotometryTargetLibrary(KeplerToolModel):
 
     There is no live image archive behind photometry -- ``categories`` is
     exactly ``tools.claude_photometry_haiku_tool.list_bundled_targets()``'s
-    output (bundled ``test_data/optical/`` stems grouped by the category
+    output (bundled ``data/optical/`` stems grouped by the category
     embedded in each filename), not a query result.
     """
 

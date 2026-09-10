@@ -1165,10 +1165,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "directory": {
                     "type": "string",
                     "description": "Directory to search. Defaults to "
-                    "KEPLER_OPTICAL_DATA_DIR (or the bundled test_data/optical) "
+                    "KEPLER_OPTICAL_DATA_DIR (or the bundled data/optical) "
                     "plus the archive download directory, so anything fetched by "
                     "search_mast/search_casda is listed too. Passing a directory "
-                    "searches only that one.",
+                    "searches only that one, which is how to narrow a listing "
+                    "that reports it was truncated after a bulk download.",
                 },
                 "image_filter": {
                     "type": "string",
@@ -1334,7 +1335,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "list_zeropoint_references",
         "description": "List the recorded photometric zero-point solves bundled "
-        "as ground truth (test_data/fieldcal/). Each is a real Skynet "
+        "as ground truth (data/fieldcal/). Each is a real Skynet "
         "calc_solution result -- and for NGC 5128 B, Afterglow's API response "
         "and published web-table value too. Zero points are ABSOLUTE "
         "magnitudes; Afterglow's own API reports 20.0 plus a correction "

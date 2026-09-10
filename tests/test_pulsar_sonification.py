@@ -131,7 +131,7 @@ def test_polarization_columns_are_read_in_upstream_order(pulsar_path) -> None:
 def test_standard_flavour_is_detected_and_parsed() -> None:
     """The ``"# Input"`` discriminator and the prefolded single-column branch.
 
-    No standard-flavour file ships in ``test_data`` — all five scans are cal
+    No standard-flavour file ships in ``data`` — all five scans are cal
     files — so this exercises the branch on a minimal literal built to the
     upstream format.
     """
@@ -721,7 +721,7 @@ def test_folding_at_the_catalogued_period_is_the_reliable_path(
 def test_curated_and_atnf_periods_agree_where_it_matters() -> None:
     """Two independent references, and the difference is below what a fold sees.
 
-    ``PULSAR_PERIODS_S`` comes from ``test_data/pulsar/Curated pulsars.docx``,
+    ``PULSAR_PERIODS_S`` comes from ``data/pulsar/Curated pulsars.docx``,
     the curation shipped with the scans. ``PULSAR_ATNF[...]["p0"]`` is the live
     catalogue. They agree to 4e-10 for two sources and differ by up to 2e-5 for
     the rest -- different epochs or source references.

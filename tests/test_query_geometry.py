@@ -3,7 +3,7 @@
 This is the module that decides *which patch of sky gets queried*, so an error
 here does not raise — it fetches the wrong stars and the zero-point solve
 quietly calibrates against them. Everything is exercised against the real
-headers in ``test_data/optical``, because the interesting cases are exactly the
+headers in ``data/optical``, because the interesting cases are exactly the
 ones real detectors produce: rotation, negative parity, and southern fields
 where the cos(dec) narrowing stops being a rounding detail.
 

@@ -103,6 +103,12 @@ The first local, no-network tools are:
   image work. Searches the primary optical root *and* the archive download
   root, so a product fetched by `tools.mast`/`tools.casda` resolves by name
   through the same registry every image tool already takes a path from.
+  Both bounds on that search are operator settings rather than tool
+  parameters: the download root is walked recursively only while it resolves
+  inside `KEPLER_DATA_DIR` (outside it, searched flat with a
+  `download_root_outside_data_dir` warning), and `KEPLER_MAX_FRAMES`
+  (default 200) caps how many frames one listing reads headers for, with a
+  `listing_truncated` warning naming the total when it bites.
 - `tools.astrometry.describe_image_wcs(path)`
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`

@@ -34,7 +34,7 @@ from tools.pulsar import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-PULSAR = ROOT / "test_data" / "pulsar"
+PULSAR = ROOT / "data" / "pulsar"
 CURATED = PULSAR / "curated_periods.json"
 
 ALL_SCANS = sorted(PULSAR_SCANS)
@@ -176,7 +176,7 @@ def _bundled_copy(directory: Path, *keys: str) -> Path:
 
 
 def test_a_missing_map_is_a_warning_not_an_import_error(tmp_path: Path) -> None:
-    """``tools/`` has to import and run without ``test_data/`` present."""
+    """``tools/`` has to import and run without ``data/`` present."""
 
     assert pulsar_tools._load_curated_periods(tmp_path / "absent.json") == ({}, None)
 

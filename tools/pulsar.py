@@ -949,15 +949,15 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 def _pulsar_data_dir() -> Path:
     from tools.config import env_path
 
-    return env_path(PULSAR_DATA_DIR_ENV, _REPO_ROOT / "test_data" / "pulsar") or (
-        _REPO_ROOT / "test_data" / "pulsar"
+    return env_path(PULSAR_DATA_DIR_ENV, _REPO_ROOT / "data" / "pulsar") or (
+        _REPO_ROOT / "data" / "pulsar"
     )
 
 
 #: The curated literature periods, read from beside the scans they describe.
 #: A scan file carries no ``P_topo`` header -- that field appears on prefolded
 #: "standard" files, none of which ship here -- so the period always comes from
-#: outside the data. ``test_data/README.md`` records the rest, including that
+#: outside the data. ``data/README.md`` records the rest, including that
 #: ``Curated pulsars.docx``, not ATNF, is the reference the tests compare
 #: against.
 #:
@@ -979,7 +979,7 @@ def _load_curated_periods(
     """Read one curated period map, or report that there is no usable one.
 
     Guarded because ``tools/`` has to import and run wherever it is installed,
-    with or without this repository's ``test_data/``. A missing, unreadable or
+    with or without this repository's ``data/``. A missing, unreadable or
     malformed map costs the curated period, not the pipeline: the scan still
     resolves, and the caller is told the period has to be measured or fetched
     instead.

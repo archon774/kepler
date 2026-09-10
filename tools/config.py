@@ -6,7 +6,11 @@ import os
 from pathlib import Path
 
 ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
+DATA_DIR_ENV = "KEPLER_DATA_DIR"
 FITS_DOWNLOAD_DIR_ENV = "KEPLER_FITS_DOWNLOAD_DIR"
+MAX_FRAMES_ENV = "KEPLER_MAX_FRAMES"
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def env_value(name: str, default: str | None = None) -> str | None:
@@ -35,14 +39,39 @@ def env_path(name: str, default: str | Path | None = None) -> Path | None:
 # each of those. This also keeps ArtifactRef.path consistent with
 # FileMetadata.path, which describe_file() has always resolved.
 ARTIFACT_DIR = (env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")).resolve()
-# Resolved for the same reason ARTIFACT_DIR is, and it matters more now that
-# tools.optical searches this directory: a frame's reported path is handed back
-# to a caller who will pass it to another tool, and a bare "fits_downloads/..."
-# resolves against whatever working directory that next call happens to have.
+# The repository's data root: where general data for this repo lives -- the
+# bundled fixture frames and recorded reference solves, and now the archive
+# download root too.
+#
+# It is also a *boundary*. tools.optical walks the download root recursively,
+# because astroquery nests MAST products under mastDownload/<mission>/<obs_id>/,
+# and a recursive walk is only safe while it is confined to a directory that
+# holds astronomy data and nothing else. A download root pointed outside this
+# tree is searched flat instead of walked -- see tools.optical._optical_data_roots.
+#
+# Overriding this moves the download root and the recursion boundary. It does
+# *not* move the frame library, which has its own override
+# (KEPLER_OPTICAL_DATA_DIR); by default both live under this directory.
+DATA_DIR = (env_path(DATA_DIR_ENV, _REPO_ROOT / "data") or _REPO_ROOT / "data").resolve()
+
+# Defaults inside DATA_DIR rather than beside the working directory. A bare
+# relative "fits_downloads" meant the download root moved with whatever
+# directory the process happened to start in, so the same configuration
+# resolved to a different place per caller. Resolved for the same reason
+# ARTIFACT_DIR is: a frame's reported path is handed back to a caller who will
+# pass it to another tool.
 FITS_DOWNLOAD_DIR = (
-    env_path(FITS_DOWNLOAD_DIR_ENV, "fits_downloads") or Path("fits_downloads")
+    env_path(FITS_DOWNLOAD_DIR_ENV, DATA_DIR / "fits_downloads")
+    or DATA_DIR / "fits_downloads"
 ).resolve()
 PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
+# How many frames one list_optical_frames call reads headers for and returns.
+# Not a tool parameter: the cap exists so a bulk archive download cannot make a
+# single listing read thousands of FITS headers and serialise them all into a
+# model's context (search_mast records 121,515 products for Cas A alone).
+# Callers that genuinely want more raise it here; the listing says when it
+# truncated rather than dropping frames silently.
+DEFAULT_MAX_FRAMES = int(env_value(MAX_FRAMES_ENV, "200") or "200")
 DEFAULT_MAX_CATALOGS = int(env_value("KEPLER_MAX_CATALOGS", "20") or "20")
 DEFAULT_MAX_OBSERVATIONS = int(
     env_value("KEPLER_MAX_OBSERVATIONS", "25") or "25"

@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Generated plots default to the user's Downloads folder rather than next to the
-# source FITS file — bundled test_data targets live inside the repo tree, and
+# source FITS file — bundled data targets live inside the repo tree, and
 # this repo's convention is to never write generated artifacts there (see
 # CLAUDE.md: "Do not commit downloaded FITS products, generated plots, ...").
 DEFAULT_OUTPUT_DIR = Path.home() / "Downloads"
@@ -187,7 +187,7 @@ def list_bundled_targets() -> dict[str, list[str]]:
 
     Delegates to ``tools.optical.list_optical_frames``; the category is the
     second token of each stem, per the <object>_<category>_<filter>_<seq>
-    convention documented in test_data/README.md.
+    convention documented in data/README.md.
 
     Scoped to the primary root on purpose. ``list_photometry_targets`` tells
     its caller this is a small fixed set of bundled frames with no archive
@@ -411,7 +411,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--list-targets",
         action="store_true",
-        help="List the FITS targets bundled under test_data/optical, grouped by "
+        help="List the FITS targets bundled under data/optical, grouped by "
         "category, and exit. There is no live archive query behind this tool — a "
         "target only resolves if it's in this list.",
     )
@@ -1175,10 +1175,10 @@ def main() -> int:
     if args.list_targets:
         targets = list_bundled_targets()
         if not targets:
-            print("No bundled FITS targets found under test_data/optical.", file=sys.stderr)
+            print("No bundled FITS targets found under data/optical.", file=sys.stderr)
             return 1
         total = sum(len(stems) for stems in targets.values())
-        print(f"{total} bundled FITS targets under test_data/optical:")
+        print(f"{total} bundled FITS targets under data/optical:")
         for category, stems in targets.items():
             print(f"\n{category} ({len(stems)}):")
             for stem in stems:
@@ -1188,7 +1188,7 @@ def main() -> int:
     if args.fits_path is None:
         print(
             "Missing FITS target. Pass a path or target name, or use --list-targets "
-            "to see what's bundled under test_data/optical.",
+            "to see what's bundled under data/optical.",
             file=sys.stderr,
         )
         return 1

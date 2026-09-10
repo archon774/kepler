@@ -16,7 +16,7 @@ from tools.models import OpticalFrame, OpticalFrameList
 from tools.optical import list_optical_frames, resolve_optical_frame
 
 ROOT = Path(__file__).resolve().parents[1]
-OPTICAL = ROOT / "test_data" / "optical"
+OPTICAL = ROOT / "data" / "optical"
 
 
 def test_lists_every_bundled_frame():
@@ -27,7 +27,7 @@ def test_lists_every_bundled_frame():
 
 
 def test_listing_reports_the_filter_spread_recorded_in_the_readme():
-    """test_data/README.md: V (25), R (7), B (2), Halpha (2), OIII (1), Lum (1), Open (1)."""
+    """data/README.md: V (25), R (7), B (2), Halpha (2), OIII (1), Lum (1), Open (1)."""
     listing = list_optical_frames()
     counts: dict[str, int] = {}
     for frame in listing.frames:
@@ -46,7 +46,7 @@ def test_filter_narrowing():
 
 
 def test_category_comes_from_the_filename_convention():
-    """Frames are named <object>_<category>_<filter>_<seq> (test_data/README.md)."""
+    """Frames are named <object>_<category>_<filter>_<seq> (data/README.md)."""
     frame = resolve_optical_frame("ngc1846_cluster_r_000")
     assert isinstance(frame, OpticalFrame)
     assert frame.category == "cluster"
@@ -364,3 +364,150 @@ def test_an_empty_directory_string_falls_back_to_the_default_roots():
     listing = list_optical_frames("")
     assert listing.count == 39
     assert Path(listing.search_root) == OPTICAL
+
+
+# --- The recursive walk is bounded ------------------------------------------
+#
+# Two bounds, added after P2 recorded the unbounded rglob as an open finding.
+# KEPLER_FITS_DOWNLOAD_DIR can name anywhere -- a home directory, a mount
+# point, "/" -- so recursion is confined to the data directory; and a bulk
+# search_mast(download=True) can leave thousands of products under it
+# (121,515 for Cas A), so one listing reads a bounded number of headers.
+
+
+def test_a_download_root_inside_the_data_dir_is_walked(tmp_path, monkeypatch):
+    from tools import config
+
+    data_dir = tmp_path / "data"
+    inside = data_dir / "fits_downloads"
+    monkeypatch.setattr(config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", inside)
+    _write_frame(
+        inside / "mastDownload" / "HST" / "idxq01010" / "nested.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+
+    listing = list_optical_frames()
+
+    assert "nested.fits" in {Path(f.path).name for f in listing.frames}
+    assert listing.warnings == []
+
+
+def test_a_download_root_outside_the_data_dir_is_searched_flat(tmp_path, monkeypatch):
+    """Still searched -- just not walked. CASDA's download_files writes flat,
+    so refusing the root outright would lose those frames too."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    outside = tmp_path / "elsewhere"
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", outside)
+    _write_frame(outside / "flat.fits", object_name="NGC 1234", image_filter="V")
+    _write_frame(
+        outside / "mastDownload" / "HST" / "idxq01010" / "nested.fits",
+        object_name="NGC 5678",
+        image_filter="V",
+    )
+
+    listing = list_optical_frames()
+    names = {Path(f.path).name for f in listing.frames}
+
+    assert "flat.fits" in names
+    assert "nested.fits" not in names
+    assert [w.code for w in listing.warnings] == ["download_root_outside_data_dir"]
+    assert str(outside) in listing.warnings[0].message
+
+
+def test_containment_is_decided_on_the_resolved_path(tmp_path, monkeypatch):
+    """A symlink named inside the data directory but pointing out of it does
+    not buy a recursive walk of wherever it lands."""
+    from tools import config
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    link = data_dir / "fits_downloads"
+    link.symlink_to(real, target_is_directory=True)
+    monkeypatch.setattr(config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", link)
+    _write_frame(
+        real / "mastDownload" / "HST" / "idxq01010" / "nested.fits",
+        object_name="NGC 5678",
+        image_filter="V",
+    )
+
+    listing = list_optical_frames()
+
+    assert "nested.fits" not in {Path(f.path).name for f in listing.frames}
+    assert [w.code for w in listing.warnings] == ["download_root_outside_data_dir"]
+
+
+def test_the_shipped_defaults_put_the_download_root_inside_the_data_dir(monkeypatch):
+    """The default configuration has to satisfy its own containment rule, or
+    the archive-to-analysis loop is flat-searched out of the box (BL-11).
+
+    Loaded as a pristine copy: the autouse ``download_root`` fixture has
+    already reassigned both values on the live ``tools.config``.
+    """
+    import importlib.util
+
+    from tools import config
+
+    monkeypatch.delenv("KEPLER_DATA_DIR", raising=False)
+    monkeypatch.delenv("KEPLER_FITS_DOWNLOAD_DIR", raising=False)
+    spec = importlib.util.spec_from_file_location("_config_pristine", config.__file__)
+    pristine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pristine)
+
+    assert pristine.DATA_DIR == ROOT / "data"
+    assert pristine.FITS_DOWNLOAD_DIR.is_relative_to(pristine.DATA_DIR)
+
+
+def test_a_listing_is_capped_and_says_how_many_it_left_out(monkeypatch):
+    from tools import config
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
+    listing = list_optical_frames()
+
+    assert listing.count == 5
+    assert [w.code for w in listing.warnings] == ["listing_truncated"]
+    assert "39 frames found" in listing.warnings[0].message
+    assert "KEPLER_MAX_FRAMES" in listing.warnings[0].message
+
+
+def test_an_uncapped_listing_carries_no_truncation_warning():
+    listing = list_optical_frames()
+
+    assert listing.count == 39
+    assert listing.warnings == []
+
+
+def test_the_cap_bounds_header_reads_not_just_the_returned_list(monkeypatch):
+    """The cap exists to stop a bulk download costing thousands of FITS header
+    reads, so it has to apply before _summary rather than trimming after."""
+    from tools import config, optical
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 3)
+    read: list[Path] = []
+    real_summary = optical._summary
+    monkeypatch.setattr(
+        optical, "_summary", lambda path: (read.append(path), real_summary(path))[1]
+    )
+
+    optical.list_optical_frames()
+
+    assert len(read) == 3
+
+
+def test_a_truncated_listing_warns_on_the_frame_it_resolves(monkeypatch):
+    """A lone match in a capped listing was found among the frames that were
+    read, not among the frames that exist -- so the caveat rides on the frame
+    rather than being dropped with the list it came from."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
+    frame = resolve_optical_frame("carina")
+
+    assert isinstance(frame, OpticalFrame)
+    assert "listing_truncated" in [w.code for w in frame.warnings]

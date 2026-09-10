@@ -2718,7 +2718,7 @@ The four tools that sit on these are documented in
   in §7 is pinned with its reason.
 - **The output is a pulsar, not just a file.** Folding the ingested B0329+54
   scan at its curated literature period (0.7145197 s, from
-  `test_data/pulsar/Curated pulsars.docx` — the scans carry no period in-file)
+  `data/pulsar/Curated pulsars.docx` — the scans carry no period in-file)
   gives a **316 sigma** pulse confined to a few percent of the period. Folding the *rendered WAV's*
   amplitude envelope at that period times the reported `playback_stretch`
   recovers the pulse train from the audio itself. B1133+16 folds at 20 sigma;

@@ -34,7 +34,11 @@ from tools.models import ToolError, ToolWarning, WcsSummary
 
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-_FIXTURE_ROOT = (_REPOSITORY_ROOT / "test_data").resolve()
+#: The committed fixture tree. Pinned to this repository rather than read from
+#: ``config.DATA_DIR``: an operator who points KEPLER_DATA_DIR at their own
+#: archive has neither made these frames writable nor made that archive a tree
+#: of fixtures, so the guard must not travel with the setting.
+_FIXTURE_ROOT = (_REPOSITORY_ROOT / "data").resolve()
 
 
 class _FileChangedError(RuntimeError):
@@ -95,9 +99,33 @@ def _summary_from_wcs(
 
 
 def _under_fixture_root(path: Path) -> bool:
+    """Whether ``path`` is a committed fixture this tool must not rewrite.
+
+    The guard is the data directory *minus* the archive download root. Those
+    were separate trees until the download root moved inside ``data/``, and a
+    downloaded frame is precisely the thing under there a caller is entitled to
+    plate-solve and write a header back into -- that is the archive -> analysis
+    loop BL-11 exists to join. Guarding the data directory wholesale would
+    refuse exactly that write, and would do it with a message claiming the
+    downloaded product was a bundled fixture.
+
+    The download root is read through ``tools.config`` rather than bound at
+    import, for the same reason ``tools.optical`` reads it that way: the two
+    have to agree about where downloads land, and a test that reassigns one
+    must move the other.
+    """
+    from tools import config
+
     try:
-        path.relative_to(_FIXTURE_ROOT)
-    except ValueError:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(_FIXTURE_ROOT):
+            return False
+        download_dir = config.FITS_DOWNLOAD_DIR
+        if download_dir is not None and resolved.is_relative_to(
+            Path(download_dir).expanduser().resolve()
+        ):
+            return False
+    except OSError:  # pragma: no cover - symlink loop, unreadable mount
         return False
     return True
 
@@ -252,7 +280,9 @@ def solve_astrometry(
                     *summary.errors,
                     ToolError(
                         code="refusing_to_modify_fixture",
-                        message="Refusing to rewrite a bundled test_data FITS fixture.",
+                        message="Refusing to rewrite a bundled FITS fixture "
+                        "under data/. Frames under the archive download root "
+                        "are not fixtures and can be written.",
                     ),
                 ]
             }

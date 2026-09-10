@@ -1,11 +1,11 @@
 """The recorded field-calibration ground truth, reachable as a tool result.
 
-BL-4: ``test_data/fieldcal/`` and ``test_data/afterglow/`` carry a complete
+BL-4: ``data/fieldcal/`` and ``data/afterglow/`` carry a complete
 cross-implementation parity chain -- Skynet's own ``calc_solution`` output,
 Afterglow's API response, and Afterglow's published web-table value -- and
 before this module nothing outside ``tests/`` could read any of it.
 
-Everything here is offline. ``test_data/README.md`` spells out the chain for
+Everything here is offline. ``data/README.md`` spells out the chain for
 NGC 5128 B::
 
     Kepler calc_solution        21.147659857998637   (bit-exact)
@@ -24,7 +24,7 @@ four and reproduced bit-for-bit by :func:`solve_zeropoint_from_reference`.
 
 Only ``KEPLER_FIELDCAL_DATA_DIR`` relocates the ``zp_solutions/`` search;
 the bundled-frame and Afterglow web-table lookups always read the repo's own
-``test_data/`` because they only make sense against the shipped fixtures.
+``data/`` because they only make sense against the shipped fixtures.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 #: do not match: upstream's ``(1)``/``(2)`` directory suffixes were flattened
 #: separately from the frame rename. Only ``ngc5128_b_002`` has a bundled
 #: frame; the three NGC 5286 B solves describe ``ngc5286_globular_b_00N.fits``,
-#: which are not in ``test_data/optical/``.
+#: which are not in ``data/optical/``.
 _BUNDLED_FRAME_BY_FIELD: dict[str, str | None] = {
     "ngc5128_b_002": "ngc5128_galaxy_b_001.fits",
     "ngc5286_b_000": None,
@@ -100,7 +100,7 @@ def _fieldcal_data_dir(directory: str | Path | None = None) -> Path:
 
     from tools.config import env_path
 
-    default = _REPO_ROOT / "test_data" / "fieldcal"
+    default = _REPO_ROOT / "data" / "fieldcal"
     return env_path(FIELDCAL_DATA_DIR_ENV, default) or default
 
 
@@ -169,7 +169,7 @@ def _catalog_name(summary: dict) -> str | None:
 
 def _web_table_zero_point(frame_filename: str) -> float | None:
     """Afterglow's published web-table zero point for a bundled frame, if recorded."""
-    path = _REPO_ROOT / "test_data" / "afterglow" / "afterglow_web_values_master.csv"
+    path = _REPO_ROOT / "data" / "afterglow" / "afterglow_web_values_master.csv"
     if not path.is_file():
         return None
     with path.open(newline="") as handle:
@@ -200,13 +200,13 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
             )
         ]
 
-    candidate = _REPO_ROOT / "test_data" / "optical" / bundled
+    candidate = _REPO_ROOT / "data" / "optical" / bundled
     if candidate.is_file():
         return str(candidate), []
     return None, [
         ToolWarning(
             code="frame_not_bundled",
-            message=f"{bundled} is not present in test_data/optical/.",
+            message=f"{bundled} is not present in data/optical/.",
         )
     ]
 
@@ -256,7 +256,7 @@ def list_zeropoint_references(
     """Every recorded zero-point solve on local disk.
 
     Reads ``<KEPLER_FIELDCAL_DATA_DIR>/zp_solutions/*/`` (default
-    ``test_data/fieldcal/zp_solutions/``). Returns an empty list -- not an
+    ``data/fieldcal/zp_solutions/``). Returns an empty list -- not an
     error -- when the directory is absent.
     """
     solutions_dir = _solutions_dir(directory)
@@ -329,10 +329,10 @@ def solve_zeropoint_from_reference(
 def load_ocl_reference(frame_stem: str) -> dict:
     """The recorded Open/Clear/Lum filter-substitution sweep for a bundled frame.
 
-    BL-6: ``test_data/fieldcal/ocl_filter_report.json`` records a full
+    BL-6: ``data/fieldcal/ocl_filter_report.json`` records a full
     wcs -> photometry -> field-calibration sweep over ten M15 frames, keyed by
     upstream filename. The rename to ``m15_globular_lum_000.fits`` stranded it;
-    ``test_data/frame_provenance.json`` restores the join.
+    ``data/frame_provenance.json`` restores the join.
 
     Takes a bundled frame stem (``"m15_globular_open_000"``) and returns the
     matching ``results`` entry from the report -- ``input_file``,
@@ -343,9 +343,9 @@ def load_ocl_reference(frame_stem: str) -> dict:
     Reads the bundled fixtures directly; ``KEPLER_FIELDCAL_DATA_DIR`` does not
     relocate them.
     """
-    test_data = _REPO_ROOT / "test_data"
-    provenance_path = test_data / "frame_provenance.json"
-    report_path = test_data / "fieldcal" / "ocl_filter_report.json"
+    data_root = _REPO_ROOT / "data"
+    provenance_path = data_root / "frame_provenance.json"
+    report_path = data_root / "fieldcal" / "ocl_filter_report.json"
 
     if not provenance_path.is_file() or not report_path.is_file():
         return {
@@ -354,7 +354,7 @@ def load_ocl_reference(frame_stem: str) -> dict:
                 {
                     "code": "fixture_missing",
                     "message": "frame_provenance.json or fieldcal/ocl_filter_report.json "
-                    "is not present in test_data/.",
+                    "is not present in data/.",
                 }
             ],
         }

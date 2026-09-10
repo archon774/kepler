@@ -109,7 +109,7 @@ Python functions in `tools/`:
   ANTHROPIC_API_KEY=... python3 tools/claude_photometry_haiku_tool.py ngc1846_cluster_r_000
   ```
 
-  `--list-targets` lists the bundled `test_data/optical` targets it can run
+  `--list-targets` lists the bundled `data/optical` targets it can run
   against with no live archive query; `--check-only` resolves a target
   without running the pipeline. **Listing and resolving a target are offline;
   running one is not.** Field calibration is on by default
@@ -229,7 +229,9 @@ Kepler/
     periodogram/                 # TypeScript periodogram extraction
     hrdiagram/                   # TypeScript HR-diagram extraction
   tests/                         # pytest suite (algorithm-preservation + tool smoke)
-  test_data/                     # real fixture frames and recorded reference outputs
+  data/                          # the data root: fixture frames, recorded
+                                 #   reference outputs, and the (untracked)
+                                 #   fits_downloads/ archive download root
 ```
 
 ## Getting Started

@@ -21,7 +21,7 @@ artifacts, so the default `pytest` run collects them with the rest of the suite.
 Three consequences shape everything here:
 
 1. **Real data, not synthetic.** Fixtures are 39 real PROMPT/Skynet frames and
-   four complete recorded Skynet zero-point solves. See `test_data/README.md`.
+   four complete recorded Skynet zero-point solves. See `data/README.md`.
 2. **Recorded output, not recomputed expectations.** The centrepiece,
    `test_fieldcal_solution.py`, feeds `calc_solution` the exact rows Skynet fed
    it and compares against the exact numbers Skynet returned — bit-for-bit on

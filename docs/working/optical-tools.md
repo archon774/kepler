@@ -15,7 +15,7 @@ local-data, documentation, solver-convergence, and TypeScript-runtime gaps.
 **Merged at:** `dev` commit `33617a4adaf89aadd006ec8be11fe6678f19d0cd` (PR #52,
 "Refactor optical processing to stateless S0–S6 contracts").
 **Scope:** the seam between the public `tools/` surface and the local data in
-`test_data/`, the execution architecture behind that seam, and the Python
+`data/`, the execution architecture behind that seam, and the Python
 runtime ports needed to make the locally shipped TypeScript algorithms callable.
 The ports preserve TypeScript numerical behavior; separate correctness
 remediation remains
@@ -31,7 +31,7 @@ that satisfies them.
 
 **The links are broken.** Tools that should run against the data bundled in this
 repository do not reach it, and the recorded ground truth in
-`test_data/afterglow/` and `test_data/fieldcal/` is readable only as a pytest
+`data/afterglow/` and `data/fieldcal/` is readable only as a pytest
 fixture, never as a tool result. The original twelve findings are supplemented
 by the reference-document drift found in the post-rollout audit, section 1.
 
@@ -75,9 +75,9 @@ Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
 | BL-1 | `describe_image_wcs` raised `TypeError` on 38 of 39 bundled frames | **closed** — fixed on `dev` before Phase 1; the parametrized sweep landed with it | — |
 | BL-2 | The agent registry omitted the local no-network tools | **closed** — Phase 1 registered `astrometry`, `calibration`, `catalogs`, `workspace` | was High |
 | BL-3 | No optical-frame lookup registry (the HR-diagram example) | **closed** — Phase 2 added `tools/optical.py` | was Medium |
-| BL-4 | No tool read `test_data/afterglow/` or `test_data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
+| BL-4 | No tool read `data/afterglow/` or `data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
 | BL-5 | `ZeropointSolution.zero_point_corr` held an absolute zero point | **closed** — Phase 1 renamed it to `zero_point` | was High |
-| BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `test_data/frame_provenance.json` | was Medium |
+| BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `data/frame_provenance.json` | was Medium |
 | BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **wiring closed; convergence planned** — Phase P6 adds explicit opt-in search bounds while retaining the parity default | was Medium |
 | BL-8 | Curated pulsar periods unreachable from the tool layer | **closed** — Phase P1 added the curated-period map and the measure-first sourcing order | was Medium |
 | BL-9 | HR diagram: no offline path and an incomplete Python port | **planned** — Phase P5 provides explicit local-grid input and ports the remaining computational TypeScript surface | Medium |
@@ -137,9 +137,9 @@ no header metadata — so a caller could not ask "which frames are in B?" or
 `docs/pulsar-tool-pipeline.md` already cited the photometry script as the model
 the pulsar tools should follow; both halves converge on one pattern.
 
-### BL-4 — no tool read `test_data/afterglow/` or `test_data/fieldcal/`
+### BL-4 — no tool read `data/afterglow/` or `data/fieldcal/`
 
-Grepping `test_data` across `tools/` and `algorithms/` returned hits in exactly
+Grepping `data` across `tools/` and `algorithms/` returned hits in exactly
 two files: the pulsar scan directory and the photometry script's frame search
 roots. **Nothing in the tool layer read the recorded ground truth.**
 
@@ -147,11 +147,11 @@ What was sitting there unused:
 
 | Fixture | Contents |
 |---|---|
-| `test_data/fieldcal/zp_solutions/<field>/fit_data.csv` | every photometered source, with `used_for_calibration` marking the exact rows handed to `calc_solution` |
+| `data/fieldcal/zp_solutions/<field>/fit_data.csv` | every photometered source, with `used_for_calibration` marking the exact rows handed to `calc_solution` |
 | `…/fit_summary.json` | the five numbers `calc_solution` returned, plus Afterglow's own result and the declared tolerance |
-| `test_data/afterglow/fieldcal/ngc_5128_test_vals.json` | the complete Afterglow field-calibration API response |
-| `test_data/afterglow/photometry/afterglow_photometry_ngc5128_b.csv` | 303 sources with `zero_point`, `zero_point_correction`, `calibrated_zero_point` |
-| `test_data/afterglow/afterglow_web_values_master.csv` | published zero points for 73 subjects |
+| `data/afterglow/fieldcal/ngc_5128_test_vals.json` | the complete Afterglow field-calibration API response |
+| `data/afterglow/photometry/afterglow_photometry_ngc5128_b.csv` | 303 sources with `zero_point`, `zero_point_correction`, `calibrated_zero_point` |
+| `data/afterglow/afterglow_web_values_master.csv` | published zero points for 73 subjects |
 
 The capability was there; only the tool in front of it was missing. Driving the
 zero-point solver by hand from the recorded rows reproduces the recorded solve
@@ -188,14 +188,14 @@ The public model field named `zero_point_corr` was populated from
 `calc_solution`'s `m0`, which is the **absolute** zero point —
 `21.147659857998637` where the recorded correction is `1.1476598579986392`.
 Afterglow fixes `zero_point = 20` and reports a correction; Kepler computes the
-absolute value. `test_data/README.md` warns in bold that mixing the two
+absolute value. `data/README.md` warns in bold that mixing the two
 conventions "lands 20 magnitudes off in a way that looks entirely plausible" —
 and the public model name was on the wrong side of exactly that trap. Afterglow's
 own `field_cal_zero_point_corr` key keeps its name; it genuinely is a correction.
 
 ### BL-6 — the OCL report no longer joined to any bundled frame
 
-`test_data/fieldcal/ocl_filter_report.json` records a full WCS → photometry →
+`data/fieldcal/ocl_filter_report.json` records a full WCS → photometry →
 field-calibration sweep over ten Open/Clear/Lum frames, keyed by upstream
 filename. The bundled frames were renamed to `m15_globular_lum_000.fits` and
 `m15_globular_open_000.fits`, and the report carries no observation
@@ -208,7 +208,7 @@ corroborates it independently: all three trial filters for the Open frame failed
 with "no WCS solution found in FITS header", and `m15_globular_open_000.fits` is
 precisely the one bundled frame with no WCS keywords. The mapping was certain;
 it just was not written down here. It now is, as
-`test_data/frame_provenance.json`.
+`data/frame_provenance.json`.
 
 Worth noting for BL-7: upstream's OCL sweep only *read* the header WCS — it did
 not plate-solve. A working plate-solving tool takes that frame further than the
@@ -277,7 +277,7 @@ it is not re-made.
 frequency, coordinates, duration, and size — and no period. The periods live in
 two places, neither of which is a tool:
 
-- `test_data/pulsar/Curated pulsars.docx` — the reference `test_data/README.md`
+- `data/pulsar/Curated pulsars.docx` — the reference `data/README.md`
   calls "the verification reference … **This document, not ATNF, is the reference
   the tests compare against**".
 - A literal dictionary in `tests/conftest.py`, transcribed from that document's
@@ -309,7 +309,7 @@ grids from the CMD service at `stev.oapd.inaf.it` and caches them under
 What survives is narrower and squarely this document's topic: **the HR-diagram
 chain cannot run offline.** The isochrone grid is a live HTTP fetch, Gaia
 photometry is a live VizieR query, and there is no cluster fixture anywhere in
-`test_data/` — so nothing in the chain has a bundled-data path, and the
+`data/` — so nothing in the chain has a bundled-data path, and the
 repository's "default checks stay deterministic and bounded" constraint means
 none of it can be covered by the default suite. The fix is a recorded fixture
 (one cluster's Gaia rows plus one PARSEC grid), not a runtime or a data-licensing
@@ -334,7 +334,7 @@ PARSEC fetch now supplies at the cost of a network call.
 
 `algorithms/lightcurve/variable/` and `algorithms/periodogram/variable/` are
 TypeScript with no runtime, and there is no fixture data anywhere in
-`test_data/`. Astromancer ships no sample light curves. Unlike BL-9 there is no
+`data/`. Astromancer ships no sample light curves. Unlike BL-9 there is no
 external-data blocker — a variable-star light curve is an ordinary time series
 and VizieR, ASAS-SN, or ZTF can supply one. Phase P4 settles the runtime as an
 exact-parity Python port and adds a compact paired-source fixture.
@@ -376,7 +376,7 @@ established, because everything below builds on it.
 | --- | --- | --- |
 | 1 — local tools work and are reachable | #43 | The `StrListProxy` fix plus a parametrized sweep over all 39 frames; `astrometry`, `calibration`, `catalogs` and `workspace` registered; `ZeropointSolution.zero_point` renamed to say it holds an absolute zero point; a registry-coverage test that pins every public tool module as represented. |
 | 2 — the optical frame registry | #44 | `tools/optical.py` — `list_optical_frames` and `resolve_optical_frame`, header summary only with no pixel reads, backed by `KEPLER_OPTICAL_DATA_DIR`, returning `OpticalFrame`/`OpticalFrameList` with filter, telescope, WCS presence, field centre, pixel scale and size. Both registered; the photometry CLI's private resolver delegates to it. |
-| 3 — the field-calibration reference comparison | #45 | `tools/fieldcal_reference.py` — listing, loading, solving from, and comparing against the recorded solves, plus `replay_catalog_sources` for offline replay; `tools/photometry.py`'s `calibrate_zeropoint`; `test_data/frame_provenance.json` restoring the OCL join key. |
+| 3 — the field-calibration reference comparison | #45 | `tools/fieldcal_reference.py` — listing, loading, solving from, and comparing against the recorded solves, plus `replay_catalog_sources` for offline replay; `tools/photometry.py`'s `calibrate_zeropoint`; `data/frame_provenance.json` restoring the OCL join key. |
 | 4 — plate solving as a tool | #47 | `tools/wcs.py`'s `solve_astrometry`, with a timeout bound, backend-attempt reporting, fixture protection, a concurrent-file-change check, and an atomic WCS header write. Behind a `solver` marker by default. |
 
 **Names later phases depend on:** `list_optical_frames`,
@@ -681,7 +681,7 @@ Every phase inherits these, from `CLAUDE.md` and `docs/tool-architecture.md`.
   Keep solver-data and live-query tests opt-in.
 - **No generated files in the repository.** Artifacts go to
   `KEPLER_ARTIFACT_DIR` (default `artifacts/`, gitignored). Do not add FITS,
-  plots, or caches to `test_data/`; the one new fixture the remaining phases add
+  plots, or caches to `data/`; the one new fixture the remaining phases add
   is a small JSON map.
 - **Keep Python 3.14 and current dependency versions.** Dependencies are pinned
   with `==`; no phase here needs a new one.
@@ -948,7 +948,7 @@ data; neither reopens the completed stateless boundary.
 
 ### Phase P1 — Curated pulsar periods (BL-8) — Complete
 
-- [x] Create `test_data/pulsar/curated_periods.json`, transcribed from
+- [x] Create `data/pulsar/curated_periods.json`, transcribed from
       `tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and
       `PULSAR_DIFFICULTY` tables — themselves the literature-period column of
       `Curated pulsars.docx`. The file carries a comment recording that **that
@@ -993,7 +993,7 @@ it in step when Stage 0 gains the curated period.
 commits: the tool change, its documentation, and a policy correction made during
 review.
 
-`test_data/pulsar/curated_periods.json` is the single copy of the curated
+`data/pulsar/curated_periods.json` is the single copy of the curated
 periods, difficulty ratings and ATNF cross-check; `tests/conftest.py`'s
 `PULSAR_PERIODS_S`, `PULSAR_ATNF` and `PULSAR_DIFFICULTY` read it rather than
 restating it, with their comment blocks kept. `PulsarScan` gained
@@ -1009,7 +1009,7 @@ resolve with their literature period, including the B2021+51 scan whose
 affected registry tool descriptions and the tool docstrings state the sourcing
 order as measure, compare, retune, and only then fall back to the reference.
 Folding at a literature period produces a fit to a known answer rather than a
-detection, and `test_data/README.md` leans on that distinction — the scans carry
+detection, and `data/README.md` leans on that distinction — the scans carry
 no period in-file precisely so that a successful fold is independent evidence.
 Preferring the reference by default would convert every `pulse_snr` in the
 pipeline from evidence into a restatement of its own input. The recovery path
@@ -1023,7 +1023,7 @@ directory instead, because `KEPLER_PULSAR_DATA_DIR` points the tools at another
 archive: a hardcoded path would name-match these five periods onto an operator's
 own files and stamp them with a `period_source` naming a document that describes
 different observations. The bundled case is unchanged — the map is in the
-bundled directory — and `tools/` still imports with no `test_data/` present.
+bundled directory — and `tools/` still imports with no `data/` present.
 
 **Review.** A `high`-effort code review and a security review both ran against
 the PR diff. The security review returned no findings: the PR adds no privilege
@@ -1061,9 +1061,9 @@ findings were fixed rather than deferred:
   It now plants a deliberately wrong curated period beside a copied scan, so a
   leak would move the answer rather than merely confirm it, over a narrowed grid.
 
-Findings dismissed with reasons: `test_data/` not being packaged makes
+Findings dismissed with reasons: `data/` not being packaged makes
 `curated_period_s` null in an installed copy, but the scans are not packaged
-either and `_pulsar_data_dir()` already defaults inside `test_data/`, so an
+either and `_pulsar_data_dir()` already defaults inside `data/`, so an
 installed copy has no scans to attach a period to — a pre-existing repository
 property, not one this phase introduced. The "programme SRC_NAME collides"
 scenario does not hold: `3_Pulsar_Team_B2021+51_ERIRA` embeds its own target
@@ -1351,7 +1351,7 @@ pulsar pattern: bounded previews inline, complete tables as artifacts, and
 typed warnings/errors at the tool boundary.
 
 - [ ] Add a compact, two-source variable-light-curve CSV fixture under
-      `test_data/variable_star/`, using the extracted parser input columns
+      `data/variable_star/`, using the extracted parser input columns
       `id`, `mjd`, `mag`, and `mag_error`, plus a README naming it a parity
       fixture rather than a catalog download.
 - [ ] Port every computational variable TypeScript symbol needed by the runtime:
@@ -1528,7 +1528,7 @@ Node-subprocess alternative and the proposed cluster registry are rejected.
 | | HR diagram | Variable star |
 |---|---|---|
 | Runtime | **now exists** on `dev` — `algorithms/hrdiagram_py/` plus seven registered tools | none — nothing executes the TypeScript |
-| Input data | none in `test_data/` | none in `test_data/` |
+| Input data | none in `data/` | none in `data/` |
 | Catalog access | solvable — `algorithms/query` already queries VizieR for Gaia, 2MASS, APASS, WISE and MWSC | solvable — VizieR, ASAS-SN, ZTF |
 | Model grids | **fetched live** from the PARSEC CMD service, with no recorded fixture | not applicable |
 
@@ -1582,7 +1582,7 @@ a public cluster registry. M67 remains test-only.
 ### 7.2 Asset-gated inputs
 
 **Cluster photometry and variable-star light curves.** There is none in
-`test_data/`. P5 is specifically gated on the maintainer supplying a local PARSEC
+`data/`. P5 is specifically gated on the maintainer supplying a local PARSEC
 grid, not on recording a cluster fixture or introducing a public lookup registry.
 
 **UCAC4/UCAC5 catalog data.** Absent from this host entirely. The ATLAS triangle
@@ -1614,7 +1614,7 @@ cone response so catalog selection, including the 263 unmatched rows, becomes
 reproducible.
 
 **The 36 frames above the 9 MB cut-off.** The Afterglow web table covers 73
-subjects (~1.5 GB); `test_data/optical/` carries the 37 under 9 MB plus the two
+subjects (~1.5 GB); `data/optical/` carries the 37 under 9 MB plus the two
 OCL frames. Widening coverage means adding large incompressible binaries to plain
 git, permanently. This rollout does not widen that set: P8 uses Git LFS only for
 the three NGC 5286 B frames above.
@@ -1659,7 +1659,7 @@ frame.
   — the open pulsar tool bugs P1 must leave alone.
 * [`../analysis/algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md)
   — algorithm correctness, deliberately out of scope.
-* `test_data/README.md` — the zero-point convention warning behind BL-5, and the
+* `data/README.md` — the zero-point convention warning behind BL-5, and the
   Git LFS note behind section 7.3.
 * [tui-harness.md](tui-harness.md) — unblocked by the stateless rollout but
   separately scoped; it owns the photometry-pipeline rename that must operate on
