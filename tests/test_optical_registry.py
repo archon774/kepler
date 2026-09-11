@@ -527,3 +527,18 @@ def test_a_miss_in_a_truncated_listing_says_the_search_was_partial(monkeypatch):
     assert "Only the first 5 frames were read" in message
     assert "KEPLER_MAX_FRAMES" in message
     assert "listing_truncated" in [w.code for w in result.warnings]
+
+
+def test_an_absent_download_root_outside_the_data_dir_warns_nothing(tmp_path, monkeypatch):
+    """The containment warning says the root "is searched flat". A root that
+    does not exist is not searched at all, so it gets no warning -- matching
+    how an absent root inside the data dir is already skipped silently."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", tmp_path / "elsewhere")
+
+    listing = list_optical_frames()
+
+    assert listing.warnings == []
+    assert [Path(r) for r in listing.search_roots] == [OPTICAL]

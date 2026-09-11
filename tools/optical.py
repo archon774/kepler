@@ -115,7 +115,10 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
         download_root = Path(download_dir).expanduser()
         data_dir = Path(config.DATA_DIR).expanduser()
         recursive = _within(download_root, data_dir)
-        if not recursive:
+        # Only a root that exists earns the warning: an absent download root is
+        # skipped by the lister without comment, and telling a caller that a
+        # directory which is not searched at all "is searched flat" is wrong.
+        if not recursive and download_root.is_dir():
             warnings.append(
                 ToolWarning(
                     code="download_root_outside_data_dir",
@@ -439,6 +442,8 @@ def resolve_optical_frame(
         return frame
 
     if not matches:
+        from tools import config
+
         # Say when the search was partial. Reporting the capped count as though
         # it were the total is worst in exactly the case the cap creates: after
         # a bulk download the wanted frame is the one likely to have fallen
@@ -450,7 +455,7 @@ def resolve_optical_frame(
             else f"{listing.count} frames are available"
         )
         hint = (
-            "narrow with directory= or raise KEPLER_MAX_FRAMES"
+            f"narrow with directory= or raise {config.MAX_FRAMES_ENV}"
             if truncated
             else "call list_optical_frames to see them"
         )
