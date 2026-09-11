@@ -1,0 +1,9 @@
+id,mjd,mag,mag_error
+variable,59000.0,14.00,0.02
+comparison,59000.0,12.00,0.01
+variable,59000.2,14.12,0.02
+comparison,59000.2,12.01,0.01
+variable,59000.4,14.04,0.02
+comparison,59000.4,12.00,0.01
+variable,59000.6,13.94,0.02
+comparison,59000.6,12.02,0.01
