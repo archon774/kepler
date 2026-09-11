@@ -56,10 +56,10 @@ def env_positive_int(name: str, default: int) -> int:
 def safe_resolve(path: Path) -> Path:
     """``path.resolve()``, falling back to ``path`` when the filesystem refuses.
 
-    A symlink loop raises ``OSError`` on some Python versions and
-    ``RuntimeError`` on 3.12 (the version CI runs); non-strict resolution on
-    3.13+ raises nothing. One helper so every containment check in ``tools``
-    handles all three the same way.
+    A symlink loop raises ``RuntimeError`` on Python 3.12 -- the floor in
+    ``pyproject.toml`` -- and ``OSError`` for other filesystem refusals;
+    non-strict resolution on 3.13+ raises nothing for the loop. One helper so
+    every containment check in ``tools`` handles all three the same way.
     """
 
     try:

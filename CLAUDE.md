@@ -73,8 +73,11 @@ a fresh checkout and `tsc` is not on `PATH` without it. Nothing installs it for
 you: the typecheck is not a CI job, so this is the only thing that runs it
 (BL-12).
 
-CI (`.github/workflows/ci.yml`) gates three jobs: `compileall` over `tools algorithms
-tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
+CI (`.github/workflows/ci.yml`) runs on **Python 3.14**; `pyproject.toml` keeps
+3.12 as the floor, so code still has to work there (`Path.resolve()` raises
+`RuntimeError` rather than `OSError` on a symlink loop under 3.12 — use
+`tools.config.within`/`safe_resolve`). It gates three jobs: `compileall` over
+`tools algorithms tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`, `tools/runner.py`, and
 `docs/tool-architecture.md` exist. **The TypeScript typecheck is not a CI job** — run it
 by hand when touching a `.ts` file.
@@ -141,9 +144,26 @@ see below. Ownership is strict:
   See `docs/pulsar-tool-pipeline.md`.
 
   Never read a period off rendered audio: the synthesis ignores sample
-  timestamps (`docs/extraction.md`, Pulsar Sonification §7.2). Catalogued
-  periods come from `tools.atnf.search_atnf` and beat anything a 60-second scan
-  measures.
+  timestamps (`docs/extraction.md`, Pulsar Sonification §7.2).
+
+  **A catalogued period is a check on a measured one, never an input.** The
+  bundled scans carry `curated_period_s` (from `data/pulsar/curated_periods.json`,
+  reported by `resolve_pulsar_scan`/`list_pulsar_scans` with a `period_source`);
+  `tools.atnf.search_atnf` covers sources the curation does not. Neither is
+  where a period comes from. A fold at a *measured* period is a detection; a
+  fold at a *literature* period is a fit to a known answer, and the two must
+  never be reported as each other. The order is fixed: **measure** with
+  `compute_pulsar_periodogram` (read `peak_fold_snr`, not `peak_confidence` —
+  the confidence threshold assumes white noise and mains interference reads
+  "99.73%" while folding to nothing) → **compare** against the curated or
+  ATNF value → on disagreement **retune** (`back_scale`, `start`/`stop`,
+  `steps`; 0.016665 s is 60 Hz mains, a 2.1–2.2 s peak is baseline red noise)
+  → only then **fall back** to folding at the reference, and say so — that
+  fold's `pulse_snr` is not an independent detection. A blind search succeeds
+  on one of the five bundled scans, so reaching the fallback on the faint ones
+  is an ordinary outcome to report, not a failure to hide. This reversed P1's
+  original checkbox wording at the maintainer's direction; the shipped prompt
+  in `tools/agent/prompt.py` ("PERIOD SOURCING") is the authoritative text.
 
 `algorithms/query/` imports `algorithms/catalogs/`; never the reverse. That direction is what keeps
 filter matching and the whole zero-point solve runnable with no network stack

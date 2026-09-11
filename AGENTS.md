@@ -6,7 +6,7 @@ Kepler is a staging area for extracted astronomy algorithms. Public Python tools
 
 ## Build, Test, and Development Commands
 
-- `uv sync`: create/update the Python 3.12 environment from `pyproject.toml` and `uv.lock`.
+- `uv sync`: create/update the Python environment (3.14 in CI; 3.12 is the floor in `pyproject.toml`) from `pyproject.toml` and `uv.lock`.
 - `uv run pytest`: the test suite (see Testing Guidelines below) — no network access by default.
 - `uv run kepler-astro-query "<question>"`: run the optional agentic loop over the `tools` schemas (requires `ANTHROPIC_API_KEY`).
 - `python3 -m compileall tools algorithms`: syntax smoke test.

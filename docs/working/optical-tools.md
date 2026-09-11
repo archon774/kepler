@@ -1420,7 +1420,8 @@ maintainer. The ones that changed behaviour:
   download warning now names the leaf directories products landed in, and the
   hints say to pass one of those.
 - **`Path.resolve()` raises `RuntimeError`, not `OSError`, on a symlink loop
-  under Python 3.12 — the version CI runs.** Every `except OSError` around a
+  under Python 3.12 — the version CI ran at the time (bumped to 3.14 since;
+  3.12 remains the `pyproject.toml` floor).** Every `except OSError` around a
   resolve was wrong there and dead on 3.13+. Lifted into
   `tools.config.within`/`safe_resolve`, catching both, used by both modules.
 - **`list_photometry_targets` was silently capped** — it went through the
