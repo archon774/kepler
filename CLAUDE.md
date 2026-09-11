@@ -260,15 +260,22 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
   the download root and the boundary, not the bundled frame library — that has
   its own override, `KEPLER_OPTICAL_DATA_DIR`.
 
-  `KEPLER_MAX_FRAMES` (default 200) bounds how many frames one
-  `list_optical_frames` call reads headers for and returns; over the cap the
-  listing carries a `listing_truncated` warning naming the total. It is not a
-  tool parameter, so raising it is an operator decision, not a model's.
+  `KEPLER_MAX_FRAMES` (default 200, must be ≥ 1) bounds how many frames one
+  `list_optical_frames` call reads headers for and returns **per root**; over
+  the cap the listing carries a `listing_truncated` warning naming the total.
+  Per root, not overall, because roots are ordered primary-first and an
+  operator archive larger than the cap would otherwise make every archive
+  download invisible. It is not a tool parameter, so raising it is an
+  operator decision, not a model's. `list_photometry_targets` is an
+  inventory of filenames, not a header listing, and is never capped.
 
   `tools/wcs.py` refuses to write a solved header back into a bundled fixture.
-  That guard is `<repo>/data` **minus** the download root — pinned to this
-  repository rather than following `KEPLER_DATA_DIR` — because a downloaded
-  product living under `data/` is not a fixture and must stay writable.
+  That guard names the four tracked fixture subtrees (`afterglow/`,
+  `fieldcal/`, `optical/`, `pulsar/`) — pinned to this repository, reading no
+  setting — so a downloaded product under `data/fits_downloads/` stays
+  writable and no environment variable can switch the guard off. A new
+  fixture subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the
+  tuple matches the directories present.
 
 ### Runtime dependencies that are not optional
 

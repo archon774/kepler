@@ -185,9 +185,12 @@ def resolve_fits_path(query: str | Path) -> Path:
 def list_bundled_targets() -> dict[str, list[str]]:
     """Return the FITS target stems bundled locally, by category.
 
-    Delegates to ``tools.optical.list_optical_frames``; the category is the
-    second token of each stem, per the <object>_<category>_<filter>_<seq>
-    convention documented in data/README.md.
+    Delegates to ``tools.optical`` for both the inventory and the category
+    parse, so the CLI and the registered tools cannot drift apart. This is an
+    index of filenames, not a header listing: it goes through
+    ``bundled_frame_paths`` rather than ``list_optical_frames`` so it reads no
+    headers and is never subject to ``KEPLER_MAX_FRAMES`` -- an index that
+    advertises itself as the complete fixed set must not silently truncate.
 
     Scoped to the primary root on purpose. ``list_photometry_targets`` tells
     its caller this is a small fixed set of bundled frames with no archive
@@ -196,12 +199,12 @@ def list_bundled_targets() -> dict[str, list[str]]:
     is not an optical photometry target. Downloaded frames stay reachable
     through ``list_optical_frames``/``resolve_optical_frame`` and by path.
     """
-    from tools.optical import list_optical_frames, primary_optical_data_dir
+    from tools.optical import bundled_frame_paths, category_from_stem
 
     targets: dict[str, list[str]] = {}
-    for frame in list_optical_frames(primary_optical_data_dir()).frames:
-        targets.setdefault(frame.category or "uncategorized", []).append(
-            Path(frame.path).stem
+    for path in bundled_frame_paths():
+        targets.setdefault(category_from_stem(path) or "uncategorized", []).append(
+            path.stem
         )
     return {category: sorted(stems) for category, stems in sorted(targets.items())}
 

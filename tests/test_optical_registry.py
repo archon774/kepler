@@ -502,15 +502,150 @@ def test_the_cap_bounds_header_reads_not_just_the_returned_list(monkeypatch):
 
 def test_a_truncated_listing_warns_on_the_frame_it_resolves(monkeypatch):
     """A lone match in a capped listing was found among the frames that were
-    read, not among the frames that exist -- so the caveat rides on the frame
-    rather than being dropped with the list it came from."""
+    read, not among the frames that exist -- uncapped it might have been
+    ambiguous -- so the caveat rides on the frame rather than being dropped
+    with the list it came from."""
     from tools import config
 
     monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
     frame = resolve_optical_frame("carina")
 
     assert isinstance(frame, OpticalFrame)
-    assert "listing_truncated" in [w.code for w in frame.warnings]
+    codes = [w.code for w in frame.warnings]
+    assert "resolved_from_truncated_listing" in codes
+    assert "may not be the only match" in frame.warnings[-1].message
+
+
+def test_an_ambiguous_name_hidden_by_the_cap_is_flagged_not_silently_unique(monkeypatch):
+    """Code review: with the cap set below the bundled count, 'm31' matched
+    only the R frame among those read and came back as a plain unique match,
+    when uncapped it is ambiguous between R and V. The frame now carries the
+    caveat, so a caller can see the match was made against a partial set."""
+    from tools import config
+
+    uncapped = resolve_optical_frame("m31")
+    assert isinstance(uncapped, OpticalFrameList)
+    assert [e.code for e in uncapped.errors] == ["ambiguous"]
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 7)
+    capped = resolve_optical_frame("m31")
+    assert isinstance(capped, OpticalFrame)
+    assert "resolved_from_truncated_listing" in [w.code for w in capped.warnings]
+
+
+def test_the_containment_warning_does_not_ride_onto_a_bundled_frame_resolve(
+    tmp_path, monkeypatch
+):
+    """The containment warning describes the operator's configuration, not the
+    match. Carrying it would attach it to every bundled-frame resolve for
+    anyone with a flat CASDA root outside the data dir."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    outside = tmp_path / "elsewhere"
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", outside)
+    _write_frame(outside / "unrelated.fits", object_name="Other", image_filter="V")
+
+    assert [w.code for w in list_optical_frames().warnings] == [
+        "download_root_outside_data_dir"
+    ]
+    frame = resolve_optical_frame("carina")
+    assert isinstance(frame, OpticalFrame)
+    assert "download_root_outside_data_dir" not in [w.code for w in frame.warnings]
+
+
+def test_the_cap_is_per_root_so_a_large_primary_cannot_starve_the_download_root(
+    download_root, tmp_path, monkeypatch
+):
+    """Code review: filling one overall cap primary-first meant an operator
+    archive larger than the cap made every archive download invisible --
+    BL-11 again, with nothing in the result saying the second root
+    contributed zero."""
+    from tools import config
+
+    big_primary = tmp_path / "primary"
+    for i in range(6):
+        _write_frame(big_primary / f"arch_{i:03d}.fits", object_name=f"A{i}", image_filter="V")
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(big_primary))
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 4)
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+
+    listing = list_optical_frames()
+    names = {Path(f.path).name for f in listing.frames}
+
+    assert listing.count == 5  # 4 from the primary, 1 from the download root
+    assert "idxq01010_drz.fits" in names
+    assert [w.code for w in listing.warnings] == ["listing_truncated"]
+    assert "7 frames found" in listing.warnings[0].message
+    assert isinstance(resolve_optical_frame("NGC 1234"), OpticalFrame)
+
+
+def test_bundled_targets_are_an_uncapped_inventory(monkeypatch):
+    """Code review: list_bundled_targets went through list_optical_frames,
+    so a cap below the library size silently truncated an index that calls
+    itself the complete fixed set. It is an inventory of filenames now --
+    no header reads, no cap."""
+    from tools import config
+    from tools.claude_photometry_haiku_tool import list_bundled_targets
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 3)
+    targets = list_bundled_targets()
+
+    assert sum(len(stems) for stems in targets.values()) == 39
+
+
+def test_a_non_empty_legacy_download_root_is_reported(download_root, monkeypatch):
+    """The default moved from <cwd>/fits_downloads to data/fits_downloads.
+    Earlier downloads left at the repository root would otherwise resolve as
+    not_found with nothing saying the root moved."""
+    from tools import optical
+
+    legacy = optical._REPO_ROOT / "fits_downloads"
+    assert not legacy.exists(), "test would need to create a real dir at the repo root"
+    fake_repo = download_root.parent / "repo"
+    _write_frame(fake_repo / "fits_downloads" / "old.fits", object_name="Old", image_filter="V")
+    # _REPO_ROOT also anchors the default primary root; pin that to the real
+    # bundled directory so the listing is a normal one, not directory_not_found.
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(OPTICAL))
+    monkeypatch.setattr(optical, "_REPO_ROOT", fake_repo)
+    download_root.mkdir()
+
+    listing = list_optical_frames()
+
+    assert listing.errors == []
+    assert listing.count == 39
+    assert [w.code for w in listing.warnings] == ["legacy_download_root_present"]
+    assert "old.fits" not in {Path(f.path).name for f in listing.frames}
+    assert str(fake_repo / "fits_downloads") in listing.warnings[0].message
+
+
+def test_an_empty_legacy_download_root_is_not_reported(download_root, monkeypatch):
+    """Only a legacy directory with something in it means orphaned downloads."""
+    from tools import optical
+
+    fake_repo = download_root.parent / "repo"
+    (fake_repo / "fits_downloads").mkdir(parents=True)
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(OPTICAL))
+    monkeypatch.setattr(optical, "_REPO_ROOT", fake_repo)
+
+    assert list_optical_frames().warnings == []
+
+
+def test_a_zero_or_negative_frame_cap_is_rejected_at_load(monkeypatch):
+    """Code review: 0 returned an empty listing and -5 sliced from the end
+    while the warning still said "the first N were read"."""
+    from tools import config
+
+    for bad in ("0", "-5", "many"):
+        monkeypatch.setenv("KEPLER_MAX_FRAMES", bad)
+        with pytest.raises(ValueError):
+            config.env_positive_int("KEPLER_MAX_FRAMES", 200)
+    monkeypatch.setenv("KEPLER_MAX_FRAMES", "7")
+    assert config.env_positive_int("KEPLER_MAX_FRAMES", 200) == 7
 
 
 def test_a_miss_in_a_truncated_listing_says_the_search_was_partial(monkeypatch):

@@ -21,6 +21,7 @@ the kind of well-studied object callers ask about most.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional, Union
 
 from astroquery.exceptions import InvalidQueryError
@@ -156,11 +157,23 @@ def search_mast(
             local_paths = (
                 list(manifest["Local Path"]) if "Local Path" in manifest.colnames else []
             )
+            # Name the directories the files actually landed in. astroquery
+            # nests them under mastDownload/<mission>/<obs_id>/, and once a
+            # bulk download outgrows list_optical_frames' cap, directory=
+            # naming one of these leaves is how a caller reaches a specific
+            # product -- nothing else reports the leaf.
+            leaves = sorted({str(Path(str(p)).parent) for p in local_paths if p})
+            shown = ", ".join(leaves[:5]) + (
+                f" (+{len(leaves) - 5} more)" if len(leaves) > 5 else ""
+            )
             warnings.append(
-                f"downloaded {len(local_paths)} file(s) to {download_dir}; "
-                "they now resolve through the local frame registry -- call "
+                f"downloaded {len(local_paths)} file(s) to {download_dir}"
+                + (f" under: {shown}" if leaves else "")
+                + "; they now resolve through the local frame registry -- call "
                 "list_optical_frames or resolve_optical_frame to pick one up, "
-                "then the image tools take it by path"
+                "then the image tools take it by path. A listing reads a bounded "
+                "number of frames, so after a large download pass directory= "
+                "naming one of the directories above"
             )
 
     return ToolResult(

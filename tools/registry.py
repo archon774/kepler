@@ -1168,8 +1168,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "KEPLER_OPTICAL_DATA_DIR (or the bundled data/optical) "
                     "plus the archive download directory, so anything fetched by "
                     "search_mast/search_casda is listed too. Passing a directory "
-                    "searches only that one, which is how to narrow a listing "
-                    "that reports it was truncated after a bulk download.",
+                    "searches only that one, flat -- so to reach a product past "
+                    "a truncated listing, name the directory the product is "
+                    "actually in (search_mast reports where each download "
+                    "landed), not the download root.",
                 },
                 "image_filter": {
                     "type": "string",

@@ -242,22 +242,49 @@ def test_write_header_refuses_to_modify_a_bundled_fixture():
     ]
 
 
-def test_the_fixture_guard_exempts_the_archive_download_root(monkeypatch):
+def test_the_fixture_guard_exempts_the_archive_download_root():
     """The download root moved inside ``data/`` when the fixture tree was
     renamed. Guarding the whole tree would refuse to write a solved header
     back into a *downloaded* frame -- reporting an archive product as a
     bundled fixture, and closing the archive -> analysis loop BL-11 opened.
     """
-    from tools import config
     from tools.wcs import _under_fixture_root
 
     downloads = ROOT / "data" / "fits_downloads"
-    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", downloads)
 
     assert _under_fixture_root(SOLVED_FRAME)
     assert not _under_fixture_root(
         downloads / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits"
     )
+
+
+def test_the_fixture_guard_cannot_be_disabled_by_the_download_root_setting(monkeypatch):
+    """Code review of the first draft: exempting whatever FITS_DOWNLOAD_DIR
+    named meant KEPLER_FITS_DOWNLOAD_DIR=<repo>/data switched the guard off for
+    every fixture. The guard names the fixture subtrees and reads no setting.
+    """
+    from tools import config
+    from tools.wcs import _under_fixture_root
+
+    for misconfigured in (ROOT / "data", ROOT / "data" / "optical", ROOT):
+        monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", misconfigured)
+        assert _under_fixture_root(SOLVED_FRAME), misconfigured
+
+
+def test_the_fixture_subtrees_match_the_directories_actually_present():
+    """A new fixture subtree under data/ has to be added to the guard, or its
+    frames are writable. The only directory allowed to exist there unlisted is
+    the archive download root, and no FITS file may sit loose at the top."""
+    from tools.wcs import _FIXTURE_ROOT, _FIXTURE_SUBTREES
+
+    present = {
+        p.name
+        for p in _FIXTURE_ROOT.iterdir()
+        if p.is_dir() and p.name != "fits_downloads" and not p.name.startswith(".")
+    }
+
+    assert present == set(_FIXTURE_SUBTREES)
+    assert list(_FIXTURE_ROOT.glob("*.fits")) == []
 
 
 def test_the_fixture_guard_does_not_travel_with_the_data_dir_setting(monkeypatch):

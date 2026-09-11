@@ -24,6 +24,7 @@ not touch pixel data.
 from __future__ import annotations
 
 import re
+import stat
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +36,7 @@ from tools.models import OpticalFrame, OpticalFrameList, ToolError, ToolWarning
 
 __all__ = [
     "OPTICAL_DATA_DIR_ENV",
+    "bundled_frame_paths",
     "list_optical_frames",
     "primary_optical_data_dir",
     "resolve_optical_frame",
@@ -67,16 +69,20 @@ def primary_optical_data_dir() -> Path:
     return env_path(OPTICAL_DATA_DIR_ENV, default) or default
 
 
-def _within(path: Path, root: Path) -> bool:
-    """Whether ``path`` resolves inside ``root``.
+def bundled_frame_paths() -> list[Path]:
+    """Every ``*.fits`` directly under the primary root, sorted, uncapped.
 
-    Both sides are resolved before comparing, so a symlink whose name sits
-    under the data directory but whose target does not is outside it.
+    For callers that want the *inventory* of the bundled library and nothing
+    from the headers -- ``list_bundled_targets`` groups stems by the category
+    token in the filename. Going through :func:`list_optical_frames` for that
+    would read every header and, past ``KEPLER_MAX_FRAMES``, silently truncate
+    an index that advertises itself as the complete fixed set.
     """
-    try:
-        return path.resolve().is_relative_to(root.resolve())
-    except OSError:  # pragma: no cover - symlink loop, unreadable mount
-        return False
+    root = primary_optical_data_dir()
+    if not root.is_dir():
+        return []
+    paths, _ = _iter_fits([(root, False)], None)
+    return paths
 
 
 def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
@@ -114,7 +120,7 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     if download_dir is not None:
         download_root = Path(download_dir).expanduser()
         data_dir = Path(config.DATA_DIR).expanduser()
-        recursive = _within(download_root, data_dir)
+        recursive = config.within(download_root, data_dir)
         # Only a root that exists earns the warning: an absent download root is
         # skipped by the lister without comment, and telling a caller that a
         # directory which is not searched at all "is searched flat" is wrong.
@@ -135,6 +141,31 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
             )
         roots.append((download_root, recursive))
 
+        # The download root used to default to a working-directory-relative
+        # "fits_downloads", which for a developer running from the repository
+        # root meant <repo>/fits_downloads. It now defaults under data/. A
+        # non-empty directory at the old default is almost certainly earlier
+        # downloads that this search no longer sees; say so rather than let
+        # them resolve as not_found with no hint that the root moved.
+        legacy = _REPO_ROOT / "fits_downloads"
+        if (
+            legacy.is_dir()
+            and config.safe_resolve(legacy) != config.safe_resolve(download_root)
+            and any(legacy.iterdir())
+        ):
+            warnings.append(
+                ToolWarning(
+                    code="legacy_download_root_present",
+                    message=(
+                        f"{legacy} exists and is not empty, but the archive "
+                        f"download root is now {download_root} and this search "
+                        "does not look in the old location. Move its contents "
+                        f"under {download_root}, or point "
+                        f"{config.FITS_DOWNLOAD_DIR_ENV} at it."
+                    ),
+                )
+            )
+
     # One entry per distinct directory. Both env vars can name the same place,
     # and reporting it twice in search_roots reads as a bug. Recursion is OR-ed
     # rather than taken from the first entry: collapsing to the primary root's
@@ -142,10 +173,7 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     collapsed: list[tuple[Path, bool]] = []
     index: dict[Path, int] = {}
     for root, recursive in roots:
-        try:
-            key = root.resolve()
-        except OSError:  # pragma: no cover - symlink loop, unreadable mount
-            key = root
+        key = config.safe_resolve(root)
         if key in index:
             existing_root, existing_recursive = collapsed[index[key]]
             collapsed[index[key]] = (existing_root, existing_recursive or recursive)
@@ -176,13 +204,19 @@ def _iter_fits(
 ) -> tuple[list[Path], int]:
     """Frames across every root, primary first, each file listed once.
 
-    Returns at most ``limit`` paths together with how many were found, so the
-    caller can say it truncated instead of silently dropping frames.
+    Returns at most ``limit`` paths *per root* together with how many were
+    found in total, so the caller can say it truncated instead of silently
+    dropping frames. The cap is per root rather than overall because the
+    roots are ordered primary-first: an operator archive holding more than the
+    cap would otherwise fill it entirely, and no archive download could ever
+    be listed or resolved by name -- BL-11 again, quietly.
 
     Nothing stops a caller pointing ``KEPLER_OPTICAL_DATA_DIR`` and
     ``KEPLER_FITS_DOWNLOAD_DIR`` at the same directory, or nesting one inside
-    the other, so identity is the resolved path rather than the root it came
-    from.
+    the other, so identity is the file's ``(st_dev, st_ino)`` rather than the
+    root it came from -- one ``stat`` per file, which also answers "is it a
+    regular file". Resolving every path instead was a multi-syscall chain per
+    file on exactly the hundred-thousand-product trees the cap exists for.
 
     The cap bounds the expensive half of a listing -- one FITS header read per
     frame, and one serialised summary per frame into a model's context. It does
@@ -191,23 +225,26 @@ def _iter_fits(
     the data directory (see :func:`_optical_data_roots`).
     """
     paths: list[Path] = []
-    seen: set[Path] = set()
+    seen: set[tuple[int, int]] = set()
+    found = 0
     for root, recursive in roots:
         matches = root.rglob("*.fits") if recursive else root.glob("*.fits")
+        kept_here = 0
         for path in sorted(matches):
-            if not path.is_file():
-                continue
             try:
-                key = path.resolve()
-            except OSError:  # pragma: no cover - broken symlink, unreadable mount
-                key = path
+                st = path.stat()
+            except OSError:  # broken symlink, unreadable mount
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                continue
+            key = (st.st_dev, st.st_ino)
             if key in seen:
                 continue
             seen.add(key)
-            paths.append(path)
-    found = len(paths)
-    if limit is not None and found > limit:
-        return paths[:limit], found
+            found += 1
+            if limit is None or kept_here < limit:
+                paths.append(path)
+                kept_here += 1
     return paths, found
 
 
@@ -240,6 +277,18 @@ def _int(header, key: str) -> int | None:
         return None
 
 
+def category_from_stem(path: str | Path) -> str | None:
+    """The category token of a bundled frame's filename, or ``None``.
+
+    data/optical is flat and its frames are named
+    ``<object>_<category>_<filter>_<seq>`` (data/README.md), so the category
+    is the second token of the stem. Shared with ``list_bundled_targets`` so
+    the two cannot parse the convention differently.
+    """
+    parts = Path(path).stem.split("_")
+    return parts[1] if len(parts) > 1 else None
+
+
 def _summary(path: Path) -> OpticalFrame:
     """Read one frame's primary header without touching pixel data."""
 
@@ -253,11 +302,7 @@ def _summary(path: Path) -> OpticalFrame:
             errors=[ToolError(code="fits_header_error", message=str(exc))],
         )
 
-    # data/optical is flat; the category is the second token of the stem,
-    # per the <object>_<category>_<filter>_<seq> convention documented in
-    # data/README.md.
-    parts = Path(path).stem.split("_")
-    category = parts[1] if len(parts) > 1 else None
+    category = category_from_stem(path)
 
     center_ra = center_dec = None
     scale = None
@@ -360,11 +405,13 @@ def list_optical_frames(
                 code="listing_truncated",
                 message=(
                     f"{found} frames found; read and returned the first "
-                    f"{len(paths)}. Narrow the search by passing directory=, "
-                    f"or raise {config.MAX_FRAMES_ENV}. Note that image_filter "
-                    "narrows what was read, not what was found, so a filter "
-                    "applied to a truncated listing can miss matching frames "
-                    "beyond the cap."
+                    f"{limit} from each of {len(searched)} root(s), "
+                    f"{len(paths)} in all. To reach a specific frame, pass "
+                    "directory= naming the directory the frame is actually "
+                    "in -- search_mast reports where each download landed -- "
+                    f"or raise {config.MAX_FRAMES_ENV}. image_filter narrows "
+                    "what was read, not what was found, so a filter on a "
+                    "truncated listing can miss frames beyond the cap."
                 ),
             )
         )
@@ -431,13 +478,30 @@ def resolve_optical_frame(
 
     if len(matches) == 1:
         frame = matches[0]
-        if listing.warnings:
-            # A truncated or downgraded listing that happens to yield exactly
-            # one match found it among the frames that were read, not among
-            # the frames that exist. Carry the caveat onto the frame rather
-            # than dropping it with the list it came from.
+        if any(w.code == "listing_truncated" for w in listing.warnings):
+            # Found among the frames that were read, not the frames that
+            # exist. Uncapped, this name might have been ambiguous -- the same
+            # field in another band, past the cap -- so say that on the frame
+            # rather than drop it with the list. Only the truncation caveat
+            # rides along: the containment warning describes the operator's
+            # configuration, not this match, and would attach to every
+            # bundled-frame resolve for anyone with a flat CASDA root.
             frame = frame.model_copy(
-                update={"warnings": [*frame.warnings, *listing.warnings]}
+                update={
+                    "warnings": [
+                        *frame.warnings,
+                        ToolWarning(
+                            code="resolved_from_truncated_listing",
+                            message=(
+                                f"Matched {name!r} among the {listing.count} "
+                                "frames read; frames past the cap were not "
+                                "considered, so this may not be the only "
+                                "match. Pass directory= to search where the "
+                                "frame is, or list with image_filter."
+                            ),
+                        ),
+                    ]
+                }
             )
         return frame
 
@@ -455,7 +519,8 @@ def resolve_optical_frame(
             else f"{listing.count} frames are available"
         )
         hint = (
-            f"narrow with directory= or raise {config.MAX_FRAMES_ENV}"
+            "pass directory= naming the directory the frame is in (search_mast "
+            f"reports where each download landed), or raise {config.MAX_FRAMES_ENV}"
             if truncated
             else "call list_optical_frames to see them"
         )

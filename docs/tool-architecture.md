@@ -107,8 +107,10 @@ The first local, no-network tools are:
   parameters: the download root is walked recursively only while it resolves
   inside `KEPLER_DATA_DIR` (outside it, searched flat with a
   `download_root_outside_data_dir` warning), and `KEPLER_MAX_FRAMES`
-  (default 200) caps how many frames one listing reads headers for, with a
-  `listing_truncated` warning naming the total when it bites.
+  (default 200) caps how many frames one listing reads headers for from each
+  root, with a `listing_truncated` warning naming the total when it bites.
+  `search_mast(download=true)` reports the directories products landed in, so
+  `directory=` can reach a specific product past the cap.
 - `tools.astrometry.describe_image_wcs(path)`
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`

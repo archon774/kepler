@@ -34,11 +34,17 @@ from tools.models import ToolError, ToolWarning, WcsSummary
 
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-#: The committed fixture tree. Pinned to this repository rather than read from
-#: ``config.DATA_DIR``: an operator who points KEPLER_DATA_DIR at their own
-#: archive has neither made these frames writable nor made that archive a tree
-#: of fixtures, so the guard must not travel with the setting.
+#: The committed fixture tree, and the subtrees under it that hold fixtures.
+#: Pinned to this repository rather than read from ``config.DATA_DIR``: an
+#: operator who points KEPLER_DATA_DIR at their own archive has neither made
+#: these frames writable nor made that archive a tree of fixtures. The guard
+#: names the subtrees rather than the whole of ``data/`` because the archive
+#: download root lives under ``data/`` too, and a downloaded product must stay
+#: writable. tests/test_wcs_solve_tool.py asserts this tuple matches the
+#: directories actually present, so a new fixture subtree cannot be added
+#: without being listed here.
 _FIXTURE_ROOT = (_REPOSITORY_ROOT / "data").resolve()
+_FIXTURE_SUBTREES = ("afterglow", "fieldcal", "optical", "pulsar")
 
 
 class _FileChangedError(RuntimeError):
@@ -101,33 +107,22 @@ def _summary_from_wcs(
 def _under_fixture_root(path: Path) -> bool:
     """Whether ``path`` is a committed fixture this tool must not rewrite.
 
-    The guard is the data directory *minus* the archive download root. Those
-    were separate trees until the download root moved inside ``data/``, and a
-    downloaded frame is precisely the thing under there a caller is entitled to
-    plate-solve and write a header back into -- that is the archive -> analysis
-    loop BL-11 exists to join. Guarding the data directory wholesale would
-    refuse exactly that write, and would do it with a message claiming the
-    downloaded product was a bundled fixture.
+    The guard is the fixture *subtrees*, not the whole of ``data/``. The
+    archive download root lives under ``data/`` too, and a downloaded frame is
+    precisely the thing a caller is entitled to plate-solve and write a header
+    back into -- that is the archive -> analysis loop BL-11 exists to join.
+    Guarding ``data/`` wholesale would refuse exactly that write, with a message
+    claiming the product was a bundled fixture.
 
-    The download root is read through ``tools.config`` rather than bound at
-    import, for the same reason ``tools.optical`` reads it that way: the two
-    have to agree about where downloads land, and a test that reassigns one
-    must move the other.
+    Deliberately independent of ``config.FITS_DOWNLOAD_DIR``. An earlier draft
+    exempted whatever that setting named, which meant ``KEPLER_FITS_DOWNLOAD_DIR=
+    <repo>/data`` -- a plausible misconfiguration -- silently disabled the guard
+    for every fixture. A safety net that a single environment variable can
+    switch off is not one.
     """
-    from tools import config
+    from tools.config import within
 
-    try:
-        resolved = path.resolve()
-        if not resolved.is_relative_to(_FIXTURE_ROOT):
-            return False
-        download_dir = config.FITS_DOWNLOAD_DIR
-        if download_dir is not None and resolved.is_relative_to(
-            Path(download_dir).expanduser().resolve()
-        ):
-            return False
-    except OSError:  # pragma: no cover - symlink loop, unreadable mount
-        return False
-    return True
+    return any(within(path, _FIXTURE_ROOT / subtree) for subtree in _FIXTURE_SUBTREES)
 
 
 def _file_version(path: Path) -> tuple[int, int, int, int, int]:

@@ -1379,12 +1379,14 @@ The bound is two settings, both operator-level rather than tool parameters:
   deliberate: CASDA's `download_files` writes flat, so a refusal would lose
   those products. Containment is decided on the resolved path, so a symlink out
   of the tree does not buy a walk of wherever it lands.
-- **`KEPLER_MAX_FRAMES`** (default 200) caps how many frames one listing reads
-  headers for and returns, with a `listing_truncated` warning naming the total.
-  It is applied *before* `_summary`, so it bounds the FITS header reads rather
-  than trimming the result after paying for them. A lone match resolved out of a
-  truncated listing carries the warning onto the frame — it was found among the
-  frames that were read, not the frames that exist.
+- **`KEPLER_MAX_FRAMES`** (default 200, rejected below 1) caps how many frames
+  one listing reads headers for and returns **per root**, with a
+  `listing_truncated` warning naming the total. It is applied *before*
+  `_summary`, so it bounds the FITS header reads rather than trimming the
+  result after paying for them. A lone match resolved out of a truncated
+  listing carries a `resolved_from_truncated_listing` warning — it was found
+  among the frames that were read, not the frames that exist, and uncapped the
+  name might have been ambiguous.
 
 Keeping both out of the tool schema is what let the four LLM schema goldens stay
 structurally unchanged; only two description strings moved.
@@ -1394,15 +1396,58 @@ a solved header back into a bundled fixture, and that guard was the entire
 `test_data/` tree. With the download root moving *inside* `data/`, it would have
 begun refusing writes to downloaded frames — reporting an archive product as a
 bundled fixture, and closing the archive → analysis loop BL-11 exists to open.
-The guard is now `<repo>/data` **minus** the download root, and is pinned to the
-repository rather than following `KEPLER_DATA_DIR`: pointing that setting at an
-operator's own archive does not make that archive a tree of fixtures, nor make
-this repository's frames writable. Both directions are pinned by tests.
+The guard now names the four tracked fixture subtrees and reads no setting —
+see the review record below for why the first draft's "data minus the download
+root" was not good enough.
 
-**Verified:** default no-network suite **1683 passed, 41 skipped** (11 new
-cases); `compileall` over `tools algorithms tests`; `git diff --check`;
-`git check-ignore` confirming a download product under `data/fits_downloads/` is
-ignored while `data/optical/*.fits` and `data/README.md` are not.
+**Review record.** A security review found nothing and empirically exercised
+the write guard against `..` traversal and a symlink planted inside the
+download root. A code review returned fifteen findings; thirteen were fixed,
+one was a docstring correction, and one is a process point left to the
+maintainer. The ones that changed behaviour:
+
+- **The write guard could be switched off by one environment variable.** The
+  first draft exempted whatever `FITS_DOWNLOAD_DIR` named, so
+  `KEPLER_FITS_DOWNLOAD_DIR=<repo>/data` — a plausible misconfiguration —
+  disabled it for every fixture. The reviewer proposed requiring the download
+  root to be strictly inside and disjoint from the fixtures; naming the four
+  subtrees directly is simpler and cannot be misconfigured. A test asserts the
+  tuple matches the directories present.
+- **The cap filled primary-first**, so an operator archive larger than the cap
+  starved the download root and re-created BL-11 silently. It is per root now.
+- **"Narrow with `directory=`" was circular for the case the cap exists for**:
+  an explicit directory is searched flat, and MAST nests. `search_mast`'s
+  download warning now names the leaf directories products landed in, and the
+  hints say to pass one of those.
+- **`Path.resolve()` raises `RuntimeError`, not `OSError`, on a symlink loop
+  under Python 3.12 — the version CI runs.** Every `except OSError` around a
+  resolve was wrong there and dead on 3.13+. Lifted into
+  `tools.config.within`/`safe_resolve`, catching both, used by both modules.
+- **`list_photometry_targets` was silently capped** — it went through the
+  header lister for what is an index of filenames. It reads no headers now and
+  is never capped.
+- **Under truncation an ambiguous name came back as a unique match.** The frame
+  now carries `resolved_from_truncated_listing`; the containment warning no
+  longer rides onto bundled-frame resolves, where it described the operator's
+  configuration rather than the match.
+- **The default download root moved** from `<cwd>/fits_downloads` with no
+  notice. A non-empty directory at the old repository-root location now
+  produces a `legacy_download_root_present` warning.
+- `KEPLER_MAX_FRAMES=0` returned empty listings and a negative value sliced
+  from the wrong end; rejected below 1 at load. Per-file `resolve()` for
+  dedup replaced by `(st_dev, st_ino)` from the one `stat` already needed.
+  The system prompt's "listed on the next call" gained the cap caveat.
+
+Not acted on: the observation that this PR bundles a fixture rename, two
+behaviour changes and a documentation correction, against `CLAUDE.md`'s
+"keep PRs narrow". The bundling was the maintainer's direction; the point is
+recorded here for the maintainer to weigh.
+
+**Verified:** default no-network suite **1694 passed, 41 skipped**;
+`compileall` over `tools algorithms tests`; `git diff --check`; four LLM schema
+goldens regenerated (description strings only); `git check-ignore` confirming
+a download product under `data/fits_downloads/` is ignored while
+`data/optical/*.fits` and `data/README.md` are not.
 
 ### Phase P4 — Exact-parity Python variable-star runtime (BL-10)
 
