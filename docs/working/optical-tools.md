@@ -1507,8 +1507,9 @@ pipeline offline, and obtain Python results with documented TypeScript parity.
 ### Phase P5 — Complete Python HR-diagram port and local-grid operation (BL-9)
 
 **Intent:** complete the Python port of all computational HR-diagram TypeScript
-algorithms and run the existing HR tools from caller-supplied local PARSEC data
-without a network dependency.
+algorithms and run the existing HR tools from the local Girardi isochrone model
+used by Astromancer's former `GET /cluster/isochrone` backend, with no
+isochrone network dependency.
 
 **Port boundary:** extend `algorithms/hrdiagram_py/` with ports of the remaining
 computational TypeScript surface: CMD/FSR histogram helpers, source
@@ -1518,37 +1519,54 @@ non-browser isochrone-state calculations. Preserve TypeScript numerical
 behavior and known quirks exactly; correctness remediation remains a separate
 effort. Exclude Angular, Highcharts, form state, browser storage, and rendering.
 
-**Local-grid contract:** accept an explicit PARSEC grid path at the tool and
-algorithm boundary. A supplied grid bypasses `fetch_parsec_isochrone_grid` and
-must never make an HTTP request. M67 may appear only in tests as a compact
-fixture that exercises the local-grid flow; there is no public cluster registry,
-lookup API, or bundled cluster catalog in this phase.
+**Local-grid contract:** `KEPLER_ISOCHRONE_DIR`, defined in `tools.config`, is
+the operator-level path to an unpacked legacy Girardi grid. It has no bundled
+or hard-coded default: Kepler neither ships nor downloads model files. The
+directory contains exactly named NumPy tracks,
+`Girardi_<log_age>_<metallicity>.npy`; the supplied asset has every 0.05 grid
+point from log-age 6.60--10.20 and metallicity -2.20--+0.70. A missing setting,
+directory, track, or invalid `(n, 23)` numeric array is an ordinary actionable
+tool error. It never falls back to a PARSEC download or any other HTTP request.
 
-**Maintainer asset gate — special attention required:** supply a PARSEC grid
-with documented source URL, download date, licence/redistribution status,
-photometric filter columns, metallicity/age coverage, and checksum. The phase
-does not substitute a live download or an invented grid when this asset is not
-available.
+The established 23-column Astromancer model layout is: log-age and metallicity;
+U/B/V/R/I; uprime/gprime/rprime/iprime/zprime; J/H/K; W1/W2/W3/W4; G/BP/RP;
+and a trailing metallicity repeat. The loader selects exact tracks only -- no
+nearest-grid substitution or interpolation -- then returns the former backend's
+`{data: [[blue - red, lum], ...], iSkip}` shape for the requested filters.
+The browser request's inputs (`age`, `metallicity`, `blue_filter`,
+`red_filter`, `lum_filter`) and its plot-break behavior are the compatibility
+contract. There is no cluster registry, fixture resolver, public grid-path
+argument, bundled cluster catalog, or public model-download API in this phase.
+
+**Operator asset gate:** the full model remains outside this repository. The
+reference operator archive at `/srv/agents/isochrones/isochrone.zip` contains
+4,307 tracks and has SHA-256
+`83b3cfb7fed46cc766a56f7f34aaa2a0edb50b847ac75548553c4e60936d9f8b`.
+Operators obtain and manage it under the model's applicable terms; Kepler only
+reads the configured unpacked directory.
 
 - [ ] Inventory every exported computational TypeScript HR symbol and map it to
       a Python destination or an explicit browser/storage exclusion.
 - [ ] Port the unmapped computational functions into focused
       `algorithms/hrdiagram_py/` modules, preserving formulas and input/output
       shape; add `# PORTED:` provenance markers.
-- [ ] Add explicit `grid_path` plumbing to the isochrone load/fit path and
-      `tools/hr_diagram.py`; preserve the current live-fetch route only when no
-      local grid is requested.
-- [ ] Add a compact M67 test-only fixture and local PARSEC-grid test input; no
-      registry, resolver, or public fixture-discovery API is introduced.
+- [ ] Add `KEPLER_ISOCHRONE_DIR` configuration and a focused Girardi-grid loader
+      that selects exact legacy tracks and filter triples. Replace the live
+      PARSEC fetch route; do not add a fallback download or a per-call
+      `grid_path` parameter.
+- [ ] Add deterministic tests that construct minimal temporary
+      `Girardi_*.npy` inputs from literal values. The default suite must not
+      depend on the operator asset, a cluster fixture, or a live service.
 - [ ] Add port-parity and offline tests for every newly ported computation and
-      a test that local-grid execution makes zero HTTP requests.
+      a test that configured local-grid execution makes zero HTTP requests.
 
 **Validation:** focused HR tests, `npm run typecheck`, the default Python suite,
-and an explicitly local-grid full-pipeline test. Any live Gaia/PARSEC test stays
-network-marked.
+and a configured-local-grid fit test. Any live Gaia/literature test stays
+network-marked; the isochrone path itself has no live mode.
 
 **Exit:** every non-browser HR computational algorithm has a documented Python
-home, and an explicit local grid enables a deterministic offline HR execution.
+home, and a configured operator grid enables deterministic local isochrone
+execution.
 
 ### Phase P6 — Explicit WCS search controls (BL-7)
 

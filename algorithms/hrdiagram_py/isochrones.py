@@ -1,10 +1,8 @@
-"""algorithms.hrdiagram_py.isochrones - PARSEC isochrone fetch, fit, and comparison.
+"""algorithms.hrdiagram_py.isochrones - local Girardi fit and comparison.
 
-The one network call this package still makes directly: stev.oapd.inaf.it's
-PARSEC CMD service has no existing Kepler tool wrapping it (unlike Gaia/VizieR
-cluster-parameter lookups, which route through ``tools.vizier.search_vizier``
-one layer up -- see ``matching.py`` and ``literature.py``), so there is
-nothing to reuse here.
+Isochrone data comes only from the operator-installed legacy Girardi grid;
+this module makes no network request. Gaia/VizieR catalog lookups remain owned
+by :mod:`tools.hr_diagram`, one layer up.
 
 Output paths (the members CSV ``hrfit`` reads back, and the HR-diagram PNG)
 are always caller-supplied, not computed here -- callers in ``tools/`` decide
@@ -16,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import tempfile
 import warnings
 from pathlib import Path
 from typing import Any, Mapping
@@ -24,11 +23,9 @@ import numpy as np
 import pandas as pd
 import requests
 
-from algorithms.hrdiagram_py import hrfit
+from algorithms.hrdiagram_py import hrfit, local_grid
 
 __all__ = [
-    "PARSEC_PHOTSYS",
-    "fetch_parsec_isochrone_grid",
     "fit_and_compare",
 ]
 
@@ -230,10 +227,9 @@ def fit_and_compare(
     logage_half_width: float = 0.3,
     dlage: float = 0.05,
     mh: float = 0.0,
-    iso_path: str | Path | None = None,
-    photsys: str = "gaiaEDR3",
+    grid_dir: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Fit distance/E(B-V)/age to `members` against a PARSEC isochrone grid
+    """Fit distance/E(B-V)/age to `members` against a local Girardi grid
     centred on the literature age, and compare the fit to the literature.
 
     `mh` is the isochrone grid's metallicity ([M/H], solar=0.0). The literature
@@ -244,29 +240,41 @@ def fit_and_compare(
     ``members_csv_path`` and ``out_png`` are always caller-supplied -- this
     function does not choose where its outputs live.
     """
-    if iso_path is None:
-        iso_path = fetch_parsec_isochrone_grid(
-            literature["log_age"],
-            logage_half_width=logage_half_width,
-            dlage=dlage,
-            mh=mh,
-            photsys=photsys,
+    if grid_dir is None:
+        raise RuntimeError(
+            "KEPLER_ISOCHRONE_DIR is not configured; install the operator Girardi "
+            "grid and set it to the unpacked track directory"
         )
-    iso_cols = PARSEC_PHOTSYS[photsys]
+    center = float(literature["log_age"])
+    if logage_half_width == 0:
+        ages = [round(center, 2)]
+    else:
+        count = int(round((2 * logage_half_width) / dlage))
+        ages = [round(center - logage_half_width + index * dlage, 2) for index in range(count + 1)]
+    iso_all = local_grid.load_tracks(grid_dir, ages=ages, metallicity=mh)
+    iso_cols = {"blue": blue, "red": red, "lum": lum}
 
     members_csv_path = Path(members_csv_path)
     members_csv_path.parent.mkdir(parents=True, exist_ok=True)
     members.to_csv(members_csv_path, index=False)
 
-    iso_all = hrfit.load_isochrone(iso_path)
     logages = sorted(np.unique(iso_all["logAge"].values))
-
-    result = hrfit.fit_cluster(
-        members_csv_path, iso_path, blue, red, lum,
-        iso_cols["blue"], iso_cols["red"], iso_cols["lum"],
-        logages=logages, max_error=max_error,
-        x0=(literature["distance_kpc"], literature["ebv"]),
-    )
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".dat", prefix="kepler_girardi_", dir=members_csv_path.parent,
+        delete=False,
+    ) as handle:
+        temporary_iso_path = Path(handle.name)
+        handle.write("# " + " ".join(iso_all.columns) + "\n")
+        iso_all.to_csv(handle, sep=" ", index=False, header=False)
+    try:
+        result = hrfit.fit_cluster(
+            members_csv_path, temporary_iso_path, blue, red, lum,
+            iso_cols["blue"], iso_cols["red"], iso_cols["lum"],
+            logages=logages, max_error=max_error,
+            x0=(literature["distance_kpc"], literature["ebv"]),
+        )
+    finally:
+        temporary_iso_path.unlink(missing_ok=True)
     best = result["best"]
 
     fitted = {
@@ -315,6 +323,6 @@ def fit_and_compare(
         "literature": dict(literature),
         "comparison": comparison,
         "png_path": str(out_png),
-        "isochrone_path": str(iso_path),
+        "isochrone_path": str(Path(grid_dir)),
         "members_csv_path": str(members_csv_path),
     }

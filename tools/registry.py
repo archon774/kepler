@@ -535,7 +535,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "fit_and_compare_hr_diagram",
         "description": (
-            "Fetch a PARSEC isochrone near the cluster's published age, fit distance and "
+            "Load a local Girardi isochrone near the cluster's published age (requires "
+            "KEPLER_ISOCHRONE_DIR), fit distance and "
             "E(B-V) to the cluster members' Gaia photometry, and plot the HR diagram with "
             "the fitted isochrone overlaid. Returns the fitted values, the literature "
             "values, and their percent/absolute differences, plus the saved PNG artifact."
