@@ -1,10 +1,10 @@
 """The recorded ground truth, reachable as a tool result.
 
-BL-4: test_data/fieldcal/ and test_data/afterglow/ carry a complete
+BL-4: data/fieldcal/ and data/afterglow/ carry a complete
 cross-implementation parity chain for NGC 5128 B, and before this module
 nothing outside tests/ could read any of it.
 
-The chain, all offline (test_data/README.md):
+The chain, all offline (data/README.md):
 
     Kepler calc_solution        21.147659857998637   (bit-exact)
     Skynet recorded local fit   21.147659857998637

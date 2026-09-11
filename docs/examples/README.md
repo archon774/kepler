@@ -45,7 +45,7 @@ from tools.pulsar import (
     fold_pulsar_lightcurve, plot_pulsar,
 )
 
-lc   = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+lc   = load_pulsar_lightcurve("data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
 pg   = compute_pulsar_periodogram(lc.artifact.path)
 fold = fold_pulsar_lightcurve(lc.artifact.path, pg.peak_period_s)
 for stage in (lc, pg, fold):
@@ -83,7 +83,7 @@ step.
 
 **The period came from the data alone.** The measured value was
 `0.7144527749932426 s`, which is 9.4e-5 relative from both the curated
-literature period (`test_data/pulsar/Curated pulsars.docx`, 0.7145197 s) and
+literature period (`data/pulsar/Curated pulsars.docx`, 0.7145197 s) and
 ATNF's live `P0` — with no catalogue consulted during the run.
 
 ### Regenerating it
@@ -100,7 +100,7 @@ from tools.pulsar import (
     load_pulsar_lightcurve, compute_pulsar_periodogram, sonify_pulsar,
 )
 
-lc = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+lc = load_pulsar_lightcurve("data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
 pg = compute_pulsar_periodogram(lc.artifact.path, start=0.7, stop=0.73, steps=2000)
 wav = sonify_pulsar(lc.artifact.path, period_s=pg.peak_period_s)
 ```
@@ -114,4 +114,4 @@ The PNGs are cheap (~75 KB each) and compress; adding a plot for another source
 is reasonable. **The audio is not** — 10 MB, incompressible, and permanent in
 git history even if deleted later. Keep it to the one file; if a second render
 ever becomes necessary, prefer a few seconds over a full 60 s pass
-(`audio_seconds=5`). See `test_data/README.md`, "Repository size".
+(`audio_seconds=5`). See `data/README.md`, "Repository size".

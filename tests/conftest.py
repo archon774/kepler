@@ -7,7 +7,7 @@ Two rules shape everything here, both from ``CLAUDE.md``:
   without ``KEPLER_TEST_NETWORK=1``.
 * **The Python folders are byte-preserving extractions.** So the fixtures are
   real Skynet frames and real recorded Skynet solver output, not synthesised
-  arrays — see ``test_data/README.md``.
+  arrays — see ``data/README.md``.
 
 Fixtures that need data the repo cannot carry (astrometry.net indexes, a local
 UCAC catalog) skip themselves rather than failing, mirroring how the upstream
@@ -27,11 +27,11 @@ import pytest
 from astropy.io import fits
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEST_DATA = REPO_ROOT / "test_data"
-OPTICAL = TEST_DATA / "optical"
-ZP_SOLUTIONS = TEST_DATA / "fieldcal" / "zp_solutions"
-AFTERGLOW = TEST_DATA / "afterglow"
-PULSAR = TEST_DATA / "pulsar"
+DATA_ROOT = REPO_ROOT / "data"
+OPTICAL = DATA_ROOT / "optical"
+ZP_SOLUTIONS = DATA_ROOT / "fieldcal" / "zp_solutions"
+AFTERGLOW = DATA_ROOT / "afterglow"
+PULSAR = DATA_ROOT / "pulsar"
 
 #: Short aliases for the pulsar scans, keyed by the source they point at.
 #: ``b0329`` is the loud one — the brightest pulsar in the northern sky, and
@@ -44,7 +44,7 @@ PULSAR_SCANS: dict[str, str] = {
     "b2045": "Skynet_60902_psr_b2045_16_138488_88426.A.cal.txt",
 }
 
-#: The curated tables, read from ``test_data/pulsar/curated_periods.json``
+#: The curated tables, read from ``data/pulsar/curated_periods.json``
 #: rather than restated here, so the tool layer and the suite compare against
 #: one copy of each number (BL-8). The reasoning below is not in the JSON.
 #:
@@ -65,7 +65,7 @@ def _load_curated_pulsars() -> dict[str, dict]:
 
 _CURATED_PULSARS: dict[str, dict] = _load_curated_pulsars()
 
-#: Reference periods (s), from ``test_data/pulsar/Curated pulsars.docx`` — the
+#: Reference periods (s), from ``data/pulsar/Curated pulsars.docx`` — the
 #: curation shipped alongside the scans, column "Period(Literature)". That
 #: document is the intended verification reference for this data set, so it is
 #: what the tests compare against.
@@ -115,11 +115,11 @@ PULSAR_DIFFICULTY: dict[str, dict[str, object]] = {
 #: ``pulsar_path`` (which skips on its own when the scans are absent).
 requires_curated_periods = pytest.mark.skipif(
     not _CURATED_PULSARS,
-    reason="missing fixture test_data/pulsar/curated_periods.json — see test_data/README.md",
+    reason="missing fixture data/pulsar/curated_periods.json — see data/README.md",
 )
 
 #: Short aliases for the frames individual tests single out, each chosen for a
-#: specific header or geometry property. See ``test_data/README.md``.
+#: specific header or geometry property. See ``data/README.md``.
 FRAMES: dict[str, str] = {
     # WCS written as PC + CDELT rather than CD.
     "nsv2849": "nsv2849_star_v_000.fits",
@@ -137,7 +137,7 @@ FRAMES: dict[str, str] = {
     # Southern field at dec -69, where cos(dec) stops being negligible.
     "ngc2070": "ngc2070_nebula_v_000.fits",
     # The exact frame behind the recorded NGC 5128 solve and the Afterglow
-    # API response in test_data/afterglow/.
+    # API response in data/afterglow/.
     "ngc5128_b": "ngc5128_galaxy_b_001.fits",
     # 1600x1200 from a third instrument, with FOCALLEN and a WCS.
     "ngc1982": "ngc1982_nebula_r_000.fits",
@@ -145,7 +145,7 @@ FRAMES: dict[str, str] = {
 
 
 def _discover_frames() -> list[str]:
-    """Every frame filename in ``test_data/optical``, sorted.
+    """Every frame filename in ``data/optical``, sorted.
 
     Discovered rather than listed so that adding a frame to the directory
     extends the sweep tests automatically — several tests parametrize over the
@@ -177,15 +177,44 @@ ZP_CASES: tuple[str, ...] = (
 def _require(path: Path) -> Path:
     if not path.exists():
         pytest.skip(
-            f"missing fixture {path.relative_to(REPO_ROOT)} — see test_data/README.md "
+            f"missing fixture {path.relative_to(REPO_ROOT)} — see data/README.md "
             f"for how to re-sync it from the Skynet pipeline data repository"
         )
     return path
 
 
+@pytest.fixture(autouse=True)
+def download_root(tmp_path, monkeypatch):
+    """Point the archive download root at an empty tmp path for every test.
+
+    ``fits_downloads/`` is gitignored but real: a developer who has ever run
+    ``search_mast(..., download=True)`` has one in the working tree. It is now
+    a genuine second search root for ``tools.optical``, so without this any
+    test that resolves a frame -- test_optical_registry, test_fieldcal_reference,
+    test_photometry_tool_smoke -- depends on untracked local state. A
+    downloaded frame whose name normalizes to contain a probed name turns a
+    clean resolve into an ``ambiguous`` error.
+
+    ``DATA_DIR`` is patched alongside it, not just the download root:
+    ``tools.optical`` only *walks* the download root while it resolves inside
+    ``config.DATA_DIR``, so a download root sandboxed to tmp while the data
+    root still pointed at the repository would be searched flat -- and every
+    nested-product case would quietly stop being exercised while still passing.
+
+    Patched on ``tools.config`` rather than the environment because both are
+    computed at import.
+    """
+    from tools import config
+
+    root = tmp_path / "fits_downloads"
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", root)
+    return root
+
+
 @pytest.fixture(scope="session")
-def test_data_dir() -> Path:
-    return _require(TEST_DATA)
+def data_dir() -> Path:
+    return _require(DATA_ROOT)
 
 
 @pytest.fixture(scope="session")
@@ -316,7 +345,7 @@ def afterglow_web_zero_points() -> dict[str, tuple[float, float]]:
     field-calibration service, not out of Skynet's local pipeline, so agreement
     between them and Kepler's solver is a cross-implementation check rather than
     a self-comparison. 73 subjects; six of the eight frames in
-    ``test_data/optical`` appear.
+    ``data/optical`` appear.
     """
     path = _require(AFTERGLOW / "afterglow_web_values_master.csv")
     with open(path, newline="") as fh:
@@ -350,9 +379,9 @@ def afterglow_photometry_rows() -> list[dict]:
 
 
 @pytest.fixture(scope="session")
-def ocl_filter_report(test_data_dir) -> dict:
+def ocl_filter_report(data_dir) -> dict:
     """Skynet's Open/Clear/Lum substitute-filter trial report."""
-    with open(_require(test_data_dir / "fieldcal" / "ocl_filter_report.json")) as fh:
+    with open(_require(data_dir / "fieldcal" / "ocl_filter_report.json")) as fh:
         return json.load(fh)
 
 

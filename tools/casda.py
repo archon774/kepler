@@ -28,6 +28,7 @@ from astropy.coordinates import SkyCoord
 from astroquery.casda import Casda
 
 from tools import artifacts
+from tools import config
 from tools.config import CASDA_OPAL_USERNAME, PREVIEW_ROWS
 from tools.models import ToolResult
 from tools.resolve import resolve_target_coords
@@ -120,8 +121,20 @@ def search_casda(
             )
         casda.login(username=CASDA_OPAL_USERNAME)
         url_list = casda.stage_data(table)
-        casda.download_files(url_list, savedir="fits_downloads")
-        warnings.append(f"staged and downloaded {len(url_list)} file(s) to fits_downloads/")
+        # The literal "fits_downloads" this used to pass ignored
+        # KEPLER_FITS_DOWNLOAD_DIR, so a configured operator got downloads in
+        # one directory and a frame registry searching another. Same directory
+        # as tools.mast now, which is the one tools.optical searches.
+        # Read through the module for the same reason tools.mast does.
+        download_dir = config.FITS_DOWNLOAD_DIR
+        download_dir.mkdir(parents=True, exist_ok=True)
+        casda.download_files(url_list, savedir=str(download_dir))
+        warnings.append(
+            f"staged and downloaded {len(url_list)} file(s) to {download_dir}; "
+            "they now resolve through the local frame registry -- call "
+            "list_optical_frames or resolve_optical_frame to pick one up, "
+            "then the image tools take it by path"
+        )
 
     return ToolResult(
         status="ok",

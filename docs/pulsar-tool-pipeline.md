@@ -8,7 +8,7 @@ map from each stage to the extracted Astromancer code that backs it.
 
 A discovery step sits in front of stage 1: `list_pulsar_scans` and
 `resolve_pulsar_scan` (`tools.pulsar`, both registered) turn a source name into a
-scan path under `test_data/pulsar/` — override with `KEPLER_PULSAR_DATA_DIR` —
+scan path under `data/pulsar/` — override with `KEPLER_PULSAR_DATA_DIR` —
 returning `ToolError`s for misses and ambiguity rather than raising. It is
 optional; every stage below also accepts a bare file path.
 
@@ -140,7 +140,7 @@ from tools.pulsar import (
     fold_pulsar_lightcurve, sonify_pulsar,
 )
 
-lc   = load_pulsar_lightcurve("test_data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
+lc   = load_pulsar_lightcurve("data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt")
 pg   = compute_pulsar_periodogram(lc.artifact.path)
 fold = fold_pulsar_lightcurve(lc.artifact.path, pg.peak_period_s)
 wav  = sonify_pulsar(lc.artifact.path, period_s=pg.peak_period_s)
@@ -158,7 +158,7 @@ normal for a pulsar and is why the field exists.
 
 B0329+54 is the **only** one of the five bundled scans where this works with
 default settings. Verified against the curated periods in
-`test_data/pulsar/Curated pulsars.docx`, cross-checked against live ATNF:
+`data/pulsar/Curated pulsars.docx`, cross-checked against live ATNF:
 
 | Scan | Curated difficulty | `S1400` | Blind search result | Fold at curated `P0` |
 | --- | --- | --- | --- |
@@ -217,7 +217,7 @@ not inputs to the pipeline. The ordering the tools and the system prompt state:
    that profile's `pulse_snr` is not an independent detection.
 
 The distinction is the whole reason the fixtures are usable as verification.
-`test_data/README.md`: the scans carry no period in-file, so **a successful fold
+`data/README.md`: the scans carry no period in-file, so **a successful fold
 is a real detection rather than a fit to a known answer** — which holds only
 while the period being folded at was measured. Seeding the fold from the
 literature by default would quietly convert every `pulse_snr` in the pipeline

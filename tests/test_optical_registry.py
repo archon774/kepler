@@ -16,7 +16,7 @@ from tools.models import OpticalFrame, OpticalFrameList
 from tools.optical import list_optical_frames, resolve_optical_frame
 
 ROOT = Path(__file__).resolve().parents[1]
-OPTICAL = ROOT / "test_data" / "optical"
+OPTICAL = ROOT / "data" / "optical"
 
 
 def test_lists_every_bundled_frame():
@@ -27,7 +27,7 @@ def test_lists_every_bundled_frame():
 
 
 def test_listing_reports_the_filter_spread_recorded_in_the_readme():
-    """test_data/README.md: V (25), R (7), B (2), Halpha (2), OIII (1), Lum (1), Open (1)."""
+    """data/README.md: V (25), R (7), B (2), Halpha (2), OIII (1), Lum (1), Open (1)."""
     listing = list_optical_frames()
     counts: dict[str, int] = {}
     for frame in listing.frames:
@@ -46,7 +46,7 @@ def test_filter_narrowing():
 
 
 def test_category_comes_from_the_filename_convention():
-    """Frames are named <object>_<category>_<filter>_<seq> (test_data/README.md)."""
+    """Frames are named <object>_<category>_<filter>_<seq> (data/README.md)."""
     frame = resolve_optical_frame("ngc1846_cluster_r_000")
     assert isinstance(frame, OpticalFrame)
     assert frame.category == "cluster"
@@ -131,3 +131,549 @@ def test_the_cli_resolver_still_raises_for_its_own_callers():
 
     with pytest.raises(FileNotFoundError):
         resolve_fits_path("messier 87")
+
+
+# --- BL-11: the archive-to-analysis loop -------------------------------------
+#
+# tools.mast/tools.casda download products into tools.config.FITS_DOWNLOAD_DIR
+# and nothing could then find them: the registry searched one directory. The
+# download root is now a second search root, recursive because astroquery lays
+# MAST products out under mastDownload/<mission>/<obs_id>/ rather than flat.
+
+
+def _write_frame(path: Path, *, object_name: str, image_filter: str) -> Path:
+    """A minimal well-formed FITS frame; header-only, so no WCS."""
+    import numpy as np
+    from astropy.io import fits
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = fits.Header()
+    header["OBJECT"] = object_name
+    header["FILTER"] = image_filter
+    fits.PrimaryHDU(np.zeros((4, 4), dtype=np.float32), header).writeto(path)
+    return path
+
+
+def test_search_roots_reports_only_the_optical_root_when_nothing_is_downloaded():
+    listing = list_optical_frames()
+    assert Path(listing.search_root) == OPTICAL
+    assert [Path(r) for r in listing.search_roots] == [OPTICAL]
+
+
+def test_a_downloaded_frame_is_listed_alongside_the_bundled_ones(download_root):
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+    listing = list_optical_frames()
+
+    assert listing.count == 40
+    assert [Path(r) for r in listing.search_roots] == [OPTICAL, download_root]
+    # search_root still names the primary root, unchanged.
+    assert Path(listing.search_root) == OPTICAL
+    assert "idxq01010_drz.fits" in {Path(f.path).name for f in listing.frames}
+
+
+def test_a_downloaded_frame_resolves_by_object_name(download_root):
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+    frame = resolve_optical_frame("NGC 1234")
+
+    assert isinstance(frame, OpticalFrame)
+    assert Path(frame.path).name == "idxq01010_drz.fits"
+    assert frame.object_name == "NGC 1234"
+
+
+def test_a_downloaded_frame_resolves_by_bare_stem(download_root):
+    """The stem probe has to try every root, not just the primary one."""
+    _write_frame(
+        download_root / "idxq01010_drz.fits", object_name="NGC 1234", image_filter="F606W"
+    )
+    frame = resolve_optical_frame("idxq01010_drz")
+
+    assert isinstance(frame, OpticalFrame)
+    assert Path(frame.path).name == "idxq01010_drz.fits"
+
+
+def test_only_the_download_root_is_searched_recursively(download_root, tmp_path, monkeypatch):
+    """MAST nests; a caller's own archive directory keeps the flat contract."""
+    nested_primary = tmp_path / "primary"
+    _write_frame(
+        nested_primary / "subdir" / "buried.fits", object_name="Buried", image_filter="V"
+    )
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(nested_primary))
+    _write_frame(
+        download_root / "deep" / "deeper" / "found.fits", object_name="Found", image_filter="V"
+    )
+
+    names = {Path(f.path).name for f in list_optical_frames().frames}
+    assert names == {"found.fits"}
+
+
+def test_an_explicit_directory_argument_still_means_exactly_that_directory(download_root):
+    _write_frame(
+        download_root / "idxq01010_drz.fits", object_name="NGC 1234", image_filter="F606W"
+    )
+    listing = list_optical_frames(OPTICAL)
+
+    assert listing.count == 39
+    assert [Path(r) for r in listing.search_roots] == [OPTICAL]
+    assert "idxq01010_drz.fits" not in {Path(f.path).name for f in listing.frames}
+
+
+def test_a_frame_reachable_through_two_roots_is_listed_once(monkeypatch, download_root):
+    """Nothing stops an operator pointing both env vars at one directory."""
+    download_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(download_root))
+    _write_frame(download_root / "one.fits", object_name="One", image_filter="V")
+
+    listing = list_optical_frames()
+    assert listing.count == 1
+    # Reported once, not twice: the same directory named by both env vars is
+    # one root, and duplicating it in search_roots reads as a bug.
+    assert [Path(r) for r in listing.search_roots] == [download_root]
+
+
+def test_collapsing_two_roots_into_one_keeps_the_recursive_search(
+    monkeypatch, download_root
+):
+    """The collapse must not inherit the primary root's flat search.
+
+    Taking the first entry's recursion flag would silently stop finding nested
+    downloads the moment an operator pointed both env vars at one directory.
+    """
+    download_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(download_root))
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "obs" / "nested.fits",
+        object_name="Nested",
+        image_filter="V",
+    )
+
+    listing = list_optical_frames()
+    assert [Path(f.path).name for f in listing.frames] == ["nested.fits"]
+
+
+def test_a_downloaded_frame_resolves_by_its_filename(download_root):
+    """A filename is what a caller copies out of an archive manifest.
+
+    The flat root/name probe cannot reach a nested download, so this falls
+    through to normalized matching -- where _normalize("x.fits") is "xfits",
+    not a substring of the stem "x". The full filename is matched too.
+    """
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+    frame = resolve_optical_frame("idxq01010_drz.fits")
+
+    assert isinstance(frame, OpticalFrame)
+    assert Path(frame.path).name == "idxq01010_drz.fits"
+
+
+def test_the_download_root_is_reported_as_an_absolute_path(download_root):
+    """A frame path is handed to the next tool, which may have another cwd."""
+    _write_frame(download_root / "one.fits", object_name="One", image_filter="V")
+    listing = list_optical_frames()
+
+    assert all(Path(r).is_absolute() for r in listing.search_roots)
+    assert all(Path(f.path).is_absolute() for f in listing.frames)
+
+
+def test_photometry_targets_exclude_the_archive_download_root(download_root):
+    """list_photometry_targets advertises a fixed bundled set, so it stays one.
+
+    A downloaded product has no <object>_<category>_<filter>_<seq> token to
+    parse, and a CASDA radio cube is not an optical photometry target.
+    """
+    from tools.claude_photometry_haiku_tool import list_bundled_targets
+
+    _write_frame(
+        download_root / "idxq01010_drz.fits", object_name="NGC 1234", image_filter="F606W"
+    )
+    stems = {stem for stems in list_bundled_targets().values() for stem in stems}
+
+    assert "idxq01010_drz" not in stems
+    assert "ngc5128_galaxy_b_001" in stems
+    # Still reachable through the frame registry, just not as a "target".
+    assert isinstance(resolve_optical_frame("idxq01010_drz"), OpticalFrame)
+
+
+def test_the_archive_tools_and_the_registry_agree_on_the_download_root(download_root):
+    """A late reassignment has to move both, or BL-11 comes straight back.
+
+    tools.optical reads config.FITS_DOWNLOAD_DIR through the module; a
+    from-import in tools.mast/tools.casda would bind it at import and send
+    downloads somewhere the registry never looks.
+    """
+    from tools import casda, config, mast
+
+    assert mast.__dict__.get("FITS_DOWNLOAD_DIR") is None
+    assert casda.__dict__.get("FITS_DOWNLOAD_DIR") is None
+    assert mast.config.FITS_DOWNLOAD_DIR == download_root
+    assert casda.config.FITS_DOWNLOAD_DIR == config.FITS_DOWNLOAD_DIR
+
+
+def test_a_missing_primary_root_is_not_an_error_when_a_download_root_has_frames(
+    monkeypatch, download_root
+):
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", "/nonexistent/optical")
+    _write_frame(download_root / "one.fits", object_name="One", image_filter="V")
+
+    listing = list_optical_frames()
+    assert listing.errors == []
+    assert listing.count == 1
+    assert [Path(r) for r in listing.search_roots] == [download_root]
+    # The primary root is still what search_root names, present or not.
+    assert Path(listing.search_root) == Path("/nonexistent/optical")
+
+
+def test_directory_not_found_names_every_root_it_tried(monkeypatch, download_root):
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", "/nonexistent/optical")
+    listing = list_optical_frames()
+
+    assert [e.code for e in listing.errors] == ["directory_not_found"]
+    assert listing.search_roots == []
+    message = listing.errors[0].message
+    assert "/nonexistent/optical" in message
+    assert str(download_root) in message
+    assert "KEPLER_OPTICAL_DATA_DIR" in message
+
+
+def test_an_absent_download_root_is_skipped_without_a_warning(download_root):
+    assert not download_root.exists()
+    listing = list_optical_frames()
+
+    assert listing.warnings == []
+    assert listing.errors == []
+    assert [Path(r) for r in listing.search_roots] == [OPTICAL]
+
+
+def test_an_empty_directory_string_falls_back_to_the_default_roots():
+    """Path("") is Path("."), so `is not None` would search the CWD instead.
+
+    An optional string parameter arriving as "" rather than omitted is an
+    ordinary thing for a model to do, and the failure is silent: an empty
+    listing rather than the bundled frames.
+    """
+    listing = list_optical_frames("")
+    assert listing.count == 39
+    assert Path(listing.search_root) == OPTICAL
+
+
+# --- The recursive walk is bounded ------------------------------------------
+#
+# Two bounds, added after P2 recorded the unbounded rglob as an open finding.
+# KEPLER_FITS_DOWNLOAD_DIR can name anywhere -- a home directory, a mount
+# point, "/" -- so recursion is confined to the data directory; and a bulk
+# search_mast(download=True) can leave thousands of products under it
+# (121,515 for Cas A), so one listing reads a bounded number of headers.
+
+
+def test_a_download_root_inside_the_data_dir_is_walked(tmp_path, monkeypatch):
+    from tools import config
+
+    data_dir = tmp_path / "data"
+    inside = data_dir / "fits_downloads"
+    monkeypatch.setattr(config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", inside)
+    _write_frame(
+        inside / "mastDownload" / "HST" / "idxq01010" / "nested.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+
+    listing = list_optical_frames()
+
+    assert "nested.fits" in {Path(f.path).name for f in listing.frames}
+    assert listing.warnings == []
+
+
+def test_a_download_root_outside_the_data_dir_is_searched_flat(tmp_path, monkeypatch):
+    """Still searched -- just not walked. CASDA's download_files writes flat,
+    so refusing the root outright would lose those frames too."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    outside = tmp_path / "elsewhere"
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", outside)
+    _write_frame(outside / "flat.fits", object_name="NGC 1234", image_filter="V")
+    _write_frame(
+        outside / "mastDownload" / "HST" / "idxq01010" / "nested.fits",
+        object_name="NGC 5678",
+        image_filter="V",
+    )
+
+    listing = list_optical_frames()
+    names = {Path(f.path).name for f in listing.frames}
+
+    assert "flat.fits" in names
+    assert "nested.fits" not in names
+    assert [w.code for w in listing.warnings] == ["download_root_outside_data_dir"]
+    assert str(outside) in listing.warnings[0].message
+
+
+def test_containment_is_decided_on_the_resolved_path(tmp_path, monkeypatch):
+    """A symlink named inside the data directory but pointing out of it does
+    not buy a recursive walk of wherever it lands."""
+    from tools import config
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    link = data_dir / "fits_downloads"
+    link.symlink_to(real, target_is_directory=True)
+    monkeypatch.setattr(config, "DATA_DIR", data_dir)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", link)
+    _write_frame(
+        real / "mastDownload" / "HST" / "idxq01010" / "nested.fits",
+        object_name="NGC 5678",
+        image_filter="V",
+    )
+
+    listing = list_optical_frames()
+
+    assert "nested.fits" not in {Path(f.path).name for f in listing.frames}
+    assert [w.code for w in listing.warnings] == ["download_root_outside_data_dir"]
+
+
+def test_the_shipped_defaults_put_the_download_root_inside_the_data_dir(monkeypatch):
+    """The default configuration has to satisfy its own containment rule, or
+    the archive-to-analysis loop is flat-searched out of the box (BL-11).
+
+    Loaded as a pristine copy: the autouse ``download_root`` fixture has
+    already reassigned both values on the live ``tools.config``.
+    """
+    import importlib.util
+
+    from tools import config
+
+    monkeypatch.delenv("KEPLER_DATA_DIR", raising=False)
+    monkeypatch.delenv("KEPLER_FITS_DOWNLOAD_DIR", raising=False)
+    spec = importlib.util.spec_from_file_location("_config_pristine", config.__file__)
+    pristine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pristine)
+
+    assert pristine.DATA_DIR == ROOT / "data"
+    assert pristine.FITS_DOWNLOAD_DIR.is_relative_to(pristine.DATA_DIR)
+
+
+def test_a_listing_is_capped_and_says_how_many_it_left_out(monkeypatch):
+    from tools import config
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
+    listing = list_optical_frames()
+
+    assert listing.count == 5
+    assert [w.code for w in listing.warnings] == ["listing_truncated"]
+    assert "39 frames found" in listing.warnings[0].message
+    assert "KEPLER_MAX_FRAMES" in listing.warnings[0].message
+
+
+def test_an_uncapped_listing_carries_no_truncation_warning():
+    listing = list_optical_frames()
+
+    assert listing.count == 39
+    assert listing.warnings == []
+
+
+def test_the_cap_bounds_header_reads_not_just_the_returned_list(monkeypatch):
+    """The cap exists to stop a bulk download costing thousands of FITS header
+    reads, so it has to apply before _summary rather than trimming after."""
+    from tools import config, optical
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 3)
+    read: list[Path] = []
+    real_summary = optical._summary
+    monkeypatch.setattr(
+        optical, "_summary", lambda path: (read.append(path), real_summary(path))[1]
+    )
+
+    optical.list_optical_frames()
+
+    assert len(read) == 3
+
+
+def test_a_truncated_listing_warns_on_the_frame_it_resolves(monkeypatch):
+    """A lone match in a capped listing was found among the frames that were
+    read, not among the frames that exist -- uncapped it might have been
+    ambiguous -- so the caveat rides on the frame rather than being dropped
+    with the list it came from."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
+    frame = resolve_optical_frame("carina")
+
+    assert isinstance(frame, OpticalFrame)
+    codes = [w.code for w in frame.warnings]
+    assert "resolved_from_truncated_listing" in codes
+    assert "may not be the only match" in frame.warnings[-1].message
+
+
+def test_an_ambiguous_name_hidden_by_the_cap_is_flagged_not_silently_unique(monkeypatch):
+    """Code review: with the cap set below the bundled count, 'm31' matched
+    only the R frame among those read and came back as a plain unique match,
+    when uncapped it is ambiguous between R and V. The frame now carries the
+    caveat, so a caller can see the match was made against a partial set."""
+    from tools import config
+
+    uncapped = resolve_optical_frame("m31")
+    assert isinstance(uncapped, OpticalFrameList)
+    assert [e.code for e in uncapped.errors] == ["ambiguous"]
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 7)
+    capped = resolve_optical_frame("m31")
+    assert isinstance(capped, OpticalFrame)
+    assert "resolved_from_truncated_listing" in [w.code for w in capped.warnings]
+
+
+def test_the_containment_warning_does_not_ride_onto_a_bundled_frame_resolve(
+    tmp_path, monkeypatch
+):
+    """The containment warning describes the operator's configuration, not the
+    match. Carrying it would attach it to every bundled-frame resolve for
+    anyone with a flat CASDA root outside the data dir."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    outside = tmp_path / "elsewhere"
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", outside)
+    _write_frame(outside / "unrelated.fits", object_name="Other", image_filter="V")
+
+    assert [w.code for w in list_optical_frames().warnings] == [
+        "download_root_outside_data_dir"
+    ]
+    frame = resolve_optical_frame("carina")
+    assert isinstance(frame, OpticalFrame)
+    assert "download_root_outside_data_dir" not in [w.code for w in frame.warnings]
+
+
+def test_the_cap_is_per_root_so_a_large_primary_cannot_starve_the_download_root(
+    download_root, tmp_path, monkeypatch
+):
+    """Code review: filling one overall cap primary-first meant an operator
+    archive larger than the cap made every archive download invisible --
+    BL-11 again, with nothing in the result saying the second root
+    contributed zero."""
+    from tools import config
+
+    big_primary = tmp_path / "primary"
+    for i in range(6):
+        _write_frame(big_primary / f"arch_{i:03d}.fits", object_name=f"A{i}", image_filter="V")
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(big_primary))
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 4)
+    _write_frame(
+        download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
+        object_name="NGC 1234",
+        image_filter="F606W",
+    )
+
+    listing = list_optical_frames()
+    names = {Path(f.path).name for f in listing.frames}
+
+    assert listing.count == 5  # 4 from the primary, 1 from the download root
+    assert "idxq01010_drz.fits" in names
+    assert [w.code for w in listing.warnings] == ["listing_truncated"]
+    assert "7 frames found" in listing.warnings[0].message
+    assert isinstance(resolve_optical_frame("NGC 1234"), OpticalFrame)
+
+
+def test_bundled_targets_are_an_uncapped_inventory(monkeypatch):
+    """Code review: list_bundled_targets went through list_optical_frames,
+    so a cap below the library size silently truncated an index that calls
+    itself the complete fixed set. It is an inventory of filenames now --
+    no header reads, no cap."""
+    from tools import config
+    from tools.claude_photometry_haiku_tool import list_bundled_targets
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 3)
+    targets = list_bundled_targets()
+
+    assert sum(len(stems) for stems in targets.values()) == 39
+
+
+def test_a_non_empty_legacy_download_root_is_reported(download_root, monkeypatch):
+    """The default moved from <cwd>/fits_downloads to data/fits_downloads.
+    Earlier downloads left at the repository root would otherwise resolve as
+    not_found with nothing saying the root moved."""
+    from tools import optical
+
+    legacy = optical._REPO_ROOT / "fits_downloads"
+    assert not legacy.exists(), "test would need to create a real dir at the repo root"
+    fake_repo = download_root.parent / "repo"
+    _write_frame(fake_repo / "fits_downloads" / "old.fits", object_name="Old", image_filter="V")
+    # _REPO_ROOT also anchors the default primary root; pin that to the real
+    # bundled directory so the listing is a normal one, not directory_not_found.
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(OPTICAL))
+    monkeypatch.setattr(optical, "_REPO_ROOT", fake_repo)
+    download_root.mkdir()
+
+    listing = list_optical_frames()
+
+    assert listing.errors == []
+    assert listing.count == 39
+    assert [w.code for w in listing.warnings] == ["legacy_download_root_present"]
+    assert "old.fits" not in {Path(f.path).name for f in listing.frames}
+    assert str(fake_repo / "fits_downloads") in listing.warnings[0].message
+
+
+def test_an_empty_legacy_download_root_is_not_reported(download_root, monkeypatch):
+    """Only a legacy directory with something in it means orphaned downloads."""
+    from tools import optical
+
+    fake_repo = download_root.parent / "repo"
+    (fake_repo / "fits_downloads").mkdir(parents=True)
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(OPTICAL))
+    monkeypatch.setattr(optical, "_REPO_ROOT", fake_repo)
+
+    assert list_optical_frames().warnings == []
+
+
+def test_a_zero_or_negative_frame_cap_is_rejected_at_load(monkeypatch):
+    """Code review: 0 returned an empty listing and -5 sliced from the end
+    while the warning still said "the first N were read"."""
+    from tools import config
+
+    for bad in ("0", "-5", "many"):
+        monkeypatch.setenv("KEPLER_MAX_FRAMES", bad)
+        with pytest.raises(ValueError):
+            config.env_positive_int("KEPLER_MAX_FRAMES", 200)
+    monkeypatch.setenv("KEPLER_MAX_FRAMES", "7")
+    assert config.env_positive_int("KEPLER_MAX_FRAMES", 200) == 7
+
+
+def test_a_miss_in_a_truncated_listing_says_the_search_was_partial(monkeypatch):
+    """"39 frames are available" would be a lie when only 5 were read, and it
+    reads as "it is not here" -- the wrong conclusion in exactly the case the
+    cap creates."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
+    result = resolve_optical_frame("ngc7293")
+
+    assert isinstance(result, OpticalFrameList)
+    message = result.errors[0].message
+    assert "Only the first 5 frames were read" in message
+    assert "KEPLER_MAX_FRAMES" in message
+    assert "listing_truncated" in [w.code for w in result.warnings]
+
+
+def test_an_absent_download_root_outside_the_data_dir_warns_nothing(tmp_path, monkeypatch):
+    """The containment warning says the root "is searched flat". A root that
+    does not exist is not searched at all, so it gets no warning -- matching
+    how an absent root inside the data dir is already skipped silently."""
+    from tools import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", tmp_path / "elsewhere")
+
+    listing = list_optical_frames()
+
+    assert listing.warnings == []
+    assert [Path(r) for r in listing.search_roots] == [OPTICAL]

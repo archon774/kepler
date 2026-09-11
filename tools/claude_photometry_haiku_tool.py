@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Generated plots default to the user's Downloads folder rather than next to the
-# source FITS file — bundled test_data targets live inside the repo tree, and
+# source FITS file — bundled data targets live inside the repo tree, and
 # this repo's convention is to never write generated artifacts there (see
 # CLAUDE.md: "Do not commit downloaded FITS products, generated plots, ...").
 DEFAULT_OUTPUT_DIR = Path.home() / "Downloads"
@@ -185,16 +185,26 @@ def resolve_fits_path(query: str | Path) -> Path:
 def list_bundled_targets() -> dict[str, list[str]]:
     """Return the FITS target stems bundled locally, by category.
 
-    Delegates to ``tools.optical.list_optical_frames``; the category is the
-    second token of each stem, per the <object>_<category>_<filter>_<seq>
-    convention documented in test_data/README.md.
+    Delegates to ``tools.optical`` for both the inventory and the category
+    parse, so the CLI and the registered tools cannot drift apart. This is an
+    index of filenames, not a header listing: it goes through
+    ``bundled_frame_paths`` rather than ``list_optical_frames`` so it reads no
+    headers and is never subject to ``KEPLER_MAX_FRAMES`` -- an index that
+    advertises itself as the complete fixed set must not silently truncate.
+
+    Scoped to the primary root on purpose. ``list_photometry_targets`` tells
+    its caller this is a small fixed set of bundled frames with no archive
+    behind it, so the archive download root is deliberately excluded -- a
+    downloaded product has no category token to parse and a CASDA radio cube
+    is not an optical photometry target. Downloaded frames stay reachable
+    through ``list_optical_frames``/``resolve_optical_frame`` and by path.
     """
-    from tools.optical import list_optical_frames
+    from tools.optical import bundled_frame_paths, category_from_stem
 
     targets: dict[str, list[str]] = {}
-    for frame in list_optical_frames().frames:
-        targets.setdefault(frame.category or "uncategorized", []).append(
-            Path(frame.path).stem
+    for path in bundled_frame_paths():
+        targets.setdefault(category_from_stem(path) or "uncategorized", []).append(
+            path.stem
         )
     return {category: sorted(stems) for category, stems in sorted(targets.items())}
 
@@ -404,7 +414,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--list-targets",
         action="store_true",
-        help="List the FITS targets bundled under test_data/optical, grouped by "
+        help="List the FITS targets bundled under data/optical, grouped by "
         "category, and exit. There is no live archive query behind this tool — a "
         "target only resolves if it's in this list.",
     )
@@ -1168,10 +1178,10 @@ def main() -> int:
     if args.list_targets:
         targets = list_bundled_targets()
         if not targets:
-            print("No bundled FITS targets found under test_data/optical.", file=sys.stderr)
+            print("No bundled FITS targets found under data/optical.", file=sys.stderr)
             return 1
         total = sum(len(stems) for stems in targets.values())
-        print(f"{total} bundled FITS targets under test_data/optical:")
+        print(f"{total} bundled FITS targets under data/optical:")
         for category, stems in targets.items():
             print(f"\n{category} ({len(stems)}):")
             for stem in stems:
@@ -1181,7 +1191,7 @@ def main() -> int:
     if args.fits_path is None:
         print(
             "Missing FITS target. Pass a path or target name, or use --list-targets "
-            "to see what's bundled under test_data/optical.",
+            "to see what's bundled under data/optical.",
             file=sys.stderr,
         )
         return 1

@@ -1,5 +1,5 @@
 {
-  "_comment": "Upstream (pre-reorganization) filename for each bundled frame stem. The recorded ground truth in fieldcal/ocl_filter_report.json keys its rows by the upstream name, and the rename to <object>_<category>_<filter>_<seq> (skynet-data/pipeline_data/reorganize.py) lost that join. This map restores it. Values are basenames as they appear in the recorded reports; test_data/optical/ is flat, so the reorganize.py destination subdirectory is dropped. Not every stem here is bundled -- the full table is kept so a future fixture that needs a join already has it.",
+  "_comment": "Upstream (pre-reorganization) filename for each bundled frame stem. The recorded ground truth in fieldcal/ocl_filter_report.json keys its rows by the upstream name, and the rename to <object>_<category>_<filter>_<seq> (skynet-data/pipeline_data/reorganize.py) lost that join. This map restores it. Values are basenames as they appear in the recorded reports; data/optical/ is flat, so the reorganize.py destination subdirectory is dropped. Not every stem here is bundled -- the full table is kept so a future fixture that needs a join already has it.",
   "_source": "skynet-data/pipeline_data/reorganize.py",
   "_collisions": {
     "ngc5286_globular_b_000": [

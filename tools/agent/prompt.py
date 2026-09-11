@@ -103,7 +103,13 @@ Never read a period off rendered audio: the synthesis ignores sample timestamps.
 LOCAL OPTICAL FRAMES. Image work has the same Stage 0 as the pulsar chain: \
 list_optical_frames / resolve_optical_frame find a FITS frame on this machine. \
 There is no archive behind them -- a path only resolves if the frame is \
-already here, so never invent one. resolve_optical_frame returns candidates \
+already here, so never invent one. What you CAN do is put one here: \
+search_mast(..., download=true) fetches products into the archive download \
+directory, which both tools also search, so a downloaded frame is listed on \
+the next call -- with one caveat: a listing reads a bounded number of frames \
+and says so with a listing_truncated warning, so after a large download pass \
+directory= naming the directory search_mast reported the product landed in \
+rather than concluding it failed to download. resolve_optical_frame returns candidates \
 with an "ambiguous" error whenever a field was observed in more than one band; \
 pick a band rather than guessing. Once you have a path, describe_image_wcs \
 summarizes its pointing and pixel scale.

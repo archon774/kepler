@@ -21,7 +21,7 @@ artifacts, so the default `pytest` run collects them with the rest of the suite.
 Three consequences shape everything here:
 
 1. **Real data, not synthetic.** Fixtures are 39 real PROMPT/Skynet frames and
-   four complete recorded Skynet zero-point solves. See `test_data/README.md`.
+   four complete recorded Skynet zero-point solves. See `data/README.md`.
 2. **Recorded output, not recomputed expectations.** The centrepiece,
    `test_fieldcal_solution.py`, feeds `calc_solution` the exact rows Skynet fed
    it and compares against the exact numbers Skynet returned — bit-for-bit on
@@ -39,7 +39,7 @@ Three consequences shape everything here:
 | `test_fieldcal_solution.py` | **`calc_solution` bit-exact parity** against four recorded Skynet fits |
 | `test_fieldcal_afterglow_parity.py` | Cross-implementation parity vs the Afterglow web service |
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms, the `eval` guardrail |
-| `test_fieldcal_pipeline.py` | The `deps` seam, source matching, end-to-end calibration on a real frame |
+| `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
 | `test_catalogs_registries.py` | Declarations, the two-registry divergence, no-network guarantee |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |

@@ -34,7 +34,17 @@ from tools.models import ToolError, ToolWarning, WcsSummary
 
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-_FIXTURE_ROOT = (_REPOSITORY_ROOT / "test_data").resolve()
+#: The committed fixture tree, and the subtrees under it that hold fixtures.
+#: Pinned to this repository rather than read from ``config.DATA_DIR``: an
+#: operator who points KEPLER_DATA_DIR at their own archive has neither made
+#: these frames writable nor made that archive a tree of fixtures. The guard
+#: names the subtrees rather than the whole of ``data/`` because the archive
+#: download root lives under ``data/`` too, and a downloaded product must stay
+#: writable. tests/test_wcs_solve_tool.py asserts this tuple matches the
+#: directories actually present, so a new fixture subtree cannot be added
+#: without being listed here.
+_FIXTURE_ROOT = (_REPOSITORY_ROOT / "data").resolve()
+_FIXTURE_SUBTREES = ("afterglow", "fieldcal", "optical", "pulsar")
 
 
 class _FileChangedError(RuntimeError):
@@ -95,11 +105,24 @@ def _summary_from_wcs(
 
 
 def _under_fixture_root(path: Path) -> bool:
-    try:
-        path.relative_to(_FIXTURE_ROOT)
-    except ValueError:
-        return False
-    return True
+    """Whether ``path`` is a committed fixture this tool must not rewrite.
+
+    The guard is the fixture *subtrees*, not the whole of ``data/``. The
+    archive download root lives under ``data/`` too, and a downloaded frame is
+    precisely the thing a caller is entitled to plate-solve and write a header
+    back into -- that is the archive -> analysis loop BL-11 exists to join.
+    Guarding ``data/`` wholesale would refuse exactly that write, with a message
+    claiming the product was a bundled fixture.
+
+    Deliberately independent of ``config.FITS_DOWNLOAD_DIR``. An earlier draft
+    exempted whatever that setting named, which meant ``KEPLER_FITS_DOWNLOAD_DIR=
+    <repo>/data`` -- a plausible misconfiguration -- silently disabled the guard
+    for every fixture. A safety net that a single environment variable can
+    switch off is not one.
+    """
+    from tools.config import within
+
+    return any(within(path, _FIXTURE_ROOT / subtree) for subtree in _FIXTURE_SUBTREES)
 
 
 def _file_version(path: Path) -> tuple[int, int, int, int, int]:
@@ -252,7 +275,9 @@ def solve_astrometry(
                     *summary.errors,
                     ToolError(
                         code="refusing_to_modify_fixture",
-                        message="Refusing to rewrite a bundled test_data FITS fixture.",
+                        message="Refusing to rewrite a bundled FITS fixture "
+                        "under data/. Frames under the archive download root "
+                        "are not fixtures and can be written.",
                     ),
                 ]
             }

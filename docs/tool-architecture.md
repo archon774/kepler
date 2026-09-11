@@ -79,6 +79,14 @@ package data such as
 
 ## 2. Public Tool Layer
 
+**One public tool call is Kepler's execution boundary.** No run, stage, session,
+or batch object spans two calls; no tool writes state another tool reads. A
+caller that needs a value from an earlier step passes it in, or passes the
+artifact path the earlier call returned. The processing-run architecture that
+used to carry that state was removed by the stateless rollout (S0–S6), along
+with `algorithms/fieldcal/deps.py` — cross-domain values are explicit function
+arguments now, not injected module-level names.
+
 Tools are the public surface. They should stay thin:
 
 - accept normal Python values, file paths, or small Pydantic models;
@@ -90,10 +98,31 @@ Tools are the public surface. They should stay thin:
 
 The first local, no-network tools are:
 
+- `tools.optical.list_optical_frames(directory=None, image_filter=None)` /
+  `tools.optical.resolve_optical_frame(name, directory=None)` -- Stage 0 for
+  image work. Searches the primary optical root *and* the archive download
+  root, so a product fetched by `tools.mast`/`tools.casda` resolves by name
+  through the same registry every image tool already takes a path from.
+  Both bounds on that search are operator settings rather than tool
+  parameters: the download root is walked recursively only while it resolves
+  inside `KEPLER_DATA_DIR` (outside it, searched flat with a
+  `download_root_outside_data_dir` warning), and `KEPLER_MAX_FRAMES`
+  (default 200) caps how many frames one listing reads headers for from each
+  root, with a `listing_truncated` warning naming the total when it bites.
+  `search_mast(download=true)` reports the directories products landed in, so
+  `directory=` can reach a specific product past the cap.
 - `tools.astrometry.describe_image_wcs(path)`
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`
 - `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
+- `tools.photometry.calibrate_zeropoint(path, catalog_sources=None, catalogs=None, compare_to=None)`
+  -- extraction -> photometry -> catalog match -> reference magnitude ->
+  `calc_solution`. Local only when `catalog_sources` is injected; without it
+  the calibration-input helper queries a reference catalog over the network.
+- `tools.fieldcal_reference.list_zeropoint_references()` /
+  `load_zeropoint_reference(field)` / `compare_zeropoint_to_reference(...)` --
+  the four recorded Skynet zero-point solves, and the offline replay
+  (`replay_catalog_sources`) that drives a real solve against them.
 - `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`
@@ -178,9 +207,11 @@ Next Python tools should follow the same pattern before adding new layers:
 
 - `extract_sources(path, settings=None)`
 - `measure_photometry(path, sources, settings=None)`
-- `calibrate_zeropoint(path, settings=None)`
 - `search_catalog(catalog, region, limit=50)`
 - `search_catalogs_for_image(path, limit=50)`
+
+`calibrate_zeropoint` and `solve_astrometry` were on this list and have since
+landed; both are above.
 
 TypeScript-backed tools should come after the TypeScript package/runtime story
 is explicit. Their first wrapper should be simple: JSON in, existing algorithm

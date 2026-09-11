@@ -401,7 +401,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "search_mast",
         "description": "Search the MAST archive for observations of an object and "
         "list their data products. Set download=true to fetch matched products "
-        "to local disk.",
+        "to local disk; downloaded frames then resolve through "
+        "list_optical_frames/resolve_optical_frame, so the image tools can take "
+        "them by path.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1163,7 +1165,13 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "directory": {
                     "type": "string",
                     "description": "Directory to search. Defaults to "
-                    "KEPLER_OPTICAL_DATA_DIR, then the bundled test_data/optical.",
+                    "KEPLER_OPTICAL_DATA_DIR (or the bundled data/optical) "
+                    "plus the archive download directory, so anything fetched by "
+                    "search_mast/search_casda is listed too. Passing a directory "
+                    "searches only that one, flat -- so to reach a product past "
+                    "a truncated listing, name the directory the product is "
+                    "actually in (search_mast reports where each download "
+                    "landed), not the download root.",
                 },
                 "image_filter": {
                     "type": "string",
@@ -1329,7 +1337,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "list_zeropoint_references",
         "description": "List the recorded photometric zero-point solves bundled "
-        "as ground truth (test_data/fieldcal/). Each is a real Skynet "
+        "as ground truth (data/fieldcal/). Each is a real Skynet "
         "calc_solution result -- and for NGC 5128 B, Afterglow's API response "
         "and published web-table value too. Zero points are ABSOLUTE "
         "magnitudes; Afterglow's own API reports 20.0 plus a correction "

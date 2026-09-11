@@ -19,7 +19,7 @@ import pytest
 
 from tools.astrometry import describe_image_wcs
 
-FRAME_PATHS = sorted((Path(__file__).resolve().parents[1] / "test_data" / "optical").glob("*.fits"))
+FRAME_PATHS = sorted((Path(__file__).resolve().parents[1] / "data" / "optical").glob("*.fits"))
 
 
 def test_the_fixture_directory_is_populated():
@@ -34,7 +34,7 @@ def test_describe_image_wcs_never_raises_on_a_bundled_frame(path):
 
 def test_frame_with_a_wcs_reports_ctype_and_a_centre():
     summary = describe_image_wcs(
-        Path(__file__).resolve().parents[1] / "test_data" / "optical" / "ngc5128_galaxy_b_001.fits"
+        Path(__file__).resolve().parents[1] / "data" / "optical" / "ngc5128_galaxy_b_001.fits"
     )
     assert summary.has_wcs is True
     assert summary.ctype == ("RA---TAN", "DEC--TAN")
@@ -44,9 +44,9 @@ def test_frame_with_a_wcs_reports_ctype_and_a_centre():
 
 
 def test_frame_without_a_wcs_warns_instead_of_erroring():
-    """m15_globular_open_000 carries no WCS keywords at all (test_data/README.md)."""
+    """m15_globular_open_000 carries no WCS keywords at all (data/README.md)."""
     summary = describe_image_wcs(
-        Path(__file__).resolve().parents[1] / "test_data" / "optical" / "m15_globular_open_000.fits"
+        Path(__file__).resolve().parents[1] / "data" / "optical" / "m15_globular_open_000.fits"
     )
     assert summary.has_wcs is False
     assert [w.code for w in summary.warnings] == ["no_celestial_wcs"]
@@ -54,6 +54,6 @@ def test_frame_without_a_wcs_warns_instead_of_erroring():
 
 
 def test_missing_file_returns_an_error_not_an_exception():
-    summary = describe_image_wcs("test_data/optical/does_not_exist.fits")
+    summary = describe_image_wcs("data/optical/does_not_exist.fits")
     assert summary.has_wcs is False
     assert [e.code for e in summary.errors] == ["file_not_found"]

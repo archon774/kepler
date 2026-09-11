@@ -1,11 +1,35 @@
-# `test_data/` — real observational fixtures
+# `data/` — the repository data root
 
-Everything here is **real data copied verbatim** from the Skynet pipeline data
-repository at `/home/claude/skynet-data/pipeline_data`. Nothing was synthesised,
-resampled, trimmed, or re-headered. That is the point: Kepler's Python folders
-are byte-preserving extractions from Skynet (see `CLAUDE.md`, "The extraction
-contract"), so the tests that guard them have to run on the frames and the
-recorded solver outputs the upstream pipeline actually produced.
+This directory was called `test_data/` until the data-root refactor. It is
+where general data for this repo lives: the committed observational fixtures
+below, and the *untracked* archive download root `fits_downloads/` that
+`search_mast`/`search_casda` write into.
+
+Everything committed here is **real data copied verbatim** from the Skynet
+pipeline data repository at `/home/claude/skynet-data/pipeline_data`. Nothing
+was synthesised, resampled, trimmed, or re-headered. That is the point:
+Kepler's Python folders are byte-preserving extractions from Skynet (see
+`CLAUDE.md`, "The extraction contract"), so the tests that guard them have to
+run on the frames and the recorded solver outputs the upstream pipeline
+actually produced.
+
+## This directory is tracked; one subdirectory is not
+
+`data/` carries ~175 MB of committed fixtures, so **there is deliberately no
+`data/` pattern in `.gitignore`** — adding one would ignore the entire fixture
+tree, and because files already tracked stay tracked, the breakage would
+surface only when someone added a fixture that never got committed.
+`tests/test_repository_shape.py` guards against exactly that.
+
+The one thing under here that must stay untracked is `fits_downloads/`, the
+archive download root, already matched by the depth-independent
+`fits_downloads/` pattern.
+
+`data/` is also a **boundary**: `tools/optical.py` walks the download root
+recursively (astroquery nests MAST products under
+`mastDownload/<mission>/<obs_id>/`) and will only do so while that root
+resolves inside this directory. `KEPLER_DATA_DIR` moves the root and the
+boundary together; `KEPLER_OPTICAL_DATA_DIR` moves the frame library alone.
 
 **Total size: ~175 MB**, essentially all of it the 39 FITS frames. That is large
 for a plain git repository; see "Repository size" at the bottom.
@@ -13,7 +37,8 @@ for a plain git repository; see "Repository size" at the bottom.
 ## Layout
 
 ```
-test_data/
+data/
+  fits_downloads/              archive download root — UNTRACKED, gitignored
   optical/                     39 FITS frames (~169 MB)
   afterglow/                   Afterglow web service ground truth (160 KB)
     afterglow_web_values_*.csv   zero points for 73 subjects
@@ -294,7 +319,7 @@ grow on its own, but two things are worth knowing:
 - Frames are binary and incompressible, so every re-copy of a frame adds its
   full size to history permanently. Replace a frame only when it must change.
 - If clone times become a problem, these are natural Git LFS candidates —
-  `test_data/optical/*.fits` is the whole of it, and the JSON/CSV ground truth
+  `data/optical/*.fits` is the whole of it, and the JSON/CSV ground truth
   (160 KB) should stay in regular git either way.
 
 The frame cut-off is 9 MB. The Afterglow table covers 73 subjects totalling
@@ -310,20 +335,20 @@ These are copies, not a submodule. To re-sync:
 SRC=/home/claude/skynet-data/pipeline_data
 
 # Ground truth (small, always safe to refresh)
-cp "$SRC"/afterglow_results/afterglow_web_values_*.csv  test_data/afterglow/
-cp "$SRC"/afterglow_results/build_master_table.py       test_data/afterglow/
-cp "$SRC"/afterglow_results/fieldcal/*.json             test_data/afterglow/fieldcal/
+cp "$SRC"/afterglow_results/afterglow_web_values_*.csv  data/afterglow/
+cp "$SRC"/afterglow_results/build_master_table.py       data/afterglow/
+cp "$SRC"/afterglow_results/fieldcal/*.json             data/afterglow/fieldcal/
 
 # Frames: every web-table subject under 9 MB, plus the two OCL frames
 python3 - <<'PY'
 import csv, glob, os, shutil
-master = {r["file"] for r in csv.DictReader(open("test_data/afterglow/afterglow_web_values_master.csv"))}
+master = {r["file"] for r in csv.DictReader(open("data/afterglow/afterglow_web_values_master.csv"))}
 found = {os.path.basename(p): p for p in glob.glob(
     "/home/claude/skynet-data/pipeline_data/test_subjects/optical/*/*.fits")}
 keep = (master & set(found)) | {"m15_globular_lum_000.fits", "m15_globular_open_000.fits"}
 for name in sorted(keep):
     if os.path.getsize(found[name]) < 9_000_000:
-        shutil.copy2(found[name], f"test_data/optical/{name}")
+        shutil.copy2(found[name], f"data/optical/{name}")
 PY
 ```
 

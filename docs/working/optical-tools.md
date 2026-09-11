@@ -15,7 +15,7 @@ local-data, documentation, solver-convergence, and TypeScript-runtime gaps.
 **Merged at:** `dev` commit `33617a4adaf89aadd006ec8be11fe6678f19d0cd` (PR #52,
 "Refactor optical processing to stateless S0–S6 contracts").
 **Scope:** the seam between the public `tools/` surface and the local data in
-`test_data/`, the execution architecture behind that seam, and the Python
+`data/`, the execution architecture behind that seam, and the Python
 runtime ports needed to make the locally shipped TypeScript algorithms callable.
 The ports preserve TypeScript numerical behavior; separate correctness
 remediation remains
@@ -31,7 +31,7 @@ that satisfies them.
 
 **The links are broken.** Tools that should run against the data bundled in this
 repository do not reach it, and the recorded ground truth in
-`test_data/afterglow/` and `test_data/fieldcal/` is readable only as a pytest
+`data/afterglow/` and `data/fieldcal/` is readable only as a pytest
 fixture, never as a tool result. The original twelve findings are supplemented
 by the reference-document drift found in the post-rollout audit, section 1.
 
@@ -75,16 +75,16 @@ Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
 | BL-1 | `describe_image_wcs` raised `TypeError` on 38 of 39 bundled frames | **closed** — fixed on `dev` before Phase 1; the parametrized sweep landed with it | — |
 | BL-2 | The agent registry omitted the local no-network tools | **closed** — Phase 1 registered `astrometry`, `calibration`, `catalogs`, `workspace` | was High |
 | BL-3 | No optical-frame lookup registry (the HR-diagram example) | **closed** — Phase 2 added `tools/optical.py` | was Medium |
-| BL-4 | No tool read `test_data/afterglow/` or `test_data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
+| BL-4 | No tool read `data/afterglow/` or `data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
 | BL-5 | `ZeropointSolution.zero_point_corr` held an absolute zero point | **closed** — Phase 1 renamed it to `zero_point` | was High |
-| BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `test_data/frame_provenance.json` | was Medium |
+| BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `data/frame_provenance.json` | was Medium |
 | BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **wiring closed; convergence planned** — Phase P6 adds explicit opt-in search bounds while retaining the parity default | was Medium |
-| BL-8 | Curated pulsar periods unreachable from the tool layer | **planned** — Phase P1 | Medium |
+| BL-8 | Curated pulsar periods unreachable from the tool layer | **closed** — Phase P1 added the curated-period map and the measure-first sourcing order | was Medium |
 | BL-9 | HR diagram: no offline path and an incomplete Python port | **planned** — Phase P5 provides explicit local-grid input and ports the remaining computational TypeScript surface | Medium |
 | BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **planned** — Phase P4 is an exact-parity Python runtime port | Medium |
-| BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **planned** — Phase P2 | Medium |
-| BL-12 | `npm run typecheck` cannot run from a fresh checkout | **planned** — Phase P2 | Low |
-| BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **planned** — Phase P3 reconciles reference documents with the landed architecture | Medium |
+| BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **closed** — Phase P2 made the archive download directory a second, recursive frame-registry root | was Medium |
+| BL-12 | `npm run typecheck` cannot run from a fresh checkout | **closed** — Phase P2 recorded the `npm install` prerequisite in `CLAUDE.md` | was Low |
+| BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **closed** — Phase P3 reconciled `CLAUDE.md`, `README.md`, the reference docs and the working index with the landed architecture | was Medium |
 
 ### BL-1 — `describe_image_wcs` raised on almost every bundled frame
 
@@ -137,9 +137,9 @@ no header metadata — so a caller could not ask "which frames are in B?" or
 `docs/pulsar-tool-pipeline.md` already cited the photometry script as the model
 the pulsar tools should follow; both halves converge on one pattern.
 
-### BL-4 — no tool read `test_data/afterglow/` or `test_data/fieldcal/`
+### BL-4 — no tool read `data/afterglow/` or `data/fieldcal/`
 
-Grepping `test_data` across `tools/` and `algorithms/` returned hits in exactly
+Grepping `data` across `tools/` and `algorithms/` returned hits in exactly
 two files: the pulsar scan directory and the photometry script's frame search
 roots. **Nothing in the tool layer read the recorded ground truth.**
 
@@ -147,11 +147,11 @@ What was sitting there unused:
 
 | Fixture | Contents |
 |---|---|
-| `test_data/fieldcal/zp_solutions/<field>/fit_data.csv` | every photometered source, with `used_for_calibration` marking the exact rows handed to `calc_solution` |
+| `data/fieldcal/zp_solutions/<field>/fit_data.csv` | every photometered source, with `used_for_calibration` marking the exact rows handed to `calc_solution` |
 | `…/fit_summary.json` | the five numbers `calc_solution` returned, plus Afterglow's own result and the declared tolerance |
-| `test_data/afterglow/fieldcal/ngc_5128_test_vals.json` | the complete Afterglow field-calibration API response |
-| `test_data/afterglow/photometry/afterglow_photometry_ngc5128_b.csv` | 303 sources with `zero_point`, `zero_point_correction`, `calibrated_zero_point` |
-| `test_data/afterglow/afterglow_web_values_master.csv` | published zero points for 73 subjects |
+| `data/afterglow/fieldcal/ngc_5128_test_vals.json` | the complete Afterglow field-calibration API response |
+| `data/afterglow/photometry/afterglow_photometry_ngc5128_b.csv` | 303 sources with `zero_point`, `zero_point_correction`, `calibrated_zero_point` |
+| `data/afterglow/afterglow_web_values_master.csv` | published zero points for 73 subjects |
 
 The capability was there; only the tool in front of it was missing. Driving the
 zero-point solver by hand from the recorded rows reproduces the recorded solve
@@ -188,14 +188,14 @@ The public model field named `zero_point_corr` was populated from
 `calc_solution`'s `m0`, which is the **absolute** zero point —
 `21.147659857998637` where the recorded correction is `1.1476598579986392`.
 Afterglow fixes `zero_point = 20` and reports a correction; Kepler computes the
-absolute value. `test_data/README.md` warns in bold that mixing the two
+absolute value. `data/README.md` warns in bold that mixing the two
 conventions "lands 20 magnitudes off in a way that looks entirely plausible" —
 and the public model name was on the wrong side of exactly that trap. Afterglow's
 own `field_cal_zero_point_corr` key keeps its name; it genuinely is a correction.
 
 ### BL-6 — the OCL report no longer joined to any bundled frame
 
-`test_data/fieldcal/ocl_filter_report.json` records a full WCS → photometry →
+`data/fieldcal/ocl_filter_report.json` records a full WCS → photometry →
 field-calibration sweep over ten Open/Clear/Lum frames, keyed by upstream
 filename. The bundled frames were renamed to `m15_globular_lum_000.fits` and
 `m15_globular_open_000.fits`, and the report carries no observation
@@ -208,7 +208,7 @@ corroborates it independently: all three trial filters for the Open frame failed
 with "no WCS solution found in FITS header", and `m15_globular_open_000.fits` is
 precisely the one bundled frame with no WCS keywords. The mapping was certain;
 it just was not written down here. It now is, as
-`test_data/frame_provenance.json`.
+`data/frame_provenance.json`.
 
 Worth noting for BL-7: upstream's OCL sweep only *read* the header WCS — it did
 not plate-solve. A working plate-solving tool takes that frame further than the
@@ -277,7 +277,7 @@ it is not re-made.
 frequency, coordinates, duration, and size — and no period. The periods live in
 two places, neither of which is a tool:
 
-- `test_data/pulsar/Curated pulsars.docx` — the reference `test_data/README.md`
+- `data/pulsar/Curated pulsars.docx` — the reference `data/README.md`
   calls "the verification reference … **This document, not ATNF, is the reference
   the tests compare against**".
 - A literal dictionary in `tests/conftest.py`, transcribed from that document's
@@ -309,7 +309,7 @@ grids from the CMD service at `stev.oapd.inaf.it` and caches them under
 What survives is narrower and squarely this document's topic: **the HR-diagram
 chain cannot run offline.** The isochrone grid is a live HTTP fetch, Gaia
 photometry is a live VizieR query, and there is no cluster fixture anywhere in
-`test_data/` — so nothing in the chain has a bundled-data path, and the
+`data/` — so nothing in the chain has a bundled-data path, and the
 repository's "default checks stay deterministic and bounded" constraint means
 none of it can be covered by the default suite. The fix is a recorded fixture
 (one cluster's Gaia rows plus one PARSEC grid), not a runtime or a data-licensing
@@ -334,7 +334,7 @@ PARSEC fetch now supplies at the cost of a network call.
 
 `algorithms/lightcurve/variable/` and `algorithms/periodogram/variable/` are
 TypeScript with no runtime, and there is no fixture data anywhere in
-`test_data/`. Astromancer ships no sample light curves. Unlike BL-9 there is no
+`data/`. Astromancer ships no sample light curves. Unlike BL-9 there is no
 external-data blocker — a variable-star light curve is an ordinary time series
 and VizieR, ASAS-SN, or ZTF can supply one. Phase P4 settles the runtime as an
 exact-parity Python port and adds a compact paired-source fixture.
@@ -376,7 +376,7 @@ established, because everything below builds on it.
 | --- | --- | --- |
 | 1 — local tools work and are reachable | #43 | The `StrListProxy` fix plus a parametrized sweep over all 39 frames; `astrometry`, `calibration`, `catalogs` and `workspace` registered; `ZeropointSolution.zero_point` renamed to say it holds an absolute zero point; a registry-coverage test that pins every public tool module as represented. |
 | 2 — the optical frame registry | #44 | `tools/optical.py` — `list_optical_frames` and `resolve_optical_frame`, header summary only with no pixel reads, backed by `KEPLER_OPTICAL_DATA_DIR`, returning `OpticalFrame`/`OpticalFrameList` with filter, telescope, WCS presence, field centre, pixel scale and size. Both registered; the photometry CLI's private resolver delegates to it. |
-| 3 — the field-calibration reference comparison | #45 | `tools/fieldcal_reference.py` — listing, loading, solving from, and comparing against the recorded solves, plus `replay_catalog_sources` for offline replay; `tools/photometry.py`'s `calibrate_zeropoint`; `test_data/frame_provenance.json` restoring the OCL join key. |
+| 3 — the field-calibration reference comparison | #45 | `tools/fieldcal_reference.py` — listing, loading, solving from, and comparing against the recorded solves, plus `replay_catalog_sources` for offline replay; `tools/photometry.py`'s `calibrate_zeropoint`; `data/frame_provenance.json` restoring the OCL join key. |
 | 4 — plate solving as a tool | #47 | `tools/wcs.py`'s `solve_astrometry`, with a timeout bound, backend-attempt reporting, fixture protection, a concurrent-file-change check, and an atomic WCS header write. Behind a `solver` marker by default. |
 
 **Names later phases depend on:** `list_optical_frames`,
@@ -681,7 +681,7 @@ Every phase inherits these, from `CLAUDE.md` and `docs/tool-architecture.md`.
   Keep solver-data and live-query tests opt-in.
 - **No generated files in the repository.** Artifacts go to
   `KEPLER_ARTIFACT_DIR` (default `artifacts/`, gitignored). Do not add FITS,
-  plots, or caches to `test_data/`; the one new fixture the remaining phases add
+  plots, or caches to `data/`; the one new fixture the remaining phases add
   is a small JSON map.
 - **Keep Python 3.14 and current dependency versions.** Dependencies are pinned
   with `==`; no phase here needs a new one.
@@ -948,7 +948,7 @@ data; neither reopens the completed stateless boundary.
 
 ### Phase P1 — Curated pulsar periods (BL-8) — Complete
 
-- [x] Create `test_data/pulsar/curated_periods.json`, transcribed from
+- [x] Create `data/pulsar/curated_periods.json`, transcribed from
       `tests/conftest.py`'s `PULSAR_PERIODS_S`, `PULSAR_ATNF` and
       `PULSAR_DIFFICULTY` tables — themselves the literature-period column of
       `Curated pulsars.docx`. The file carries a comment recording that **that
@@ -993,7 +993,7 @@ it in step when Stage 0 gains the curated period.
 commits: the tool change, its documentation, and a policy correction made during
 review.
 
-`test_data/pulsar/curated_periods.json` is the single copy of the curated
+`data/pulsar/curated_periods.json` is the single copy of the curated
 periods, difficulty ratings and ATNF cross-check; `tests/conftest.py`'s
 `PULSAR_PERIODS_S`, `PULSAR_ATNF` and `PULSAR_DIFFICULTY` read it rather than
 restating it, with their comment blocks kept. `PulsarScan` gained
@@ -1009,7 +1009,7 @@ resolve with their literature period, including the B2021+51 scan whose
 affected registry tool descriptions and the tool docstrings state the sourcing
 order as measure, compare, retune, and only then fall back to the reference.
 Folding at a literature period produces a fit to a known answer rather than a
-detection, and `test_data/README.md` leans on that distinction — the scans carry
+detection, and `data/README.md` leans on that distinction — the scans carry
 no period in-file precisely so that a successful fold is independent evidence.
 Preferring the reference by default would convert every `pulse_snr` in the
 pipeline from evidence into a restatement of its own input. The recovery path
@@ -1023,7 +1023,7 @@ directory instead, because `KEPLER_PULSAR_DATA_DIR` points the tools at another
 archive: a hardcoded path would name-match these five periods onto an operator's
 own files and stamp them with a `period_source` naming a document that describes
 different observations. The bundled case is unchanged — the map is in the
-bundled directory — and `tools/` still imports with no `test_data/` present.
+bundled directory — and `tools/` still imports with no `data/` present.
 
 **Review.** A `high`-effort code review and a security review both ran against
 the PR diff. The security review returned no findings: the PR adds no privilege
@@ -1061,9 +1061,9 @@ findings were fixed rather than deferred:
   It now plants a deliberately wrong curated period beside a copied scan, so a
   leak would move the answer rather than merely confirm it, over a narrowed grid.
 
-Findings dismissed with reasons: `test_data/` not being packaged makes
+Findings dismissed with reasons: `data/` not being packaged makes
 `curated_period_s` null in an installed copy, but the scans are not packaged
-either and `_pulsar_data_dir()` already defaults inside `test_data/`, so an
+either and `_pulsar_data_dir()` already defaults inside `data/`, so an
 installed copy has no scans to attach a period to — a pre-existing repository
 property, not one this phase introduced. The "programme SRC_NAME collides"
 scenario does not hold: `3_Pulsar_Team_B2021+51_ERIRA` embeds its own target
@@ -1079,6 +1079,9 @@ catalogued periods "beat anything a 60-second scan measures", and P1's checkbox
 above still reads "preferred over the blind search". Both now contradict the
 shipped prompt and tool descriptions; the code review flagged the `CLAUDE.md`
 line independently as the cheapest way to stop the contradiction propagating.
+**P3 deliberately did not touch either** — the standing decision was to leave
+them, and reconciling stale documentation is not licence to reverse a
+maintainer's explicit call. Reverse it by asking, not by tidying.
 
 **Verified:** default no-network suite **1653 passed, 41 skipped**;
 `compileall` over `tools algorithms tests`; `git diff --check`; all seven GitHub
@@ -1088,33 +1091,160 @@ not apply. The four LLM schema goldens were regenerated; the diff is four
 description strings per dialect with no schema shape change. The open
 tool-correctness bugs listed above were left alone.
 
-### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12)
+### Phase P2 — Archive-to-analysis loop and fresh-checkout documentation (BL-11, BL-12) — Complete
 
-**Now unblocked by the stateless rollout merge. The phase retains its
-independent scope.**
-
-- [ ] Make the optical data directory resolve to a **list** of roots: the
+- [x] Make the optical data directory resolve to a **list** of roots: the
       `KEPLER_OPTICAL_DATA_DIR` override or the default optical directory, plus
       `tools.config.FITS_DOWNLOAD_DIR` when it exists. Both the lister and the
       resolver inspect every root; the download root is recursive because MAST
       stores products below its `mastDownload/` directory.
-- [ ] Keep the existing `search_root` field reporting the primary root, and add a
+- [x] Keep the existing `search_root` field reporting the primary root, and add a
       `search_roots` list to `OpticalFrameList` so a caller can see both. An
       explicit `directory` argument still means exactly that one directory.
-- [ ] Extend the archive tools' existing download warning so it names the next
+- [x] Extend the archive tools' existing download warning so it names the next
       step — that the downloaded files are now resolvable through the frame
       registry.
-- [ ] `README.md`: the photometry-tool section says the target listing covers
+- [x] `README.md`: the photometry-tool section says the target listing covers
       targets it can run against with no live archive query. True of *resolution*,
       but field calibration is on by default and queries VizieR. State that the
       zero point needs either `--no-field-cal`, a `--zero-point` override, or the
       offline `compare_to` path.
-- [ ] `README.md` and `docs/tool-architecture.md` section 2: add the tools the
+- [x] `README.md` and `docs/tool-architecture.md` section 2: add the tools the
       baseline phases landed to the local-tool lists, and strike
       `solve_astrometry` from "next tools" now that it exists.
-- [ ] `CLAUDE.md` Commands: note that `npm run typecheck` needs `npm install`
+- [x] `CLAUDE.md` Commands: note that `npm run typecheck` needs `npm install`
       first — `node_modules/` is not present in a fresh checkout and the typecheck
       is not a CI job (BL-12). `README.md` already says so; `CLAUDE.md` does not.
+
+
+**Outcome.** Delivered on `feat/archive-frame-registry` -> `dev`, three
+commits: the tool change, the documentation corrections, and this record.
+
+`tools/optical.py` resolves a **list** of roots. The primary root is unchanged
+and `search_root` still reports it, present or not; `OpticalFrameList` gains
+`search_roots`, every root actually inspected, so a caller can tell "nothing
+downloaded yet" from "the primary root is gone". The archive download root is
+appended when it exists and searched recursively; the primary root stays flat.
+`directory_not_found` now fires only when no root exists and names each root it
+tried. A file reachable through two roots is listed once, keyed on the resolved
+path, because nothing stops an operator pointing both env vars at one place.
+An explicit `directory` argument still means exactly that one directory.
+
+**Three divergences from the checkboxes above.**
+
+*`solve_astrometry` was already struck.* P2 asked for it to come off the "next
+tools" list in `docs/tool-architecture.md` section 2. It had already been
+removed when it landed, and has its own paragraph there. The entry that was
+actually stale was `calibrate_zeropoint`, which exists as
+`tools.photometry.calibrate_zeropoint`; that is what was struck, with a line
+recording that both have landed.
+
+*`tools/casda.py` was fixed, not just its warning.* Checkbox 3 asks the archive
+tools' download warning to name the next step. For CASDA that statement would
+have been false: `download_files` was passed a literal `savedir="fits_downloads"`
+rather than `FITS_DOWNLOAD_DIR`, so an operator who set
+`KEPLER_FITS_DOWNLOAD_DIR` got downloads in one directory and a frame registry
+searching another. It uses `FITS_DOWNLOAD_DIR` now. This is a behaviour change
+in a phase that is otherwise plumbing and documentation; it is here because the
+warning cannot be made true without it.
+
+*The registry descriptions and the system prompt were amended.* Not in the
+checkboxes, but `list_optical_frames`'s `directory` parameter documented one
+default root and now has two, and the prompt's LOCAL OPTICAL FRAMES paragraph
+told the model "there is no archive behind them" with no hint that
+`search_mast(download=true)` can put a frame within reach — which is the whole
+point of the phase. The four LLM schema goldens were regenerated: two
+description strings per dialect, no schema shape change.
+
+**Scope deliberately not taken.** The glob stays `*.fits`. Astroquery can
+deliver gzipped products, and a `.fits.gz` under the download root is still
+invisible to the registry. Nothing in this repository exercises that path, the
+checkbox does not mention extensions, and widening the glob touches `_summary`'s
+`<object>_<category>_<filter>_<seq>` stem parse (`Path("x.fits.gz").stem` is
+`"x.fits"`), so it is recorded here rather than guessed at. A phase that wants
+the loop to close for every MAST mission should start there.
+
+**Review.** A `high`-effort code review and a security review both ran against
+the PR diff. The security review returned no findings: the phase adds no
+privilege boundary, no subprocess, no new network call, no deserialization and
+no secret handling; the path handling it does add reaches nothing that
+`resolve_optical_frame`'s pre-existing "explicit path" contract did not already
+reach, and `KEPLER_FITS_DOWNLOAD_DIR` is a trusted operator input. One new data
+flow was noted rather than flagged: `list_optical_frames()` now parses FITS
+headers from archive-fetched files automatically, and those header strings
+reach the model. That is the same trust level as every existing remote tool
+result, but it is the first time an archive download joins it.
+
+The code review's six substantive findings were fixed rather than deferred:
+
+- **The documented override only moved half the loop.** `tools/optical.py`
+  reads `config.FITS_DOWNLOAD_DIR` through the module, but `tools/mast.py` and
+  `tools/casda.py` bound it with a `from`-import. A host application that
+  reassigned it downloaded to one directory while the registry searched another
+  — BL-11 again, with the new warning actively claiming otherwise. The env-var
+  path worked for both, which is why nothing caught it. Both archive tools read
+  it late now.
+- **A downloaded frame could not be resolved by its filename.** The `root /
+  name` probe is flat and cannot reach a nested download; normalized matching
+  turns `"x.fits"` into `"xfits"`, which is not a substring of the stem `"x"`.
+  The docstring and the registry schema both advertise "filename", and a
+  filename is exactly what a caller copies out of an archive manifest. The
+  original test missed it by writing its frame flat in the download root.
+- **`list_photometry_targets` began advertising downloads as bundled targets**,
+  contradicting its own registry description ("no live image archive behind
+  photometry … a small, fixed set of bundled test frames"), `list_bundled_targets`'s
+  docstring, and `PhotometryTargetLibrary`'s. A CASDA radio cube in an optical
+  photometry target list is simply wrong. Scoped to the primary root through a
+  new public `primary_optical_data_dir()`.
+- **`FITS_DOWNLOAD_DIR` was never resolved**, unlike `ARTIFACT_DIR`, whose
+  comment explains precisely why a bare relative path is a hazard for something
+  handed to another caller. Now that these paths *are* the frame paths the
+  image tools take, resolved at import like its neighbour.
+- **Duplicate roots were reported twice** in `search_roots`. Collapsed, with
+  recursion **OR-ed** rather than taken from the first entry — inheriting the
+  primary root's flat search would have silently stopped finding nested
+  downloads.
+- **The isolation fixture was module-scoped**, so `test_fieldcal_reference` and
+  `test_photometry_tool_smoke` still resolved frames against whatever untracked
+  `fits_downloads/` the developer had. Moved to `tests/conftest.py`.
+
+A seventh finding is **recorded, not fixed**: `rglob` over the download root is
+unbounded, and the whole `OpticalFrameList` is serialized into the model's
+context by `tools/agent/engine.py`. After a bulk `download=True` — and
+`search_mast`'s own docstring records 121,515 products for Cas A — one
+`list_optical_frames()` call reads thousands of headers and emits a payload
+that can exhaust the context window. The exposure is real and this phase
+created it, but the fix is a `limit`/`max_frames` parameter with a truncation
+warning, mirroring `max_observations`; that changes a public tool schema and is
+a maintainer's call, not a review cleanup. **It should be the first item of
+whichever phase touches this tool next.**
+
+> **Closed** by the data-root phase below (§5, "Data root and bounded frame
+> discovery"). The maintainer chose a boundary over a parameter: recursion is
+> confined to the data directory and the cap is an operator setting
+> (`KEPLER_MAX_FRAMES`), so the public tool schema is unchanged.
+
+One earlier self-audit finding, fixed before review: `_resolve_roots` tested
+`directory is not None` where the single-root code it replaced tested `if
+directory`. `Path("")` is `Path(".")`, so an empty string — an ordinary thing
+for a model to send for an optional parameter — went from "use the defaults" to
+"search the working directory", returning an empty listing with `search_root`
+`"."`.
+
+**Verified:** default no-network suite **1672 passed, 41 skipped** (19 new
+cases in `tests/test_optical_registry.py`); `compileall` over `tools algorithms
+tests`; `git diff --check`. No `.ts` file was touched, so `npm run typecheck`
+did not apply — though BL-12's claim was confirmed directly while documenting
+it: with no `node_modules/`, the command fails with `tsc: command not found`.
+
+The new tests use an autouse fixture that points the download root at an empty
+tmp path. `fits_downloads/` is gitignored but real, and now that it is a genuine
+second search root a developer who had ever run `search_mast(..., download=True)`
+would otherwise see the bundled-frame counts move under them.
+
+**Not touched:** the BL-8 row in the status summary above still reads
+"planned — Phase P1" although P1 is complete. It belongs to that phase's
+record, not this one. *(Corrected during P3, at the maintainer's direction.)*
 
 ---
 
@@ -1126,7 +1256,7 @@ dependency on one another; P2 and P3 both edit reference documentation and
 should be coordinated or landed serially. P5 begins once the maintainer has
 supplied the PARSEC grid described in its asset gate.
 
-### Phase P3 — Reconcile reference documentation (BL-13)
+### Phase P3 — Reconcile reference documentation (BL-13) — Complete
 
 **Intent:** make the reference documents describe the stateless architecture
 that is already in `dev`, rather than telling callers to recreate deleted
@@ -1136,17 +1266,17 @@ processing-run and dependency-injection APIs.
 `docs/repository-folders.md`, `docs/extraction.md`, `tests/README.md`, and
 `docs/working/README.md`.
 
-- [ ] Replace the `algorithms.fieldcal.deps` wiring examples with the explicit
+- [x] Replace the `algorithms.fieldcal.deps` wiring examples with the explicit
       `perform_field_calibration` inputs and tool-owned query boundary.
-- [ ] Remove references to deleted run-shaped photometry adapters and WCS
+- [x] Remove references to deleted run-shaped photometry adapters and WCS
       reconstruction helpers; retain upstream names only in clearly historical
       provenance text.
-- [ ] State that one public tool call is Kepler's execution boundary and list
+- [x] State that one public tool call is Kepler's execution boundary and list
       the landed `optical`, `fieldcal_reference`, `photometry`, and `wcs` tools.
-- [ ] Correct the photometry documentation: target resolution is offline, but
+- [x] Correct the photometry documentation: target resolution is offline, but
       default field calibration can query VizieR unless callers use the
       documented offline/replay or no-field-calibration routes.
-- [ ] Update the working-document index to show S0–S6 complete and list these
+- [x] Update the working-document index to show S0–S6 complete and list these
       remaining independently deliverable closure phases.
 
 **Validation:** `rg` finds no current instruction to import
@@ -1156,6 +1286,169 @@ processing-run and dependency-injection APIs.
 
 **Exit:** current-state documents agree with the public code and the working
 index no longer describes the completed stateless rollout as pending.
+
+**Outcome.** Landed with P2 in PR #59, at the maintainer's direction — the phase
+table said P2 and P3 "should be coordinated or landed serially", and P2 had
+already completed two of P3's five checkboxes (the photometry offline/VizieR
+correction outright, and part of the landed-tool listing), so coordinating them
+into one PR discharged the constraint rather than deferring it.
+
+`algorithms/fieldcal/deps.py` is **gone** — verified against the tree, not
+inferred: `algorithms/fieldcal/` is now `field_cal.py`, `ref_mag.py`,
+`schemas.py`, `solution.py`, `__init__.py`. The `deps` wiring example in
+`CLAUDE.md` and the two paragraphs in `README.md` are replaced by the real
+signature: `perform_field_calibration(header, data, *, wcs=, catalog_sources=,
+variable_sources=, extraction_settings=|detected_sources=, photometry_settings=,
+field_cal_settings=)`. The catalog query did not move behind a different seam —
+it left the package. There is no `deps.query_catalogs` and no lazy import of
+`algorithms.query`; `algorithms/fieldcal/` opens no socket, and the tool layer
+(`tools.photometry.calibrate_zeropoint`) is the caller that queries.
+
+Two stale symbol claims were found while checking the rest:
+`algorithms.photometry.photometry.perform_photometry` does not exist —
+`run_photometry` is the module's entire `__all__` — and
+`build_wcs_for_processing_run` does not exist, `build_wcs_from_header` does.
+Both were named in `CLAUDE.md` as current API. `get_source_radec` and
+`run_source_extraction`, also named in the deleted `deps` block, do still exist
+and are now listed against the module that owns them.
+
+`docs/extraction.md` needed one current-state correction (a "now reaches the
+network through `deps.query_catalogs`" claim) and two severed-dependency rows
+reworded so "reached via `deps`" reads as what was true at extraction time
+rather than as current structure. The upstream Skynet names in that document are
+untouched — that is the provenance record.
+
+The execution-boundary statement (checkbox 3) is now in `CLAUDE.md`,
+`README.md`'s domain-ownership highlight, and `docs/tool-architecture.md`
+section 2, not only in the `solve_astrometry` paragraph where it originally
+appeared.
+
+**Deliberately not touched.** `CLAUDE.md`'s pulsar section still says catalogued
+periods "beat anything a 60-second scan measures", contradicting the shipped
+prompt. P1's outcome records that as left open **by maintainer decision**.
+Reconciling stale documentation is not licence to reverse an explicit call, so
+it stands; see the note in P1 above.
+
+**Verified:** `rg` finds no instruction to import `algorithms.fieldcal.deps`,
+construct a `ProcessingRun`, or call a deleted adapter outside clearly
+historical provenance text; `uv run --python 3.14 pytest -q`;
+`python3 -m compileall tools algorithms tests`; `git diff --check`.
+
+**Audited afterwards, and it missed one.** Re-running P3's check in a
+generalised form — import every dotted `algorithms.*`/`tools.*` symbol the
+top-level documents name, and stat every in-repo path they reference — found
+`algorithms/wcs/state.py`, which the stateless rollout deleted alongside
+`algorithms/fieldcal/deps.py`. P3 chased the second and never looked for the
+first. It was cited in three current-state places, the worst being `CLAUDE.md`'s
+extraction contract, where it was the **flagship example** of a parity quirk not
+to "fix" — and the function it named, `_clear_wcs_solution_fields`, is on
+`tests/test_repository_shape.py`'s forbidden-API list. Corrected, with a live
+example substituted (the two deliberately disagreeing catalog registries) and
+the dead one kept as a record of a quirk that is gone rather than preserved.
+`docs/repository-folders.md` listed `state.py` among `algorithms/wcs/`'s current
+files and omitted `results.py`, so that list was wrong in both directions. A
+`deps.query_catalogs` mention also survived in `tools/photometry.py`'s
+docstring: P3 swept the documentation tree and not tool docstrings. The lesson
+for later phases is in the method — a reconciliation that greps for the symbol
+it already knows about will only ever find that symbol.
+
+### Data root and bounded frame discovery — Complete
+
+**Not a numbered phase.** This closes the finding P2 recorded and deferred (see
+the block quote in §4), on the maintainer's instruction to bind the recursive
+walk to the data directory, and renames that directory in the same breath.
+
+`test_data/` is now `data/`: it holds the archive download root, so naming it
+after the test suite had stopped being true. The rename carried a trap worth
+recording. `.gitignore` already contained a bare `data/` for local scratch, so
+renaming into it would have made git ignore the whole ~175 MB fixture tree —
+and because files already tracked stay tracked, nothing would have looked wrong
+until someone added a fixture that silently never got committed.
+`tests/test_repository_shape.py` now asserts no such pattern exists, and
+`.gitignore` carries a comment saying why.
+
+The bound is two settings, both operator-level rather than tool parameters:
+
+- **`KEPLER_DATA_DIR`** (default `<repo>/data`) is the data root *and* the
+  recursion boundary. `KEPLER_FITS_DOWNLOAD_DIR` defaults inside it, rather
+  than to a working-directory-relative `fits_downloads` that moved with
+  whatever directory the process started in. `tools/optical.py` walks the
+  download root recursively only while it resolves inside the data root;
+  outside it the directory is still *searched*, but flat, with a
+  `download_root_outside_data_dir` warning. Downgrading rather than refusing is
+  deliberate: CASDA's `download_files` writes flat, so a refusal would lose
+  those products. Containment is decided on the resolved path, so a symlink out
+  of the tree does not buy a walk of wherever it lands.
+- **`KEPLER_MAX_FRAMES`** (default 200, rejected below 1) caps how many frames
+  one listing reads headers for and returns **per root**, with a
+  `listing_truncated` warning naming the total. It is applied *before*
+  `_summary`, so it bounds the FITS header reads rather than trimming the
+  result after paying for them. A lone match resolved out of a truncated
+  listing carries a `resolved_from_truncated_listing` warning — it was found
+  among the frames that were read, not the frames that exist, and uncapped the
+  name might have been ambiguous.
+
+Keeping both out of the tool schema is what let the four LLM schema goldens stay
+structurally unchanged; only two description strings moved.
+
+**One consequence the plan did not anticipate.** `tools/wcs.py` refuses to write
+a solved header back into a bundled fixture, and that guard was the entire
+`test_data/` tree. With the download root moving *inside* `data/`, it would have
+begun refusing writes to downloaded frames — reporting an archive product as a
+bundled fixture, and closing the archive → analysis loop BL-11 exists to open.
+The guard now names the four tracked fixture subtrees and reads no setting —
+see the review record below for why the first draft's "data minus the download
+root" was not good enough.
+
+**Review record.** A security review found nothing and empirically exercised
+the write guard against `..` traversal and a symlink planted inside the
+download root. A code review returned fifteen findings; thirteen were fixed,
+one was a docstring correction, and one is a process point left to the
+maintainer. The ones that changed behaviour:
+
+- **The write guard could be switched off by one environment variable.** The
+  first draft exempted whatever `FITS_DOWNLOAD_DIR` named, so
+  `KEPLER_FITS_DOWNLOAD_DIR=<repo>/data` — a plausible misconfiguration —
+  disabled it for every fixture. The reviewer proposed requiring the download
+  root to be strictly inside and disjoint from the fixtures; naming the four
+  subtrees directly is simpler and cannot be misconfigured. A test asserts the
+  tuple matches the directories present.
+- **The cap filled primary-first**, so an operator archive larger than the cap
+  starved the download root and re-created BL-11 silently. It is per root now.
+- **"Narrow with `directory=`" was circular for the case the cap exists for**:
+  an explicit directory is searched flat, and MAST nests. `search_mast`'s
+  download warning now names the leaf directories products landed in, and the
+  hints say to pass one of those.
+- **`Path.resolve()` raises `RuntimeError`, not `OSError`, on a symlink loop
+  under Python 3.12 — the version CI ran at the time (bumped to 3.14 since;
+  3.12 remains the `pyproject.toml` floor).** Every `except OSError` around a
+  resolve was wrong there and dead on 3.13+. Lifted into
+  `tools.config.within`/`safe_resolve`, catching both, used by both modules.
+- **`list_photometry_targets` was silently capped** — it went through the
+  header lister for what is an index of filenames. It reads no headers now and
+  is never capped.
+- **Under truncation an ambiguous name came back as a unique match.** The frame
+  now carries `resolved_from_truncated_listing`; the containment warning no
+  longer rides onto bundled-frame resolves, where it described the operator's
+  configuration rather than the match.
+- **The default download root moved** from `<cwd>/fits_downloads` with no
+  notice. A non-empty directory at the old repository-root location now
+  produces a `legacy_download_root_present` warning.
+- `KEPLER_MAX_FRAMES=0` returned empty listings and a negative value sliced
+  from the wrong end; rejected below 1 at load. Per-file `resolve()` for
+  dedup replaced by `(st_dev, st_ino)` from the one `stat` already needed.
+  The system prompt's "listed on the next call" gained the cap caveat.
+
+Not acted on: the observation that this PR bundles a fixture rename, two
+behaviour changes and a documentation correction, against `CLAUDE.md`'s
+"keep PRs narrow". The bundling was the maintainer's direction; the point is
+recorded here for the maintainer to weigh.
+
+**Verified:** default no-network suite **1694 passed, 41 skipped**;
+`compileall` over `tools algorithms tests`; `git diff --check`; four LLM schema
+goldens regenerated (description strings only); `git check-ignore` confirming
+a download product under `data/fits_downloads/` is ignored while
+`data/optical/*.fits` and `data/README.md` are not.
 
 ### Phase P4 — Exact-parity Python variable-star runtime (BL-10)
 
@@ -1179,7 +1472,7 @@ pulsar pattern: bounded previews inline, complete tables as artifacts, and
 typed warnings/errors at the tool boundary.
 
 - [ ] Add a compact, two-source variable-light-curve CSV fixture under
-      `test_data/variable_star/`, using the extracted parser input columns
+      `data/variable_star/`, using the extracted parser input columns
       `id`, `mjd`, `mag`, and `mag_error`, plus a README naming it a parity
       fixture rather than a catalog download.
 - [ ] Port every computational variable TypeScript symbol needed by the runtime:
@@ -1356,7 +1649,7 @@ Node-subprocess alternative and the proposed cluster registry are rejected.
 | | HR diagram | Variable star |
 |---|---|---|
 | Runtime | **now exists** on `dev` — `algorithms/hrdiagram_py/` plus seven registered tools | none — nothing executes the TypeScript |
-| Input data | none in `test_data/` | none in `test_data/` |
+| Input data | none in `data/` | none in `data/` |
 | Catalog access | solvable — `algorithms/query` already queries VizieR for Gaia, 2MASS, APASS, WISE and MWSC | solvable — VizieR, ASAS-SN, ZTF |
 | Model grids | **fetched live** from the PARSEC CMD service, with no recorded fixture | not applicable |
 
@@ -1410,7 +1703,7 @@ a public cluster registry. M67 remains test-only.
 ### 7.2 Asset-gated inputs
 
 **Cluster photometry and variable-star light curves.** There is none in
-`test_data/`. P5 is specifically gated on the maintainer supplying a local PARSEC
+`data/`. P5 is specifically gated on the maintainer supplying a local PARSEC
 grid, not on recording a cluster fixture or introducing a public lookup registry.
 
 **UCAC4/UCAC5 catalog data.** Absent from this host entirely. The ATLAS triangle
@@ -1442,7 +1735,7 @@ cone response so catalog selection, including the 263 unmatched rows, becomes
 reproducible.
 
 **The 36 frames above the 9 MB cut-off.** The Afterglow web table covers 73
-subjects (~1.5 GB); `test_data/optical/` carries the 37 under 9 MB plus the two
+subjects (~1.5 GB); `data/optical/` carries the 37 under 9 MB plus the two
 OCL frames. Widening coverage means adding large incompressible binaries to plain
 git, permanently. This rollout does not widen that set: P8 uses Git LFS only for
 the three NGC 5286 B frames above.
@@ -1487,7 +1780,7 @@ frame.
   — the open pulsar tool bugs P1 must leave alone.
 * [`../analysis/algorithm-remediation-plan.md`](../analysis/algorithm-remediation-plan.md)
   — algorithm correctness, deliberately out of scope.
-* `test_data/README.md` — the zero-point convention warning behind BL-5, and the
+* `data/README.md` — the zero-point convention warning behind BL-5, and the
   Git LFS note behind section 7.3.
 * [tui-harness.md](tui-harness.md) — unblocked by the stateless rollout but
   separately scoped; it owns the photometry-pipeline rename that must operate on

@@ -2,7 +2,7 @@
 
 This is the load-bearing test of the whole suite. ``calc_solution`` was copied
 verbatim out of ``skynet_db/runners/utils.py`` (lines 468-603), and
-``test_data/fieldcal/zp_solutions/`` holds four *complete* Skynet field
+``data/fieldcal/zp_solutions/`` holds four *complete* Skynet field
 calibrations — the exact source rows that were fed in, and the exact five
 numbers that came out. So this is not a self-consistency check against values
 Kepler generated: it compares Kepler's extracted solver against output recorded

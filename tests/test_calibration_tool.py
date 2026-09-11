@@ -11,7 +11,7 @@ scatter input; see
 
 BL-5: the result field was named ``zero_point_corr`` while holding an
 *absolute* zero point. Afterglow fixes ``zero_point = 20`` and reports a
-correction; Kepler computes the absolute value. ``test_data/README.md`` warns
+correction; Kepler computes the absolute value. ``data/README.md`` warns
 that confusing the two "lands 20 magnitudes off in a way that looks entirely
 plausible", so the public name has to be unambiguous -- it is now
 ``zero_point``.
@@ -29,7 +29,7 @@ import pytest
 from tools.calibration import solve_zeropoint_from_measurements
 
 ROOT = Path(__file__).resolve().parents[1]
-SOLVE = ROOT / "test_data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002"
+SOLVE = ROOT / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002"
 
 # Real scatter around a zero point near 2.1 (not an exact constant offset) --
 # a constant offset reproduces the zero-scatter domain-error edge case this
