@@ -33,6 +33,11 @@ __all__ = [
     "PulsarFoldedProfile",
     "PulsarSonification",
     "PulsarPlot",
+    "VariableStarFixture",
+    "VariableStarFixtureList",
+    "VariableStarLightCurve",
+    "VariableStarPeriodogram",
+    "VariableStarFoldedLightCurve",
     "coerce_optional_int",
 ]
 
@@ -349,6 +354,67 @@ class PulsarScanList(KeplerToolModel):
     scans: list[PulsarScan] = Field(default_factory=list)
     search_root: str
     count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class VariableStarFixture(KeplerToolModel):
+    """One bundled, paired-source CSV available to the variable-star tools."""
+
+    path: str
+    name: str
+    source_ids: list[str] = Field(default_factory=list)
+    source_count: int = 0
+    row_count: int = 0
+
+
+class VariableStarFixtureList(KeplerToolModel):
+    """Stage 0 variable-star fixture discovery result."""
+
+    fixtures: list[VariableStarFixture] = Field(default_factory=list)
+    search_root: str
+    count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class VariableStarLightCurve(KeplerToolModel):
+    """Stage 1 merged paired-source photometry."""
+
+    file: FileMetadata
+    artifact: ArtifactRef | None = None
+    rows_read: int = 0
+    rows_merged: int = 0
+    source_ids: list[str] = Field(default_factory=list)
+    preview: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class VariableStarPeriodogram(KeplerToolModel):
+    """Stage 2 fixed-grid error-weighted variable-star periodogram."""
+
+    file: FileMetadata
+    artifact: ArtifactRef | None = None
+    samples: int = 0
+    start_period: float | None = None
+    end_period: float | None = None
+    variable_star: str | None = None
+    preview: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class VariableStarFoldedLightCurve(KeplerToolModel):
+    """Stage 3 phase-folded differential variable-star photometry."""
+
+    file: FileMetadata
+    artifact: ArtifactRef | None = None
+    period: float | None = None
+    phase: float | None = None
+    display_periods: int | None = None
+    rows_folded: int = 0
+    preview: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

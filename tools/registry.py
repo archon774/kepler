@@ -49,6 +49,13 @@ from tools.pulsar import (
     load_pulsar_lightcurve,
     sonify_pulsar,
 )
+from tools.variable_star import (
+    compute_variable_star_periodogram,
+    fold_variable_star_lightcurve,
+    list_variable_star_fixtures,
+    load_variable_star_lightcurve,
+    resolve_variable_star_fixture,
+)
 from tools.photometry import (
     calibrate_zeropoint,
     list_photometry_targets,
@@ -1381,6 +1388,60 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "list_variable_star_fixtures",
+        "description": "List the compact paired-source variable-star CSV fixtures available offline.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "resolve_variable_star_fixture",
+        "description": "Resolve an offline variable-star fixture by name or CSV path.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "Fixture name or CSV path."}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "load_variable_star_lightcurve",
+        "description": "Validate and merge a paired-source variable-star CSV into an ECSV artifact.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Paired-source CSV path."}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "compute_variable_star_periodogram",
+        "description": "Compute the extracted error-weighted variable-star periodogram from a light-curve artifact.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Stage-1 ECSV artifact path."},
+                "variable_star": {"type": "string", "enum": ["source1", "source2"]},
+                "reference_star_magnitude": {"type": "number"},
+                "start_period": {"type": "number", "default": 0.1},
+                "end_period": {"type": "number", "default": 1.0},
+            },
+            "required": ["path", "variable_star", "reference_star_magnitude"],
+        },
+    },
+    {
+        "name": "fold_variable_star_lightcurve",
+        "description": "Fold a variable-star light-curve artifact at an explicit period.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Stage-1 ECSV artifact path."},
+                "variable_star": {"type": "string", "enum": ["source1", "source2"]},
+                "reference_star_magnitude": {"type": "number"},
+                "period": {"type": "number", "exclusiveMinimum": 0},
+                "phase": {"type": "number", "default": 0.0},
+                "display_periods": {"type": "integer", "enum": [1, 2], "default": 2},
+            },
+            "required": ["path", "variable_star", "reference_star_magnitude", "period"],
+        },
+    },
+    {
         "name": "calibrate_zeropoint",
         "description": "Solve a photometric zero point from a local FITS "
         "frame's own pixels -- source extraction, aperture photometry, catalog "
@@ -1454,6 +1515,11 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "fold_pulsar_lightcurve": fold_pulsar_lightcurve,
     "plot_pulsar": plot_pulsar,
     "sonify_pulsar": sonify_pulsar,
+    "list_variable_star_fixtures": list_variable_star_fixtures,
+    "resolve_variable_star_fixture": resolve_variable_star_fixture,
+    "load_variable_star_lightcurve": load_variable_star_lightcurve,
+    "compute_variable_star_periodogram": compute_variable_star_periodogram,
+    "fold_variable_star_lightcurve": fold_variable_star_lightcurve,
     "list_optical_frames": list_optical_frames,
     "resolve_optical_frame": resolve_optical_frame,
     "describe_image_wcs": describe_image_wcs,
