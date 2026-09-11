@@ -1,17 +1,18 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`, and closure phase P1 is complete. The remaining closure phases are
-planned below; they are independently deliverable unless a phase states an
-asset prerequisite.
+`dev`, as are closure phases P1–P4. The remaining closure phases are planned
+below; they are independently deliverable unless a phase states an asset
+prerequisite.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
-consolidation), 2026-09-09 (completion audit and approved closure rollout)
+consolidation), 2026-09-09 (completion audit and approved closure rollout),
+2026-09-11 (P4 completion)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
 prerequisite — broken-links Phase 4 — merged as PR #47. P5, P8, and P9 have
 separate maintainer- or operator-supplied asset gates.
 **Unblocks:** The stateless boundary required by every phase of
 [tui-harness.md](tui-harness.md) is complete. The remaining phases close
-local-data, documentation, solver-convergence, and TypeScript-runtime gaps.
+local-data and solver-convergence gaps.
 **Merged at:** `dev` commit `33617a4adaf89aadd006ec8be11fe6678f19d0cd` (PR #52,
 "Refactor optical processing to stateless S0–S6 contracts").
 **Scope:** the seam between the public `tools/` surface and the local data in
@@ -68,7 +69,8 @@ merged.
 
 ### Status summary
 
-Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
+Status is **as of 2026-09-11 on `dev`**, after PRs #43, #44, #45, #47, #52,
+#59, and #60.
 
 | # | Broken link | Status | Severity |
 |---|---|---|---|
@@ -81,7 +83,7 @@ Status is **as of 2026-09-09 on `dev`**, after PRs #43, #44, #45, #47, and #52.
 | BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **wiring closed; convergence planned** — Phase P6 adds explicit opt-in search bounds while retaining the parity default | was Medium |
 | BL-8 | Curated pulsar periods unreachable from the tool layer | **closed** — Phase P1 added the curated-period map and the measure-first sourcing order | was Medium |
 | BL-9 | HR diagram: no offline path and an incomplete Python port | **planned** — Phase P5 provides explicit local-grid input and ports the remaining computational TypeScript surface | Medium |
-| BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **planned** — Phase P4 is an exact-parity Python runtime port | Medium |
+| BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **closed** — PR #60 added the exact-parity Python runtime and compact fixture | Medium |
 | BL-11 | Archive downloads dead-end — no tool consumes a downloaded FITS path | **closed** — Phase P2 made the archive download directory a second, recursive frame-registry root | was Medium |
 | BL-12 | `npm run typecheck` cannot run from a fresh checkout | **closed** — Phase P2 recorded the `npm install` prerequisite in `CLAUDE.md` | was Low |
 | BL-13 | Reference documentation still instructs callers to use removed stateless-rollout APIs | **closed** — Phase P3 reconciled `CLAUDE.md`, `README.md`, the reference docs and the working index with the landed architecture | was Medium |
@@ -332,12 +334,13 @@ PARSEC fetch now supplies at the cost of a network call.
 
 ### BL-10 — variable-star light curve and periodogram
 
-`algorithms/lightcurve/variable/` and `algorithms/periodogram/variable/` are
-TypeScript with no runtime, and there is no fixture data anywhere in
-`data/`. Astromancer ships no sample light curves. Unlike BL-9 there is no
-external-data blocker — a variable-star light curve is an ordinary time series
-and VizieR, ASAS-SN, or ZTF can supply one. Phase P4 settles the runtime as an
-exact-parity Python port and adds a compact paired-source fixture.
+`algorithms/lightcurve/variable/` and `algorithms/periodogram/variable/` remain
+the TypeScript provenance for the variable-star algorithms. P4 added their
+exact-parity Python runtime in `algorithms/variable_star/`, its public tools,
+and a compact paired-source fixture in `data/variable_star/` (PR #60).
+Astromancer ships no sample light curves. Unlike BL-9 there is no external-data
+blocker — a variable-star light curve is an ordinary time series and VizieR,
+ASAS-SN, or ZTF can supply one.
 
 ### BL-11 — archive downloads dead-end
 
@@ -1452,6 +1455,8 @@ a download product under `data/fits_downloads/` is ignored while
 
 ### Phase P4 — Exact-parity Python variable-star runtime (BL-10)
 
+**Status:** Complete — merged to `dev` as PR #60.
+
 **Intent:** expose the existing variable-star light-curve, fold, and
 error-weighted periodogram algorithms through Python tools without changing the
 TypeScript mathematical behavior.
@@ -1471,23 +1476,23 @@ compute the periodogram, and fold at an explicit period. Results follow the
 pulsar pattern: bounded previews inline, complete tables as artifacts, and
 typed warnings/errors at the tool boundary.
 
-- [ ] Add a compact, two-source variable-light-curve CSV fixture under
+- [x] Add a compact, two-source variable-light-curve CSV fixture under
       `data/variable_star/`, using the extracted parser input columns
       `id`, `mjd`, `mag`, and `mag_error`, plus a README naming it a parity
       fixture rather than a catalog download.
-- [ ] Port every computational variable TypeScript symbol needed by the runtime:
+- [x] Port every computational variable TypeScript symbol needed by the runtime:
       `mergeSourcesByMjd`, `errorMSE`, `VariableData`, variable-source choice,
       differential values and error bars, JD range, period folding,
       `getPeriodStep`, `getChartPeriodogramDataArray`, and
       `lombScargleWithError` with its supporting vector operations.
-- [ ] Preserve the original source semantics, including the documented
+- [x] Preserve the original source semantics, including the documented
       error-weighting normalization, `errorMSE` calculation, empty-input and
       fold-edge behavior. The public tool may reject malformed file paths and
       invalid schema values, but must not change valid-input algorithm results.
-- [ ] Add the Stage 0 list/resolve functions, load/periodogram/fold tools,
+- [x] Add the Stage 0 list/resolve functions, load/periodogram/fold tools,
       registry entries, and artifact writing. Do not add browser playback,
       Highcharts rendering, Angular/RxJS state, forms, or persistence APIs.
-- [ ] Add parity tests with complete expected rows at each stage, including
+- [x] Add parity tests with complete expected rows at each stage, including
       merge ordering, uncertainty values, differential magnitudes, period-fold
       ordering, and the weighted periodogram samples. Pin documented quirks as
       parity behavior rather than silently correcting them.
@@ -1496,7 +1501,7 @@ typed warnings/errors at the tool boundary.
 TypeScript provenance; `uv run --python 3.14 pytest -q`; Python compilation;
 and `git diff --check`.
 
-**Exit:** a caller can discover the bundled fixture, run the entire variable
+**Exit:** complete — a caller can discover the bundled fixture, run the entire variable
 pipeline offline, and obtain Python results with documented TypeScript parity.
 
 ### Phase P5 — Complete Python HR-diagram port and local-grid operation (BL-9)
@@ -1693,7 +1698,7 @@ tractable — and would be precisely the failure mode that comment warns about.
 settles the follow-up: callers may explicitly opt in to a search radius and
 minimum/maximum pixel-scale bounds; omitted controls retain the all-sky defaults.
 
-**The TypeScript runtime for the variable-star tools (BL-10).** P4 selects a
+**The TypeScript runtime for the variable-star tools (BL-10).** P4 established a
 Python-only, exact-parity port with artifact output and no browser/UI rendering.
 
 **Whether Kepler carries, fetches, or requires an isochrone grid.** P5 requires a
