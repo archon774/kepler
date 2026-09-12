@@ -8,13 +8,20 @@ layer up in :mod:`tools.config`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-__all__ = ["GridUnavailableError", "LegacyIsochrone", "load_isochrone", "load_tracks"]
+from tools import config
+
+__all__ = ["GridUnavailableError", "load_isochrone", "load_tracks"]
+
+
+# The supplied tracks are about 100 KiB. These caps keep a malformed
+# operator-installed ``.npy`` file from exhausting the tool process.
+MAX_TRACK_BYTES = 8 * 1024 * 1024
+MAX_TRACK_ROWS = 100_000
 
 
 # PORTED: filter names accepted by Astromancer's
@@ -33,17 +40,48 @@ class GridUnavailableError(RuntimeError):
     """The configured local model cannot satisfy an isochrone request."""
 
 
-@dataclass(frozen=True)
-class LegacyIsochrone:
-    """The former backend response plus the exact local source file."""
-
-    data: list[list[float]]
-    i_skip: int
-    path: Path
+def _configured_directory() -> Path:
+    if config.ISOCHRONE_DIR is None:
+        raise GridUnavailableError(
+            "Girardi grid directory is unavailable; set KEPLER_ISOCHRONE_DIR "
+            "to an unpacked grid directory"
+        )
+    directory = config.ISOCHRONE_DIR
+    if not directory.is_dir():
+        raise GridUnavailableError(
+            "Girardi grid directory is unavailable; set KEPLER_ISOCHRONE_DIR "
+            "to an unpacked grid directory"
+        )
+    return directory
 
 
 def _track_path(grid_dir: Path, age: float, metallicity: float) -> Path:
     return grid_dir / f"Girardi_{age:.2f}_{metallicity:.2f}.npy"
+
+
+def _load_track(directory: Path, age: float, metallicity: float) -> np.ndarray:
+    path = _track_path(directory, age, metallicity)
+    if not path.is_file():
+        raise GridUnavailableError(f"required exact Girardi track {path.name} is missing")
+    try:
+        if path.stat().st_size > MAX_TRACK_BYTES:
+            raise GridUnavailableError(
+                f"Girardi track {path.name} exceeds the maximum size of {MAX_TRACK_BYTES} bytes"
+            )
+        track = np.load(path, allow_pickle=False, mmap_mode="r")
+    except (OSError, ValueError) as exc:
+        raise GridUnavailableError(f"could not read Girardi track {path.name}: {exc}") from exc
+    if (
+        track.ndim != 2
+        or track.shape[1] != 23
+        or track.shape[0] > MAX_TRACK_ROWS
+        or not np.issubdtype(track.dtype, np.number)
+    ):
+        raise GridUnavailableError(
+            f"Girardi track {path.name} must be a numeric two-dimensional array with 23 columns "
+            f"and at most {MAX_TRACK_ROWS} rows"
+        )
+    return track
 
 
 def _column(filter_name: str) -> int:
@@ -57,57 +95,35 @@ def _column(filter_name: str) -> int:
 
 
 def load_isochrone(
-    grid_dir: str | Path,
     *,
     age: float,
     metallicity: float,
     blue_filter: str,
     red_filter: str,
     lum_filter: str,
-) -> LegacyIsochrone:
+) -> dict[str, list[list[float]] | int]:
     """Return one exact local Girardi track in Astromancer response shape.
 
     No age/metallicity interpolation or nearest-track fallback occurs. The
     source arrays do not carry Astromancer's server-side discontinuity metadata,
-    so ``i_skip`` is zero (no inserted plot break).
+    so ``iSkip`` is zero (no inserted plot break).
     """
-
-    directory = Path(grid_dir).expanduser()
-    if not directory.is_dir():
-        raise GridUnavailableError(
-            f"Girardi grid directory {directory} is unavailable; set "
-            "KEPLER_ISOCHRONE_DIR to an unpacked grid directory"
-        )
 
     blue_column = _column(blue_filter)
     red_column = _column(red_filter)
     lum_column = _column(lum_filter)
-    path = _track_path(directory, age, metallicity)
-    if not path.is_file():
-        raise GridUnavailableError(
-            f"required exact Girardi track {path.name} is missing from {directory}"
-        )
-    try:
-        track = np.load(path, allow_pickle=False)
-    except (OSError, ValueError) as exc:
-        raise GridUnavailableError(f"could not read Girardi track {path}: {exc}") from exc
-    if track.ndim != 2 or track.shape[1] != 23 or not np.issubdtype(track.dtype, np.number):
-        raise GridUnavailableError(
-            f"Girardi track {path} must be a numeric two-dimensional array with 23 columns"
-        )
+    track = _load_track(_configured_directory(), age, metallicity)
 
-    return LegacyIsochrone(
-        data=[
+    return {
+        "data": [
             [float(row[blue_column] - row[red_column]), float(row[lum_column])]
             for row in track
         ],
-        i_skip=0,
-        path=path,
-    )
+        "iSkip": 0,
+    }
 
 
 def load_tracks(
-    grid_dir: str | Path,
     *,
     ages: list[float],
     metallicity: float,
@@ -118,28 +134,10 @@ def load_tracks(
     source row's order inside an individual legacy track.
     """
 
-    directory = Path(grid_dir).expanduser()
-    if not directory.is_dir():
-        raise GridUnavailableError(
-            f"Girardi grid directory {directory} is unavailable; set "
-            "KEPLER_ISOCHRONE_DIR to an unpacked grid directory"
-        )
-
     columns = ["logAge", "MH", *list(_FILTER_COLUMNS), "MH_repeat"]
     frames: list[pd.DataFrame] = []
+    directory = _configured_directory()
     for age in ages:
-        path = _track_path(directory, age, metallicity)
-        if not path.is_file():
-            raise GridUnavailableError(
-                f"required exact Girardi track {path.name} is missing from {directory}"
-            )
-        try:
-            track = np.load(path, allow_pickle=False)
-        except (OSError, ValueError) as exc:
-            raise GridUnavailableError(f"could not read Girardi track {path}: {exc}") from exc
-        if track.ndim != 2 or track.shape[1] != 23 or not np.issubdtype(track.dtype, np.number):
-            raise GridUnavailableError(
-                f"Girardi track {path} must be a numeric two-dimensional array with 23 columns"
-            )
+        track = _load_track(directory, age, metallicity)
         frames.append(pd.DataFrame(track, columns=columns))
     return pd.concat(frames, ignore_index=True)

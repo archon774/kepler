@@ -392,7 +392,6 @@ def fit_and_compare_hr_diagram(
             members_csv_path=_output_path(f"{stem}_members", ".csv"),
             out_png=_output_path(f"hr_{stem}", ".png"),
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
-            grid_dir=config.ISOCHRONE_DIR,
         )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
@@ -446,7 +445,6 @@ def run_full_hr_pipeline(
             members, params, cluster_name,
             members_csv_path=_output_path(f"{stem}_members", ".csv"),
             out_png=_output_path(f"hr_{stem}", ".png"),
-            grid_dir=config.ISOCHRONE_DIR,
         )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
@@ -510,7 +508,6 @@ def run_full_hr_pipeline_from_catalog(
             members_csv_path=_output_path(f"{stem}_members", ".csv"),
             out_png=_output_path(f"hr_{stem}", ".png"),
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
-            grid_dir=config.ISOCHRONE_DIR,
         )
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
