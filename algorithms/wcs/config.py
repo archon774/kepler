@@ -19,6 +19,8 @@ Callers with their own configuration can pass their object to
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 
 class SolverSettings:
     """Duck-typed stand-in for the five keys the WCS backends read.
@@ -49,4 +51,50 @@ class SolverSettings:
         self.ATLAS_TIMEOUT_S = atlas_timeout_s
 
 
-__all__ = ["SolverSettings"]
+@dataclass(frozen=True)
+class WcsSearchBounds:
+    """Optional, caller-supplied bounds on the plate-solve search (P6).
+
+    Post-extraction seam. Upstream ``solve_wcs`` builds a fresh
+    ``WcsCalibrationSettings()`` on every call and searches all-sky
+    (``radius=180``) over 0.1–60 arcsec/px; its ``PlateSolveSettings`` exposes
+    only ``sip_order`` and ``crpix_center`` on the stated grounds that an
+    observer narrowing the search would silently cause misses. That default is
+    parity and is untouched: a field left ``None`` keeps the extracted value,
+    so ``WcsSearchBounds()`` is the same call as passing nothing.
+
+    * ``radius_deg`` — search radius around the frame's own pointing hint;
+      ``180`` is all-sky. A radius below 180 needs a hint to anchor on, and
+      ``solve_wcs`` refuses (``SearchRadiusWithoutHint``) when the header
+      yields none rather than widening back to all-sky behind the caller.
+    * ``min_scale_arcsec`` / ``max_scale_arcsec`` — pixel-scale window in
+      arcsec/px. Either may be given alone; the other keeps its default. An
+      explicit window is used verbatim by both backends: the ATLAS branch's
+      narrowing around the header's pixel-scale estimate is skipped, because
+      a caller overriding the window is doing so precisely when that estimate
+      cannot be trusted.
+
+    Range checking is upstream's own (``wcs.py``): the values land on the
+    settings object before its ``radius > 0`` and ``min_scale < max_scale``
+    checks run.
+    """
+
+    radius_deg: float | None = None
+    min_scale_arcsec: float | None = None
+    max_scale_arcsec: float | None = None
+
+    @property
+    def explicit(self) -> tuple[str, ...]:
+        """Names of the bounds the caller actually set."""
+        return tuple(
+            name
+            for name in ("radius_deg", "min_scale_arcsec", "max_scale_arcsec")
+            if getattr(self, name) is not None
+        )
+
+    @property
+    def scale_window_is_explicit(self) -> bool:
+        return self.min_scale_arcsec is not None or self.max_scale_arcsec is not None
+
+
+__all__ = ["SolverSettings", "WcsSearchBounds"]

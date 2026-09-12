@@ -7,7 +7,10 @@
 # Numerical/search behavior, constants, and the legacy-Afterglow parity notes
 # remain unchanged. The backend-config builder and main entry point now accept
 # caller-scoped timeout/config and diagnostic-list plumbing for
-# tools.wcs.solve_astrometry. See docs/extraction.md, WCS.
+# tools.wcs.solve_astrometry, and (P6) an opt-in `search_bounds` override that
+# is applied to the freshly built WcsCalibrationSettings exactly where
+# `solve_settings` already is; every `search_bounds`/`SearchRadiusWithoutHint`
+# line below is post-extraction. See docs/extraction.md, WCS.
 
 from __future__ import annotations
 
@@ -52,6 +55,7 @@ from algorithms.skylib_lite.astrometry.anet.backend import (
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
 from algorithms.skylib_lite.util.fits import get_fits_exp_length, get_fits_time
 
+from .config import WcsSearchBounds
 from .results import WcsSolveMetadata, WcsSolveResult
 # EXTRACTED: was `from skynet_db.runners.common.schemas import ...` and
 # `from skynet_sdk.schemas import PlateSolveSettings` — the WCS-related models
@@ -103,6 +107,17 @@ WCS_REGEX = re.compile(
 )
 
 _OBS_TIME_KEYS = ("DATE-OBS", "MJD-OBS", "DATEREF", "MJDREFI", "MJDREFF")
+
+
+class SearchRadiusWithoutHint(ValueError):
+    """A bounded ``WcsSearchBounds.radius_deg`` with no pointing hint to centre it on.
+
+    Post-extraction. The astrometry.net backend passes ``--ra/--dec/--radius``
+    only when the radius is below 180 and then reads the hint unconditionally;
+    the ATLAS backend does the same. Raised before either runs so the caller
+    hears "nothing to anchor the radius on" instead of a backend ``TypeError``,
+    and so the solve is never silently widened back to all-sky.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +478,7 @@ def solve_wcs(
         extraction_settings: SourceExtractionSettings | None = None,
         solve_settings: "PlateSolveSettings | None" = None,
         solver_settings=None,
+        search_bounds: WcsSearchBounds | None = None,
         solver_attempts: list[str] | None = None,
         solver_failures: list[str] | None = None,
 ) -> WcsSolveResult:
@@ -477,6 +493,19 @@ def solve_wcs(
     if solve_settings is not None:
         wcs_settings.sip_order = solve_settings.sip_order
         wcs_settings.crpix_center = solve_settings.crpix_center
+
+    # P6: explicit search bounds. The rationale above still holds for the
+    # *default* — nothing here changes it — but an observer who deliberately
+    # knows a bounded region may say so. Only the fields they set replace the
+    # extracted values, and they do so before upstream's range checks below,
+    # so those checks cover the overrides too.
+    if search_bounds is not None:
+        if search_bounds.radius_deg is not None:
+            wcs_settings.radius = search_bounds.radius_deg
+        if search_bounds.min_scale_arcsec is not None:
+            wcs_settings.min_scale = search_bounds.min_scale_arcsec
+        if search_bounds.max_scale_arcsec is not None:
+            wcs_settings.max_scale = search_bounds.max_scale_arcsec
 
     if wcs_settings.ra_hours is not None and not 0 <= wcs_settings.ra_hours < 24:
         raise ValueError('wcs_settings.ra_hours', 'RA not within range [0,24)', 422)
@@ -576,6 +605,25 @@ def solve_wcs(
     search_radius_deg = wcs_settings.radius
     anet_min_scale = wcs_settings.min_scale
     anet_max_scale = wcs_settings.max_scale
+
+    # P6: a radius below 180 is centred on the hint resolved above. Unreachable
+    # from the extracted defaults (radius is 180 unless search_bounds set it).
+    if search_radius_deg < 180 and (ra_hint_deg is None or dec_hint_deg is None):
+        raise SearchRadiusWithoutHint(
+            f"search radius {search_radius_deg:g} deg needs a pointing hint to "
+            "centre on, and the FITS header yields none (no celestial WCS and no "
+            "OBJRA/TELRA/RA + OBJDEC/TELDEC/DEC keywords); drop the radius or "
+            "supply a frame that records where it was pointed"
+        )
+
+    # P6: what the backends are asked to search, reported on every return path.
+    search_metadata = dict(
+        search_radius_deg=float(search_radius_deg),
+        search_min_scale_arcsec=float(anet_min_scale),
+        search_max_scale_arcsec=float(anet_max_scale),
+        search_center_ra_deg=ra_hint_deg,
+        search_center_dec_deg=dec_hint_deg,
+    )
 
     logger.debug(
         "solve_wcs: file_id=%s hints=(ra_h=%s dec_d=%s) "
@@ -721,7 +769,14 @@ def solve_wcs(
             # The full WcsCalibrationSettings range (default 0.1–60 arcsec/px) forces
             # exhaustive triangle search; with a hint the solver runs in seconds.
             _scale_hint = pixel_scale_hint_arcsec or estimate_pixel_scale_arcsec_per_pix(header)
-            if _scale_hint and _scale_hint > 0:
+            if search_bounds is not None and search_bounds.scale_window_is_explicit:
+                # P6: an explicit window is used verbatim — intersecting it
+                # with the header-derived one could hand ATLAS an inverted
+                # range when the header's scale is exactly what the caller is
+                # overriding.
+                atlas_min_scale = wcs_settings.min_scale
+                atlas_max_scale = wcs_settings.max_scale
+            elif _scale_hint and _scale_hint > 0:
                 atlas_min_scale = max(wcs_settings.min_scale, _scale_hint * 0.5)
                 atlas_max_scale = min(wcs_settings.max_scale, _scale_hint * 2.0)
             else:
@@ -807,6 +862,7 @@ def solve_wcs(
                 width_px=width,
                 height_px=height,
                 n_field=int(len(sources)),
+                **search_metadata,
             ),
         )
 
@@ -819,6 +875,7 @@ def solve_wcs(
                 width_px=width,
                 height_px=height,
                 n_field=int(len(sources)),
+                **search_metadata,
             ),
         )
 
@@ -924,5 +981,6 @@ def solve_wcs(
             delta_ra_arcsec=delta_ra_arcsec,
             delta_dec_arcsec=delta_dec_arcsec,
             n_field=int(len(sources)),
+            **search_metadata,
         ),
     )

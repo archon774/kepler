@@ -1231,7 +1231,7 @@
     "type": "function",
     "function": {
       "name": "solve_astrometry",
-      "description": "Plate-solve a local FITS image. Existing celestial WCS metadata is returned without re-solving unless force=true. Solver failures and missing configuration are reported as structured results.",
+      "description": "Plate-solve a local FITS image. Existing celestial WCS metadata is returned without re-solving unless force=true. Solver failures and missing configuration are reported as structured results. By default the search is all-sky over 0.1-60 arcsec/px, which can run for many minutes to a miss; the optional bounds narrow it and the result's `search` reports what was actually searched.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1257,6 +1257,22 @@
             "type": "boolean",
             "description": "Solve even when the FITS header already has celestial WCS.",
             "default": false
+          },
+          "search_radius_deg": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 180,
+            "description": "Search only within this many degrees of the frame's own pointing hint (its header WCS centre, else OBJRA/TELRA/RA keywords). Omit for the all-sky default (180). A frame with no pointing hint cannot take a radius and says so. Too small a radius is a silent miss: set it from what you know about the pointing, not to make the solve faster."
+          },
+          "min_scale_arcsec": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Lower bound on the pixel scale in arcsec/px (default 0.1). Must stay below max_scale_arcsec. Set only from known optics or a trusted header scale; a wrong window is a silent miss."
+          },
+          "max_scale_arcsec": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Upper bound on the pixel scale in arcsec/px (default 60). Must stay above min_scale_arcsec. Set only from known optics or a trusted header scale; a wrong window is a silent miss."
           }
         },
         "required": [
