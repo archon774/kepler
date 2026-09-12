@@ -7,7 +7,7 @@ Chains together pieces that already exist:
     algorithms.hrdiagram_py.matching        detected sources <-> Gaia rows, by sky position
     algorithms.hrdiagram_py.literature       a fetched catalog row -> age/distance/E(B-V)
     algorithms.hrdiagram_py.membership       field-star removal (parallax + PM cut)
-    algorithms.hrdiagram_py.isochrones       PARSEC isochrone fetch, fit, CMD/HR plot
+    algorithms.hrdiagram_py.isochrones       local Girardi isochrone fit, CMD/HR plot
 
 A single FITS frame is one filter, which is not enough for a colour-magnitude
 diagram on its own. The bridge is Gaia: sources detected in the frame are
@@ -62,7 +62,7 @@ import pandas as pd
 from astropy.table import Table
 
 from algorithms.hrdiagram_py import isochrones, literature, matching, membership, observations
-from tools import artifacts
+from tools import artifacts, config
 from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult
 from tools.vizier import search_vizier
@@ -377,8 +377,8 @@ def fit_and_compare_hr_diagram(
     max_error: float = 0.1,
     logage_half_width: float = 0.3,
 ) -> ToolResult:
-    """Fit distance/E(B-V)/age to cluster members against a PARSEC isochrone
-    grid near the cluster's published age, and plot the HR diagram.
+    """Fit distance/E(B-V)/age to cluster members against the configured
+    local Girardi grid near the cluster's published age, and plot the HR diagram.
 
     Returns the fitted values, the literature values, and their
     percent/absolute differences, plus the saved PNG artifact.

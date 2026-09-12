@@ -8,6 +8,7 @@ from pathlib import Path
 ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
 DATA_DIR_ENV = "KEPLER_DATA_DIR"
 FITS_DOWNLOAD_DIR_ENV = "KEPLER_FITS_DOWNLOAD_DIR"
+ISOCHRONE_DIR_ENV = "KEPLER_ISOCHRONE_DIR"
 MAX_FRAMES_ENV = "KEPLER_MAX_FRAMES"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -116,6 +117,10 @@ DATA_DIR = env_path(DATA_DIR_ENV, _REPO_ROOT / "data").resolve()
 # tests/conftest.py does. Setting the environment variables is the supported
 # way to move them together.
 FITS_DOWNLOAD_DIR = env_path(FITS_DOWNLOAD_DIR_ENV, DATA_DIR / "fits_downloads").resolve()
+# The legacy Girardi model is a substantial operator dependency, not Kepler
+# data.  Deliberately no default: silently looking in a repository-relative
+# directory would make a missing model look bundled and conceal setup errors.
+ISOCHRONE_DIR = env_path(ISOCHRONE_DIR_ENV)
 PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
 # How many frames one list_optical_frames call reads headers for and returns.
 # Not a tool parameter: the cap exists so a bulk archive download cannot make a
