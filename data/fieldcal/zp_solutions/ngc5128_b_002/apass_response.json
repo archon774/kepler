@@ -1,5 +1,6 @@
 {
  "fixture": "vizier_response",
+ "format_version": 1,
  "field": "ngc5128_b_002",
  "frame": "ngc5128_galaxy_b_001.fits",
  "catalog": "APASS",

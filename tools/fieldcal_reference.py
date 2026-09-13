@@ -422,6 +422,10 @@ def _response_path(field_dir: Path, catalog: str) -> Path:
 
 
 def _read_response(field_dir: Path, catalog: str) -> dict | None:
+    """The parsed response fixture, or ``None`` when it is absent or not the
+    shape ``_response_table`` needs -- a file that does not parse is treated
+    like one that is not there, as ``_read_summary`` does, so a hand-made
+    fixture never turns into a traceback out of a registered tool."""
     path = _response_path(field_dir, catalog)
     if not path.is_file():
         return None
@@ -429,7 +433,23 @@ def _read_response(field_dir: Path, catalog: str) -> dict | None:
         loaded = json.loads(path.read_text())
     except (OSError, ValueError):
         return None
-    return loaded if isinstance(loaded, dict) and loaded.get("rows") is not None else None
+    if not isinstance(loaded, dict):
+        return None
+    columns, rows = loaded.get("columns"), loaded.get("rows")
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None
+    if not all(isinstance(spec, dict) and "name" in spec and "dtype" in spec for spec in columns):
+        return None
+    if not all(isinstance(row, list) and len(row) == len(columns) for row in rows):
+        return None
+    try:
+        # A dtype numpy does not know, a cell a column cannot hold. Cheap
+        # (a few hundred rows), and it makes "readable" mean one thing for
+        # the provenance loader and the source builders alike.
+        _response_table(loaded)
+    except (TypeError, ValueError):
+        return None
+    return loaded
 
 
 def _response_table(payload: dict):
@@ -484,19 +504,30 @@ def load_catalog_response(
                     code="fixture_missing",
                     message=f"No recorded {catalog} response for {field!r}: "
                     f"{_response_path(field_dir, catalog).name} is not present in "
-                    f"{field_dir}.",
+                    f"{field_dir}, or is not readable as a recorded response.",
                 )
             ],
         )
+    # The rows were validated by _read_response; the descriptive blocks are
+    # taken as they are when they have the expected shape and left empty
+    # otherwise, so a hand-edited fixture degrades rather than raises.
+    def _block(key: str) -> dict:
+        value = payload.get(key)
+        return dict(value) if isinstance(value, dict) else {}
+
+    def _text(key: str) -> str | None:
+        value = payload.get(key)
+        return None if value is None else str(value)
+
     return CatalogResponseReference(
         field=field,
-        catalog=str(payload.get("catalog") or catalog),
+        catalog=_text("catalog") or catalog,
         path=str(_response_path(field_dir, catalog)),
-        vizier_catalog=payload.get("vizier_catalog"),
-        vizier_table=payload.get("vizier_table"),
-        query=dict(payload.get("query") or {}),
-        provenance=dict(payload.get("provenance") or {}),
-        columns=[spec["name"] for spec in payload.get("columns", [])],
+        vizier_catalog=_text("vizier_catalog"),
+        vizier_table=_text("vizier_table"),
+        query=_block("query"),
+        provenance=_block("provenance"),
+        columns=[str(spec["name"]) for spec in payload["columns"]],
         row_count=len(payload["rows"]),
     )
 
@@ -512,7 +543,12 @@ def _sources_from_response(field: str, catalog: str, directory: str | Path | Non
     # mapping; nothing here issues a query.
     from algorithms.query.registry import CATALOGS
 
-    return list(CATALOGS[catalog].table_to_sources(_response_table(payload)))
+    try:
+        return list(CATALOGS[catalog].table_to_sources(_response_table(payload)))
+    except (KeyError, TypeError, ValueError):
+        # The plugin's mapping needs columns the fixture does not carry: not a
+        # recorded response for this catalog, reported by the callers as absent.
+        return []
 
 
 def _selected_row_sources(field: str, directory: str | Path | None) -> list:
@@ -696,8 +732,9 @@ def replay_field_calibration(
             ToolError(
                 code="fixture_missing",
                 message=f"No recorded {catalog} response for {field!r}: "
-                f"{_response_path(field_dir, catalog).name} is not present in {field_dir}. "
-                "The selection replay needs the full response, not just the matched rows.",
+                f"{_response_path(field_dir, catalog).name} is not present in {field_dir}, "
+                "or is not readable as a recorded response. The selection replay needs "
+                "the full response, not just the matched rows.",
             )
         )
     if reference.frame_path is None:

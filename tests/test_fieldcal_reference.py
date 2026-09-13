@@ -328,6 +328,47 @@ def test_the_selection_replay_reports_a_field_it_cannot_run():
     assert "frame_not_bundled" in codes
 
 
+@float32_mag_errors
+def test_a_malformed_response_fixture_is_reported_not_raised(tmp_path):
+    """A hand-made fixture under KEPLER_FIELDCAL_DATA_DIR that does not parse
+    must surface as fixture_missing from a registered tool, not as a
+    traceback -- nothing guards dispatch in the agent loop."""
+    import shutil
+
+    field_dir = tmp_path / "zp_solutions" / "ngc5128_b_002"
+    shutil.copytree(
+        Path(__file__).resolve().parent.parent / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002",
+        field_dir,
+    )
+    (field_dir / "apass_response.json").write_text(
+        '{"columns": [{"name": "RAJ2000", "dtype": "not-a-dtype"}], "rows": [[1.0]]}'
+    )
+    (field_dir / "vsx_response.json").write_text('{"rows": "nope"}')
+
+    assert replay_catalog_sources("ngc5128_b_002", tmp_path, fixture="full_response") == []
+    assert replay_variable_sources("ngc5128_b_002", tmp_path) == []
+    assert [e.code for e in load_catalog_response("ngc5128_b_002", directory=tmp_path).errors] == [
+        "fixture_missing"
+    ]
+    replay = replay_field_calibration("ngc5128_b_002", tmp_path)
+    assert [e.code for e in replay.errors] == ["fixture_missing"]
+    assert "not readable" in replay.errors[0].message
+
+    # Rows that parse but a provenance block that is the wrong shape: the
+    # rows are still usable, and the provenance loader must not raise either.
+    (field_dir / "apass_response.json").write_text(
+        '{"query": [1, 2], "provenance": "none", "vizier_table": 336, '
+        '"columns": [{"name": "RAJ2000", "dtype": "float64"}, {"name": "DEJ2000", "dtype": "float64"}, '
+        '{"name": "Bmag", "dtype": "float32"}], "rows": [[201.3, -43.0, 12.5]]}'
+    )
+    response = load_catalog_response("ngc5128_b_002", directory=tmp_path)
+    assert response.errors == []
+    assert response.row_count == 1
+    assert response.query == {} and response.provenance == {}
+    assert response.vizier_table == "336"
+    assert len(replay_catalog_sources("ngc5128_b_002", tmp_path, fixture="full_response")) == 1
+
+
 def test_the_selection_replay_reports_an_unknown_field():
     replay = replay_field_calibration("ngc9999_z_000")
     assert [e.code for e in replay.errors] == ["not_found"]
@@ -426,6 +467,39 @@ def test_calibrate_zeropoint_reports_a_fixture_that_was_never_recorded():
     )
     assert [e.code for e in comparison.errors] == ["catalog_fixture_missing"]
     assert "ngc5286_b_000" in comparison.errors[0].message
+
+
+@float32_mag_errors
+def test_the_full_response_fixture_applies_the_recorded_vsx_filter_from_pixels(monkeypatch):
+    """From pixels, 'full_response' must hand the recorded VSX rows to the
+    algorithm with the variable check on, and 'selected_rows' must not --
+    the selected rows are already known to match, and one of them could sit
+    near a variable."""
+    import algorithms.fieldcal.field_cal as field_cal
+    from tools.optical import resolve_optical_frame
+    from tools.photometry import calibrate_zeropoint
+
+    seen: dict[str, tuple] = {}
+    real = field_cal.perform_field_calibration
+
+    def spy(*args, **kwargs):
+        seen[kwargs["field_cal_settings"].catalogs[0]] = (
+            kwargs["variable_sources"],
+            kwargs["field_cal_settings"].variable_check_tol,
+            len(kwargs["catalog_sources"]),
+        )
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(field_cal, "perform_field_calibration", spy)
+    frame = resolve_optical_frame("ngc5128_galaxy_b_001")
+
+    calibrate_zeropoint(frame.path, catalog_fixture="selected_rows", compare_to="ngc5128_b_002")
+    variables, tol, candidates = seen.pop("APASS")
+    assert (variables, tol, candidates) == (None, 0, 35)
+
+    calibrate_zeropoint(frame.path, catalog_fixture="full_response", compare_to="ngc5128_b_002")
+    variables, tol, candidates = seen.pop("APASS")
+    assert len(variables) == 12 and tol == 5 and candidates == 132
 
 
 @float32_mag_errors
