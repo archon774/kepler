@@ -1811,13 +1811,35 @@ the VSX plugin hashes `row['n_max']`, which raises on a masked cell; the
 fixture stores those as `""`, as VizieR returned them, and its provenance
 says so.
 
+**Audit (2026-09-13), before the PR.** The `/code-review high` run over
+the branch died on a session rate limit before producing a finding, so the
+review below is the author's own pass, checkbox by checkbox and against the
+global constraints — worth re-running the independent review on the PR.
+`algorithms/` has no diff; the kernels are untouched; every replay path runs
+under a `socket.connect` guard; the fixture is the phase's own requested
+artifact, not a generated one. Three things the audit changed. (1) A
+hand-made `*_response.json` under `KEPLER_FIELDCAL_DATA_DIR` that did not
+parse raised `TypeError` out of `np.dtype` inside a registered tool — the
+P6 lesson again — so `_read_response` now validates the shape and rebuilds
+the table itself (cheap), both the provenance loader and the source
+builders report the same `fixture_missing` ("not present … or not
+readable") for it, and a malformed provenance block (a non-dict `query`, a
+numeric `vizier_table`) degrades to empty/stringified rather than raising
+out of `dict()` or pydantic; pinned. (2) The from-pixels `full_response` path was asserted to reach the answer
+but not to *apply* the VSX filter; a spy on `perform_field_calibration` now
+pins `(variable_sources, variable_check_tol, candidates)` as `(12 rows, 5,
+132)` for `full_response` and `(None, 0, 35)` for `selected_rows`. (3) The
+fixtures carry `format_version: 1`, and `tests/README.md` no longer claims
+the VSX/APASS row mappers are never executed against real provider rows —
+they now are; Landolt and USNO's still are not.
+
 **Evidence.** From pixels, `calibrate_zeropoint(frame, catalog_fixture=...)`
 lands on the identical zero point for both fixtures, 21.142973 (−4.7 mmag
 from the recorded solve — re-measured photometry, inside the existing 0.1
 bound), so the SEP extraction + selection over 132 candidates chooses the
 same calibration set as the 35 known-good rows. `data/README.md` documents
 the two files; `README.md`, `docs/tool-architecture.md` and `CLAUDE.md` name
-the new switches. Default suite: 1799 passed, 42 skipped, 139 warnings (was 1779 / 42 / 139);
+the new switches. Default suite: 1801 passed, 42 skipped, 139 warnings (was 1779 / 42 / 139);
 the new tests run under a `socket.connect` guard. Not in scope and still
 open: the three NGC 5286 B solves have neither a frame nor a recorded
 response, so `replay_field_calibration` returns `fixture_missing` +
