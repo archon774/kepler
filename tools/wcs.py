@@ -68,7 +68,7 @@ def _timeout_error(name: str, value: object) -> ToolError | None:
         return None
     try:
         timeout = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         timeout = math.nan
     if not math.isfinite(timeout) or timeout < 1:
         return ToolError(
@@ -88,58 +88,90 @@ def _finite_positive(value: object) -> float | None:
     """``value`` as a float when it is a finite number above zero, else ``None``."""
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: float(10**400). A model can send that literal and
+        # nothing above this tool catches it.
         return None
     if not math.isfinite(number) or number <= 0:
         return None
     return number
 
 
-def _search_bounds_error(bounds: WcsSearchBounds) -> ToolError | None:
+def _validate_search_bounds(
+    search_radius_deg: object,
+    min_scale_arcsec: object,
+    max_scale_arcsec: object,
+) -> tuple[WcsSearchBounds | None, ToolError | None]:
     """Validate the caller's search bounds before anything is read or run.
 
     Mirrors the algorithm's own checks (``radius > 0``, ``min < max``) so an
     unconfigured or unavailable solver still reports an input problem as one,
     and adds what the algorithm cannot know: a radius above 180 means nothing,
-    and a single bound has to fit against the other side's default.
+    and a single bound has to fit against the other side's default. Returns
+    the bounds as the floats they were validated as, so the algorithm never
+    sees the object the caller passed -- a numeric string satisfies ``float()``
+    but not ``radius < 180``.
     """
     problems: list[str] = []
 
-    if bounds.radius_deg is not None:
-        radius = _finite_positive(bounds.radius_deg)
+    radius = None
+    if search_radius_deg is not None:
+        radius = _finite_positive(search_radius_deg)
         if radius is None or radius > 180:
+            radius = None
             problems.append(
-                f"search_radius_deg={bounds.radius_deg!r} must be a finite number "
+                f"search_radius_deg={search_radius_deg!r} must be a finite number "
                 "in (0, 180]; 180 is the all-sky default"
             )
 
-    min_scale = _DEFAULT_SEARCH.min_scale
-    max_scale = _DEFAULT_SEARCH.max_scale
-    if bounds.min_scale_arcsec is not None:
-        min_scale = _finite_positive(bounds.min_scale_arcsec)
+    min_scale = None
+    max_scale = None
+    if min_scale_arcsec is not None:
+        min_scale = _finite_positive(min_scale_arcsec)
         if min_scale is None:
             problems.append(
-                f"min_scale_arcsec={bounds.min_scale_arcsec!r} must be a finite "
+                f"min_scale_arcsec={min_scale_arcsec!r} must be a finite "
                 "number above zero"
             )
-    if bounds.max_scale_arcsec is not None:
-        max_scale = _finite_positive(bounds.max_scale_arcsec)
+    if max_scale_arcsec is not None:
+        max_scale = _finite_positive(max_scale_arcsec)
         if max_scale is None:
             problems.append(
-                f"max_scale_arcsec={bounds.max_scale_arcsec!r} must be a finite "
+                f"max_scale_arcsec={max_scale_arcsec!r} must be a finite "
                 "number above zero"
             )
-    if min_scale is not None and max_scale is not None and min_scale >= max_scale:
+    effective_min = _DEFAULT_SEARCH.min_scale if min_scale_arcsec is None else min_scale
+    effective_max = _DEFAULT_SEARCH.max_scale if max_scale_arcsec is None else max_scale
+    if (
+        effective_min is not None
+        and effective_max is not None
+        and effective_min >= effective_max
+    ):
         problems.append(
-            f"the pixel-scale window {min_scale:g}–{max_scale:g} arcsec/px is "
-            "empty: min_scale_arcsec must be below max_scale_arcsec (an omitted "
+            f"the pixel-scale window {effective_min:g}–{effective_max:g} arcsec/px "
+            "is empty: min_scale_arcsec must be below max_scale_arcsec (an omitted "
             f"side keeps its default, {_DEFAULT_SEARCH.min_scale:g} or "
             f"{_DEFAULT_SEARCH.max_scale:g})"
         )
 
-    if not problems:
-        return None
-    return ToolError(code="invalid_search_bounds", message="; ".join(problems) + ".")
+    if problems:
+        return None, ToolError(
+            code="invalid_search_bounds", message="; ".join(problems) + "."
+        )
+    return (
+        WcsSearchBounds(
+            radius_deg=radius, min_scale_arcsec=min_scale, max_scale_arcsec=max_scale
+        ),
+        None,
+    )
+
+
+#: Seam field -> the tool parameter the caller actually wrote, for ``explicit``.
+_BOUND_PARAMETER_NAMES = {
+    "radius_deg": "search_radius_deg",
+    "min_scale_arcsec": "min_scale_arcsec",
+    "max_scale_arcsec": "max_scale_arcsec",
+}
 
 
 def _search_summary(
@@ -155,7 +187,9 @@ def _search_summary(
         max_scale_arcsec=metadata.search_max_scale_arcsec,
         center_ra_deg=metadata.search_center_ra_deg,
         center_dec_deg=metadata.search_center_dec_deg,
-        explicit=list(bounds.explicit),
+        atlas_min_scale_arcsec=metadata.search_atlas_min_scale_arcsec,
+        atlas_max_scale_arcsec=metadata.search_atlas_max_scale_arcsec,
+        explicit=[_BOUND_PARAMETER_NAMES[name] for name in bounds.explicit],
     )
 
 
@@ -340,8 +374,9 @@ def solve_astrometry(
     subprocess also adds a short termination grace period to reap children.
 
     The search bounds are opt-in. Left unset, the solve is the extracted
-    all-sky search over 0.1–60 arcsec/px -- which on a 10-arcminute frame has
-    run for eleven minutes to a miss. ``search_radius_deg`` bounds the search
+    all-sky search over 0.1–60 arcsec/px -- which on a 10-arcminute frame took
+    285 s against indexes covering its scale, and eleven minutes to a miss
+    against ones that did not. ``search_radius_deg`` bounds the search
     around the frame's own pointing hint (header WCS centre, else the
     OBJRA/TELRA/RA family of keywords), and ``min_scale_arcsec`` /
     ``max_scale_arcsec`` bound the pixel scale. A wrong bound is a silent
@@ -388,12 +423,9 @@ def solve_astrometry(
             errors=[timeout_error],
         )
 
-    search_bounds = WcsSearchBounds(
-        radius_deg=search_radius_deg,
-        min_scale_arcsec=min_scale_arcsec,
-        max_scale_arcsec=max_scale_arcsec,
+    search_bounds, bounds_error = _validate_search_bounds(
+        search_radius_deg, min_scale_arcsec, max_scale_arcsec
     )
-    bounds_error = _search_bounds_error(search_bounds)
     if bounds_error is not None:
         return WcsSummary(
             file=file,

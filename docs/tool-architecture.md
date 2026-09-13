@@ -208,8 +208,10 @@ The three search bounds are opt-in (P6). Unset, the solve is the extracted
 all-sky search over 0.1–60 arcsec/px; set, they are validated at the tool
 boundary (`invalid_search_bounds`), reach the algorithm as one
 `algorithms.wcs.config.WcsSearchBounds`, and the result's `search` reports the
-radius, scale window, and pointing centre the backends were actually asked to
-search, with `explicit` naming which bounds the caller set. A radius below 180
+radius, scale window, and pointing centre astrometry.net was asked to search,
+with `explicit` naming which bounds the caller set and, when the ATLAS
+backend ran, the narrower window it was given (`atlas_*`; ATLAS takes no
+radius). A radius below 180
 is centred on the frame's own pointing hint; a frame that yields none gets
 `search_radius_without_hint`, not a silent all-sky search. On the development
 host, against its 4200-series indexes, the M15 fixture solves in ~14 s at

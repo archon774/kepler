@@ -246,8 +246,9 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
   ATLAS branch instead of being intersected with its header-derived
   half/double narrowing, which could invert the range when the header scale is
   what the caller is overriding. The effective radius, window, and hint centre
-  are reported on `WcsSolveMetadata.search_*` on every return path. Every
-  such line in `wcs.py` is commented `P6`.
+  are reported on `WcsSolveMetadata.search_*` on every return path, and the
+  window ATLAS was actually given on `search_atlas_*` when that branch ran.
+  Every such line in `wcs.py` is commented `P6`.
 
 ##### 5.2 ORM rows — removed
 - **Was:** `from skynet_db.models import ObservationAssetProcessingRun`

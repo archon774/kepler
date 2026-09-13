@@ -111,11 +111,17 @@ class TableSummary(KeplerToolModel):
 class WcsSearchSummary(KeplerToolModel):
     """The search the plate solver was asked to run.
 
-    Present only when the solve reached the backends. ``all_sky`` is the
-    extracted default (radius 180); ``explicit`` names which of the caller's
-    ``search_radius_deg`` / ``min_scale_arcsec`` / ``max_scale_arcsec`` set the
-    value reported, so a bounded miss is distinguishable from an all-sky one.
-    ``center_*`` is the frame's own pointing hint the radius was centred on.
+    Present only when the solve reached the backends. ``radius_deg`` and the
+    ``min``/``max_scale_arcsec`` window are what astrometry.net searched
+    verbatim; ``all_sky`` is the extracted default (radius 180). The ATLAS
+    backend ignores the radius -- it always searches locally around the
+    pointing hint -- and unless a scale bound was explicit it narrows the
+    window around the header's pixel-scale estimate, so when ATLAS was
+    attempted ``atlas_min``/``atlas_max_scale_arcsec`` carry the window it was
+    given. ``explicit`` names which of the caller's ``search_radius_deg`` /
+    ``min_scale_arcsec`` / ``max_scale_arcsec`` set the value reported, so a
+    bounded miss is distinguishable from an all-sky one. ``center_*`` is the
+    frame's own pointing hint the radius was centred on.
     """
 
     radius_deg: float
@@ -124,6 +130,8 @@ class WcsSearchSummary(KeplerToolModel):
     max_scale_arcsec: float
     center_ra_deg: float | None = None
     center_dec_deg: float | None = None
+    atlas_min_scale_arcsec: float | None = None
+    atlas_max_scale_arcsec: float | None = None
     explicit: list[str] = Field(default_factory=list)
 
 

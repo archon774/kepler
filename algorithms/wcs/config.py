@@ -72,7 +72,11 @@ class WcsSearchBounds:
       explicit window is used verbatim by both backends: the ATLAS branch's
       narrowing around the header's pixel-scale estimate is skipped, because
       a caller overriding the window is doing so precisely when that estimate
-      cannot be trusted.
+      cannot be trusted. That holds for a single bound too — intersecting the
+      unspecified side with the header-derived one would re-admit the header
+      the caller is contradicting (header 0.25, truth 0.586, ``min=0.4``:
+      intersection gives 0.4–0.5 and misses; verbatim 0.4–60 finds it), so
+      callers who want a narrow ATLAS window pass both bounds.
 
     Range checking is upstream's own (``wcs.py``): the values land on the
     settings object before its ``radius > 0`` and ``min_scale < max_scale``

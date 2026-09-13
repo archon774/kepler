@@ -1143,17 +1143,17 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 180,
-          "description": "Search only within this many degrees of the frame's own pointing hint (its header WCS centre, else OBJRA/TELRA/RA keywords). Omit for the all-sky default (180). A frame with no pointing hint cannot take a radius and says so. Too small a radius is a silent miss: set it from what you know about the pointing, not to make the solve faster."
+          "description": "Search only within this many degrees of the frame's own pointing hint (its header WCS centre, else OBJRA/TELRA/RA keywords). Omit for the all-sky default (180). A frame with no pointing hint cannot take a radius and says so. Too small a radius is a silent miss: set it from what you know about the pointing, not to make the solve faster. Applies to the astrometry.net backend; ATLAS always searches locally around the hint."
         },
         "min_scale_arcsec": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Lower bound on the pixel scale in arcsec/px (default 0.1). Must stay below max_scale_arcsec. Set only from known optics or a trusted header scale; a wrong window is a silent miss."
+          "description": "Lower bound on the pixel scale in arcsec/px (default 0.1). Must stay below max_scale_arcsec. Set only from known optics or a trusted header scale; a wrong window is a silent miss. Pass both bounds together: an explicit window is used as given by both backends, so a single bound leaves the other side at its default and, on ATLAS, replaces its header-based narrowing."
         },
         "max_scale_arcsec": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Upper bound on the pixel scale in arcsec/px (default 60). Must stay above min_scale_arcsec. Set only from known optics or a trusted header scale; a wrong window is a silent miss."
+          "description": "Upper bound on the pixel scale in arcsec/px (default 60). Must stay above min_scale_arcsec. Set only from known optics or a trusted header scale; a wrong window is a silent miss. Pass both bounds together (see min_scale_arcsec)."
         }
       },
       "required": [

@@ -1623,8 +1623,14 @@ finite, positive, radius ≤ 180, and a single scale bound checked against the
 other side's default so `min_scale_arcsec=70` alone is rejected) before the
 FITS file is read or backend configuration is looked at. The result carries
 `search` — radius, `all_sky`, scale window, the pointing centre the radius was
-anchored on, and `explicit` naming which bounds the caller set — on every path
-that reached the backends, from `WcsSolveMetadata.search_*`. Timeout,
+anchored on, `explicit` naming which bounds the caller set (by their tool
+parameter names), and, when the ATLAS backend was attempted, `atlas_min` /
+`atlas_max_scale_arcsec` — on every path that reached the backends, from
+`WcsSolveMetadata.search_*`. The ATLAS pair exists because that backend's
+blind path takes no radius at all and, absent explicit bounds, searches a
+window narrowed around the header's pixel-scale estimate; reporting only the
+requested window would describe an ATLAS-only miss as an already wide-open
+search. Timeout,
 attempted-backend reporting, the fixture guard and the atomic header write are
 untouched; the existing tests for them still pass with the extra keyword.
 
@@ -1668,7 +1674,27 @@ re-solves with the cluster core masked at its own field-sized radius (~0.08°)
 around the first solution's CRVAL; the reported `search` is the primary
 search, and the refinement passes ride on it.
 
-Default suite: 1773 passed, 42 skipped (was 1739 / 41; the new skip is the
+**Review (2026-09-13).** A self-audit plus the code-review and security-review
+passes over the branch produced four changes and one rejected suggestion.
+(1) The boundary validator accepted a numeric string such as `"2"` (via
+`float()`, as `timeout_s` does) but forwarded the *raw* object, so
+`solve_wcs` would have crashed on `"2" < 180` and reported a bogus
+`solver_failed`; `_validate_search_bounds` now returns the bounds as the
+floats they were validated as. (2) `float(10**400)` raises `OverflowError`,
+which neither `_finite_positive` nor the pre-existing `_timeout_error`
+caught, and the agent engine has no guard around dispatch — both now catch
+it. (3) The ATLAS window is reported separately, as above. (4) `explicit`
+names the tool parameters (`search_radius_deg`), not the seam's field
+(`radius_deg`). Rejected: intersecting an unspecified scale side with the
+header-derived bound when the caller sets only one. It re-admits the header
+the caller is contradicting — header 0.25″/px, truth 0.586, `min=0.4` gives
+0.4–0.5 and misses where verbatim 0.4–60 finds it — so explicit bounds stay
+verbatim and the schema text tells callers to pass both. The security review
+found no HIGH or MEDIUM issue: the bounds reach `solve-field` only as
+`str(float(...))` in a list argv, no path or file is derived from them, and
+the fixture guard and atomic header write are untouched.
+
+Default suite: 1779 passed, 42 skipped (was 1739 / 41; the new skip is the
 solver-data test). The four LLM schema goldens were regenerated. The
 `WcsSummary` docstring's reference to the deleted `algorithms.wcs.state` was
 corrected in passing, since the model gained a field. Not in scope and still

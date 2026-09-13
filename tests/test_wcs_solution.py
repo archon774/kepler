@@ -838,12 +838,18 @@ def test_the_default_atlas_window_narrows_around_the_header_pixel_scale(
 ):
     """Parity pin for the ATLAS branch: with no override it halves/doubles the
     header's pixel-scale estimate to bound the triangle search."""
-    atlas_request_capture["run"](frame_header_copy("m15_open"))
+    result = atlas_request_capture["run"](frame_header_copy("m15_open"))
 
     request = atlas_request_capture["request"]
     assert request.min_scale == pytest.approx(M15_SECPIX * 0.5)
     assert request.max_scale == pytest.approx(M15_SECPIX * 2.0)
     assert request.radius == 180
+    # The requested window and the one ATLAS was given differ, and the result
+    # reports both rather than claiming ATLAS searched 0.1-60.
+    assert result.metadata.search_min_scale_arcsec == 0.1
+    assert result.metadata.search_max_scale_arcsec == 60
+    assert result.metadata.search_atlas_min_scale_arcsec == pytest.approx(M15_SECPIX * 0.5)
+    assert result.metadata.search_atlas_max_scale_arcsec == pytest.approx(M15_SECPIX * 2.0)
 
 
 def test_explicit_scale_bounds_bypass_the_atlas_hint_narrowing(
@@ -854,7 +860,7 @@ def test_explicit_scale_bounds_bypass_the_atlas_hint_narrowing(
     hand ATLAS an inverted or empty range. Explicit bounds are used verbatim."""
     from algorithms.wcs.config import WcsSearchBounds
 
-    atlas_request_capture["run"](
+    result = atlas_request_capture["run"](
         frame_header_copy("m15_open"),
         search_bounds=WcsSearchBounds(
             radius_deg=1.5, min_scale_arcsec=2.0, max_scale_arcsec=3.0
@@ -865,3 +871,14 @@ def test_explicit_scale_bounds_bypass_the_atlas_hint_narrowing(
     assert request.min_scale == 2.0
     assert request.max_scale == 3.0
     assert request.radius == 1.5
+    assert result.metadata.search_atlas_min_scale_arcsec == 2.0
+    assert result.metadata.search_atlas_max_scale_arcsec == 3.0
+
+
+def test_the_atlas_window_is_absent_when_atlas_never_ran(
+    anet_request_capture, frame_header_copy
+):
+    result = anet_request_capture["run"](frame_header_copy("m15_open"))
+
+    assert result.metadata.search_atlas_min_scale_arcsec is None
+    assert result.metadata.search_atlas_max_scale_arcsec is None

@@ -306,8 +306,8 @@ and Pydantic v2 are likewise required.
 
 End-to-end runs additionally need data that is not in this repo. On the
 development host, `solve-field` is `/usr/bin/solve-field`, astrometry.net
-indexes 4107-4119 are under `/usr/share/astrometry/data`, the 4200-series
-2MASS, TYCHO2 and UCAC5 index sets are under
+indexes 4107-4119 are under `/usr/share/astrometry/data`, three further
+index sets (2MASS 4200-series, TYCHO2, UCAC5) are under
 `/srv/agents/catalogs/astrometry/{2MASS_ANET/4200,TYCHO2/indices,UCAC5}`, and
 UCAC5 catalogue data is under `/srv/agents/catalogs/ATLAS/UCAC5`; none is
 selected by the repository's default environment. Set `ANET_INDEX_PATH` and/or

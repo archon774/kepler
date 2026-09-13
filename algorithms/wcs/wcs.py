@@ -612,8 +612,9 @@ def solve_wcs(
         raise SearchRadiusWithoutHint(
             f"search radius {search_radius_deg:g} deg needs a pointing hint to "
             "centre on, and the FITS header yields none (no celestial WCS and no "
-            "OBJRA/TELRA/RA + OBJDEC/TELDEC/DEC keywords); drop the radius or "
-            "supply a frame that records where it was pointed"
+            "pointing keyword pair such as OBJRA/OBJDEC, TELRA/TELDEC, RA/DEC, "
+            "RA_PNT/DEC_PNT, OBJCTRA/OBJCTDEC or TARGRA/TARGDEC); drop the radius "
+            "or supply a frame that records where it was pointed"
         )
 
     # P6: what the backends are asked to search, reported on every return path.
@@ -782,6 +783,11 @@ def solve_wcs(
             else:
                 atlas_min_scale = wcs_settings.min_scale
                 atlas_max_scale = wcs_settings.max_scale
+
+            # P6: ATLAS takes no radius and, absent explicit bounds, not the
+            # requested window either — report what it was actually given.
+            search_metadata["search_atlas_min_scale_arcsec"] = float(atlas_min_scale)
+            search_metadata["search_atlas_max_scale_arcsec"] = float(atlas_max_scale)
 
             # No rotation prior: the ATLAS backend's fast *oriented* path needs a
             # verified orientation, which only a prior solve supplies. Processing
