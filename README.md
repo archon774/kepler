@@ -432,7 +432,8 @@ Supported layouts are:
 ```
 
 The supplied complete UCAC5 tree uses 5.3 GB; reserve at least 6 GB for a
-local UCAC5 installation. Verify the configured reader can instantiate and
+local UCAC5 installation. A complete native UCAC4 tree is approximately 8.5
+GB; reserve at least 10 GB. Verify the configured reader can instantiate and
 query the catalog without network access before running a solve:
 
 ```bash

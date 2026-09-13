@@ -320,7 +320,7 @@ is still needed elsewhere, so treat it as required.
 |---|---|
 | `solve-field` binary (astrometry.net) | the anet backend. Resolved via explicit config → `SKYLIB_ASTROMETRYNET_SOLVE_FIELD` / `SKYLIB_ANET_SOLVE_FIELD` → `PATH`. Absent ⇒ `is_available()` is `False` and the solve falls through to ATLAS. |
 | astrometry.net index files | `ANET_INDEX_PATH`, or `SKYLIB_ASTROMETRYNET_INDEX_PATH` / `SKYLIB_ANET_INDEX_ROOT`. Recognized layouts: `index-*.fits`, `<prefix>-index-*.fits` (UCAC5), suffixless `index-NNN` (TYCHO2). |
-| UCAC4 or UCAC5 catalog on local disk | the ATLAS backend. Set `ATLAS_CATALOG_ROOT` and `ATLAS_CATALOG` (`ucac4` or `ucac5`; default `ucac5`). UCAC5 accepts either the `u5z` zone directory or its parent; `build_atlas_config` normalizes a path ending in `u5z` to its parent. UCAC4 expects `Z000.UC4` through `Z179.UC4` at its root. This is an operator-owned, multi-gigabyte dependency: the supplied UCAC5 tree is 5.3 GB and is never vendored. |
+| UCAC4 or UCAC5 catalog on local disk | the ATLAS backend. Set `ATLAS_CATALOG_ROOT` and `ATLAS_CATALOG` (`ucac4` or `ucac5`; default `ucac5`). UCAC5 accepts either the `u5z` zone directory or its parent; `build_atlas_config` normalizes a path ending in `u5z` to its parent. UCAC4 expects `Z000.UC4` through `Z179.UC4` at its root. This is an operator-owned, multi-gigabyte dependency: the supplied UCAC5 tree is 5.3 GB, while a complete native UCAC4 tree is approximately 8.5 GB; neither is vendored. |
 | `ngc2000.dat` | bundled at `skylib/astrometry/anet/ngc2000.dat`; drives globular-cluster core masking in `solve_field_glob`. Loaded by path relative to `engine.py`, so it must stay beside it. |
 
 Both backends degrade to "unavailable" rather than failing, so the package

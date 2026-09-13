@@ -575,11 +575,10 @@ def test_unparseable_keywords_return_none():
 # ---------------------------------------------------------------------------
 
 
-def _atlas_operator_config_or_skip():
-    """Load the operator-owned ATLAS catalog configuration for P9."""
+def _atlas_operator_settings_or_skip():
+    """Validate and load the operator-owned ATLAS configuration for P9."""
     from algorithms.wcs.config import SolverSettings
-    from algorithms.wcs.wcs import build_atlas_config
-    from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
+    from tools.wcs import _atlas_catalog_problem
 
     catalog_root = os.environ.get("ATLAS_CATALOG_ROOT")
     catalog = (os.environ.get("ATLAS_CATALOG") or "ucac5").strip().lower()
@@ -590,19 +589,14 @@ def _atlas_operator_config_or_skip():
         )
 
     root = Path(catalog_root)
-    if not root.is_dir():
-        pytest.skip(f"ATLAS_CATALOG_ROOT={root} is not a directory")
-
-    try:
-        get_catalog_spec(catalog)
-    except ValueError:
-        pytest.skip("ATLAS_CATALOG must be ucac4 or ucac5")
-
-    config = build_atlas_config(
-        SolverSettings(atlas_catalog_root=root, atlas_catalog=catalog)
-    )
-    assert config is not None
-    return config
+    settings = SolverSettings(atlas_catalog_root=root, atlas_catalog=catalog)
+    problem = _atlas_catalog_problem(settings)
+    if problem is not None:
+        pytest.skip(
+            f"ATLAS preflight failed: {problem}. Set ATLAS_CATALOG_ROOT to the "
+            "documented UCAC4/UCAC5 layout."
+        )
+    return settings
 
 
 @pytest.mark.solver_data
@@ -611,51 +605,38 @@ def test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window(
 ):
     """P9: exercise the real ATLAS lookup without claiming a blind solve.
 
-    A zero-source M15 image makes the backend return its normalized
-    ``no_sources`` diagnostic after catalog lookup. That keeps this
+    A zero-source M15 image makes the public solver's ATLAS fallback return its
+    normalized ``no_sources`` diagnostic after catalog lookup. That keeps this
     operator-only check bounded while proving that the configured UCAC tree,
     M15 pointing, and explicit 0.58--0.59 arcsec/pixel window all reach ATLAS.
     """
-    from algorithms.skylib_lite.astrometry.atlas import AtlasBackend
-    from algorithms.skylib_lite.astrometry.types import (
-        SolveFailure,
-        SolveMethod,
-        SolveRequest,
-    )
+    from algorithms.wcs.config import WcsSearchBounds
+    from algorithms.wcs.wcs import solve_wcs
 
-    atlas_config = _atlas_operator_config_or_skip()
+    atlas_settings = _atlas_operator_settings_or_skip()
     header = frame_header_copy("m15_open")
-    image_path = tmp_path / "atlas-p9-empty-m15.fits"
-    fits.writeto(image_path, np.zeros((1027, 1056), dtype=np.float32), header)
-
-    solution = AtlasBackend().solve(
-        SolveRequest(
-            image_path=image_path,
-            width=1056,
-            height=1027,
-            ra_hours=M15_HINT_RA_DEG / 15.0,
-            dec_degs=M15_HINT_DEC_DEG,
-            radius=1.0,
-            min_scale=0.58,
-            max_scale=0.59,
+    attempts: list[str] = []
+    result = solve_wcs(
+        header,
+        np.zeros((1027, 1056), dtype=np.float32),
+        tmp_path,
+        solver_settings=atlas_settings,
+        search_bounds=WcsSearchBounds(
+            radius_deg=1.0,
+            min_scale_arcsec=0.58,
+            max_scale_arcsec=0.59,
         ),
-        atlas_config,
+        solver_attempts=attempts,
     )
 
-    if solution.failure_reason == SolveFailure.NO_CATALOG:
-        pytest.skip(
-            "the configured ATLAS catalog contains no stars around the M15 fixture"
-        )
-
-    assert solution.backend == "atlas"
-    assert solution.attempt is not None
-    assert solution.attempt.method == SolveMethod.BLIND
-    assert solution.attempt.radius_deg == 1.0
-    assert solution.attempt.min_scale_arcsec_per_pix == 0.58
-    assert solution.attempt.max_scale_arcsec_per_pix == 0.59
-    assert solution.source_count == 0
-    assert solution.failure_reason == SolveFailure.NO_SOURCES
-    assert solution.metadata["n_catalog"] > 0
+    assert attempts == ["atlas"]
+    assert result.wcs is None
+    assert result.metadata.search_atlas_min_scale_arcsec == 0.58
+    assert result.metadata.search_atlas_max_scale_arcsec == 0.59
+    assert result.metadata.atlas_source_count == 0
+    assert result.metadata.atlas_catalog_count > 0
+    assert result.metadata.atlas_failure_reason == "no_sources"
+    assert result.metadata.atlas_accepted is False
 
 
 @pytest.mark.solver_data
