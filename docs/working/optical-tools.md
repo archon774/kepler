@@ -69,15 +69,15 @@ merged.
 
 ### Status summary
 
-Status is **as of 2026-09-11 on `dev`**, after PRs #43, #44, #45, #47, #52,
-#59, and #60.
+Status is **as of 2026-09-13 on `dev`**, after PRs #43, #44, #45, #47, #52,
+#59, #60, #62, #63 and the P7 branch.
 
 | # | Broken link | Status | Severity |
 |---|---|---|---|
 | BL-1 | `describe_image_wcs` raised `TypeError` on 38 of 39 bundled frames | **closed** — fixed on `dev` before Phase 1; the parametrized sweep landed with it | — |
 | BL-2 | The agent registry omitted the local no-network tools | **closed** — Phase 1 registered `astrometry`, `calibration`, `catalogs`, `workspace` | was High |
 | BL-3 | No optical-frame lookup registry (the HR-diagram example) | **closed** — Phase 2 added `tools/optical.py` | was Medium |
-| BL-4 | No tool read `data/afterglow/` or `data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
+| BL-4 | No tool read `data/afterglow/` or `data/fieldcal/` | **closed** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 recorded the field's APASS and VSX responses and added the end-to-end selection replay, which reproduces the recorded 35-of-132 selection and the solve bit for bit offline | was High |
 | BL-5 | `ZeropointSolution.zero_point_corr` held an absolute zero point | **closed** — Phase 1 renamed it to `zero_point` | was High |
 | BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `data/frame_provenance.json` | was Medium |
 | BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **closed** — Phase P6 added explicit opt-in search bounds while retaining the parity default; against the host's 4200-series indexes the M15 fixture solves in ~14 s bounded and ~285 s all-sky, to the same solution | was Medium |
@@ -1703,7 +1703,7 @@ open: the ATLAS backend is unexercised (P9), and
 passes no `solver_settings`, so it can never reach a backend and always
 self-skips — a pre-existing gap, left for a separate change.
 
-### Phase P7 — Complete offline APASS replay (BL-4)
+### Phase P7 — Complete offline APASS replay (BL-4) — Complete
 
 **Intent:** promote field-calibration replay from a selected-row comparison to a
 complete offline catalog-selection replay.
@@ -1714,16 +1714,16 @@ normalization and matching over the full cone response or reproduce the
 recorded `num_not_selected_by_field_cal: 263`. A full APASS response is the
 missing input between catalog query and the existing zero-point calculation.
 
-- [ ] Record the APASS cone-search response for the NGC 5128 fixture once,
+- [x] Record the APASS cone-search response for the NGC 5128 fixture once,
       store it as a compact versioned JSON or CSV fixture, and document query
       coordinates, radius, catalog release, retrieval date, columns, and source
       licence/provenance.
-- [ ] Extend `replay_catalog_sources` and the reference-comparison tool to use
+- [x] Extend `replay_catalog_sources` and the reference-comparison tool to use
       either the selected-row fixture or the full-response fixture explicitly;
       neither replay path may open a socket.
-- [ ] Assert catalog candidate count, selected/rejected counts, matched source
+- [x] Assert catalog candidate count, selected/rejected counts, matched source
       identity/order, reference magnitudes, and the existing recorded solution.
-- [ ] Keep the existing selected-row replay as its smaller bit-exact regression
+- [x] Keep the existing selected-row replay as its smaller bit-exact regression
       case; label the full-response path as the end-to-end selection replay.
 
 **Validation:** focused `fieldcal_reference` tests with network calls forbidden,
@@ -1731,6 +1731,98 @@ the default suite, and `git diff --check`.
 
 **Exit:** Kepler reproduces the complete recorded local field-calibration path,
 including catalog selection, without live VizieR access.
+
+**P7 record (2026-09-13).** The fixture is two files next to the recorded
+solve, `data/fieldcal/zp_solutions/ngc5128_b_002/apass_response.json` (132
+rows, 30 KB) and `vsx_response.json` (12 rows, 6 KB): one JSON object each —
+a provenance block (release, server, retrieval time, the exact column
+request, row limit, licence and acknowledgement text), the `query`, the
+columns with the dtypes and units VizieR returned, then one response row per
+line. Both were retrieved once, on 2026-09-13, with the column request
+`VizierCatalog._vizier()` builds — i.e. what the live tool path sends — as a
+**10-arcmin cone** on the frame's WCS-footprint centre (RA 13.42413 h, Dec
+−43.01841°), no cache rounding and no row cap. A cone rather than the box
+the live path issues because the cone contains the 11.2′ × 10.9′ footprint
+box with margin, so one recording serves whichever WCS defines the footprint
+(the frame's header, or the TAN fit upstream's diagnostic built from the
+CSV; both were run and select identically — pixel scales 0.6114660 and
+0.6114665 arcsec). Float32 magnitude columns are stored as the exact float64
+of each float32 and reloaded as float32, which is what keeps the replayed
+reference magnitudes bit-exact against `fit_data.csv`'s `local_ref_mag`.
+`recno` was requested but not returned — as live — so the candidates carry
+no catalog id and are identified by position.
+
+`tools.fieldcal_reference` gained `CATALOG_FIXTURES = ("selected_rows",
+"full_response")`, a `fixture=` keyword on `replay_catalog_sources`
+(default `selected_rows`, the existing bit-exact regression input; the
+full response is rebuilt as an astropy table and mapped through the APASS
+plugin's own `table_to_sources`, so candidate normalisation is the live
+code, not a re-implementation), `replay_variable_sources` (the VSX rows),
+`load_catalog_response` (the provenance, without the rows), and
+**`replay_field_calibration(field)`** — the end-to-end selection replay: the
+recorded Afterglow detections from `fit_data.csv` (298 with a finite,
+non-zero `mag` and `flux`, upstream's own rule), the full APASS response and
+the VSX rows through `perform_field_calibration(use_provided_photometry=True)`
+with the bundled frame's header supplying WCS, epoch and filter and the
+recorded run's own `strict_filter_parity`. Its `FieldCalReplay` reports
+candidate / variable / detection counts, the matched and not-selected counts
+on both sides, every match (detected id, candidate index, separation,
+instrumental and reference magnitudes), the solve, the comparison, and
+`selection_matches_recorded`. `tools.photometry.calibrate_zeropoint` gained
+`catalog_fixture=` (requires `compare_to`; mutually exclusive with
+`catalog_sources`; `conflicting_catalog_inputs`, `unknown_catalog_fixture`,
+`catalog_fixture_requires_compare_to` and `catalog_fixture_missing` are
+returned, never raised), which is how a model reaches an offline solve at
+all — the registry schema never exposed `catalog_sources`, so the registered
+tool always went to the network. Both are in the registry; the four LLM
+schema goldens were regenerated.
+
+**The one finding the plan did not anticipate: the recorded selection is
+not reproducible from the APASS response alone.** With APASS only, the
+replay matched **36** sources, not 35, and the zero point moved by 1.3e-10
+(the extra star is Chauvenet-rejected — both solves keep 26 — and the
+residual is `calc_solution`'s `sigma2` convergence carrying over from the
+extra rejection round; a tolerance check would never have caught it, which
+is why the counts are asserted). The 36th is detection SRC467 — a star Afterglow
+detected twice, SRC335 being the same star 0.05″ away — against an APASS row
+0.83″ from it. Upstream ran with the default `variable_check_tol = 5″`, and
+VSX lists `Gaia DR3 6088704247666049024` (a YSO) 0.91″ from that APASS row,
+so `_filter_variable_stars` removed it before matching and neither
+detection could match. That is a real part of "the complete recorded local
+field-calibration path", so the VSX response was recorded alongside the
+APASS one and is applied on the `full_response` path; with it the replay
+selects exactly the recorded 35, in the recorded order, with bit-exact
+reference magnitudes and errors, and `calc_solution` returns
+`21.147659857998637`, `rej_percent 25.714…`, matching
+`production_calc_solution` to the bit. Both numbers are pinned:
+`test_the_selection_replay_reproduces_the_recorded_run` and
+`test_the_selection_replay_needs_the_recorded_vsx_rows` (36 without VSX,
+with a `variable_sources_not_recorded` warning). On the selected-row path the
+VSX check stays off, as before — every one of those rows is known to match.
+
+Two smaller things worth knowing. (1) The extracted VizieR mapping stores
+each band's uncertainty as the `np.float32` astroquery handed it and pydantic
+warns on every `model_dump` of such a source (≈130 lines per replay); the
+live path does the same, the resolved `ref_mag_error` is a Python float and
+bit-exact, and the replay tests filter that one warning rather than alter
+the algorithm. (2) The ECSV intermediate used while recording turned the
+live table's *empty-string* cells (`n_max`, `f_min`) into masked ones, and
+the VSX plugin hashes `row['n_max']`, which raises on a masked cell; the
+fixture stores those as `""`, as VizieR returned them, and its provenance
+says so.
+
+**Evidence.** From pixels, `calibrate_zeropoint(frame, catalog_fixture=...)`
+lands on the identical zero point for both fixtures, 21.142973 (−4.7 mmag
+from the recorded solve — re-measured photometry, inside the existing 0.1
+bound), so the SEP extraction + selection over 132 candidates chooses the
+same calibration set as the 35 known-good rows. `data/README.md` documents
+the two files; `README.md`, `docs/tool-architecture.md` and `CLAUDE.md` name
+the new switches. Default suite: 1799 passed, 42 skipped, 139 warnings (was 1779 / 42 / 139);
+the new tests run under a `socket.connect` guard. Not in scope and still
+open: the three NGC 5286 B solves have neither a frame nor a recorded
+response, so `replay_field_calibration` returns `fixture_missing` +
+`frame_not_bundled` for them (P8 territory); and `test_query_live.py`
+remains the only exercise of the *live* selection path.
 
 ### Phase P8 — Restore NGC 5286 B-frame end-to-end evidence
 
@@ -1868,7 +1960,8 @@ solve but not catalog selection. Closing this needs a live VizieR cone search
 re-recorded as a new fixture — a network operation producing a new artifact,
 against two of this document's own constraints. P7 explicitly records the full
 cone response so catalog selection, including the 263 unmatched rows, becomes
-reproducible.
+reproducible. **Done (P7 record below):** the cone was recorded once, and the
+VSX rows with it, because the recorded selection turned out to depend on both.
 
 **The 36 frames above the 9 MB cut-off.** The Afterglow web table covers 73
 subjects (~1.5 GB); `data/optical/` carries the 37 under 9 MB plus the two
