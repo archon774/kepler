@@ -611,3 +611,274 @@ def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_availab
     )
     assert sep < 0.01
     assert _wcs_parity(solved) == _wcs_parity(expected)
+
+
+# ---------------------------------------------------------------------------
+# Explicit search bounds (P6)
+# ---------------------------------------------------------------------------
+#
+# Upstream never exposed the search radius or scale window: ``solve_wcs`` built
+# a fresh ``WcsCalibrationSettings()`` and searched all-sky over 0.1–60 arcsec/px
+# every time. That default is parity and must survive untouched; the bounds are
+# an opt-in seam layered on top of it, applied exactly where ``solve_settings``
+# already overrides ``sip_order``. These tests drive the solve up to the backend
+# request and read what it would have been asked to search.
+
+M15_HINT_RA_DEG = 322.4929
+M15_HINT_DEC_DEG = 12.1669
+M15_SECPIX = 0.5864922312362758
+
+_POINTING_KEYWORDS = ("OBJRA", "TELRA", "RA", "OBJDEC", "TELDEC", "DEC")
+
+
+@pytest.fixture
+def anet_request_capture(monkeypatch, tmp_path):
+    """Drive ``solve_wcs`` to the astrometry.net request and capture it.
+
+    Source extraction is replaced by two synthetic detections so no ``sep`` run
+    is needed, the backend is declared available, and the subprocess driver is
+    replaced by a recorder that returns no solution.
+    """
+    from algorithms.wcs.schemas import SourceExtractionData
+
+    captured: dict = {}
+    sources = [
+        SourceExtractionData(x=100.0, y=200.0, flux=1000.0),
+        SourceExtractionData(x=300.0, y=400.0, flux=500.0),
+    ]
+    monkeypatch.setattr(
+        wcs_module,
+        "run_source_extraction",
+        lambda data, header, settings, *, file_id=None: (list(sources), None, None),
+    )
+    monkeypatch.setattr(
+        wcs_module.AstrometryNetBackend, "is_available", lambda self: True
+    )
+
+    def record(request, config):
+        captured["request"] = request
+        return None
+
+    monkeypatch.setattr(wcs_module, "anet_solve_field_glob", record)
+
+    def run(header, **kwargs):
+        attempts = captured.setdefault("attempts", [])
+        return solve_wcs(
+            header,
+            np.zeros((1027, 1056), dtype=np.float32),
+            tmp_path,
+            solver_settings=SolverSettings(anet_index_path=str(tmp_path)),
+            solver_attempts=attempts,
+            **kwargs,
+        )
+
+    captured["run"] = run
+    return captured
+
+
+@pytest.fixture
+def atlas_request_capture(monkeypatch, tmp_path):
+    """Drive ``solve_wcs`` to the ATLAS request with astrometry.net disabled."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        wcs_module,
+        "run_source_extraction",
+        lambda data, header, settings, *, file_id=None: ([], None, None),
+    )
+
+    def record(self, request, config):
+        captured["request"] = request
+        return None
+
+    monkeypatch.setattr(wcs_module.AtlasBackend, "solve", record)
+
+    def run(header, **kwargs):
+        return solve_wcs(
+            header,
+            np.zeros((64, 64), dtype=np.float32),
+            tmp_path,
+            solver_settings=SolverSettings(atlas_catalog_root=str(tmp_path)),
+            **kwargs,
+        )
+
+    captured["run"] = run
+    return captured
+
+
+@pytest.mark.parametrize("bounds", [None, "empty"])
+def test_the_default_search_is_all_sky_over_the_extracted_scale_window(
+    anet_request_capture, frame_header_copy, bounds
+):
+    """No override, or an override that sets nothing, is the parity search."""
+    from algorithms.wcs.config import WcsSearchBounds
+
+    search_bounds = WcsSearchBounds() if bounds == "empty" else None
+
+    result = anet_request_capture["run"](
+        frame_header_copy("m15_open"), search_bounds=search_bounds
+    )
+
+    request = anet_request_capture["request"]
+    assert request.radius == 180
+    assert request.min_scale == 0.1
+    assert request.max_scale == 60
+    assert result.metadata.search_radius_deg == 180
+    assert result.metadata.search_min_scale_arcsec == 0.1
+    assert result.metadata.search_max_scale_arcsec == 60
+
+
+def test_explicit_search_bounds_reach_the_astrometry_net_request(
+    anet_request_capture, frame_header_copy
+):
+    from algorithms.wcs.config import WcsSearchBounds
+
+    result = anet_request_capture["run"](
+        frame_header_copy("m15_open"),
+        search_bounds=WcsSearchBounds(
+            radius_deg=2.0, min_scale_arcsec=0.4, max_scale_arcsec=0.8
+        ),
+    )
+
+    request = anet_request_capture["request"]
+    assert request.radius == 2.0
+    assert request.min_scale == 0.4
+    assert request.max_scale == 0.8
+    # The radius is anchored on the frame's own pointing hint, and the result
+    # says where that anchor was.
+    assert request.ra_hours * 15.0 == pytest.approx(M15_HINT_RA_DEG, abs=1e-3)
+    assert request.dec_degs == pytest.approx(M15_HINT_DEC_DEG, abs=1e-3)
+    assert result.metadata.search_radius_deg == 2.0
+    assert result.metadata.search_min_scale_arcsec == 0.4
+    assert result.metadata.search_max_scale_arcsec == 0.8
+    assert result.metadata.search_center_ra_deg == pytest.approx(M15_HINT_RA_DEG, abs=1e-3)
+    assert result.metadata.search_center_dec_deg == pytest.approx(M15_HINT_DEC_DEG, abs=1e-3)
+
+
+def test_a_single_explicit_bound_leaves_the_others_at_their_defaults(
+    anet_request_capture, frame_header_copy
+):
+    from algorithms.wcs.config import WcsSearchBounds
+
+    anet_request_capture["run"](
+        frame_header_copy("m15_open"),
+        search_bounds=WcsSearchBounds(max_scale_arcsec=1.0),
+    )
+
+    request = anet_request_capture["request"]
+    assert request.radius == 180
+    assert request.min_scale == 0.1
+    assert request.max_scale == 1.0
+
+
+def test_a_bounded_radius_needs_a_pointing_hint(
+    anet_request_capture, frame_header_copy
+):
+    """astrometry.net centres ``--radius`` on ``--ra/--dec``, which the backend
+    only passes when it has a hint. A radius with nothing to anchor it would
+    otherwise reach the backend as ``float(None)``; refuse it before any backend
+    runs, rather than silently widening back to all-sky.
+    """
+    from algorithms.wcs.config import WcsSearchBounds
+    from algorithms.wcs.wcs import SearchRadiusWithoutHint
+
+    header = frame_header_copy("m15_open")
+    for key in _POINTING_KEYWORDS:
+        del header[key]
+
+    with pytest.raises(SearchRadiusWithoutHint):
+        anet_request_capture["run"](header, search_bounds=WcsSearchBounds(radius_deg=2.0))
+
+    assert "request" not in anet_request_capture
+    assert anet_request_capture["attempts"] == []
+
+
+def test_an_all_sky_radius_does_not_need_a_pointing_hint(
+    anet_request_capture, frame_header_copy
+):
+    """Parity: the default search never needed a hint, and still must not."""
+    header = frame_header_copy("m15_open")
+    for key in _POINTING_KEYWORDS:
+        del header[key]
+
+    result = anet_request_capture["run"](header)
+
+    assert anet_request_capture["request"].radius == 180
+    assert result.metadata.search_center_ra_deg is None
+    assert result.metadata.search_center_dec_deg is None
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"radius_deg": 0.0},
+        {"radius_deg": -1.0},
+        {"min_scale_arcsec": 2.0, "max_scale_arcsec": 1.0},
+        {"min_scale_arcsec": 1.0, "max_scale_arcsec": 1.0},
+        {"min_scale_arcsec": 70.0},
+        {"max_scale_arcsec": 0.05},
+    ],
+)
+def test_out_of_range_bounds_trip_the_extracted_settings_validation(
+    anet_request_capture, frame_header_copy, bounds
+):
+    """The overrides land on ``WcsCalibrationSettings`` before upstream's own
+    range checks run, so those checks cover them with no new validation code."""
+    from algorithms.wcs.config import WcsSearchBounds
+
+    with pytest.raises(ValueError):
+        anet_request_capture["run"](
+            frame_header_copy("m15_open"), search_bounds=WcsSearchBounds(**bounds)
+        )
+
+    assert "request" not in anet_request_capture
+
+
+def test_the_default_atlas_window_narrows_around_the_header_pixel_scale(
+    atlas_request_capture, frame_header_copy
+):
+    """Parity pin for the ATLAS branch: with no override it halves/doubles the
+    header's pixel-scale estimate to bound the triangle search."""
+    result = atlas_request_capture["run"](frame_header_copy("m15_open"))
+
+    request = atlas_request_capture["request"]
+    assert request.min_scale == pytest.approx(M15_SECPIX * 0.5)
+    assert request.max_scale == pytest.approx(M15_SECPIX * 2.0)
+    assert request.radius == 180
+    # The requested window and the one ATLAS was given differ, and the result
+    # reports both rather than claiming ATLAS searched 0.1-60.
+    assert result.metadata.search_min_scale_arcsec == 0.1
+    assert result.metadata.search_max_scale_arcsec == 60
+    assert result.metadata.search_atlas_min_scale_arcsec == pytest.approx(M15_SECPIX * 0.5)
+    assert result.metadata.search_atlas_max_scale_arcsec == pytest.approx(M15_SECPIX * 2.0)
+
+
+def test_explicit_scale_bounds_bypass_the_atlas_hint_narrowing(
+    atlas_request_capture, frame_header_copy
+):
+    """An observer overriding the window is doing so because the header's
+    scale cannot be trusted; intersecting with the header-derived window would
+    hand ATLAS an inverted or empty range. Explicit bounds are used verbatim."""
+    from algorithms.wcs.config import WcsSearchBounds
+
+    result = atlas_request_capture["run"](
+        frame_header_copy("m15_open"),
+        search_bounds=WcsSearchBounds(
+            radius_deg=1.5, min_scale_arcsec=2.0, max_scale_arcsec=3.0
+        ),
+    )
+
+    request = atlas_request_capture["request"]
+    assert request.min_scale == 2.0
+    assert request.max_scale == 3.0
+    assert request.radius == 1.5
+    assert result.metadata.search_atlas_min_scale_arcsec == 2.0
+    assert result.metadata.search_atlas_max_scale_arcsec == 3.0
+
+
+def test_the_atlas_window_is_absent_when_atlas_never_ran(
+    anet_request_capture, frame_header_copy
+):
+    result = anet_request_capture["run"](frame_header_copy("m15_open"))
+
+    assert result.metadata.search_atlas_min_scale_arcsec is None
+    assert result.metadata.search_atlas_max_scale_arcsec is None

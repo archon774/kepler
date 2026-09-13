@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from astropy.io import fits
 from astropy.wcs import WCS
 
-from algorithms.wcs.config import SolverSettings
+from algorithms.wcs.config import SolverSettings, WcsSearchBounds
 from algorithms.wcs.header_utils import estimate_pixel_scale_arcsec_per_pix
 from algorithms.skylib_lite.astrometry.anet.engine import (
     find_solve_field,
@@ -20,8 +20,10 @@ from algorithms.skylib_lite.astrometry.anet.engine import (
     validate_index_dirs,
 )
 from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec
+from algorithms.wcs.results import WcsSolveMetadata
+from algorithms.wcs.schemas import WcsCalibrationSettings
 from algorithms.wcs.source_extraction import build_wcs_from_header
-from algorithms.wcs.wcs import WCS_REGEX, solve_wcs as _solve_wcs
+from algorithms.wcs.wcs import SearchRadiusWithoutHint, WCS_REGEX, solve_wcs as _solve_wcs
 from tools.artifacts import describe_file
 from tools.astrometry import (
     _center_from_wcs,
@@ -30,7 +32,7 @@ from tools.astrometry import (
     _rotation_deg,
     describe_image_wcs,
 )
-from tools.models import ToolError, ToolWarning, WcsSummary
+from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
 
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -66,7 +68,7 @@ def _timeout_error(name: str, value: object) -> ToolError | None:
         return None
     try:
         timeout = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         timeout = math.nan
     if not math.isfinite(timeout) or timeout < 1:
         return ToolError(
@@ -76,12 +78,128 @@ def _timeout_error(name: str, value: object) -> ToolError | None:
     return None
 
 
+#: The extracted search: all-sky over 0.1–60 arcsec/px. Read from the settings
+#: model rather than restated, so a single bound is checked against the value
+#: the other side will actually take.
+_DEFAULT_SEARCH = WcsCalibrationSettings()
+
+
+def _finite_positive(value: object) -> float | None:
+    """``value`` as a float when it is a finite number above zero, else ``None``."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: float(10**400). A model can send that literal and
+        # nothing above this tool catches it.
+        return None
+    if not math.isfinite(number) or number <= 0:
+        return None
+    return number
+
+
+def _validate_search_bounds(
+    search_radius_deg: object,
+    min_scale_arcsec: object,
+    max_scale_arcsec: object,
+) -> tuple[WcsSearchBounds | None, ToolError | None]:
+    """Validate the caller's search bounds before anything is read or run.
+
+    Mirrors the algorithm's own checks (``radius > 0``, ``min < max``) so an
+    unconfigured or unavailable solver still reports an input problem as one,
+    and adds what the algorithm cannot know: a radius above 180 means nothing,
+    and a single bound has to fit against the other side's default. Returns
+    the bounds as the floats they were validated as, so the algorithm never
+    sees the object the caller passed -- a numeric string satisfies ``float()``
+    but not ``radius < 180``.
+    """
+    problems: list[str] = []
+
+    radius = None
+    if search_radius_deg is not None:
+        radius = _finite_positive(search_radius_deg)
+        if radius is None or radius > 180:
+            radius = None
+            problems.append(
+                f"search_radius_deg={search_radius_deg!r} must be a finite number "
+                "in (0, 180]; 180 is the all-sky default"
+            )
+
+    min_scale = None
+    max_scale = None
+    if min_scale_arcsec is not None:
+        min_scale = _finite_positive(min_scale_arcsec)
+        if min_scale is None:
+            problems.append(
+                f"min_scale_arcsec={min_scale_arcsec!r} must be a finite "
+                "number above zero"
+            )
+    if max_scale_arcsec is not None:
+        max_scale = _finite_positive(max_scale_arcsec)
+        if max_scale is None:
+            problems.append(
+                f"max_scale_arcsec={max_scale_arcsec!r} must be a finite "
+                "number above zero"
+            )
+    effective_min = _DEFAULT_SEARCH.min_scale if min_scale_arcsec is None else min_scale
+    effective_max = _DEFAULT_SEARCH.max_scale if max_scale_arcsec is None else max_scale
+    if (
+        effective_min is not None
+        and effective_max is not None
+        and effective_min >= effective_max
+    ):
+        problems.append(
+            f"the pixel-scale window {effective_min:g}–{effective_max:g} arcsec/px "
+            "is empty: min_scale_arcsec must be below max_scale_arcsec (an omitted "
+            f"side keeps its default, {_DEFAULT_SEARCH.min_scale:g} or "
+            f"{_DEFAULT_SEARCH.max_scale:g})"
+        )
+
+    if problems:
+        return None, ToolError(
+            code="invalid_search_bounds", message="; ".join(problems) + "."
+        )
+    return (
+        WcsSearchBounds(
+            radius_deg=radius, min_scale_arcsec=min_scale, max_scale_arcsec=max_scale
+        ),
+        None,
+    )
+
+
+#: Seam field -> the tool parameter the caller actually wrote, for ``explicit``.
+_BOUND_PARAMETER_NAMES = {
+    "radius_deg": "search_radius_deg",
+    "min_scale_arcsec": "min_scale_arcsec",
+    "max_scale_arcsec": "max_scale_arcsec",
+}
+
+
+def _search_summary(
+    metadata: WcsSolveMetadata, bounds: WcsSearchBounds
+) -> WcsSearchSummary | None:
+    """The search the algorithm reports having run, or ``None`` if it never got there."""
+    if metadata.search_radius_deg is None:
+        return None
+    return WcsSearchSummary(
+        radius_deg=metadata.search_radius_deg,
+        all_sky=metadata.search_radius_deg >= 180,
+        min_scale_arcsec=metadata.search_min_scale_arcsec,
+        max_scale_arcsec=metadata.search_max_scale_arcsec,
+        center_ra_deg=metadata.search_center_ra_deg,
+        center_dec_deg=metadata.search_center_dec_deg,
+        atlas_min_scale_arcsec=metadata.search_atlas_min_scale_arcsec,
+        atlas_max_scale_arcsec=metadata.search_atlas_max_scale_arcsec,
+        explicit=[_BOUND_PARAMETER_NAMES[name] for name in bounds.explicit],
+    )
+
+
 def _summary_from_wcs(
     path: str,
     header: fits.Header,
     wcs: WCS,
     *,
     attempted_backends: list[str] | None = None,
+    search: WcsSearchSummary | None = None,
     warnings: list[ToolWarning] | None = None,
     errors: list[ToolError] | None = None,
 ) -> WcsSummary:
@@ -99,6 +217,7 @@ def _summary_from_wcs(
         pixel_scale_arcsec=_pixel_scale_arcsec(wcs),
         rotation_deg=_rotation_deg(wcs),
         attempted_backends=attempted_backends or [],
+        search=search,
         warnings=warnings or [],
         errors=errors or [],
     )
@@ -244,12 +363,25 @@ def solve_astrometry(
     write_header: bool = False,
     timeout_s: float | None = None,
     force: bool = False,
+    search_radius_deg: float | None = None,
+    min_scale_arcsec: float | None = None,
+    max_scale_arcsec: float | None = None,
 ) -> WcsSummary:
     """Solve a local FITS image and optionally persist the resulting WCS.
 
     ``timeout_s`` is forwarded to each low-level solve attempt; extraction and
     retries mean it does not cap total call runtime. The astrometry.net
     subprocess also adds a short termination grace period to reap children.
+
+    The search bounds are opt-in. Left unset, the solve is the extracted
+    all-sky search over 0.1–60 arcsec/px -- which on a 10-arcminute frame took
+    285 s against indexes covering its scale, and eleven minutes to a miss
+    against ones that did not. ``search_radius_deg`` bounds the search
+    around the frame's own pointing hint (header WCS centre, else the
+    OBJRA/TELRA/RA family of keywords), and ``min_scale_arcsec`` /
+    ``max_scale_arcsec`` bound the pixel scale. A wrong bound is a silent
+    miss, so set them only from something you know about the frame; the
+    result's ``search`` reports what was actually searched either way.
     """
 
     file = describe_file(path)
@@ -289,6 +421,16 @@ def solve_astrometry(
             file=file,
             has_wcs=False,
             errors=[timeout_error],
+        )
+
+    search_bounds, bounds_error = _validate_search_bounds(
+        search_radius_deg, min_scale_arcsec, max_scale_arcsec
+    )
+    if bounds_error is not None:
+        return WcsSummary(
+            file=file,
+            has_wcs=False,
+            errors=[bounds_error],
         )
 
     try:
@@ -390,9 +532,19 @@ def solve_astrometry(
                 Path(tmpdir),
                 pixel_scale_hint_arcsec=pixel_scale_hint,
                 solver_settings=solver_settings,
+                search_bounds=search_bounds,
                 solver_attempts=attempted_backends,
                 solver_failures=solver_failures,
             )
+    except SearchRadiusWithoutHint as exc:
+        return WcsSummary(
+            file=file,
+            has_wcs=False,
+            image_shape=image_shape,
+            attempted_backends=attempted_backends,
+            warnings=configuration_warnings,
+            errors=[ToolError(code="search_radius_without_hint", message=str(exc))],
+        )
     except Exception as exc:
         return WcsSummary(
             file=file,
@@ -404,6 +556,7 @@ def solve_astrometry(
         )
 
     solved_wcs = solve_result.wcs
+    search = _search_summary(solve_result.metadata, search_bounds)
     if solved_wcs is None:
         if solver_failures:
             return WcsSummary(
@@ -411,6 +564,7 @@ def solve_astrometry(
                 has_wcs=False,
                 image_shape=image_shape,
                 attempted_backends=attempted_backends,
+                search=search,
                 warnings=configuration_warnings,
                 errors=[
                     ToolError(
@@ -424,6 +578,7 @@ def solve_astrometry(
             has_wcs=False,
             image_shape=image_shape,
             attempted_backends=attempted_backends,
+            search=search,
             warnings=[
                 *configuration_warnings,
                 ToolWarning(
@@ -446,6 +601,7 @@ def solve_astrometry(
                 header,
                 solved_wcs,
                 attempted_backends=attempted_backends,
+                search=search,
                 warnings=configuration_warnings,
                 errors=[ToolError(code="file_changed", message=str(exc))],
             )
@@ -455,6 +611,7 @@ def solve_astrometry(
                 header,
                 solved_wcs,
                 attempted_backends=attempted_backends,
+                search=search,
                 warnings=configuration_warnings,
                 errors=[ToolError(code="fits_write_error", message=str(exc))],
             )
@@ -464,6 +621,7 @@ def solve_astrometry(
         header,
         solved_wcs,
         attempted_backends=attempted_backends,
+        search=search,
         warnings=configuration_warnings,
     )
 

@@ -104,6 +104,7 @@ def test_per_call_index_and_timeout_reach_the_algorithm(monkeypatch, tmp_path):
         file_id=None,
         pixel_scale_hint_arcsec=None,
         solver_settings=None,
+        search_bounds=None,
         solver_attempts=None,
         solver_failures=None,
     ):
@@ -149,7 +150,7 @@ def test_build_anet_config_applies_the_configured_timeout(tmp_path):
     assert config.timeout_s == 17.0
 
 
-@pytest.mark.parametrize("timeout_s", [0, 0.5, -1, float("nan")])
+@pytest.mark.parametrize("timeout_s", [0, 0.5, -1, float("nan"), 10**400])
 def test_timeout_must_be_at_least_one_finite_second(timeout_s):
     summary = solve_astrometry(OPEN_FRAME, timeout_s=timeout_s)
 
@@ -316,6 +317,7 @@ def test_write_header_persists_a_successful_solution(monkeypatch, tmp_path):
         file_id=None,
         pixel_scale_hint_arcsec=None,
         solver_settings=None,
+        search_bounds=None,
         solver_attempts=None,
         solver_failures=None,
     ):
@@ -361,6 +363,7 @@ def test_write_header_refuses_to_overwrite_a_file_changed_during_solve(
         file_id=None,
         pixel_scale_hint_arcsec=None,
         solver_settings=None,
+        search_bounds=None,
         solver_attempts=None,
         solver_failures=None,
     ):
@@ -401,7 +404,14 @@ def test_solve_astrometry_is_registered():
         "write_header",
         "timeout_s",
         "force",
+        "search_radius_deg",
+        "min_scale_arcsec",
+        "max_scale_arcsec",
     }
+    assert properties["search_radius_deg"]["exclusiveMinimum"] == 0
+    assert properties["search_radius_deg"]["maximum"] == 180
+    assert properties["min_scale_arcsec"]["exclusiveMinimum"] == 0
+    assert properties["max_scale_arcsec"]["exclusiveMinimum"] == 0
 
 
 @pytest.mark.solver_data
@@ -419,6 +429,272 @@ def test_the_solver_runs_and_reports_its_outcome_either_way():
     codes = [warning.code for warning in summary.warnings]
     assert "solver_unavailable" not in codes
     assert "astrometry.net" in summary.attempted_backends
+    if summary.has_wcs:
+        assert summary.center_ra_deg == pytest.approx(322.49, abs=0.2)
+        assert summary.center_dec_deg == pytest.approx(12.167, abs=0.2)
+    else:
+        assert "no_solution" in codes
+
+
+# ---------------------------------------------------------------------------
+# Explicit search bounds (P6)
+# ---------------------------------------------------------------------------
+
+def _fake_solve_recording(captured, metadata=None, *, raises=None):
+    """A ``solve_wcs`` stand-in that records its keyword arguments."""
+
+    def fake_solve(header, data, tmpdir, **kwargs):
+        captured.update(kwargs)
+        if raises is not None:
+            raise raises
+        kwargs["solver_attempts"].append("astrometry.net")
+        return WcsSolveResult(
+            wcs=None,
+            catalog_sources=(),
+            metadata=metadata or WcsSolveMetadata(width_px=1056, height_px=1027),
+        )
+
+    return fake_solve
+
+
+def test_search_bounds_reach_the_algorithm_as_one_bounds_object(monkeypatch, tmp_path):
+    from algorithms.wcs.config import WcsSearchBounds
+
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    monkeypatch.setattr("tools.wcs._solve_wcs", _fake_solve_recording(captured))
+
+    solve_astrometry(
+        OPEN_FRAME,
+        index_path=index_path,
+        search_radius_deg=2.0,
+        min_scale_arcsec=0.4,
+        max_scale_arcsec=0.8,
+    )
+
+    assert captured["search_bounds"] == WcsSearchBounds(
+        radius_deg=2.0, min_scale_arcsec=0.4, max_scale_arcsec=0.8
+    )
+
+
+def test_search_bounds_reach_the_algorithm_as_floats(monkeypatch, tmp_path):
+    """Whatever passes validation is forwarded as the number it was read as,
+    not the object it arrived as: a numeric string or numpy scalar must not
+    reach the algorithm's ``radius < 180`` comparison as-is (``timeout_s``
+    already coerces the same way on its way to the backend config)."""
+    import numpy as np
+
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    monkeypatch.setattr("tools.wcs._solve_wcs", _fake_solve_recording(captured))
+
+    solve_astrometry(
+        OPEN_FRAME,
+        index_path=index_path,
+        search_radius_deg="2",
+        min_scale_arcsec=np.float64(0.4),
+        max_scale_arcsec=1,
+    )
+
+    bounds = captured["search_bounds"]
+    assert bounds.radius_deg == 2.0 and type(bounds.radius_deg) is float
+    assert bounds.min_scale_arcsec == 0.4 and type(bounds.min_scale_arcsec) is float
+    assert bounds.max_scale_arcsec == 1.0 and type(bounds.max_scale_arcsec) is float
+
+
+def test_a_default_call_sets_no_search_bound(monkeypatch, tmp_path):
+    """The parity search: the algorithm sees an override that overrides nothing."""
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    monkeypatch.setattr("tools.wcs._solve_wcs", _fake_solve_recording(captured))
+
+    solve_astrometry(OPEN_FRAME, index_path=index_path)
+
+    assert captured["search_bounds"].explicit == ()
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"search_radius_deg": 0},
+        {"search_radius_deg": -1},
+        {"search_radius_deg": 180.5},
+        {"search_radius_deg": float("nan")},
+        {"search_radius_deg": float("inf")},
+        {"search_radius_deg": "two"},
+        {"min_scale_arcsec": 0},
+        {"min_scale_arcsec": float("nan")},
+        {"max_scale_arcsec": 0},
+        {"max_scale_arcsec": float("inf")},
+        {"min_scale_arcsec": 2.0, "max_scale_arcsec": 1.0},
+        {"min_scale_arcsec": 1.0, "max_scale_arcsec": 1.0},
+        # A single bound is checked against the other side's default (0.1–60).
+        {"min_scale_arcsec": 70.0},
+        {"max_scale_arcsec": 0.05},
+        # float() of an int this large raises OverflowError, not ValueError; a
+        # model can send the literal, and nothing above the tool catches it.
+        {"search_radius_deg": 10**400},
+        {"min_scale_arcsec": 10**400},
+    ],
+)
+def test_invalid_search_bounds_are_rejected_before_anything_runs(monkeypatch, bounds):
+    """Checked at the tool boundary, before backend configuration is even
+    looked at -- so an unconfigured solver still reports the input problem."""
+    monkeypatch.delenv("ANET_INDEX_PATH", raising=False)
+    monkeypatch.delenv("ATLAS_CATALOG_ROOT", raising=False)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("the solver must not run with invalid bounds")
+
+    monkeypatch.setattr("tools.wcs._solve_wcs", fail_if_called)
+
+    summary = solve_astrometry(OPEN_FRAME, **bounds)
+
+    assert summary.has_wcs is False
+    assert [error.code for error in summary.errors] == ["invalid_search_bounds"]
+    assert summary.warnings == []
+    assert summary.search is None
+
+
+def test_the_effective_search_is_reported_in_the_summary(monkeypatch, tmp_path):
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    metadata = WcsSolveMetadata(
+        width_px=1056,
+        height_px=1027,
+        search_radius_deg=2.0,
+        search_min_scale_arcsec=0.4,
+        search_max_scale_arcsec=60.0,
+        search_center_ra_deg=322.4929,
+        search_center_dec_deg=12.1669,
+    )
+    monkeypatch.setattr("tools.wcs._solve_wcs", _fake_solve_recording(captured, metadata))
+
+    summary = solve_astrometry(
+        OPEN_FRAME, index_path=index_path, search_radius_deg=2.0, min_scale_arcsec=0.4
+    )
+
+    assert summary.search is not None
+    assert summary.search.radius_deg == 2.0
+    assert summary.search.all_sky is False
+    assert summary.search.min_scale_arcsec == 0.4
+    assert summary.search.max_scale_arcsec == 60.0
+    assert summary.search.center_ra_deg == pytest.approx(322.4929)
+    assert summary.search.center_dec_deg == pytest.approx(12.1669)
+    # Named as the caller named them -- the tool parameters, not the seam's fields.
+    assert summary.search.explicit == ["search_radius_deg", "min_scale_arcsec"]
+    assert summary.search.atlas_min_scale_arcsec is None
+    assert summary.search.atlas_max_scale_arcsec is None
+    assert "no_solution" in [warning.code for warning in summary.warnings]
+
+
+def test_the_atlas_window_is_reported_when_that_backend_ran(monkeypatch, tmp_path):
+    """ATLAS narrows the scale window around the header's estimate and takes
+    no radius at all, so the requested window alone would misdescribe an
+    ATLAS-only miss as an already wide-open search."""
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    metadata = WcsSolveMetadata(
+        width_px=1056,
+        height_px=1027,
+        search_radius_deg=180.0,
+        search_min_scale_arcsec=0.1,
+        search_max_scale_arcsec=60.0,
+        search_atlas_min_scale_arcsec=0.293,
+        search_atlas_max_scale_arcsec=1.173,
+    )
+    monkeypatch.setattr("tools.wcs._solve_wcs", _fake_solve_recording(captured, metadata))
+
+    summary = solve_astrometry(OPEN_FRAME, index_path=index_path)
+
+    assert summary.search.min_scale_arcsec == 0.1
+    assert summary.search.max_scale_arcsec == 60.0
+    assert summary.search.atlas_min_scale_arcsec == 0.293
+    assert summary.search.atlas_max_scale_arcsec == 1.173
+
+
+def test_a_default_search_is_reported_as_all_sky(monkeypatch, tmp_path):
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    metadata = WcsSolveMetadata(
+        width_px=1056,
+        height_px=1027,
+        search_radius_deg=180.0,
+        search_min_scale_arcsec=0.1,
+        search_max_scale_arcsec=60.0,
+        search_center_ra_deg=322.4929,
+        search_center_dec_deg=12.1669,
+    )
+    monkeypatch.setattr("tools.wcs._solve_wcs", _fake_solve_recording(captured, metadata))
+
+    summary = solve_astrometry(OPEN_FRAME, index_path=index_path)
+
+    assert summary.search.all_sky is True
+    assert summary.search.radius_deg == 180.0
+    assert summary.search.explicit == []
+
+
+def test_a_bounded_radius_without_a_hint_is_a_named_error(monkeypatch, tmp_path):
+    """Not a ``solver_failed``: no backend ran, and the fix is on the input side."""
+    from algorithms.wcs.wcs import SearchRadiusWithoutHint
+
+    captured = {}
+    index_path = _configure_fake_anet(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "tools.wcs._solve_wcs",
+        _fake_solve_recording(
+            captured, raises=SearchRadiusWithoutHint("search radius 2 deg needs a pointing hint")
+        ),
+    )
+
+    summary = solve_astrometry(OPEN_FRAME, index_path=index_path, search_radius_deg=2.0)
+
+    assert summary.has_wcs is False
+    assert [error.code for error in summary.errors] == ["search_radius_without_hint"]
+    assert "pointing hint" in summary.errors[0].message
+    assert summary.attempted_backends == []
+    assert summary.search is None
+
+
+def test_a_header_wcs_short_circuit_reports_no_search(monkeypatch):
+    summary = solve_astrometry(SOLVED_FRAME)
+
+    assert "wcs_from_header" in [warning.code for warning in summary.warnings]
+    assert summary.search is None
+
+
+@pytest.mark.solver_data
+@solver_available
+def test_an_explicit_scale_window_runs_a_bounded_solve():
+    """P6's exit criterion, against the real backend: a caller who knows the
+    frame's scale and pointing gets a bounded search rather than an all-sky one,
+    and the result says which search ran. The M15 frame's header carries
+    SECPIX 0.586 and its pointing keywords; whether the installed indexes cover
+    a 10-arcmin field decides has_wcs, so both outcomes are accepted.
+    """
+
+    summary = solve_astrometry(
+        OPEN_FRAME,
+        index_path=os.environ["ANET_INDEX_PATH"],
+        timeout_s=300,
+        search_radius_deg=1.0,
+        min_scale_arcsec=0.4,
+        max_scale_arcsec=0.8,
+    )
+
+    assert summary.errors == []
+    assert "astrometry.net" in summary.attempted_backends
+    assert summary.search is not None
+    assert summary.search.all_sky is False
+    assert summary.search.radius_deg == 1.0
+    assert summary.search.min_scale_arcsec == 0.4
+    assert summary.search.max_scale_arcsec == 0.8
+    assert summary.search.center_ra_deg == pytest.approx(322.49, abs=0.01)
+    assert summary.search.center_dec_deg == pytest.approx(12.167, abs=0.01)
+    assert summary.search.explicit == [
+        "search_radius_deg", "min_scale_arcsec", "max_scale_arcsec"
+    ]
+    codes = [warning.code for warning in summary.warnings]
     if summary.has_wcs:
         assert summary.center_ra_deg == pytest.approx(322.49, abs=0.2)
         assert summary.center_dec_deg == pytest.approx(12.167, abs=0.2)

@@ -12,7 +12,18 @@ from .schemas import CatalogSource
 
 @dataclass(frozen=True)
 class WcsSolveMetadata:
-    """Scientific measurements produced while solving one FITS image."""
+    """Scientific measurements produced while solving one FITS image.
+
+    The ``search_*`` fields record the search the backends were asked to run
+    — radius, scale window, and the pointing hint the radius was anchored on —
+    so a caller can see whether a miss was an all-sky miss or a bounded one.
+    They are filled on every path that reaches the backends, solution or not.
+    astrometry.net searches the requested window verbatim; the ATLAS backend
+    ignores the radius (its blind path always searches locally around the
+    hint) and, unless the window was explicit, narrows it around the header's
+    pixel-scale estimate — ``search_atlas_*`` is the window ATLAS was actually
+    given, set only when that backend was attempted.
+    """
 
     science_hdu_index: int | None = None
     ra_deg: float | None = None
@@ -38,6 +49,13 @@ class WcsSolveMetadata:
     delta_ra_arcsec: float | None = None
     delta_dec_arcsec: float | None = None
     n_field: int = 0
+    search_radius_deg: float | None = None
+    search_min_scale_arcsec: float | None = None
+    search_max_scale_arcsec: float | None = None
+    search_center_ra_deg: float | None = None
+    search_center_dec_deg: float | None = None
+    search_atlas_min_scale_arcsec: float | None = None
+    search_atlas_max_scale_arcsec: float | None = None
 
 
 @dataclass(frozen=True)

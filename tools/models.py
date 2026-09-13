@@ -15,6 +15,7 @@ __all__ = [
     "FileMetadata",
     "ArtifactMetadata",
     "TableSummary",
+    "WcsSearchSummary",
     "WcsSummary",
     "CatalogSummary",
     "ReferenceBandResolution",
@@ -107,14 +108,42 @@ class TableSummary(KeplerToolModel):
     columns: list[str] = Field(default_factory=list)
 
 
+class WcsSearchSummary(KeplerToolModel):
+    """The search the plate solver was asked to run.
+
+    Present only when the solve reached the backends. ``radius_deg`` and the
+    ``min``/``max_scale_arcsec`` window are what astrometry.net searched
+    verbatim; ``all_sky`` is the extracted default (radius 180). The ATLAS
+    backend ignores the radius -- it always searches locally around the
+    pointing hint -- and unless a scale bound was explicit it narrows the
+    window around the header's pixel-scale estimate, so when ATLAS was
+    attempted ``atlas_min``/``atlas_max_scale_arcsec`` carry the window it was
+    given. ``explicit`` names which of the caller's ``search_radius_deg`` /
+    ``min_scale_arcsec`` / ``max_scale_arcsec`` set the value reported, so a
+    bounded miss is distinguishable from an all-sky one. ``center_*`` is the
+    frame's own pointing hint the radius was centred on.
+    """
+
+    radius_deg: float
+    all_sky: bool
+    min_scale_arcsec: float
+    max_scale_arcsec: float
+    center_ra_deg: float | None = None
+    center_dec_deg: float | None = None
+    atlas_min_scale_arcsec: float | None = None
+    atlas_max_scale_arcsec: float | None = None
+    explicit: list[str] = Field(default_factory=list)
+
+
 class WcsSummary(KeplerToolModel):
     """Compact celestial WCS metadata from a FITS header or plate solve.
 
-    ``algorithms.wcs.state.WcsSolution`` carries fitted diagnostics such as
-    ``pointing_error_arcsec`` and ``n_field``; this public summary intentionally
-    reports only the common WCS geometry shared by header inspection and the
-    plate-solving tool. ``attempted_backends`` identifies which configured
-    solvers the plate-solving path actually invoked.
+    ``algorithms.wcs.results.WcsSolveMetadata`` carries fitted diagnostics such
+    as ``pointing_error_arcsec`` and ``n_field``; this public summary
+    intentionally reports only the common WCS geometry shared by header
+    inspection and the plate-solving tool. ``attempted_backends`` identifies
+    which configured solvers the plate-solving path actually invoked, and
+    ``search`` what they were asked to search.
     """
 
     file: FileMetadata
@@ -127,6 +156,7 @@ class WcsSummary(KeplerToolModel):
     pixel_scale_arcsec: tuple[float, float] | None = None
     rotation_deg: float | None = None
     attempted_backends: list[str] = Field(default_factory=list)
+    search: WcsSearchSummary | None = None
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 
