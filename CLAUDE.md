@@ -202,8 +202,11 @@ zero_point, result = perform_field_calibration(
 `deps.query_catalogs` and no lazy import of `algorithms.query` — `algorithms/fieldcal/`
 opens no socket at all, and fetching the rows is the caller's job. In this repo
 that caller is the tool layer: `tools.photometry.calibrate_zeropoint` does the
-query, and passing it `catalog_sources=` (from
+query, and passing it `catalog_fixture=` (or `catalog_sources=` from
 `tools.fieldcal_reference.replay_catalog_sources`) makes the whole solve offline.
+`"full_response"` replays the recorded APASS response for the whole field
+**together with the recorded VSX rows** -- the recorded selection filtered
+variables out before matching, and does not reproduce without them.
 
 One public tool call is Kepler's execution boundary: no run, stage, or session
 state is retained between calls, and no tool writes state another tool reads.

@@ -22,6 +22,13 @@ ships). ``skynet_zero_point`` -- ``calc_solution``'s
 ``catalog_mag = instrumental_mag + zero_point`` offset -- is recorded for all
 four and reproduced bit-for-bit by :func:`solve_zeropoint_from_reference`.
 
+``ngc5128_b_002`` additionally carries the recorded VizieR responses the
+run's catalog selection consumed -- ``apass_response.json`` (the full APASS
+cone, 132 rows) and ``vsx_response.json`` (the variables the run filtered
+against, 12 rows) -- so :func:`replay_field_calibration` can re-run the
+whole selection offline and :func:`replay_catalog_sources` can hand either
+the selected rows or the full response to a from-pixels solve.
+
 Only ``KEPLER_FIELDCAL_DATA_DIR`` relocates the ``zp_solutions/`` search;
 the bundled-frame and Afterglow web-table lookups always read the repo's own
 ``data/`` because they only make sense against the shipped fixtures.
@@ -36,6 +43,9 @@ from pathlib import Path
 
 from tools.calibration import solve_zeropoint_from_measurements
 from tools.models import (
+    CatalogResponseReference,
+    FieldCalMatch,
+    FieldCalReplay,
     ToolError,
     ToolWarning,
     ZeropointComparison,
@@ -46,11 +56,15 @@ from tools.models import (
 __all__ = [
     "FIELDCAL_DATA_DIR_ENV",
     "PARITY_ZP_TOLERANCE",
+    "CATALOG_FIXTURES",
     "list_zeropoint_references",
     "load_zeropoint_reference",
     "solve_zeropoint_from_reference",
     "compare_zeropoint_to_reference",
+    "load_catalog_response",
     "replay_catalog_sources",
+    "replay_variable_sources",
+    "replay_field_calibration",
     "load_ocl_reference",
 ]
 
@@ -61,6 +75,18 @@ FIELDCAL_DATA_DIR_ENV = "KEPLER_FIELDCAL_DATA_DIR"
 #: The upstream diagnostic's own declared agreement threshold, in magnitudes.
 #: Used when a recorded solve does not carry its own ``parity_zp_tolerance``.
 PARITY_ZP_TOLERANCE = 0.0005
+
+#: The two inputs an offline replay can be asked for, by name. ``selected_rows``
+#: is the small bit-exact regression case: the rows ``fit_data.csv`` marks
+#: ``used_for_calibration``, i.e. the catalog rows that are already known to
+#: match. ``full_response`` is the end-to-end selection replay: the recorded
+#: VizieR response for the whole field, from which the matches still have to
+#: be chosen. Only ``ngc5128_b_002`` has the latter.
+CATALOG_FIXTURES = ("selected_rows", "full_response")
+
+#: A recorded VizieR response lives next to the solve it fed, one file per
+#: catalog: ``<field>/apass_response.json``, ``<field>/vsx_response.json``.
+_RESPONSE_FILENAME = "{catalog}_response.json"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -391,22 +417,105 @@ def load_ocl_reference(frame_stem: str) -> dict:
     }
 
 
-def replay_catalog_sources(field: str, directory: str | Path | None = None) -> list:
-    """Rebuild the catalog rows Skynet actually matched, for an offline solve.
+def _response_path(field_dir: Path, catalog: str) -> Path:
+    return field_dir / _RESPONSE_FILENAME.format(catalog=catalog.lower())
 
-    Returns ``list[algorithms.fieldcal.schemas.CatalogSource]`` -- the recorded
-    matched APASS rows, with position and reference magnitude, so
-    ``tools.photometry.calibrate_zeropoint`` can run the real extract -> measure
-    -> match -> solve chain against real catalog values with no network.
 
-    LIMITATION: ``fit_data.csv`` recorded only the rows that *matched* a
-    detection (the ``local_catalog_*`` columns), not the full cone-search
-    response. Injecting these reproduces photometry -> matching -> ref-mag ->
-    solve, but not the selection statistics -- ``fit_summary.json``'s
-    ``num_not_selected_by_field_cal`` cannot be recovered from this fixture.
-    Only ``ngc5128_b_002`` carries these columns; every other field returns
-    ``[]``.
+def _read_response(field_dir: Path, catalog: str) -> dict | None:
+    path = _response_path(field_dir, catalog)
+    if not path.is_file():
+        return None
+    try:
+        loaded = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return loaded if isinstance(loaded, dict) and loaded.get("rows") is not None else None
+
+
+def _response_table(payload: dict):
+    """Rebuild the astropy table astroquery returned, column dtypes and masks
+    included, so the catalog plugin's own ``table_to_sources`` sees exactly
+    what the live path saw. A JSON ``null`` is a masked cell; a float32
+    magnitude column stays float32, which is what keeps the reference
+    magnitudes bit-exact against ``fit_data.csv``.
     """
+    import numpy as np
+    from astropy.table import MaskedColumn, Table
+
+    columns = []
+    rows = payload["rows"]
+    for index, spec in enumerate(payload["columns"]):
+        dtype = np.dtype(spec["dtype"])
+        cells = [row[index] for row in rows]
+        mask = [cell is None for cell in cells]
+        fill = "" if dtype.kind in "US" else 0
+        values = [fill if cell is None else cell for cell in cells]
+        columns.append(
+            MaskedColumn(
+                np.array(values, dtype=dtype),
+                mask=mask,
+                name=spec["name"],
+                unit=spec.get("unit"),
+                description=spec.get("description"),
+            )
+        )
+    return Table(columns, masked=True)
+
+
+def load_catalog_response(
+    field: str, catalog: str = "APASS", directory: str | Path | None = None
+) -> CatalogResponseReference:
+    """The provenance of a recorded VizieR response, without its rows.
+
+    Reads ``<field>/<catalog>_response.json`` and reports what was asked
+    (``query``), of what release, when, with which columns and under what
+    licence (``provenance``). A field that has no recorded response for
+    ``catalog`` comes back with a ``fixture_missing`` error naming the file,
+    never raised; only ``ngc5128_b_002`` ships one.
+    """
+    field_dir = _solutions_dir(directory) / field
+    payload = _read_response(field_dir, catalog)
+    if payload is None:
+        return CatalogResponseReference(
+            field=field,
+            catalog=catalog,
+            errors=[
+                ToolError(
+                    code="fixture_missing",
+                    message=f"No recorded {catalog} response for {field!r}: "
+                    f"{_response_path(field_dir, catalog).name} is not present in "
+                    f"{field_dir}.",
+                )
+            ],
+        )
+    return CatalogResponseReference(
+        field=field,
+        catalog=str(payload.get("catalog") or catalog),
+        path=str(_response_path(field_dir, catalog)),
+        vizier_catalog=payload.get("vizier_catalog"),
+        vizier_table=payload.get("vizier_table"),
+        query=dict(payload.get("query") or {}),
+        provenance=dict(payload.get("provenance") or {}),
+        columns=[spec["name"] for spec in payload.get("columns", [])],
+        row_count=len(payload["rows"]),
+    )
+
+
+def _sources_from_response(field: str, catalog: str, directory: str | Path | None) -> list:
+    """The recorded response as ``CatalogSource`` rows, through the same
+    plugin mapping the live query uses. ``[]`` when nothing was recorded."""
+    payload = _read_response(_solutions_dir(directory) / field, catalog)
+    if payload is None:
+        return []
+
+    # The bound plugin (declaration + VizieR backend) supplies the column
+    # mapping; nothing here issues a query.
+    from algorithms.query.registry import CATALOGS
+
+    return list(CATALOGS[catalog].table_to_sources(_response_table(payload)))
+
+
+def _selected_row_sources(field: str, directory: str | Path | None) -> list:
     from algorithms.fieldcal.schemas import CatalogSource, Mag
 
     field_dir = _solutions_dir(directory) / field
@@ -441,6 +550,306 @@ def replay_catalog_sources(field: str, directory: str | Path | None = None) -> l
                 )
             )
     return sources
+
+
+def replay_catalog_sources(
+    field: str, directory: str | Path | None = None, *, fixture: str = "selected_rows"
+) -> list:
+    """Rebuild the catalog rows for an offline solve, from one of two fixtures.
+
+    Returns ``list[algorithms.fieldcal.schemas.CatalogSource]`` for
+    ``tools.photometry.calibrate_zeropoint``, so the real extract -> measure
+    -> match -> solve chain runs against real catalog values with no network.
+    ``fixture`` names which recorded input, and is one of
+    :data:`CATALOG_FIXTURES`:
+
+    ``"selected_rows"`` (default) -- the rows Skynet actually matched: the
+    ``used_for_calibration`` rows of ``fit_data.csv``, with position and
+    reference magnitude. This is the small, bit-exact regression case. It
+    exercises photometry -> matching -> ref-mag -> solve, but not selection:
+    every row it carries is already known to match, and the rows that failed
+    to match were never written down, so ``fit_summary.json``'s
+    ``num_not_selected_by_field_cal`` cannot be reproduced from it. Only
+    ``ngc5128_b_002`` carries these columns; every other field returns ``[]``.
+
+    ``"full_response"`` -- the end-to-end selection replay: the recorded
+    APASS response for the whole field (``apass_response.json``, a 10-arcmin
+    cone that contains the frame's footprint), rebuilt as an astropy table and
+    mapped through the catalog plugin's own ``table_to_sources``, so the rows
+    are what the live query would have handed ``perform_field_calibration``
+    -- ids included, which is to say none: VizieR did not return the
+    requested ``recno``. Only ``ngc5128_b_002`` has a recorded response. A
+    solve over these rows must *choose* its matches; pair it with
+    :func:`replay_variable_sources`, because the recorded run filtered VSX
+    variables out before matching and does not reproduce without them.
+
+    Neither path opens a socket. An unrecognised ``fixture`` is a caller
+    error and raises ``ValueError``.
+    """
+    if fixture not in CATALOG_FIXTURES:
+        raise ValueError(
+            f"fixture must be one of {', '.join(CATALOG_FIXTURES)}; got {fixture!r}"
+        )
+    if fixture == "full_response":
+        return _sources_from_response(field, "APASS", directory)
+    return _selected_row_sources(field, directory)
+
+
+def replay_variable_sources(field: str, directory: str | Path | None = None) -> list:
+    """The recorded VSX rows for a field, for ``perform_field_calibration``'s
+    ``variable_sources`` -- the variables the recorded run filtered its catalog
+    candidates against before matching. ``[]`` where none were recorded, which
+    ``perform_field_calibration`` treats as "nothing to filter". No socket.
+    """
+    return _sources_from_response(field, "VSX", directory)
+
+
+def _recorded_detections(field_dir: Path) -> tuple[list, list[str]]:
+    """The photometered sources the recorded run selected from, and the ids
+    it selected, both in ``fit_data.csv`` order.
+
+    Mirrors upstream's diagnostic exactly: a row is a detection when its
+    ``mag`` and ``flux`` are finite and non-zero; null uncertainties are kept
+    as ``None`` (``calc_solution`` distinguishes "no error" from "zero
+    error"). ``mag`` is on the recorded ``fit_data.csv`` scale, so the solve
+    lands on ``production_calc_solution`` rather than on Afterglow's base-20
+    correction.
+    """
+    from algorithms.fieldcal.schemas import PhotometryData
+
+    detections: list[PhotometryData] = []
+    selected_ids: list[str] = []
+    path = field_dir / "fit_data.csv"
+    if not path.is_file():
+        return detections, selected_ids
+    with path.open(newline="") as handle:
+        for record in csv.DictReader(handle):
+            source_id = (record.get("id") or "").strip() or None
+            if str(record.get("used_for_calibration", "")).strip().lower() in ("true", "1"):
+                selected_ids.append(source_id)
+            mag, flux = _f(record.get("mag")), _f(record.get("flux"))
+            if not mag or not flux:
+                continue
+            detections.append(
+                PhotometryData(
+                    id=source_id,
+                    x=_f(record.get("x")),
+                    y=_f(record.get("y")),
+                    ra_hours=_f(record.get("ra_hours")),
+                    dec_degs=_f(record.get("dec_degs")),
+                    mag=mag,
+                    mag_error=_f(record.get("mag_error")),
+                    flux=flux,
+                    flux_error=_f(record.get("flux_error")),
+                    filter=(record.get("filter") or "").strip() or None,
+                )
+            )
+    return detections, selected_ids
+
+
+def _catalog_index(catalog_id: str | None) -> int | None:
+    """``perform_field_calibration`` names an id-less candidate
+    ``fieldcal_source_<n>`` by its 1-based position in the list it was given."""
+    if not catalog_id:
+        return None
+    prefix, _, number = str(catalog_id).rpartition("_")
+    if prefix != "fieldcal_source" or not number.isdigit():
+        return None
+    return int(number) - 1
+
+
+def replay_field_calibration(
+    field: str, directory: str | Path | None = None
+) -> FieldCalReplay:
+    """Re-run a recorded field calibration end to end, catalog selection included.
+
+    This is the full-response replay. The recorded detections (``fit_data.csv``)
+    and the recorded APASS and VSX responses go through
+    ``perform_field_calibration`` the way upstream's diagnostic drove it --
+    ``use_provided_photometry``, so the recorded instrumental magnitudes are
+    consumed rather than re-measured -- with the bundled frame's header
+    supplying the WCS, the epoch and the filter. So, unlike
+    :func:`solve_zeropoint_from_reference`, the 35 calibration sources are
+    *chosen* here: from the 132 candidates in the cone, after the VSX filter,
+    by mutual nearest-neighbour matching against 298 detections. The result
+    reports the counts, each match, the solve, and the comparison to the
+    recorded numbers; ``selection_matches_recorded`` says whether the replay
+    chose exactly the recorded rows in the recorded order.
+
+    Needs the recorded response and the bundled frame, so only
+    ``ngc5128_b_002`` can run; any other field returns the errors that stop
+    it. No socket is opened on any path.
+    """
+    reference = load_zeropoint_reference(field, directory)
+    if reference.errors:
+        return FieldCalReplay(field=field, errors=list(reference.errors))
+
+    field_dir = _solutions_dir(directory) / field
+    summary = _read_summary(field_dir)
+    catalog = reference.catalog or "APASS"
+    errors: list[ToolError] = []
+    warnings: list[ToolWarning] = list(reference.warnings)
+
+    candidates = replay_catalog_sources(field, directory, fixture="full_response")
+    if not candidates:
+        errors.append(
+            ToolError(
+                code="fixture_missing",
+                message=f"No recorded {catalog} response for {field!r}: "
+                f"{_response_path(field_dir, catalog).name} is not present in {field_dir}. "
+                "The selection replay needs the full response, not just the matched rows.",
+            )
+        )
+    if reference.frame_path is None:
+        errors.append(
+            ToolError(
+                code="frame_not_bundled",
+                message=f"No bundled frame for {field!r}; the replay takes its WCS, "
+                "epoch and filter from the frame header.",
+            )
+        )
+    if errors:
+        return FieldCalReplay(field=field, catalog=catalog, errors=errors, warnings=warnings)
+
+    variables = replay_variable_sources(field, directory)
+    if not variables:
+        warnings.append(
+            ToolWarning(
+                code="variable_sources_not_recorded",
+                message=f"No recorded VSX response for {field!r}; the variable-star "
+                "filter the recorded run applied before matching is skipped, so the "
+                "selection may differ from the recorded one.",
+            )
+        )
+
+    detections, selected_ids = _recorded_detections(field_dir)
+    if not detections:
+        return FieldCalReplay(
+            field=field,
+            catalog=catalog,
+            frame_path=reference.frame_path,
+            errors=[ToolError(code="missing_fit_data", message=f"No detections in {field_dir.name}/fit_data.csv.")],
+            warnings=warnings,
+        )
+
+    import numpy as np
+    from astropy.io import fits
+
+    from algorithms.fieldcal.field_cal import perform_field_calibration
+    from algorithms.fieldcal.schemas import PhotometricCalibrationSettings
+    from algorithms.photometry.source_extraction import build_wcs_from_header
+    from algorithms.skylib_lite.util.angle import angdist
+
+    # Everything known before the solve runs; the failure results carry it too.
+    inputs = dict(
+        field=field,
+        catalog=catalog,
+        frame_path=reference.frame_path,
+        num_catalog_candidates=len(candidates),
+        num_variable_sources=len(variables),
+        num_detected_sources=len(detections),
+    )
+
+    try:
+        header = fits.getheader(reference.frame_path)
+        wcs = build_wcs_from_header(header)
+        if wcs is None:
+            raise ValueError("Missing WCS needed for calibration")
+        # The recorded run's settings: the defaults (min_snr 10, source_match_tol
+        # 5 px, variable_check_tol 5 arcsec) plus its own strict_filter_parity
+        # flag. With use_provided_photometry no pixel is read, so the image
+        # array is a placeholder, as it was upstream.
+        settings = PhotometricCalibrationSettings(
+            catalogs=[catalog],
+            strict_filter_parity=bool(summary.get("strict_filter_parity", False)),
+        )
+        outcome = perform_field_calibration(
+            header.copy(),
+            np.zeros((2, 2), dtype=float),
+            wcs=wcs,
+            field_cal_settings=settings,
+            catalog_sources=candidates,
+            variable_sources=variables,
+            detected_sources=detections,
+            use_provided_photometry=True,
+        )
+    except Exception as exc:  # noqa: BLE001 -- no match, no convergence
+        return FieldCalReplay(
+            **inputs,
+            errors=[ToolError(code="field_calibration_failed", message=str(exc))],
+            warnings=warnings,
+        )
+    if outcome is None or outcome[0] is None:
+        return FieldCalReplay(
+            **inputs,
+            errors=[ToolError(code="no_solution", message="field calibration did not converge")],
+            warnings=warnings,
+        )
+    zero_point, result = outcome
+
+    # A matched source keeps the detection's position and takes the
+    # candidate's id, so the detection is recovered by position (as upstream's
+    # diagnostic did) and the candidate by the id it was assigned.
+    detection_by_xy = {(d.x, d.y): d for d in detections}
+    matches: list[FieldCalMatch] = []
+    for source in result.phot_results:
+        detection = detection_by_xy.get((source.x, source.y))
+        index = _catalog_index(source.id)
+        candidate = candidates[index] if index is not None and index < len(candidates) else None
+        separation = None
+        if detection is not None and candidate is not None:
+            separation = float(
+                angdist(detection.ra_hours, detection.dec_degs, candidate.ra_hours, candidate.dec_degs)
+                * 3600.0
+            )
+        matches.append(
+            FieldCalMatch(
+                detected_id=detection.id if detection is not None else None,
+                catalog_index=index,
+                catalog_id=source.id,
+                catalog_ra_deg=candidate.ra_hours * 15.0 if candidate is not None else None,
+                catalog_dec_deg=candidate.dec_degs if candidate is not None else None,
+                separation_arcsec=separation,
+                mag=_f(source.mag),
+                mag_error=_f(source.mag_error),
+                ref_mag=_f(source.ref_mag),
+                ref_mag_error=_f(source.ref_mag_error),
+            )
+        )
+
+    solution = ZeropointSolution(
+        zero_point=_f(zero_point),
+        zero_point_error_mag=_f(result.zero_point_error_mag),
+        zero_point_slop=_f(result.zero_point_slop),
+        limmag5=_f(result.limmag5),
+        rej_percent=_f(result.rej_percent),
+        source_count=len(result.phot_results),
+    )
+    comparison = compare_zeropoint_to_reference(float(zero_point), field, directory)
+
+    # fit_summary.json's own counts; the matched count falls back to the rows
+    # the CSV flags, which is the same number for every recorded solve.
+    recorded_matched = summary.get("num_catalog_matched")
+    if not isinstance(recorded_matched, int):
+        recorded_matched = len(selected_ids) or None
+    recorded_not_selected = summary.get("num_not_selected_by_field_cal")
+    if not isinstance(recorded_not_selected, int):
+        recorded_not_selected = None
+
+    return FieldCalReplay(
+        **inputs,
+        fixture="full_response",
+        num_matched=len(matches),
+        num_catalog_not_selected=len(candidates) - len(matches),
+        num_detections_not_selected=len(detections) - len(matches),
+        recorded_num_matched=recorded_matched,
+        recorded_num_not_selected=recorded_not_selected,
+        selection_matches_recorded=[m.detected_id for m in matches] == selected_ids,
+        matches=matches,
+        solution=solution,
+        comparison=comparison,
+        warnings=warnings + list(comparison.warnings),
+    )
 
 
 def compare_zeropoint_to_reference(

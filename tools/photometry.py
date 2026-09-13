@@ -48,7 +48,12 @@ from tools.claude_photometry_haiku_tool import (
     resolve_fits_path,
 )
 from tools.config import artifact_directory
-from tools.fieldcal_reference import compare_zeropoint_to_reference
+from tools.fieldcal_reference import (
+    CATALOG_FIXTURES,
+    compare_zeropoint_to_reference,
+    replay_catalog_sources,
+    replay_variable_sources,
+)
 from tools.models import (
     ArtifactRef,
     FileMetadata,
@@ -56,6 +61,7 @@ from tools.models import (
     PhotometryTargetLibrary,
     SourceSummary,
     ToolError,
+    ToolWarning,
     ZeropointComparison,
     ZeropointSolution,
 )
@@ -74,8 +80,13 @@ def _resolve_calibration_inputs(
     catalog_sources: list | None,
     catalogs: list[str] | None,
     variable_check_tol: float | None,
+    variable_sources: list | None = None,
 ) -> tuple[list, list | None, list[str]]:
-    """Resolve remote catalog data at the tool boundary for one calibration call."""
+    """Resolve remote catalog data at the tool boundary for one calibration call.
+
+    ``variable_sources`` already in hand (the recorded VSX rows of a replay)
+    are passed through; the VSX query runs only when they are not.
+    """
     from algorithms.catalogs import CATALOGS
     from algorithms.query.runner import query_catalogs
     from algorithms.query.selection import select_catalogs_for_filter
@@ -99,8 +110,12 @@ def _resolve_calibration_inputs(
             {name for name in (getattr(source, "catalog_name", None) for source in catalog_sources) if name}
         )
 
-    variable_sources = None
-    if catalog_sources is not None and variable_check_tol and variable_check_tol > 0:
+    if (
+        variable_sources is None
+        and catalog_sources is not None
+        and variable_check_tol
+        and variable_check_tol > 0
+    ):
         try:
             variable_sources = query_catalogs(["VSX"], wcs=wcs, skip_failed=True)
         except Exception:
@@ -269,6 +284,7 @@ def calibrate_zeropoint(
     path: str | Path,
     *,
     catalog_sources: list | None = None,
+    catalog_fixture: str | None = None,
     catalogs: list[str] | None = None,
     compare_to: str | None = None,
 ) -> ZeropointComparison:
@@ -280,23 +296,95 @@ def calibrate_zeropoint(
     zero point returned is ABSOLUTE, on ``field_cal.py``'s aperture-correction-
     off magnitude scale.
 
-    ``catalog_sources`` (from
-    ``tools.fieldcal_reference.replay_catalog_sources``) is the offline path:
-    the recorded APASS rows are passed in, so no catalog query is reached and
-    the variable-star cross-check (which would query VSX) is disabled. Without
-    it, the tool-owned calibration-input helper queries a reference catalog
-    over the network, exactly as
-    ``run_photometry_on_target(use_field_cal=True)`` does.
+    Two offline paths, neither of which opens a socket. ``catalog_fixture``
+    names a recorded input for the solve ``compare_to`` names, one of
+    ``tools.fieldcal_reference.CATALOG_FIXTURES``:
+
+    * ``"selected_rows"`` -- the APASS rows Skynet actually matched. Every
+      row is already known to match, so this validates photometry ->
+      matching -> ref-mag -> solve, not catalog selection. The variable-star
+      cross-check is disabled: it would query VSX, and could drop rows that
+      are in the recorded matched set.
+    * ``"full_response"`` -- the end-to-end selection replay: the recorded
+      APASS response for the whole field, with the recorded VSX rows applied
+      as the variable-star filter, so the matches are chosen from all the
+      candidates exactly as a live solve chooses them.
+
+    ``catalog_sources`` is the same offline path with the rows supplied
+    directly (``tools.fieldcal_reference.replay_catalog_sources`` builds
+    them); it and ``catalog_fixture`` are mutually exclusive. Without either,
+    the tool-owned calibration-input helper queries a reference catalog over
+    the network, exactly as ``run_photometry_on_target(use_field_cal=True)``
+    does.
 
     ``compare_to`` names a recorded solve (e.g. ``"ngc5128_b_002"``); the
     result is a :class:`~tools.models.ZeropointComparison` against it. Omit it
     and ``reference`` is ``None`` -- just the solved ``zero_point``.
 
     LIMITATION: only ``ngc5128_b_002`` / ``ngc5128_galaxy_b_001.fits`` can be
-    driven end to end -- the three NGC 5286 B solves have no bundled frame. And
-    only the *matched* catalog rows were recorded, so a replay validates
-    photometry -> matching -> ref-mag -> solve, not catalog selection.
+    driven end to end -- the three NGC 5286 B solves have no bundled frame,
+    and only ``ngc5128_b_002`` has a recorded full response. This path
+    re-measures the photometry from pixels, so it is a real solve, not a
+    bit-exact one; ``tools.fieldcal_reference.replay_field_calibration`` is
+    the bit-exact selection replay over the recorded detections.
     """
+    # Argument errors first, before the filesystem is touched.
+    warnings: list = []
+    variable_sources: list | None = None
+    if catalog_fixture is not None:
+        if catalog_sources is not None:
+            return ZeropointComparison(
+                errors=[
+                    ToolError(
+                        code="conflicting_catalog_inputs",
+                        message="Pass either catalog_sources or catalog_fixture, not both.",
+                    )
+                ]
+            )
+        if catalog_fixture not in CATALOG_FIXTURES:
+            return ZeropointComparison(
+                errors=[
+                    ToolError(
+                        code="unknown_catalog_fixture",
+                        message=f"catalog_fixture must be one of "
+                        f"{', '.join(CATALOG_FIXTURES)}; got {catalog_fixture!r}.",
+                    )
+                ]
+            )
+        if compare_to is None:
+            return ZeropointComparison(
+                errors=[
+                    ToolError(
+                        code="catalog_fixture_requires_compare_to",
+                        message="catalog_fixture replays the rows recorded for a "
+                        "solve; name it with compare_to (e.g. 'ngc5128_b_002').",
+                    )
+                ]
+            )
+        catalog_sources = replay_catalog_sources(compare_to, fixture=catalog_fixture)
+        if not catalog_sources:
+            return ZeropointComparison(
+                errors=[
+                    ToolError(
+                        code="catalog_fixture_missing",
+                        message=f"No {catalog_fixture!r} catalog rows are recorded for "
+                        f"{compare_to!r}; only ngc5128_b_002 carries them. Nothing was "
+                        "queried.",
+                    )
+                ]
+            )
+        if catalog_fixture == "full_response":
+            variable_sources = replay_variable_sources(compare_to)
+            if not variable_sources:
+                warnings.append(
+                    ToolWarning(
+                        code="variable_sources_not_recorded",
+                        message=f"No recorded VSX rows for {compare_to!r}; the "
+                        "variable-star filter is skipped rather than queried.",
+                    )
+                )
+                variable_sources = None
+
     file_meta = describe_file(path)
     if not file_meta.exists or not file_meta.is_file:
         return ZeropointComparison(
@@ -335,12 +423,16 @@ def calibrate_zeropoint(
                 if name
             }
         )
+    # Offline, the variable-star cross-check runs only against recorded VSX
+    # rows: with the full response they are part of the recorded selection,
+    # while replaying the exact rows upstream fed calc_solution it would query
+    # VSX over the network and could drop rows already in the matched set.
+    check_variables = not offline or variable_sources is not None
     field_cal_settings = PhotometricCalibrationSettings(
         catalogs=selected_catalogs or ["APASS"],
-        # Replaying the exact rows upstream fed calc_solution: skip the
-        # variable-star cross-check, which would query VSX over the network and
-        # could drop rows that are already in the recorded matched set.
-        variable_check_tol=0 if offline else PhotometricCalibrationSettings().variable_check_tol,
+        variable_check_tol=(
+            PhotometricCalibrationSettings().variable_check_tol if check_variables else 0
+        ),
     )
     photometry_settings = PhotometrySettings(
         mode="aperture", a=5.0, a_in_px=8.0, a_out_px=12.0
@@ -356,6 +448,7 @@ def calibrate_zeropoint(
             catalog_sources=catalog_sources,
             catalogs=selected_catalogs,
             variable_check_tol=field_cal_settings.variable_check_tol,
+            variable_sources=variable_sources,
         )
         outcome = perform_field_calibration(
             header.copy(),
@@ -384,5 +477,7 @@ def calibrate_zeropoint(
     zero_point = float(zero_point)
 
     if compare_to is not None:
-        return compare_zeropoint_to_reference(zero_point, compare_to)
-    return ZeropointComparison(zero_point=zero_point, reference=None)
+        comparison = compare_zeropoint_to_reference(zero_point, compare_to)
+        comparison.warnings = warnings + list(comparison.warnings)
+        return comparison
+    return ZeropointComparison(zero_point=zero_point, reference=None, warnings=warnings)

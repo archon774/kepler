@@ -19,10 +19,14 @@ from pathlib import Path
 import pytest
 
 from tools.fieldcal_reference import (
+    CATALOG_FIXTURES,
     compare_zeropoint_to_reference,
     list_zeropoint_references,
+    load_catalog_response,
     load_zeropoint_reference,
     replay_catalog_sources,
+    replay_field_calibration,
+    replay_variable_sources,
     solve_zeropoint_from_reference,
 )
 
@@ -116,16 +120,229 @@ def test_replay_returns_the_recorded_catalog_rows():
     assert all(s.ra_hours is not None and s.dec_degs is not None for s in sources)
 
 
+def test_the_selected_row_fixture_is_the_default_and_is_named():
+    """The two replay inputs are chosen explicitly; the default is the small one."""
+    assert CATALOG_FIXTURES == ("selected_rows", "full_response")
+    by_default = replay_catalog_sources("ngc5128_b_002")
+    named = replay_catalog_sources("ngc5128_b_002", fixture="selected_rows")
+    assert [s.ref_mag for s in by_default] == [s.ref_mag for s in named]
+
+
+def test_an_unknown_fixture_name_is_a_caller_error():
+    with pytest.raises(ValueError, match="selected_rows"):
+        replay_catalog_sources("ngc5128_b_002", fixture="everything")
+
+
+# ---------------------------------------------------------------------------
+# P7: the full APASS response and the end-to-end selection replay
+# ---------------------------------------------------------------------------
+
+#: fit_summary.json's own selection statistics for the recorded run. 304 rows
+#: were photometered; 6 had no valid magnitude; 35 matched APASS; 263 did not.
+RECORDED_NUM_MATCHED = 35
+RECORDED_NUM_NOT_SELECTED = 263
+
+#: The extracted VizieR mapping (``algorithms/query/vizier.py``) stores each
+#: band's uncertainty as the ``np.float32`` astroquery handed it, and pydantic
+#: warns every time such a source is ``model_dump()``-ed -- which
+#: ``perform_field_calibration`` does for every candidate. The live path
+#: behaves identically, and the resolved ``ref_mag_error`` is a Python float,
+#: bit-exact (asserted below). Silenced on the replays that go through that
+#: mapping so a real failure is not buried under 130 lines of it.
+float32_mag_errors = pytest.mark.filterwarnings(
+    "ignore:Pydantic serializer warnings:UserWarning"
+)
+
+
+def test_the_recorded_apass_response_documents_its_provenance():
+    """Checkbox 1: query coordinates, radius, release, retrieval date, columns,
+    licence. The fixture is only as trustworthy as this record."""
+    response = load_catalog_response("ngc5128_b_002")
+    assert response.errors == []
+    assert response.catalog == "APASS"
+    assert response.vizier_table == "II/336/apass9"
+    assert response.row_count == 132
+
+    query = response.query
+    assert query["shape"] == "cone"
+    assert query["radius_arcmin"] == 10.0
+    assert query["ra_hours"] == pytest.approx(13.42413224816283, abs=1e-12)
+    assert query["dec_degs"] == pytest.approx(-43.018409934383605, abs=1e-12)
+
+    provenance = response.provenance
+    assert provenance["retrieved_utc"].startswith("2026-09-13T")
+    assert "DR9" in provenance["catalog_release"]
+    assert "APASS" in provenance["licence"] and "VizieR" in provenance["licence"]
+    assert provenance["truncated"] is False
+    assert response.columns == [
+        "RAJ2000", "DEJ2000", "Bmag", "e_Bmag", "Vmag", "e_Vmag",
+        "g'mag", "e_g'mag", "r'mag", "e_r'mag", "i'mag", "e_i'mag",
+    ]
+
+
+def test_the_recorded_vsx_response_is_documented_too():
+    response = load_catalog_response("ngc5128_b_002", catalog="VSX")
+    assert response.errors == []
+    assert response.row_count == 12
+    assert response.query["radius_arcmin"] == 10.0
+    assert "variable_check_tol" in response.provenance["why_recorded"]
+
+
+def test_a_field_without_a_recorded_response_says_so():
+    response = load_catalog_response("ngc5286_b_000")
+    assert [e.code for e in response.errors] == ["fixture_missing"]
+    assert "apass_response.json" in response.errors[0].message
+
+
+@float32_mag_errors
+def test_full_response_replay_normalizes_the_whole_recorded_cone():
+    """The 132 rows go through the real VizieR column mapping, so this is the
+    candidate list the live path would have handed perform_field_calibration."""
+    sources = replay_catalog_sources("ngc5128_b_002", fixture="full_response")
+    assert len(sources) == 132
+    assert {s.catalog_name for s in sources} == {"APASS"}
+    # recno was requested but not returned, exactly as live: no ids.
+    assert all(s.id is None for s in sources)
+    assert all(s.ra_hours is not None and s.dec_degs is not None for s in sources)
+    # Six rows have no B magnitude; every row has at least one band.
+    assert sum("B" in s.mags for s in sources) == 126
+    assert all(s.mags for s in sources)
+    # float32 in the response, reproduced exactly: 10.097 as a float32.
+    assert sources[0].mags["B"].value == 10.097000122070312
+
+
+def test_full_response_replay_is_empty_where_nothing_was_recorded():
+    assert replay_catalog_sources("ngc5286_b_000", fixture="full_response") == []
+    assert replay_variable_sources("ngc5286_b_000") == []
+
+
+@float32_mag_errors
+def test_replay_variable_sources_returns_the_recorded_vsx_rows():
+    variables = replay_variable_sources("ngc5128_b_002")
+    assert len(variables) == 12
+    assert {v.catalog_name for v in variables} == {"VSX"}
+    assert all(v.ra_hours is not None and v.dec_degs is not None for v in variables)
+
+
+def _recorded_used_rows() -> list[dict]:
+    import csv
+
+    path = Path(__file__).resolve().parent.parent / "data" / "fieldcal" / "zp_solutions"
+    with (path / "ngc5128_b_002" / "fit_data.csv").open(newline="") as fh:
+        return [r for r in csv.DictReader(fh) if r["used_for_calibration"] == "True"]
+
+
+@float32_mag_errors
+def test_the_selection_replay_reproduces_the_recorded_run():
+    """The end-to-end selection replay -- checkbox 3.
+
+    Recorded Afterglow detections + the full APASS cone + the VSX rows, through
+    perform_field_calibration exactly as upstream's diagnostic drove it. Unlike
+    the selected-row replay, the 35 are *chosen* here from 132 candidates.
+    """
+    replay = replay_field_calibration("ngc5128_b_002")
+    assert replay.errors == []
+    assert replay.fixture == "full_response"
+    assert Path(replay.frame_path).name == "ngc5128_galaxy_b_001.fits"
+
+    # Catalog candidate count, selected/rejected counts.
+    assert replay.num_catalog_candidates == 132
+    assert replay.num_variable_sources == 12
+    assert replay.num_detected_sources == 298
+    assert replay.num_matched == RECORDED_NUM_MATCHED
+    assert replay.num_catalog_not_selected == 132 - RECORDED_NUM_MATCHED
+    assert replay.num_detections_not_selected == RECORDED_NUM_NOT_SELECTED
+    assert replay.recorded_num_matched == RECORDED_NUM_MATCHED
+    assert replay.recorded_num_not_selected == RECORDED_NUM_NOT_SELECTED
+    assert replay.selection_matches_recorded is True
+
+    # Matched source identity and order, and the reference magnitudes.
+    used = _recorded_used_rows()
+    assert [m.detected_id for m in replay.matches] == [r["id"] for r in used]
+    assert [m.ref_mag for m in replay.matches] == [float(r["local_ref_mag"]) for r in used]
+    assert [m.ref_mag_error for m in replay.matches] == [
+        float(r["local_ref_mag_error"]) if r["local_ref_mag_error"] else None for r in used
+    ]
+    assert [m.mag for m in replay.matches] == [float(r["mag"]) for r in used]
+    assert all(0.0 <= m.separation_arcsec < 3.06 for m in replay.matches)
+    assert len({m.catalog_index for m in replay.matches}) == RECORDED_NUM_MATCHED
+
+    # The existing recorded solution, bit for bit.
+    reference = load_zeropoint_reference("ngc5128_b_002")
+    assert replay.solution.zero_point == reference.skynet_zero_point
+    assert replay.solution.source_count == RECORDED_NUM_MATCHED
+    assert replay.solution.rej_percent == pytest.approx(25.71428571428571, abs=1e-12)
+    assert replay.comparison.delta_vs_skynet == 0.0
+    assert replay.comparison.within_tolerance is True
+
+
+@float32_mag_errors
+def test_the_selection_replay_needs_the_recorded_vsx_rows(monkeypatch):
+    """PINNED: without the VSX filter the replay matches 36 sources, not 35.
+
+    Gaia DR3 6088704247666049024 sits 0.91 arcsec from the APASS row that would
+    otherwise match SRC467 (a star Afterglow detected twice: SRC335 is the same
+    star, 0.05 arcsec away).
+    The recorded run ran with variable_check_tol=5 and dropped that row before
+    matching. This is why the VSX response is part of the fixture.
+    """
+    import tools.fieldcal_reference as module
+
+    monkeypatch.setattr(module, "replay_variable_sources", lambda *a, **k: [])
+    replay = replay_field_calibration("ngc5128_b_002")
+    assert replay.errors == []
+    assert replay.num_variable_sources == 0
+    assert "variable_sources_not_recorded" in [w.code for w in replay.warnings]
+    assert replay.num_matched == 36
+    assert replay.selection_matches_recorded is False
+    assert "SRC467" in [m.detected_id for m in replay.matches]
+    # The extra star is rejected by the solve, so the zero point barely moves --
+    # which is exactly why a count check matters and a tolerance check does not.
+    assert abs(replay.comparison.delta_vs_skynet) < 1e-9
+    assert replay.solution.zero_point != load_zeropoint_reference("ngc5128_b_002").skynet_zero_point
+
+
+@float32_mag_errors
+def test_the_selection_replay_opens_no_socket(monkeypatch):
+    import socket
+
+    def refuse(self, *args, **kwargs):
+        raise AssertionError("the offline replay opened a socket")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(
+        "algorithms.query.runner.query_catalogs",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("query_catalogs was called")),
+    )
+    replay = replay_field_calibration("ngc5128_b_002")
+    assert replay.errors == []
+    assert replay.num_matched == RECORDED_NUM_MATCHED
+    assert len(replay_catalog_sources("ngc5128_b_002", fixture="full_response")) == 132
+
+
+def test_the_selection_replay_reports_a_field_it_cannot_run():
+    replay = replay_field_calibration("ngc5286_b_000")
+    assert replay.solution is None
+    codes = [e.code for e in replay.errors]
+    assert "fixture_missing" in codes
+    assert "frame_not_bundled" in codes
+
+
+def test_the_selection_replay_reports_an_unknown_field():
+    replay = replay_field_calibration("ngc9999_z_000")
+    assert [e.code for e in replay.errors] == ["not_found"]
+
+
 @pytest.mark.slow
 def test_offline_field_calibration_lands_inside_the_afterglow_tolerance():
     """The full chain on a real frame with no network: extract, measure, match,
     resolve reference magnitudes, solve, compare.
 
-    LIMITATION -- only the 35 *matched* APASS rows were recorded upstream, not
-    the full cone-search response. This exercises photometry -> matching ->
-    ref-mag resolution -> solve against real catalog values, but it cannot
-    reproduce fit_summary.json's num_not_selected_by_field_cal (263): the rows
-    that failed to match were never written down.
+    This is the selected-row case: the 35 APASS rows Skynet actually matched
+    are the only candidates, so photometry -> matching -> ref-mag resolution
+    -> solve runs against real catalog values but catalog *selection* is not
+    exercised -- every row is known to match. The full-response case below is
+    the one that selects.
     """
     from tools.optical import resolve_optical_frame
     from tools.photometry import calibrate_zeropoint
@@ -143,6 +360,113 @@ def test_offline_field_calibration_lands_inside_the_afterglow_tolerance():
     # not be bit-exact. test_solving_from_the_recorded_rows_reproduces_the_
     # recorded_solve is the bit-exact check.
     assert abs(comparison.delta_vs_afterglow) < 0.1
+
+
+@pytest.mark.slow
+@float32_mag_errors
+def test_full_response_calibration_from_pixels_selects_its_own_matches():
+    """The end-to-end selection replay from pixels: extract, measure, then
+    choose matches from all 132 candidates (minus VSX variables) rather than
+    from the 35 that are known to match. Same loose bound as the selected-row
+    case above, for the same reason -- the photometry is re-measured."""
+    from tools.optical import resolve_optical_frame
+    from tools.photometry import calibrate_zeropoint
+
+    frame = resolve_optical_frame("ngc5128_galaxy_b_001")
+    comparison = calibrate_zeropoint(
+        frame.path, catalog_fixture="full_response", compare_to="ngc5128_b_002"
+    )
+    assert comparison.errors == []
+    assert comparison.reference.field == "ngc5128_b_002"
+    assert abs(comparison.delta_vs_afterglow) < 0.1
+
+
+def test_calibrate_zeropoint_rejects_a_fixture_without_a_field():
+    from tools.photometry import calibrate_zeropoint
+
+    comparison = calibrate_zeropoint(
+        "data/optical/ngc5128_galaxy_b_001.fits", catalog_fixture="full_response"
+    )
+    assert [e.code for e in comparison.errors] == ["catalog_fixture_requires_compare_to"]
+
+
+def test_calibrate_zeropoint_rejects_a_fixture_alongside_explicit_rows():
+    from tools.photometry import calibrate_zeropoint
+
+    comparison = calibrate_zeropoint(
+        "data/optical/ngc5128_galaxy_b_001.fits",
+        catalog_sources=replay_catalog_sources("ngc5128_b_002"),
+        catalog_fixture="selected_rows",
+        compare_to="ngc5128_b_002",
+    )
+    assert [e.code for e in comparison.errors] == ["conflicting_catalog_inputs"]
+
+
+def test_calibrate_zeropoint_rejects_an_unknown_fixture_name():
+    from tools.photometry import calibrate_zeropoint
+
+    comparison = calibrate_zeropoint(
+        "data/optical/ngc5128_galaxy_b_001.fits",
+        catalog_fixture="everything",
+        compare_to="ngc5128_b_002",
+    )
+    assert [e.code for e in comparison.errors] == ["unknown_catalog_fixture"]
+    assert "full_response" in comparison.errors[0].message
+
+
+def test_calibrate_zeropoint_reports_a_fixture_that_was_never_recorded():
+    """The three NGC 5286 solves have neither a frame nor a full response; the
+    error has to name the fixture, not fall through to a network query."""
+    from tools.photometry import calibrate_zeropoint
+
+    comparison = calibrate_zeropoint(
+        "data/optical/ngc5128_galaxy_b_001.fits",
+        catalog_fixture="full_response",
+        compare_to="ngc5286_b_000",
+    )
+    assert [e.code for e in comparison.errors] == ["catalog_fixture_missing"]
+    assert "ngc5286_b_000" in comparison.errors[0].message
+
+
+@float32_mag_errors
+def test_calibrate_zeropoint_does_not_reach_the_network_when_a_fixture_is_named(monkeypatch):
+    """Both fixtures short-circuit every query -- APASS and, for the full
+    response with variable checks on, VSX too."""
+    import socket
+
+    def refuse(self, *args, **kwargs):
+        raise AssertionError("calibrate_zeropoint opened a socket")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+
+    from tools.optical import resolve_optical_frame
+    from tools.photometry import calibrate_zeropoint
+
+    frame = resolve_optical_frame("ngc5128_galaxy_b_001")
+    for fixture in CATALOG_FIXTURES:
+        comparison = calibrate_zeropoint(
+            frame.path, catalog_fixture=fixture, compare_to="ngc5128_b_002"
+        )
+        assert comparison.errors == [], fixture
+        assert comparison.zero_point is not None, fixture
+
+
+@float32_mag_errors
+def test_the_offline_paths_are_reachable_from_the_agent_registry():
+    """A model cannot pass CatalogSource objects, so the fixture names are the
+    only way it reaches an offline solve; the selection replay is a tool of
+    its own."""
+    from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
+
+    schemas = {s["name"]: s for s in TOOL_SCHEMAS}
+    fixture = schemas["calibrate_zeropoint"]["input_schema"]["properties"]["catalog_fixture"]
+    assert tuple(fixture["enum"]) == CATALOG_FIXTURES
+    assert "compare_to" in fixture["description"]
+
+    replay = schemas["replay_field_calibration"]
+    assert replay["input_schema"]["required"] == ["field"]
+    assert TOOL_FUNCTIONS["replay_field_calibration"] is replay_field_calibration
+    assert TOOL_FUNCTIONS["replay_field_calibration"](field="ngc5128_b_002").num_matched == 35
 
 
 def test_calibrate_zeropoint_does_not_reach_the_network_when_rows_are_supplied(monkeypatch):

@@ -1271,6 +1271,22 @@
     }
   },
   {
+    "name": "replay_field_calibration",
+    "description": "Re-run a recorded field calibration end to end, catalog selection included, with no network: the recorded detections and the recorded full APASS response (plus the VSX variables the run filtered out) go through perform_field_calibration, so the calibration stars are CHOSEN here -- 35 of 132 candidates for NGC 5128 B -- and the result reports candidate/matched/not-selected counts, each match with its reference magnitude, the ABSOLUTE zero point, and whether the selection and the solve reproduce what fit_summary.json recorded (they do, bit for bit). Only ngc5128_b_002 has the recorded response and a bundled frame; other fields return the errors that stop them.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Recorded-solve name, e.g. 'ngc5128_b_002'. Call list_zeropoint_references to see them."
+        }
+      },
+      "required": [
+        "field"
+      ]
+    }
+  },
+  {
     "name": "compare_zeropoint_to_reference",
     "description": "Place a computed zero point against a recorded solve: report its offset from Skynet's and (for NGC 5128 B) Afterglow's recorded values and whether it lands inside the recorded parity tolerance. `zero_point` must be ABSOLUTE (as solve_zeropoint_from_measurements returns it); hand in Afterglow's bare base-20 correction and this warns rather than reporting a silent 20-magnitude miss.",
     "input_schema": {
@@ -1414,7 +1430,7 @@
   },
   {
     "name": "calibrate_zeropoint",
-    "description": "Solve a photometric zero point from a local FITS frame's own pixels -- source extraction, aperture photometry, catalog match, reference-magnitude resolution, calc_solution -- and place the result against the recorded ground truth. The zero point is ABSOLUTE (Afterglow's API reports 20.0 plus a correction instead). Without `catalog_sources` this queries a reference catalog over the network, like run_photometry_on_target(use_field_cal=true). Today only ngc5128_galaxy_b_001.fits can be driven end to end offline, via catalog_sources from the recorded solve.",
+    "description": "Solve a photometric zero point from a local FITS frame's own pixels -- source extraction, aperture photometry, catalog match, reference-magnitude resolution, calc_solution -- and place the result against the recorded ground truth. The zero point is ABSOLUTE (Afterglow's API reports 20.0 plus a correction instead). Without `catalog_fixture` this queries a reference catalog over the network, like run_photometry_on_target(use_field_cal=true); with it, the recorded catalog rows for `compare_to` are used and no socket is opened. Today only ngc5128_galaxy_b_001.fits (compare_to 'ngc5128_b_002') can be driven end to end offline.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -1432,6 +1448,14 @@
         "compare_to": {
           "type": "string",
           "description": "A recorded-solve name (see list_zeropoint_references) to compare the result against, e.g. 'ngc5128_b_002'."
+        },
+        "catalog_fixture": {
+          "type": "string",
+          "enum": [
+            "selected_rows",
+            "full_response"
+          ],
+          "description": "Solve offline from the catalog rows recorded for the solve named by compare_to (required with this). 'selected_rows': the 35 APASS rows Skynet actually matched -- the small bit-exact regression case; every row is known to match, so catalog selection is not exercised. 'full_response': the end-to-end selection replay -- the recorded APASS response for the whole field, 132 rows, with the recorded VSX variables filtered out, so the matches are chosen as a live solve chooses them. Neither opens a socket."
         }
       },
       "required": [
