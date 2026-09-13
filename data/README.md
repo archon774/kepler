@@ -47,6 +47,7 @@ data/
     photometry/                  per-source photometry export for the same run
   fieldcal/
     zp_solutions/              4 recorded Skynet zero-point solves (in + out)
+      ngc5128_b_002/             + the APASS and VSX responses that solve consumed
     ocl_filter_report.json     Open/Clear/Lum substitute-filter trials
   frame_provenance.json        bundled frame stem -> pre-rename upstream filename
   pulsar/                      5 Green Bank 20 m pulsar scans (5.7 MB)
@@ -157,6 +158,47 @@ Skynet recorded local fit   21.147659857998637
 Afterglow API              (21.14747923526837)   = 20.0 + 1.1474792352683736
 Afterglow web table         21.147                (3 dp, recorded by hand)
 ```
+
+### `ngc5128_b_002/apass_response.json` and `vsx_response.json` — the recorded catalog responses
+
+`fit_data.csv` records the 35 APASS rows that *matched* a detection, not the
+rows that did not, so on its own it can reproduce the solve but not the
+**selection** — `fit_summary.json`'s `num_not_selected_by_field_cal: 263`
+was unreachable. These two files close that gap. They are VizieR responses,
+retrieved once (2026-09-13) with the same column request the live tool path
+sends, stored as one JSON object each — provenance block, `query`, the
+column names/dtypes/units as returned, then one response row per line — and
+they are *not* Skynet artifacts: they are Kepler's own recording of the
+public catalogue content of this field.
+
+| File | What | Query | Rows |
+| --- | --- | --- | --- |
+| `apass_response.json` | APASS DR9 (VizieR `II/336/apass9`), the B/V/g'/r'/i' magnitudes and errors | 10′ cone on the frame's WCS-footprint centre, RA 13.42413 h Dec −43.01841°, no cache, no row cap (132 ≪ the plugin's 1000) | 132 |
+| `vsx_response.json` | VSX (VizieR `B/vsx/vsx`, 2026-08-09 version), the variables the run filtered against | same cone | 12 |
+
+A **cone**, not the box the live path queries: the 10′ cone contains the
+11.2′ × 10.9′ footprint box with margin, so a replay can reproduce the box,
+the clipping and the matching from one recording whichever WCS defines the
+footprint. Numeric `null` is a VizieR masked cell; float32 columns are stored
+as the exact float64 of each float32 so a reload is bit-identical, which is
+what makes the replayed reference magnitudes bit-exact against
+`fit_data.csv`'s `local_ref_mag`. `recno` was requested but not returned,
+exactly as live, so the sources carry no catalog id.
+
+**Both responses are needed.** The recorded run used the default
+`variable_check_tol = 5″`, and VSX lists a YSO (`Gaia DR3
+6088704247666049024`) 0.91″ from the APASS row that would otherwise match
+detection SRC467 (which Afterglow detected twice — SRC335 is the same star,
+0.05″ away).
+With the VSX rows the replay matches the recorded 35; without them it
+matches 36. `tests/test_fieldcal_reference.py` pins both numbers.
+`tools.fieldcal_reference.replay_field_calibration` is the tool that drives
+this replay; `replay_catalog_sources(field, fixture="full_response")` and
+`replay_variable_sources(field)` hand the rows to a from-pixels solve.
+
+Licence and acknowledgement text for both catalogues is in each file's
+`provenance` block (APASS: Henden et al. 2016, `2016yCat.2336....0H`; VSX:
+Watson et al. 2006; both via CDS/VizieR, DOI 10.26093/cds/vizier).
 
 The `_(1)`/`_(2)` upstream directory names were flattened to `_000`/`_001`/`_002`
 so paths survive a checkout on any filesystem. File contents are untouched,
