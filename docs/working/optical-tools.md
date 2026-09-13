@@ -1,15 +1,16 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`, as are closure phases P1–P6. The remaining closure phases are planned
-below; they are independently deliverable unless a phase states an asset
-prerequisite.
+`dev`, as are closure phases P1–P6 and P9. The remaining closure phases are
+planned below; they are independently deliverable unless a phase states an
+asset prerequisite.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation), 2026-09-09 (completion audit and approved closure rollout),
-2026-09-11 (P4 completion), 2026-09-12 (P5 and P6 completion)
+2026-09-11 (P4 completion), 2026-09-12 (P5 and P6 completion), 2026-09-13
+(P9 completion)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
-prerequisite — broken-links Phase 4 — merged as PR #47. P8 and P9 have
-separate maintainer- or operator-supplied asset gates.
+prerequisite — broken-links Phase 4 — merged as PR #47. P8 has a separate
+maintainer-supplied asset gate.
 **Unblocks:** The stateless boundary required by every phase of
 [tui-harness.md](tui-harness.md) is complete. The remaining phases close
 local-data and solver-convergence gaps.
@@ -635,7 +636,7 @@ the batch driver as deliberately removed from the maintained architecture.
 ## 4. Rollout
 
 **The rollout is complete.** The stateless rollout (phases S0–S6) merged as one
-focused PR before implementation of the remaining P1–P9 phases begins, and before any
+focused PR before implementation of the remaining P1–P9 phases began, and before any
 [tui-harness.md](tui-harness.md) phase. The TUI's later photometry-pipeline
 rename therefore operates on the stateless pipeline; it must not preserve,
 recreate, or rename the removed processing-run or batch architecture.
@@ -650,9 +651,9 @@ dependency registry, and automated optical batch exporter were removed, and the
 architecture, extraction, repository-layout, package, and test documentation
 was updated accordingly.
 
-The remaining broken-links phases are now unblocked by this merge and have an
-approved, independent P1–P9 rollout below. P5, P8, and P9 begin when their
-explicit maintainer or operator assets are supplied.
+The remaining broken-links phases were unblocked by this merge and received an
+approved, independent P1–P9 rollout below. P5 and P9 have since completed;
+P8 begins when its maintainer-supplied assets arrive.
 
 PR #52's GitHub CI checks, including `python tests`, succeeded. This completion
 record does not claim that optional local solver-data or live-network checks ran;
@@ -1697,8 +1698,8 @@ the fixture guard and atomic header write are untouched.
 Default suite: 1779 passed, 42 skipped (was 1739 / 41; the new skip is the
 solver-data test). The four LLM schema goldens were regenerated. The
 `WcsSummary` docstring's reference to the deleted `algorithms.wcs.state` was
-corrected in passing, since the model gained a field. Not in scope and still
-open: the ATLAS backend is unexercised (P9), and
+corrected in passing, since the model gained a field. P9 has since added the
+ATLAS operator-data route. Not in scope and still open:
 `tests/test_wcs_solution.py::test_blind_solve_recovers_the_known_plate_solution`
 passes no `solver_settings`, so it can never reach a backend and always
 self-skips — a pre-existing gap, left for a separate change.
@@ -1756,22 +1757,29 @@ pixel path.
 
 ### Phase P9 — Validate the ATLAS WCS backend with operator data
 
-**Intent:** cover the unexercised ATLAS branch without vendoring the UCAC4/UCAC5
-catalogue.
+**Intent:** cover the ATLAS branch without vendoring the UCAC4/UCAC5 catalogue.
 
 **Operator asset gate:** provide a local UCAC4 or UCAC5 tree and set
 `ATLAS_CATALOG_ROOT` and `ATLAS_CATALOG` according to the documented layout.
 
-- [ ] Document the supported catalogue layout, environment variables, expected
-      disk cost, and a preflight command that confirms the backend can load it.
-- [ ] Add an opt-in `solver_data` test that exercises ATLAS source lookup and
-      explicit pixel-scale narrowing; self-skip with an actionable message when
-      the operator data is absent.
-- [ ] Record backend attempts and acceptance diagnostics in the test assertion;
-      do not make the bulk catalogue a default or CI dependency.
+- [x] Document the supported catalogue layout, environment variables, expected
+      disk cost, and a preflight command that confirms the backend can load it
+      in `README.md`'s WCS configuration section. The supplied UCAC5 tree is
+      an external 5.3 GB dependency at `/srv/agents/catalogs/ATLAS/UCAC5`.
+- [x] Add the opt-in `solver_data`
+      `test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window`.
+      It self-skips with setup instructions when `ATLAS_CATALOG_ROOT` or a
+      supported `ATLAS_CATALOG` is absent, exercises the real UCAC lookup, and
+      sends the explicit 0.58--0.59 arcsec/px window to ATLAS.
+- [x] Assert ATLAS's recorded blind attempt, bounded scale window, source
+      count, non-empty operator lookup, and normalized `no_sources` acceptance
+      outcome. The test uses an intentionally blank image after the real
+      catalog lookup, so it proves the backend dependency seam without making
+      the bulk catalogue a default or CI dependency and without promising
+      blind-solver convergence.
 
-**Validation:** the operator-run `solver_data` test and the default suite with
-the same test self-skipping when UCAC data is absent.
+**Validation:** the operator-run `solver_data` test passes against the supplied
+UCAC5 tree; the default suite keeps it self-skipped when UCAC data is absent.
 
 **Exit:** both WCS backends have a documented, executable validation route.
 
@@ -1842,12 +1850,12 @@ a public cluster registry. M67 remains test-only.
 `data/`. P5 is specifically gated on the maintainer supplying a local Girardi
 grid, not on recording a cluster fixture or introducing a public lookup registry.
 
-**UCAC4/UCAC5 catalog data.** Absent from this host entirely. The ATLAS triangle
-solver is therefore unreachable, and **no test the baseline phases added
-exercises that backend at all** — including its pixel-scale narrowing, which is
-the one place the pixel-scale hint actually does something. Half of
-`algorithms/wcs/`'s solver surface stays unvalidated until the operator performs
-the P9 validation with their local UCAC data.
+**UCAC4/UCAC5 catalog data.** This was absent when the investigation began, so
+the ATLAS triangle solver was unreachable and no baseline test exercised its
+pixel-scale narrowing. P9 now validates its operator-owned catalog reader,
+bounded blind-attempt diagnostics, and source-lookup path against a supplied
+local UCAC tree; full blind-triangle convergence remains intentionally outside
+that bounded validation route.
 
 **The B-band frames behind three of the four recorded zero-point solves.** Three
 of them — `ngc5286_b_000`, `_001` and `_002` — describe NGC 5286 exposures in B;
