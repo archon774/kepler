@@ -231,6 +231,23 @@ Every seam is marked in the code with `# EXTRACTED: was <original symbol>`.
   is new caller-facing plumbing to the vendored backend's existing
   `AstrometryNetConfig.timeout_s`. Callers with their own config can pass any
   object to the builders or pass it to `solve_wcs`.
+- **Search bounds (P6, 2026-09-12):** `wcs/config.py` also carries
+  `WcsSearchBounds(radius_deg, min_scale_arcsec, max_scale_arcsec)`, passed as
+  `solve_wcs(..., search_bounds=)`. Upstream exposed none of these — its
+  `PlateSolveSettings` comment says why — and the default is untouched: each
+  field that is `None` keeps the value of the freshly built
+  `WcsCalibrationSettings()`, and the overrides land on that object exactly
+  where `solve_settings` already writes `sip_order`/`crpix_center`, *before*
+  upstream's own `radius > 0` / `min_scale < max_scale` checks. Two
+  post-extraction behaviours follow, both unreachable from the defaults:
+  a radius below 180 with no pointing hint raises `SearchRadiusWithoutHint`
+  before any backend runs (astrometry.net would otherwise read the missing
+  hint as `float(None)`), and an explicit scale window is used verbatim by the
+  ATLAS branch instead of being intersected with its header-derived
+  half/double narrowing, which could invert the range when the header scale is
+  what the caller is overriding. The effective radius, window, and hint centre
+  are reported on `WcsSolveMetadata.search_*` on every return path. Every
+  such line in `wcs.py` is commented `P6`.
 
 ##### 5.2 ORM rows — removed
 - **Was:** `from skynet_db.models import ObservationAssetProcessingRun`
@@ -378,6 +395,18 @@ data installed.
   `build_atlas_config` returning `None` when unconfigured.
 - **Not** run: an end-to-end solve. That needs `solve-field` plus astrometry.net
   index files or a UCAC catalog on disk, none of which are present here.
+- *Addendum, 2026-09-12 (P6):* an end-to-end astrometry.net solve has now run
+  on the development host. With `ANET_INDEX_PATH` naming the three leaf
+  directories under `/srv/agents/catalogs/astrometry` (`2MASS_ANET/4200`,
+  `TYCHO2/indices`, `UCAC5`, `os.pathsep`-joined — the root itself holds no
+  index files and is rejected), `tools.wcs.solve_astrometry` on
+  `data/optical/m15_globular_open_000.fits` with
+  `search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8` solved in
+  ~14 s: CRVAL (322.481, 12.195), 0.594 arcsec/px against the header's
+  `SECPIX` 0.586, parity accepted; the unbounded default reached the same
+  solution in ~285 s. `solve_field_glob` then re-solved with the cluster core
+  masked, at its own field-sized radius around that solution. The ATLAS
+  backend remains unexercised (P9).
 
 ## Photometry
 

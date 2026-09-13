@@ -306,14 +306,23 @@ and Pydantic v2 are likewise required.
 
 End-to-end runs additionally need data that is not in this repo. On the
 development host, `solve-field` is `/usr/bin/solve-field`, astrometry.net
-indexes 4107-4119 are under `/usr/share/astrometry/data`, and UCAC5 data is
-under `/srv/agents/catalogs/ATLAS/UCAC5`; none is selected by the repository's
-default environment. Set `ANET_INDEX_PATH` and/or `ATLAS_CATALOG_ROOT` to opt
-in. The packaged astrometry.net indexes start at a wider scale than the
-~10-arcminute fixture, and the all-sky 0.1-60 arcsec/pixel search has reached
-the backend without producing a solution. The `solver_data`-marked tests gate
-this path. The solver is wired and exercised; successful solve parity has not
-been validated. Both backends still degrade to "unavailable" when unconfigured.
+indexes 4107-4119 are under `/usr/share/astrometry/data`, the 4200-series
+2MASS, TYCHO2 and UCAC5 index sets are under
+`/srv/agents/catalogs/astrometry/{2MASS_ANET/4200,TYCHO2/indices,UCAC5}`, and
+UCAC5 catalogue data is under `/srv/agents/catalogs/ATLAS/UCAC5`; none is
+selected by the repository's default environment. Set `ANET_INDEX_PATH` and/or
+`ATLAS_CATALOG_ROOT` to opt in. `ANET_INDEX_PATH` must name directories that
+hold index files *directly* (`os.pathsep`-join the three leaf directories
+above; the `astrometry/` root alone is rejected as holding no index files).
+The packaged 4107-4119 indexes start at a wider scale than the ~10-arcminute
+fixture, and the default all-sky 0.1-60 arcsec/pixel search has reached the
+backend without producing a solution. With the 4200-series set the M15
+fixture solves: in ~14 s with explicit bounds (`solve_astrometry(...,
+search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8)`, P6) and in
+~285 s all-sky, to the same solution. The bounds are opt-in; the default
+stays the extracted all-sky search. The
+`solver_data`-marked tests gate this path. The ATLAS backend has not been
+validated (P9). Both backends still degrade to "unavailable" when unconfigured.
 
 ## TypeScript domain boundaries
 

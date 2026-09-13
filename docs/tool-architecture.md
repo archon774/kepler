@@ -197,11 +197,24 @@ to a radio map), `algorithms.radio` (spectral fitting, catalog cross-match),
   -- the spectral half alone, for one already-identified/named source.
 
 `tools.wcs.solve_astrometry(path, *, index_path=None, write_header=False,
-timeout_s=None, force=False)` wraps the extracted plate solver with its required
+timeout_s=None, force=False, search_radius_deg=None, min_scale_arcsec=None,
+max_scale_arcsec=None)` wraps the extracted plate solver with its required
 per-call backend configuration, structured unavailable and no-solution outcomes,
 attempted-backend reporting, and guarded FITS-header persistence. A single tool
 call is Kepler's execution boundary: no run or stage state is retained between
 calls.
+
+The three search bounds are opt-in (P6). Unset, the solve is the extracted
+all-sky search over 0.1–60 arcsec/px; set, they are validated at the tool
+boundary (`invalid_search_bounds`), reach the algorithm as one
+`algorithms.wcs.config.WcsSearchBounds`, and the result's `search` reports the
+radius, scale window, and pointing centre the backends were actually asked to
+search, with `explicit` naming which bounds the caller set. A radius below 180
+is centred on the frame's own pointing hint; a frame that yields none gets
+`search_radius_without_hint`, not a silent all-sky search. On the development
+host, against its 4200-series indexes, the M15 fixture solves in ~14 s at
+`search_radius_deg=1, min_scale_arcsec=0.4, max_scale_arcsec=0.8` and in
+~285 s all-sky, to the same solution.
 
 Next Python tools should follow the same pattern before adding new layers:
 

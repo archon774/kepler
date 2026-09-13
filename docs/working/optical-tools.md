@@ -1,12 +1,12 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`, as are closure phases P1–P5. The remaining closure phases are planned
+`dev`, as are closure phases P1–P6. The remaining closure phases are planned
 below; they are independently deliverable unless a phase states an asset
 prerequisite.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation), 2026-09-09 (completion audit and approved closure rollout),
-2026-09-11 (P4 completion), 2026-09-12 (P5 completion)
+2026-09-11 (P4 completion), 2026-09-12 (P5 and P6 completion)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
 prerequisite — broken-links Phase 4 — merged as PR #47. P8 and P9 have
 separate maintainer- or operator-supplied asset gates.
@@ -80,7 +80,7 @@ Status is **as of 2026-09-11 on `dev`**, after PRs #43, #44, #45, #47, #52,
 | BL-4 | No tool read `data/afterglow/` or `data/fieldcal/` | **closed for tool reachability** — Phase 3 added `tools/fieldcal_reference.py` and `tools/photometry.py`; Phase P7 completes the catalog-selection replay | was High |
 | BL-5 | `ZeropointSolution.zero_point_corr` held an absolute zero point | **closed** — Phase 1 renamed it to `zero_point` | was High |
 | BL-6 | `ocl_filter_report.json` no longer joined to any bundled frame | **closed** — Phase 3 added `data/frame_provenance.json` | was Medium |
-| BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **wiring closed; convergence planned** — Phase P6 adds explicit opt-in search bounds while retaining the parity default | was Medium |
+| BL-7 | `solve_wcs` unreachable; its index data present but unconfigured | **closed** — Phase P6 added explicit opt-in search bounds while retaining the parity default; against the host's 4200-series indexes the M15 fixture solves in ~14 s bounded and ~285 s all-sky, to the same solution | was Medium |
 | BL-8 | Curated pulsar periods unreachable from the tool layer | **closed** — Phase P1 added the curated-period map and the measure-first sourcing order | was Medium |
 | BL-9 | HR diagram: no offline path and an incomplete Python port | **closed** — Phase P5 provides a configured operator-local Girardi grid and ports the remaining computational TypeScript surface | was Medium |
 | BL-10 | Variable-star light curve / periodogram: TypeScript only, no data | **closed** — PR #60 added the exact-parity Python runtime and compact fixture | Medium |
@@ -264,9 +264,10 @@ data exists on this host, so ATLAS is unavailable and that narrowing never runs.
 
 **Consequence, and it survived into the landed tool:** a wrapper cannot make this
 solve fast through the public signature. Phase 4 bounded it with a timeout and
-reported non-convergence as a warning. P6 resolves the remaining public-control
+reported non-convergence as a warning. P6 resolved the remaining public-control
 gap by adding explicit opt-in search-radius and scale bounds while preserving the
-default all-sky 0.1–60 arcsec/px behavior.
+default all-sky 0.1–60 arcsec/px behavior; see its completion record for the
+bounded solve that closed this.
 
 An earlier draft of that phase told the implementer to pass the pixel-scale hint
 to speed the solve up. Reading the algorithm after the real run showed the hint
@@ -1582,19 +1583,19 @@ network-marked; the isochrone path itself has no live mode.
 home, and a configured operator grid enables deterministic local isochrone
 execution.
 
-### Phase P6 — Explicit WCS search controls (BL-7)
+### Phase P6 — Explicit WCS search controls (BL-7) — Complete
 
 **Intent:** make the wired plate solver usable when an observer deliberately
 knows a bounded search region, without changing the parity default.
 
-- [ ] Extend the public `solve_astrometry` request and the internal settings
+- [x] Extend the public `solve_astrometry` request and the internal settings
       seam with optional search radius and minimum/maximum pixel-scale bounds.
-- [ ] Preserve the current all-sky radius and 0.1–60 arcsec/px window whenever
+- [x] Preserve the current all-sky radius and 0.1–60 arcsec/px window whenever
       the caller supplies no overrides.
-- [ ] Validate all three explicit bounds at the tool boundary, report the
+- [x] Validate all three explicit bounds at the tool boundary, report the
       effective search settings in the result diagnostics, and retain timeout,
       backend-attempt, fixture-protection, and atomic-write behavior.
-- [ ] Add deterministic settings-forwarding tests and a solver-data-gated test
+- [x] Add deterministic settings-forwarding tests and a solver-data-gated test
       using an explicit scale window. Do not require solver indexes for the
       default suite.
 
@@ -1603,6 +1604,78 @@ when the operator has indexes, the default Python suite, and `git diff --check`.
 
 **Exit:** default calls retain extracted behavior; callers can explicitly request
 a constrained, observable solve instead of waiting for an all-sky miss.
+
+**P6 record (2026-09-12).** The seam is one frozen value object,
+`algorithms.wcs.config.WcsSearchBounds(radius_deg, min_scale_arcsec,
+max_scale_arcsec)`, passed as `solve_wcs(..., search_bounds=)`. Each field
+left `None` keeps the value of the freshly built `WcsCalibrationSettings()`,
+and the overrides are written to that object at the same point
+`solve_settings` already writes `sip_order`/`crpix_center` — *before*
+upstream's own `radius > 0` / `min_scale < max_scale` checks, so those cover
+the overrides with no new validation in the algorithm. `WcsSearchBounds()` is
+therefore the same call as passing nothing, and the default remains the
+extracted all-sky 0.1–60 arcsec/px search; the algorithm tests pin both that
+and the ATLAS branch's header-hint narrowing.
+
+`tools.wcs.solve_astrometry` gained `search_radius_deg`, `min_scale_arcsec`
+and `max_scale_arcsec`, validated at the boundary (`invalid_search_bounds`:
+finite, positive, radius ≤ 180, and a single scale bound checked against the
+other side's default so `min_scale_arcsec=70` alone is rejected) before the
+FITS file is read or backend configuration is looked at. The result carries
+`search` — radius, `all_sky`, scale window, the pointing centre the radius was
+anchored on, and `explicit` naming which bounds the caller set — on every path
+that reached the backends, from `WcsSolveMetadata.search_*`. Timeout,
+attempted-backend reporting, the fixture guard and the atomic header write are
+untouched; the existing tests for them still pass with the extra keyword.
+
+Two decisions the checkboxes did not spell out:
+
+1. **A bounded radius needs a pointing hint, and a frame without one is an
+   error, not an all-sky search.** astrometry.net passes `--ra/--dec/--radius`
+   only when the radius is below 180 and then reads the hint unconditionally,
+   so a radius on a hint-less frame would have surfaced as a backend
+   `TypeError` labelled `solver_failed`. `solve_wcs` now raises
+   `SearchRadiusWithoutHint` before any backend runs and the tool reports it as
+   `search_radius_without_hint` with `attempted_backends == []`. Widening
+   silently was rejected because it re-creates exactly the wait P6 exists to
+   avoid, behind a caller who asked for the opposite. The radius is anchored
+   on the frame's own hint only — there is no explicit RA/Dec parameter; a
+   frame that records no pointing cannot take a radius, and adding a centre
+   parameter would be a separate decision.
+2. **An explicit scale window bypasses the ATLAS branch's header-hint
+   narrowing.** That branch halves/doubles the header's pixel-scale estimate;
+   intersecting an explicit window with it hands ATLAS an inverted range
+   precisely when the header scale is what the caller is overriding. Explicit
+   bounds are used verbatim by both backends; the default narrowing is pinned
+   by a test.
+
+**Evidence.** On the development host, with `ANET_INDEX_PATH` naming the three
+leaf directories under `/srv/agents/catalogs/astrometry` (`2MASS_ANET/4200`,
+`TYCHO2/indices`, `UCAC5`, `os.pathsep`-joined — the root alone holds no index
+files and `validate_index_dirs` rejects it), the new solver-data test solved
+`m15_globular_open_000.fits` in **14 s** at `search_radius_deg=1,
+min_scale_arcsec=0.4, max_scale_arcsec=0.8`: CRVAL (322.481, 12.195), 0.594
+arcsec/px against the header's 0.586, parity accepted, `search` reporting the
+bounded window. The parity default was then run against the same indexes for
+comparison (`test_the_solver_runs_and_reports_its_outcome_either_way`): the
+all-sky 0.1–60 arcsec/px search reached the **identical** solution in
+**285 s** — so the 670 s miss in the BL-7 finding was the 4107–4119 set not
+covering the field scale, and the bounds' contribution on a covered field is
+a ~20× shorter run to the same answer, not a solve where there was none. One
+nuance worth knowing when reading either log: `solve_field_glob` solves once
+with the caller's bounds, then — M15 being a globular cluster in the field —
+re-solves with the cluster core masked at its own field-sized radius (~0.08°)
+around the first solution's CRVAL; the reported `search` is the primary
+search, and the refinement passes ride on it.
+
+Default suite: 1773 passed, 42 skipped (was 1739 / 41; the new skip is the
+solver-data test). The four LLM schema goldens were regenerated. The
+`WcsSummary` docstring's reference to the deleted `algorithms.wcs.state` was
+corrected in passing, since the model gained a field. Not in scope and still
+open: the ATLAS backend is unexercised (P9), and
+`tests/test_wcs_solution.py::test_blind_solve_recovers_the_known_plate_solution`
+passes no `solver_settings`, so it can never reach a backend and always
+self-skips — a pre-existing gap, left for a separate change.
 
 ### Phase P7 — Complete offline APASS replay (BL-4)
 
@@ -1727,7 +1800,7 @@ nothing, on a frame whose own header states `SECPIX = 0.5864922312362758`.
 Narrowing the window to the header value would very probably make the solve
 tractable — and would be precisely the failure mode that comment warns about.
 **Phase 4 therefore bounded the run with a timeout and narrowed nothing.** P6
-settles the follow-up: callers may explicitly opt in to a search radius and
+settled the follow-up: callers may explicitly opt in to a search radius and
 minimum/maximum pixel-scale bounds; omitted controls retain the all-sky defaults.
 
 **The TypeScript runtime for the variable-star tools (BL-10).** P4 established a
@@ -1796,7 +1869,7 @@ find local data, run the real code path against it, and return a number
 comparable to recorded ground truth. It does not validate that Kepler's whole
 pipeline reproduces Skynet's.
 
-**Not a guaranteed plate solve.** P6 makes deliberate search narrowing available
+**Not a guaranteed plate solve.** P6 made deliberate search narrowing available
 without changing the default all-sky behavior. P9 validates ATLAS only when an
 operator supplies UCAC data; neither promise guarantees convergence on every
 frame.
