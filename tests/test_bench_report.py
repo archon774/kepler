@@ -849,3 +849,68 @@ def test_latency_falls_back_when_no_first_repeat_answered():
     row = build_report([_pair(entries=entries)])["matrix"]["anthropic/claude-opus-5"]
     assert row["cold_latency"] is False
     assert row["seconds_per_answer"] == pytest.approx(40.0)
+
+
+# --- the per-task matrix: what the benchmark is for -----------------------
+
+
+def test_the_matrix_reports_repeats_as_a_count_not_a_rate():
+    """``2/3`` is the finding. Averaging it into a rate and wrapping it in an
+    interval answers a question about tasks nobody ran."""
+
+    entries = [
+        _entry(task_id="t1", repeat=r, passed=(r != 2)) for r in (1, 2, 3)
+    ]
+    text = render_markdown(build_report([_pair(entries=entries)]))
+    matrix = text[text.index("## Per task"):text.index("### Per model")]
+    assert "2/3" in matrix
+
+
+def test_a_right_answer_by_a_wrong_route_is_marked_not_hidden():
+    """The distinction the scope turns on: did it reach a correct solution,
+    *and* were its tool calls acceptable. A pass count alone answers only the
+    first, and a model can score 3/3 having taken a forbidden route."""
+
+    entries = [_entry(task_id="t1", repeat=r, passed=True) for r in (1, 2, 3)]
+    entries[0]["trajectory"]["failures"] = [
+        {"check": "must_not_call", "detail": "search_atnf was called"}
+    ]
+    report = build_report([_pair(entries=entries)])
+    cell = next(iter(report["by_task"].values()))
+    assert cell["correct"] == 3
+    assert cell["trajectory_failures"] == 1
+
+    matrix = render_markdown(report)
+    matrix = matrix[matrix.index("## Per task"):matrix.index("### Per model")]
+    assert "3/3 T" in matrix
+    # ... and it is not bolded, because bold means clean.
+    assert "**3/3**" not in matrix
+
+
+def test_tasks_a_model_never_answers_are_named():
+    """The sharpest line in the report. A model that cannot do a task at all
+    is a different finding from one that does it inconsistently, and a rate
+    blends the two."""
+
+    entries = [_entry(task_id="t1", repeat=r, passed=False) for r in (1, 2, 3)]
+    entries += [_entry(task_id="t2", repeat=r, passed=True) for r in (1, 2, 3)]
+    text = render_markdown(build_report([_pair(entries=entries)]))
+    assert "never answered: `t1`" in text
+    assert "`t2`" not in text.split("never answered")[1].split("\n")[0]
+
+
+def test_the_failure_profile_is_categorical():
+    """Which checks a model fails is directly actionable and needs no
+    population assumption."""
+
+    entries = [
+        _entry(
+            task_id="t1",
+            repeat=r,
+            passed=False,
+            failures=[{"check": "must_source_value", "detail": "d"}],
+        )
+        for r in (1, 2, 3)
+    ]
+    text = render_markdown(build_report([_pair(entries=entries)]))
+    assert "`must_source_value` x3" in text

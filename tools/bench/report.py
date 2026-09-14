@@ -120,12 +120,54 @@ def build_report(
         _rank_boards(matrix)
 
     return {
+        "by_task": _by_task(grid),
         "header": header,
         "boards": boards(matrix) if composite else None,
         "matrix": matrix,
         "per_task": grid,
         "failures": failures,
     }
+
+
+def _by_task(grid: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """One cell per ``(task, backend)``: what the benchmark is actually for.
+
+    Did the model reach a correct answer on this prompt, were its tool calls
+    the ones the task requires, were those calls well formed, and what did it
+    cost. Repeats are a count -- ``2/3`` is the finding -- and nothing here is
+    inferred beyond what the sessions recorded.
+    """
+
+    cells: dict[str, dict[str, Any]] = {}
+    for row in grid:
+        cell = cells.setdefault(
+            f"{row['task_id']}\x00{row['backend']}",
+            {
+                "task_id": row["task_id"],
+                "backend": row["backend"],
+                "repeats": 0,
+                "correct": 0,
+                "incomplete": 0,
+                "trajectory_failures": 0,
+                "trajectory_deviations": 0,
+                "faults": 0,
+                "wall_ms": 0.0,
+                "tokens": 0,
+                "checks": [],
+            },
+        )
+        cell["repeats"] += 1
+        if row["incomplete"]:
+            cell["incomplete"] += 1
+        elif row["passed"]:
+            cell["correct"] += 1
+        cell["trajectory_failures"] += row["trajectory_failures"] or 0
+        cell["trajectory_deviations"] += row["trajectory_deviations"] or 0
+        cell["faults"] += row["faults"] or 0
+        cell["wall_ms"] += row["wall_ms"] or 0.0
+        cell["tokens"] += (row["input_tokens"] or 0) + (row["output_tokens"] or 0)
+        cell["checks"].extend(row["answer_failures"])
+    return cells
 
 
 def _empty_row() -> dict[str, Any]:
@@ -607,6 +649,8 @@ def _grid_row(entry: Mapping[str, Any]) -> dict[str, Any]:
         "rate_kind": metrics.get("tokens_per_second_kind"),
         "faults": entry["protocol"]["metrics"].get("fault_total"),
         "trajectory_failures": len(entry["trajectory"]["failures"]),
+        "trajectory_deviations": len(entry["trajectory"]["deviations"]),
+        "answer_failures": [f["check"] for f in entry["answer"]["failures"]],
         "judge": (entry.get("judge") or {}).get("verdict"),
     }
 
@@ -726,6 +770,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         )
         lines.append("")
 
+    lines.extend(_task_matrix(report))
     lines.extend(_ranking_table(report))
     lines.extend(_matrix_table(report))
     lines.extend(_grid_table(report))
@@ -779,6 +824,131 @@ _BOARD_UNIT: Mapping[str, str] = {
     "speed": "s",
     "cost": " tokens",
 }
+
+
+def _task_matrix(report: Mapping[str, Any]) -> list[str]:
+    """One cell per task per model: the result this benchmark exists to give.
+
+    Whether a model used these tools well on a given prompt is a direct
+    observation. The session ran; the checks passed or they did not. So the
+    cell is a count, and ``2/3`` is reported as ``2/3`` rather than averaged
+    into a rate and wrapped in an interval -- that would answer a question
+    about tasks nobody ran.
+    """
+
+    cells = report.get("by_task") or {}
+    if not cells:
+        return []
+    tasks = sorted({c["task_id"] for c in cells.values()})
+    backends = sorted({c["backend"] for c in cells.values()})
+
+    lines = [
+        "## Per task",
+        "",
+        "Correct answers out of repeats. A mark means the *route* was wrong "
+        "even where the answer was not -- `T` a required or forbidden call "
+        "violated, `d` an off-script call, `P` a malformed call, `!` a run "
+        "that never answered.",
+        "",
+        "| task | " + " | ".join(f"`{b.split('/')[-1]}`" for b in backends) + " |",
+        "| --- | " + " | ".join(":-:" for _ in backends) + " |",
+    ]
+    for task in tasks:
+        row = [f"`{task}`"]
+        for backend in backends:
+            cell = cells.get(f"{task}\x00{backend}")
+            if cell is None:
+                row.append("--")
+                continue
+            marks = "".join(
+                mark
+                for mark, present in (
+                    ("T", cell["trajectory_failures"]),
+                    ("d", cell["trajectory_deviations"]),
+                    ("P", cell["faults"]),
+                    ("!", cell["incomplete"]),
+                )
+                if present
+            )
+            count = f"{cell['correct']}/{cell['repeats']}"
+            if cell["correct"] == cell["repeats"] and not marks:
+                count = f"**{count}**"
+            row.append(f"{count} {marks}".strip())
+        lines.append("| " + " | ".join(row) + " |")
+    lines.append("")
+    lines.extend(_tool_use_summary(cells, backends))
+    return lines
+
+
+def _tool_use_summary(
+    cells: Mapping[str, Mapping[str, Any]], backends: Sequence[str]
+) -> list[str]:
+    """Per model: which tasks it cannot do, and how its tool use went wrong.
+
+    Half the question is whether the calls and the reasoning were acceptable,
+    which is the trajectory and protocol axes. They belong here, not filed
+    under diagnostics beneath a percentage.
+    """
+
+    lines = [
+        "### Per model",
+        "",
+        "| model | always correct | never correct | inconsistent | "
+        "route violations | off-script calls | malformed calls |",
+        "| --- | :-: | :-: | :-: | :-: | :-: | :-: |",
+    ]
+    for backend in backends:
+        mine = [c for c in cells.values() if c["backend"] == backend]
+        lines.append(
+            "| `{backend}` | {always} of {total} | {never} | {mixed} | "
+            "{traj} | {dev} | {faults} |".format(
+                backend=backend,
+                always=sum(1 for c in mine if c["correct"] == c["repeats"]),
+                total=len(mine),
+                never=sum(1 for c in mine if c["correct"] == 0),
+                mixed=sum(1 for c in mine if 0 < c["correct"] < c["repeats"]),
+                traj=sum(c["trajectory_failures"] for c in mine),
+                dev=sum(c["trajectory_deviations"] for c in mine),
+                faults=sum(c["faults"] for c in mine),
+            )
+        )
+    lines.append("")
+
+    never: list[str] = []
+    for backend in backends:
+        failed = sorted(
+            c["task_id"]
+            for c in cells.values()
+            if c["backend"] == backend and c["correct"] == 0
+        )
+        if failed:
+            never.append(
+                f"- `{backend}` never answered: "
+                + ", ".join(f"`{t}`" for t in failed)
+            )
+    if never:
+        lines.append("Tasks a model never got right, which is the sharper result:")
+        lines.append("")
+        lines.extend(never)
+        lines.append("")
+
+    lines.append("Which answer checks each model failed, and how often:")
+    lines.append("")
+    for backend in backends:
+        checks: list[str] = []
+        for cell in cells.values():
+            if cell["backend"] == backend:
+                checks.extend(cell["checks"])
+        if not checks:
+            lines.append(f"- `{backend}`: none")
+            continue
+        counted = sorted(((checks.count(c), c) for c in set(checks)), reverse=True)
+        lines.append(
+            f"- `{backend}`: "
+            + ", ".join(f"`{name}` x{count}" for count, name in counted)
+        )
+    lines.append("")
+    return lines
 
 
 def _ranking_table(report: Mapping[str, Any]) -> list[str]:
