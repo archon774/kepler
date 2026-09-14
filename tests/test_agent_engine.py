@@ -15,7 +15,13 @@ from tools.agent import events
 from tools.agent.approval import Decision
 from tools.agent.engine import run_session
 from tools.agent.prompt import SYSTEM_PROMPT
-from tools.llm.types import ModelResponse, ProtocolFault, ToolCallBlock
+from tools.llm.types import (
+    Message,
+    ModelResponse,
+    ProtocolFault,
+    TextBlock,
+    ToolCallBlock,
+)
 from tools.models import ToolResult
 from tools.sessions import AgentSession
 
@@ -77,6 +83,35 @@ def test_the_system_prompt_defaults_to_the_moved_constant(monkeypatch):
     session = _session()
     list(run_session("hi", backend=backend, session=session, tool_functions={}))
     assert backend.calls[0]["system"] == SYSTEM_PROMPT
+
+
+def test_history_precedes_the_follow_up_user_message():
+    """A resumed prompt must retain recorded context in its first model request."""
+
+    history = (
+        Message(role="user", blocks=(TextBlock(text="Find M31."),)),
+        Message(role="assistant", blocks=(TextBlock(text="M31 is Andromeda."),)),
+    )
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="What next?")])
+
+    list(
+        run_session(
+            "How far away is it?",
+            backend=backend,
+            session=_session(),
+            history=history,
+            tool_schemas=[],
+            tool_functions={},
+        )
+    )
+
+    messages = backend.calls[0]["messages"]
+    assert [message.role for message in messages] == ["user", "assistant", "user"]
+    assert [message.blocks for message in messages] == [
+        (TextBlock(text="Find M31."),),
+        (TextBlock(text="M31 is Andromeda."),),
+        (TextBlock(text="How far away is it?"),),
+    ]
 
 
 def test_max_tokens_comes_from_the_backend_capability(monkeypatch):

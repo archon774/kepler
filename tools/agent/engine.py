@@ -49,6 +49,7 @@ def run_session(
     system: str = SYSTEM_PROMPT,
     max_turns: int = 20,
     approver: Approver = auto_approve,
+    history: Sequence[Message] = (),
     session: AgentSession | None = None,
     tool_schemas: Sequence[dict[str, Any]] | None = None,
     tool_functions: _ToolFunctions | None = None,
@@ -73,9 +74,8 @@ def run_session(
             system=system,
         )
 
-    messages: list[Message] = [
-        Message(role="user", blocks=(TextBlock(text=user_message),))
-    ]
+    messages = list(history)
+    messages.append(Message(role="user", blocks=(TextBlock(text=user_message),)))
     call_cache: dict[str, dict[str, Any]] = {}
     max_tokens = backend.capabilities.max_output_tokens
 

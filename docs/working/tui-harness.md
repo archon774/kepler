@@ -655,14 +655,14 @@ and no command text is ever forwarded to the engine.
 
 ### Phase F — Session browser and resume
 
-- [ ] Build `SessionBrowser` over `tools.workspace.list_sessions()` and
+- [x] Build `SessionBrowser` over `tools.workspace.list_sessions()` and
       `describe_session`, listing id, timestamp, model, outcome, and turn count,
       with enter bound to `KeplerApp.resume_session`.
-- [ ] Build `history_from_manifest`, seeding the engine's message history from a
+- [x] Build `history_from_manifest`, seeding the engine's message history from a
       manifest's recorded turns via `tools.sessions.read_session_manifest`. The
       first entry is the original user message; every recorded assistant turn
       follows.
-- [ ] **Resume references artifacts rather than replaying them** (section 16,
+- [x] **Resume references artifacts rather than replaying them** (section 16,
       question 3): re-rendering every image on resume is slow for a long session,
       and the artifact browser is the way back to them.
 

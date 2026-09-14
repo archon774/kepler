@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual import work
@@ -26,10 +28,13 @@ from tools.agent.policy import SessionPolicy, policy_approver
 from tools.tui.commands import help_text, parse_input, resolve
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.widgets.artifacts import ArtifactBrowser
+from tools.tui.widgets.sessions import SessionBrowser, history_from_manifest
 from tools.tui.widgets.transcript import Transcript
+from tools.workspace import describe_session, list_artifacts, list_sessions
 
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
+    from tools.llm.types import Message
 
 __all__ = ["ApprovalModal", "KeplerApp"]
 
@@ -61,7 +66,10 @@ class KeplerApp(App[None]):
 
     TITLE = "Kepler"
 
-    BINDINGS = [Binding("f3", "show_artifacts", "Artifacts")]
+    BINDINGS = [
+        Binding("f3", "show_artifacts", "Artifacts"),
+        Binding("f4", "show_sessions", "Sessions"),
+    ]
 
     CSS = """
     #transcript {
@@ -113,6 +121,8 @@ class KeplerApp(App[None]):
         self.token_usage = None
         self.graphics_tier = detect_tier() if graphics_tier is None else graphics_tier
         self.policy = SessionPolicy(self._request_approval)
+        self._history: tuple["Message", ...] = ()
+        self._artifact_directory: Path | None = None
 
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
@@ -154,7 +164,9 @@ class KeplerApp(App[None]):
         parsed = parse_input(event.value)
         event.input.value = ""
         if parsed.kind == "message":
-            self.run_prompt(parsed.text)
+            history = self._history
+            self._history = ()
+            self.run_prompt(parsed.text, history=history)
             return
         if parsed.kind == "unknown":
             self._append_transcript(f"Unknown command: /{parsed.name}")
@@ -166,7 +178,7 @@ class KeplerApp(App[None]):
             handler(parsed.args)
 
     @work(thread=True, exclusive=True)
-    def run_prompt(self, text: str) -> None:
+    def run_prompt(self, text: str, *, history: tuple["Message", ...] = ()) -> None:
         """Run the synchronous engine in a Textual thread worker."""
 
         self.engine_starts += 1
@@ -175,6 +187,7 @@ class KeplerApp(App[None]):
             backend=self.backend,
             max_turns=self.max_turns,
             approver=policy_approver(self.policy),
+            history=history,
         ):
             self.post_message(self.EngineEvent(event))
 
@@ -186,12 +199,80 @@ class KeplerApp(App[None]):
     def show_artifacts(self, args: tuple[str, ...]) -> None:
         """Open the current artifact browser without involving the model."""
 
-        self.push_screen(ArtifactBrowser(tier=self.graphics_tier))
+        artifacts = (
+            None
+            if self._artifact_directory is None
+            else list_artifacts(self._artifact_directory)
+        )
+        self.push_screen(ArtifactBrowser(artifacts, tier=self.graphics_tier))
 
     def action_show_artifacts(self) -> None:
         """Open the artifact browser from its F3 keybinding."""
 
         self.show_artifacts(())
+
+    def show_sessions(self, args: tuple[str, ...]) -> None:
+        """Open the saved-session browser without involving the model."""
+
+        self.push_screen(SessionBrowser(), self.resume_session)
+
+    def action_show_sessions(self) -> None:
+        """Open the session browser from its F4 keybinding."""
+
+        self.show_sessions(())
+
+    def resume(self, args: tuple[str, ...]) -> None:
+        """Load the saved session named by a `/resume <id>` command."""
+
+        if len(args) != 1:
+            self._append_transcript("Usage: /resume <session-id>")
+            return
+        session_id = args[0]
+        for session in list_sessions():
+            try:
+                manifest = describe_session(session.file.path)
+            except (OSError, ValueError):
+                continue
+            if (
+                isinstance(manifest, Mapping)
+                and manifest.get("session_id") == session_id
+            ):
+                self.resume_session(Path(session.file.path))
+                return
+        self._append_transcript(f"Unknown session: {session_id}")
+
+    def resume_session(self, path: Path | None) -> None:
+        """Load a saved trace for the next submitted follow-up prompt."""
+
+        if path is None:
+            return
+        try:
+            manifest = describe_session(path)
+            history = history_from_manifest(manifest)
+        except (OSError, ValueError):
+            self._append_transcript(f"Unable to load session: {path}")
+            return
+
+        directory = manifest.get("artifact_directory")
+        self._artifact_directory = (
+            Path(directory) if isinstance(directory, str) else path.parent
+        )
+        transcript = self.query_one("#transcript", Transcript)
+        transcript.clear()
+        transcript.restore_assistant_text(
+            "\n\n".join(
+                block.text
+                for message in history
+                if message.role == "assistant"
+                for block in message.blocks
+            )
+        )
+        session_id = manifest.get("session_id", path.parent.name)
+        transcript.append_notice(
+            f"Loaded session {session_id}. Artifacts remain available by path."
+        )
+        self._history = history
+        self.query_one("#prompt", Input).focus()
 
     def quit(self, args: tuple[str, ...]) -> None:
         """Exit the console through its declarative command handler."""
