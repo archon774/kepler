@@ -22,6 +22,7 @@ such string is escaped there.
 
 from __future__ import annotations
 
+import math
 import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -142,10 +143,59 @@ def _finalize(row: dict[str, Any]) -> None:
         if row["model_time_ms"]
         else None
     )
+    row["scored"] = scored
+    interval = wilson_interval(row["passed"], scored)
+    # A list, not a tuple: the JSON and Markdown reports are written from the
+    # same object and a test holds them to the same content.
+    row["pass_interval"] = list(interval) if interval else None
     row["turns_per_run"] = row["turns"] / row["runs"] if row["runs"] else None
     row["duplicate_rate"] = (
         row["duplicate_calls"] / row["tool_calls"] if row["tool_calls"] else None
     )
+
+
+#: 95%, the conventional two-sided normal quantile.
+WILSON_Z = 1.959963984540054
+
+
+def wilson_interval(passed: int, trials: int, *, z: float = WILSON_Z):
+    """A Wilson score interval on a pass rate.
+
+    The suite reports rates like 23/24 and 21/24 side by side, and a reader
+    will subtract them. This is the mechanical answer to whether that
+    subtraction means anything: at these trial counts a two-item gap has a
+    confidence interval several times its own width, so two backends whose
+    intervals overlap have not been separated *by this suite* however
+    confidently the table is read.
+
+    Wilson rather than the textbook normal interval because it stays inside
+    [0, 1] and does not collapse to zero width at 24/24 -- both of which
+    matter at exactly the counts a benchmark of this size produces.
+    """
+
+    if trials <= 0:
+        return None
+    p = passed / trials
+    denominator = 1.0 + z * z / trials
+    center = (p + z * z / (2 * trials)) / denominator
+    half = (
+        z * math.sqrt(p * (1.0 - p) / trials + z * z / (4.0 * trials * trials))
+    ) / denominator
+    return (max(0.0, center - half), min(1.0, center + half))
+
+
+def separated(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
+    """Whether two backends' correctness intervals fail to overlap.
+
+    Reported rather than enforced: a suite that cannot separate two models is
+    making a statement about the suite, and hiding it behind an ordered table
+    would be the whole failure this benchmark is meant to avoid.
+    """
+
+    first, second = a.get("pass_interval"), b.get("pass_interval")
+    if not first or not second:
+        return False
+    return first[1] < second[0] or second[1] < first[0]
 
 
 def _composite(row: Mapping[str, Any], best_tokens: float | None) -> float | None:
@@ -368,18 +418,21 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
         "",
         "The two headline axes first; the two diagnostic axes explain them.",
         "",
-        "| backend | correctness | stability | tokens to an answer | turns/run | "
-        "tok/s | duplicate rate | trajectory failures | protocol faults |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| backend | correctness | 95% interval | stability | tokens to an "
+        "answer | turns/run | tok/s | duplicate rate | trajectory failures | "
+        "protocol faults |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for backend, row in sorted(report["matrix"].items()):
         lines.append(
-            "| `{backend}` | {passed}/{scored} ({rate}) | {stability} | {tpa} | "
+            "| `{backend}` | {passed}/{scored} ({rate}) | {interval} | "
+            "{stability} | {tpa} | "
             "{tpr} | {tps} | {dup} | {traj} | {faults} |".format(
                 backend=backend,
                 passed=row["passed"],
                 scored=row["runs"] - row["incomplete"],
                 rate=_pct(row["pass_rate"]),
+                interval=_interval(row.get("pass_interval")),
                 stability=_pct(row.get("stability")),
                 tpa=_num(row["tokens_per_answer"], "{:,.0f}"),
                 tpr=_num(row["turns_per_run"], "{:.1f}"),
@@ -389,7 +442,7 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
                 faults=row["fault_total"],
             )
         )
-    lines.append("")
+    lines.extend(_separation_note(report))
     lines.append(
         "*Tokens to an answer* is total tokens on runs that passed the answer "
         "axis, per passing run. Runs that failed it spent "
@@ -408,6 +461,45 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
         for backend, row in sorted(report["matrix"].items()):
             lines.append(f"- `{backend}`: {_num(row.get('composite'), '{:.4f}')}")
         lines.append("")
+    return lines
+
+
+def _interval(interval: Any) -> str:
+    if not interval:
+        return "--"
+    return f"{interval[0]:.0%}-{interval[1]:.0%}"
+
+
+def _separation_note(report: Mapping[str, Any]) -> list[str]:
+    """Say which pairs this suite actually separated, and which it did not.
+
+    A table of rates invites subtraction. At 24 trials a two-item gap carries
+    an interval several times its own width, so the honest report names the
+    pairs whose intervals overlap rather than leaving an ordered column to
+    imply a ranking the evidence does not carry.
+    """
+
+    rows = sorted(report["matrix"].items())
+    if len(rows) < 2:
+        return [""]
+    overlapping = [
+        f"`{a}` vs `{b}`"
+        for index, (a, row_a) in enumerate(rows)
+        for b, row_b in rows[index + 1 :]
+        if not separated(row_a, row_b)
+    ]
+    lines = [""]
+    if overlapping:
+        lines.append(
+            "**Not separated by this suite** (95% correctness intervals "
+            "overlap): " + ", ".join(overlapping) + ". Ordering these pairs on "
+            "correctness reads a difference the trial count does not support."
+        )
+    else:
+        lines.append(
+            "Every pair of backends is separated at 95% on correctness."
+        )
+    lines.append("")
     return lines
 
 

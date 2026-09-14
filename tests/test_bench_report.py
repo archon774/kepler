@@ -190,9 +190,12 @@ def test_the_column_order_reads_the_two_questions_left_to_right():
     text = render_markdown(build_report([_pair()]))
     header = next(line for line in text.splitlines() if line.startswith("| backend |"))
     columns = [c.strip() for c in header.strip("|").split("|")]
-    assert columns[:4] == [
+    assert columns[:5] == [
         "backend",
         "correctness",
+        # Immediately beside the rate it qualifies, so a reader subtracting two
+        # rates sees what the subtraction is worth before doing it.
+        "95% interval",
         "stability",
         "tokens to an answer",
     ]
@@ -429,3 +432,54 @@ def test_the_composite_is_none_when_an_axis_is_missing():
     entry = _entry(incomplete=True, passed=False)
     report = build_report([_pair(entries=[entry])], composite=True)
     assert report["matrix"]["anthropic/claude-opus-5"]["composite"] is None
+
+
+# --- what the trial count will and will not support ------------------------
+
+
+def test_a_two_item_gap_at_this_trial_count_is_not_a_separation():
+    """The correction that motivated the interval column.
+
+    23/24 and 21/24 look like a ranking and are not one: two items across
+    twenty-four trials carry intervals several times the gap's own width.
+    """
+
+    from tools.bench.report import separated, wilson_interval
+
+    top = {"pass_interval": list(wilson_interval(23, 24))}
+    second = {"pass_interval": list(wilson_interval(21, 24))}
+    assert not separated(top, second)
+
+
+def test_a_wide_gap_is_separated():
+    from tools.bench.report import separated, wilson_interval
+
+    top = {"pass_interval": list(wilson_interval(23, 24))}
+    bottom = {"pass_interval": list(wilson_interval(10, 24))}
+    assert separated(top, bottom)
+
+
+def test_a_perfect_score_still_has_a_lower_bound():
+    """Wilson rather than the normal interval: 24/24 does not collapse to a
+    zero-width interval claiming certainty from twenty-four trials."""
+
+    from tools.bench.report import wilson_interval
+
+    low, high = wilson_interval(24, 24)
+    assert 0.0 < low < 1.0
+    assert high == 1.0
+
+
+def test_the_report_names_the_pairs_it_could_not_separate():
+    """Two backends one item apart over four trials: the table must say so
+    rather than leave an ordered column implying a ranking."""
+
+    entries = [_entry(task_id=f"t{i}", passed=i < 4) for i in range(4)]
+    entries += [
+        _entry(backend="ollama/local", task_id=f"t{i}", passed=i < 3)
+        for i in range(4)
+    ]
+    text = render_markdown(build_report([_pair(entries=entries)]))
+    assert "95% interval" in text
+    assert "Not separated by this suite" in text
+    assert "`anthropic/claude-opus-5` vs `ollama/local`" in text
