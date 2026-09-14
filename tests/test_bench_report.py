@@ -11,7 +11,7 @@ import json
 import pytest
 
 from tools.bench.report import (
-    COMPOSITE_WEIGHTS,
+    SCORE_BOARDS,
     build_report,
     render_markdown,
     write_report,
@@ -207,35 +207,45 @@ def test_the_column_order_reads_the_two_questions_left_to_right():
     assert columns.index("protocol faults") > columns.index("trajectory failures")
 
 
-def test_the_score_is_three_measurements_and_nothing_else():
-    """Correct, how long, how many tokens. Everything else the harness records
-    is diagnosis for reading why a score came out as it did."""
+def test_the_three_measurements_get_three_boards_and_no_blend():
+    """Correct, how long, how many tokens -- scored separately.
 
-    from tools.bench.report import SCORE_WEIGHTS
+    Correctness has a baseline and the other two do not, so a weighted sum
+    would move whenever the field of compared backends changed while reading
+    like a property of the model.
+    """
 
     report = build_report([_pair()])
-    assert set(report["weights"]) == {"correctness", "time", "tokens"}
-    assert report["weights"] == dict(SCORE_WEIGHTS)
-    for diagnostic in ("trajectory", "protocol", "stability", "duplicate"):
-        assert diagnostic not in report["weights"]
+    assert set(SCORE_BOARDS) == {"correctness", "speed", "cost"}
+    assert set(report["boards"]) >= set(SCORE_BOARDS)
+    for row in report["matrix"].values():
+        assert "score" not in row
+        assert "composite" not in row
 
 
-def test_the_ranking_prints_its_weights_above_it():
-    """A reader must be able to disagree with the weights rather than guess
-    them."""
-
-    text = render_markdown(build_report([_pair()]))
-    assert "## Ranking" in text
-    assert "**correctness** 0.6" in text
-    assert "**time** 0.2" in text and "**tokens** 0.2" in text
-
-
-def test_the_ranking_orders_by_score():
+def test_each_board_is_ordered_on_its_own_measurement():
     slow = _entry(backend="slow/model", task_id="t1", wall_ms=200_000)
     fast = _entry(backend="fast/model", task_id="t1", wall_ms=10_000)
-    text = render_markdown(build_report([_pair(entries=[slow, fast])]))
-    ranking = text[text.index("## Ranking"):text.index("## Diagnostics")]
-    assert ranking.index("fast/model") < ranking.index("slow/model")
+    fast["efficiency"]["metrics"]["tokens"] = {
+        "input_tokens": 84000,
+        "output_tokens": 1600,
+    }
+    boards = build_report([_pair(entries=[slow, fast])])["boards"]
+    assert [e["backend"] for e in boards["speed"]] == ["fast/model", "slow/model"]
+    assert [e["backend"] for e in boards["cost"]] == ["slow/model", "fast/model"]
+
+
+def test_a_relative_board_reports_its_ratio_to_the_best():
+    """"1.8x the fastest" is a comparison. A normalised 0.55 would read as a
+    score on a scale that does not exist."""
+
+    quick = _entry(backend="quick/model", task_id="t1", wall_ms=50_000)
+    slow = _entry(backend="slow/model", task_id="t1", wall_ms=100_000)
+    boards = build_report([_pair(entries=[quick, slow])])["boards"]
+    assert boards["speed"][0]["times_best"] == pytest.approx(1.0)
+    assert boards["speed"][1]["times_best"] == pytest.approx(2.0)
+    assert "times_best" not in boards["correctness"][0]
+    assert "interval" in boards["correctness"][0]
 
 
 def test_tokens_without_result_are_reported_separately_never_averaged_in():
@@ -421,39 +431,51 @@ def test_a_single_repeat_reports_no_stability_rather_than_a_perfect_one():
     assert "| -- |" in text
 
 
-def test_a_cost_twice_the_best_scores_half_of_its_weight():
-    """Time and tokens have no natural ceiling, so each is a ratio against the
-    best row: fastest scores 1.0, twice as slow scores 0.5."""
+def test_correctness_does_not_move_when_a_slower_backend_joins():
+    """The distinction the split exists for. Adding a backend changes every
+    speed standing and no correctness figure."""
 
-    cheap = _entry(backend="cheap/model", task_id="t1")
-    dear = _entry(backend="dear/model", task_id="t1")
-    dear["efficiency"]["metrics"]["tokens"] = {
-        "input_tokens": 84000,
-        "output_tokens": 1600,
-    }
-    matrix = build_report([_pair(entries=[cheap, dear])])["matrix"]
-    # Both correct and equally fast: correctness gives 0.6 and time 0.2 to
-    # each. The cheaper row takes all 0.2 of tokens, the dearer one half.
-    assert matrix["cheap/model"]["score"] == pytest.approx(1.0)
-    assert matrix["dear/model"]["score"] == pytest.approx(0.9)
+    base = [_entry(backend="a/model", task_id="t1", wall_ms=50_000)]
+    with_slow = base + [_entry(backend="b/model", task_id="t1", wall_ms=500_000)]
 
+    before = build_report([_pair(entries=base)])["boards"]
+    after = build_report([_pair(entries=with_slow)])["boards"]
 
-def test_taking_twice_as_long_costs_half_the_time_weight():
-    quick = _entry(backend="quick/model", task_id="t1", wall_ms=50_000)
-    slow = _entry(backend="slow/model", task_id="t1", wall_ms=100_000)
-    matrix = build_report([_pair(entries=[quick, slow])])["matrix"]
-    assert matrix["quick/model"]["score"] == pytest.approx(1.0)
-    assert matrix["slow/model"]["score"] == pytest.approx(0.9)
+    def correctness(boards, backend):
+        return next(e["value"] for e in boards["correctness"] if e["backend"] == backend)
+
+    assert correctness(before, "a/model") == correctness(after, "a/model")
+    # ... while its speed standing is now a comparison against a second model.
+    assert len(after["speed"]) == 2
 
 
-def test_a_backend_that_answered_nothing_is_unscored_not_zero():
-    """It has no time or token cost per answer, and scoring it as infinitely
-    slow would invent a measurement it never made."""
+def test_a_backend_that_answered_nothing_is_unmeasured_not_zero():
+    """It has no cost *per answer*, and ranking it as infinitely slow would
+    invent a measurement it never made."""
 
     entry = _entry(incomplete=True, passed=False)
     report = build_report([_pair(entries=[entry])])
-    assert report["matrix"]["anthropic/claude-opus-5"]["score"] is None
-    assert "Unscored" in render_markdown(report)
+    boards = report["boards"]
+    assert boards["speed"] == []
+    assert boards["speed_unmeasured"] == [{"backend": "anthropic/claude-opus-5"}]
+    assert "Not measured" in render_markdown(report)
+
+
+def test_the_board_names_the_backends_the_measurements_disagree_on():
+    """A model first for correctness and last for speed has not been beaten --
+    it bought accuracy with time, and no weight can adjudicate that."""
+
+    right_slow = _entry(backend="careful/model", task_id="t1", passed=True,
+                        wall_ms=500_000)
+    wrong_fast = _entry(backend="hasty/model", task_id="t1", passed=False,
+                        wall_ms=5_000)
+    wrong_fast2 = _entry(backend="hasty/model", task_id="t2", passed=True,
+                         wall_ms=5_000)
+    text = render_markdown(
+        build_report([_pair(entries=[right_slow, wrong_fast, wrong_fast2])])
+    )
+    assert "### The board" in text
+    assert "No single order over these backends exists." in text
 
 
 # --- what the trial count will and will not support ------------------------

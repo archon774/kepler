@@ -44,8 +44,8 @@ __all__ = [
     "render_markdown",
     "build_report",
     "write_report",
-    "SCORE_WEIGHTS",
-    "COMPOSITE_WEIGHTS",
+    "SCORE_BOARDS",
+    "boards",
     "REPORT_MD_NAME",
     "REPORT_JSON_NAME",
 ]
@@ -53,22 +53,25 @@ __all__ = [
 REPORT_MD_NAME = "report.md"
 REPORT_JSON_NAME = "report.json"
 
-#: The three measurements, and what each is worth. Printed above every ranking
-#: so a reader can disagree with the weights rather than guess at them.
+#: The three measurements, each scored on its own board. **Never blended.**
 #:
-#: Correctness dominates on purpose: an answer delivered instantly and cheaply
-#: is worth nothing if it is wrong, so no amount of speed or thrift lifts a
-#: model past one that is right by a wide margin. Time and tokens are weighted
-#: equally -- they are two prices for the same answer, one paid in waiting and
-#: one in spend, and nothing here knows which a given caller minds more.
-SCORE_WEIGHTS: Mapping[str, float] = {
-    "correctness": 0.6,
-    "time": 0.2,
-    "tokens": 0.2,
-}
-
-#: Superseded name, kept so an older report payload still reads.
-COMPOSITE_WEIGHTS = SCORE_WEIGHTS
+#: They are not the same kind of quantity, and a weighted sum of them would
+#: hide that. Correctness is *absolute*: it is a rate in [0, 1], 1.0 means the
+#: model answered every question correctly, and the figure means the same thing
+#: whether it was measured against one other backend or ten.
+#:
+#: Speed and cost have no such baseline. Seconds and tokens are unbounded below
+#: by anything this harness knows -- there is no "perfectly fast" -- so the only
+#: honest comparison is against the other backends on the board. That makes them
+#: *relative*: add a slower model and every other model's speed standing moves,
+#: while nobody's correctness does. Folding a floating quantity into a fixed one
+#: produces a number that changes when the field changes and looks like it
+#: measured the model.
+#:
+#: So three boards, three orders, and a summary that shows where they disagree.
+#: A model that is right most often and slowest is a real result, not a tie to
+#: be broken by a weight nobody can justify.
+SCORE_BOARDS: tuple[str, ...] = ("correctness", "speed", "cost")
 
 #: A fixture miss rate above this is called out in the header in the
 #: document's own words rather than left for a reader to notice in a column.
@@ -114,15 +117,11 @@ def build_report(
     for row in matrix.values():
         _finalize(row)
     if composite:
-        best_tokens = _best(matrix, "tokens_per_answer")
-        best_seconds = _best(matrix, "seconds_per_answer")
-        for row in matrix.values():
-            row["score"] = _score(row, best_seconds, best_tokens)
-            row["composite"] = row["score"]
+        _rank_boards(matrix)
 
     return {
         "header": header,
-        "weights": dict(SCORE_WEIGHTS) if composite else None,
+        "boards": boards(matrix) if composite else None,
         "matrix": matrix,
         "per_task": grid,
         "failures": failures,
@@ -249,36 +248,63 @@ def _best(matrix: Mapping[str, Mapping[str, Any]], key: str) -> float | None:
     return min(values) if values else None
 
 
-def _score(
-    row: Mapping[str, Any],
-    best_seconds: float | None,
-    best_tokens: float | None,
-) -> float | None:
-    """The benchmark score: correctness, time and tokens, and nothing else.
+#: How each board is read off a matrix row: the column, and whether a bigger
+#: number is better.
+_BOARD_COLUMN: Mapping[str, tuple[str, bool]] = {
+    "correctness": ("pass_rate", True),
+    "speed": ("seconds_per_answer", False),
+    "cost": ("tokens_per_answer", False),
+}
 
-    Correctness is already a rate in [0, 1]. Time and tokens are normalised
-    against the best row, because neither has a natural ceiling to divide by:
-    the fastest backend scores 1.0 on time and one taking twice as long scores
-    0.5. Both costs count only the runs that reached a passing answer.
 
-    ``None`` when a backend answered nothing, rather than substituting a zero:
-    a model with no passing run has no time or token cost per answer, and
-    scoring it as infinitely slow would invent a measurement it never made.
+def boards(matrix: Mapping[str, Mapping[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Three independent orders, one per measurement.
+
+    Each row carries the raw measurement and -- for the two relative boards --
+    its ratio to the best entry, so "1.8x the fastest" is visible as a
+    comparison rather than disguised as a score. Correctness carries its 95%
+    interval instead, because it has an absolute scale on which an interval
+    means something.
     """
 
-    correctness = row.get("pass_rate")
-    seconds = row.get("seconds_per_answer")
-    tokens = row.get("tokens_per_answer")
-    if correctness is None or not seconds or not tokens:
-        return None
-    if not best_seconds or not best_tokens:
-        return None
-    return round(
-        correctness * SCORE_WEIGHTS["correctness"]
-        + (best_seconds / seconds) * SCORE_WEIGHTS["time"]
-        + (best_tokens / tokens) * SCORE_WEIGHTS["tokens"],
-        4,
-    )
+    out: dict[str, list[dict[str, Any]]] = {}
+    for board in SCORE_BOARDS:
+        column, higher_is_better = _BOARD_COLUMN[board]
+        entries = [
+            {"backend": backend, "value": row[column]}
+            for backend, row in matrix.items()
+            if row.get(column) is not None
+        ]
+        entries.sort(key=lambda e: e["value"], reverse=higher_is_better)
+        best = entries[0]["value"] if entries else None
+        for rank, entry in enumerate(entries, start=1):
+            entry["rank"] = rank
+            if board == "correctness":
+                entry["interval"] = matrix[entry["backend"]].get("pass_interval")
+            elif best:
+                # Relative to the best on this board, and only ever that: there
+                # is no absolute scale for a second or a token here.
+                entry["times_best"] = entry["value"] / best
+        entries_missing = sorted(
+            backend
+            for backend, row in matrix.items()
+            if row.get(column) is None
+        )
+        out[board] = entries
+        out[f"{board}_unmeasured"] = [
+            {"backend": backend} for backend in entries_missing
+        ]
+    return out
+
+
+def _rank_boards(matrix: dict[str, dict[str, Any]]) -> None:
+    """Write each backend's rank on each board back onto its matrix row."""
+
+    for board, entries in boards(matrix).items():
+        if board.endswith("_unmeasured"):
+            continue
+        for entry in entries:
+            matrix[entry["backend"]][f"rank_{board}"] = entry["rank"]
 
 
 def _filtered(grades: Mapping[str, Any], tag: str | None) -> Mapping[str, Any]:
@@ -531,63 +557,158 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _ranking_table(report: Mapping[str, Any]) -> list[str]:
-    """The scoreboard: three measurements, one score, one order.
+#: What each board measures, in the report's own words.
+_BOARD_BLURB: Mapping[str, str] = {
+    "correctness": (
+        "**Absolute.** Share of sessions whose answer passed every hard check. "
+        "1.0 means every question answered correctly, and the figure means the "
+        "same whoever else was measured."
+    ),
+    "speed": (
+        "**Relative.** Wall-clock seconds to a passing answer. There is no "
+        "\"perfectly fast\", so the only comparison available is against the "
+        "other backends here -- add a slower model and these standings move."
+    ),
+    "cost": (
+        "**Relative.** Tokens spent per passing answer, on the same footing as "
+        "speed: a ranking among these backends, not a score on a fixed scale."
+    ),
+}
 
-    Ranked because that is what a scoreboard is for. The 95% interval stays in
-    the row so the precision of the correctness term is visible beside it --
-    a reader ordering two backends whose intervals overlap should be able to
-    see that from the same table.
+_BOARD_UNIT: Mapping[str, str] = {
+    "correctness": "",
+    "speed": "s",
+    "cost": " tokens",
+}
+
+
+def _ranking_table(report: Mapping[str, Any]) -> list[str]:
+    """Three boards, never one number.
+
+    Correctness, speed and cost are not the same kind of quantity, and a
+    weighted sum of them would read as a measurement of the model while
+    actually moving whenever the field of compared backends changes. They get
+    an order each, and the summary shows where those orders disagree -- which
+    is the finding, not a tie to be broken.
     """
 
-    weights = report.get("weights")
-    if not weights:
+    data = report.get("boards")
+    if not data:
         return []
-    rows = [
-        (backend, row)
-        for backend, row in report["matrix"].items()
-        if row.get("score") is not None
-    ]
-    unscored = sorted(set(report["matrix"]) - {backend for backend, _ in rows})
-    rows.sort(key=lambda item: item[1]["score"], reverse=True)
 
     lines = [
-        "## Ranking",
+        "## Scores",
         "",
-        "Three measurements and nothing else: **is the answer correct**, **how "
-        "long did it take**, **how many tokens did it cost**. Time and tokens "
-        "are scored against the best row and counted only over runs that "
-        "reached a passing answer.",
+        "Three measurements, three boards, **never blended**. Only correctness "
+        "has a baseline; a second and a token do not, so those two are "
+        "rankings among the backends compared here and nothing more.",
         "",
-        "Weights: " + ", ".join(f"**{k}** {v}" for k, v in weights.items()) + ".",
-        "",
-        "| # | backend | score | correct | 95% interval | seconds/answer | "
-        "tokens/answer |",
-        "| --: | --- | --: | --- | --- | --: | --: |",
     ]
-    for rank, (backend, row) in enumerate(rows, start=1):
-        lines.append(
-            "| {rank} | `{backend}` | **{score:.3f}** | {passed}/{scored} "
-            "({rate}) | {interval} | {spa} | {tpa} |".format(
-                rank=rank,
-                backend=backend,
-                score=row["score"],
-                passed=row["passed"],
-                scored=row["runs"] - row["incomplete"],
-                rate=_pct(row["pass_rate"]),
-                interval=_interval(row.get("pass_interval")),
-                spa=_num(row.get("seconds_per_answer"), "{:,.0f}"),
-                tpa=_num(row.get("tokens_per_answer"), "{:,.0f}"),
+
+    for board in SCORE_BOARDS:
+        entries = data.get(board) or []
+        lines.append(f"### {board.capitalize()}")
+        lines.append("")
+        lines.append(_BOARD_BLURB[board])
+        lines.append("")
+        if not entries:
+            lines.append("Nothing measured on this board.")
+            lines.append("")
+        elif board == "correctness":
+            lines.append("| # | backend | correct | 95% interval |")
+            lines.append("| --: | --- | --- | --- |")
+            for entry in entries:
+                row = report["matrix"][entry["backend"]]
+                lines.append(
+                    "| {rank} | `{backend}` | **{rate}** ({passed}/{scored}) | "
+                    "{interval} |".format(
+                        rank=entry["rank"],
+                        backend=entry["backend"],
+                        rate=_pct(entry["value"]),
+                        passed=row["passed"],
+                        scored=row["runs"] - row["incomplete"],
+                        interval=_interval(entry.get("interval")),
+                    )
+                )
+        else:
+            unit = _BOARD_UNIT[board]
+            lines.append(f"| # | backend | per answer | vs best |")
+            lines.append("| --: | --- | --: | --: |")
+            for entry in entries:
+                times = entry.get("times_best")
+                lines.append(
+                    "| {rank} | `{backend}` | **{value:,.0f}**{unit} | "
+                    "{times} |".format(
+                        rank=entry["rank"],
+                        backend=entry["backend"],
+                        value=entry["value"],
+                        unit=unit,
+                        times="best" if times == 1 else f"{times:.2f}x",
+                    )
+                )
+        lines.append("")
+        missing = data.get(f"{board}_unmeasured") or []
+        if missing:
+            lines.append(
+                "Not measured (no passing run to cost): "
+                + ", ".join(f"`{m['backend']}`" for m in missing)
+                + "."
             )
+            lines.append("")
+
+    lines.extend(_board_summary(report, data))
+    return lines
+
+
+def _board_summary(report: Mapping[str, Any], data: Mapping[str, Any]) -> list[str]:
+    """One row per backend, its place on each board.
+
+    The point of the table is the rows that disagree with themselves. A model
+    ranked first for correctness and last for speed has not been beaten by a
+    faster one -- it has bought accuracy with time, and which of those a caller
+    wants is not something this harness can decide for them.
+    """
+
+    backends = sorted(report["matrix"])
+    if len(backends) < 2:
+        return []
+    place: dict[str, dict[str, Any]] = {b: {} for b in backends}
+    for board in SCORE_BOARDS:
+        for entry in data.get(board) or []:
+            place[entry["backend"]][board] = entry["rank"]
+
+    lines = [
+        "### The board",
+        "",
+        "Where these three disagree is the result, not a tie to break.",
+        "",
+        "| backend | correctness | speed | cost |",
+        "| --- | :-: | :-: | :-: |",
+    ]
+    for backend in backends:
+        cells = " | ".join(
+            str(place[backend].get(board, "--")) for board in SCORE_BOARDS
+        )
+        lines.append(f"| `{backend}` | {cells} |")
+    lines.append("")
+
+    disagreeing = [
+        backend
+        for backend in backends
+        if len({place[backend][b] for b in SCORE_BOARDS if b in place[backend]}) > 1
+    ]
+    if disagreeing:
+        lines.append(
+            "Ranked differently by different measurements: "
+            + ", ".join(f"`{b}`" for b in disagreeing)
+            + ". No single order over these backends exists."
+        )
+    else:
+        lines.append(
+            "Every backend holds the same place on all three boards, so one "
+            "order does describe them."
         )
     lines.append("")
-    if unscored:
-        lines.append(
-            "Unscored (no passing run, so no cost per answer to measure): "
-            + ", ".join(f"`{backend}`" for backend in unscored)
-            + "."
-        )
-        lines.append("")
     return lines
 
 
