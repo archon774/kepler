@@ -6,14 +6,25 @@ import asyncio
 import sys
 from types import SimpleNamespace
 
+from textual.widgets import Static
+
 from tools.agent.events import TextDelta
 from tools.llm.base import BackendUnavailableError
 from tools.tui import __main__ as tui_main
 from tools.tui.app import KeplerApp
+from tools.tui.widgets.transcript import Transcript
 
 
 def _run(coroutine):
-    return asyncio.run(coroutine)
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coroutine)
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        executor = loop._default_executor
+        if executor is not None:
+            executor.shutdown(wait=True)
+        loop.close()
 
 
 def test_shell_exposes_a_transcript_prompt_and_status_bar():
@@ -43,7 +54,8 @@ def test_engine_events_append_assistant_text_to_the_transcript():
         async with app.run_test() as pilot:
             app.post_message(KeplerApp.EngineEvent(TextDelta(text="hello")))
             await pilot.pause()
-            assert "hello" in str(app.query_one("#transcript").render())
+            transcript = app.query_one("#transcript", Transcript)
+            assert transcript.assistant_text == "hello"
 
     _run(scenario())
 
@@ -53,8 +65,11 @@ def test_unknown_slash_command_renders_an_error_without_starting_the_engine():
         app = KeplerApp(backend=object())
         async with app.run_test() as pilot:
             await pilot.press("/", "n", "o", "p", "e", "enter")
-            assert "Unknown command: /nope" in str(
-                app.query_one("#transcript").render()
+            await pilot.pause()
+            transcript = app.query_one("#transcript", Transcript)
+            assert any(
+                "Unknown command: /nope" in str(entry.render())
+                for entry in transcript.query(Static)
             )
             assert app.engine_starts == 0
 
@@ -66,7 +81,11 @@ def test_help_command_renders_the_generated_command_list():
         app = KeplerApp(backend=object())
         async with app.run_test() as pilot:
             await pilot.press("/", "?", "enter")
-            rendered = str(app.query_one("#transcript").render())
+            await pilot.pause()
+            transcript = app.query_one("#transcript", Transcript)
+            rendered = "\n".join(
+                str(entry.render()) for entry in transcript.query(Static)
+            )
             assert "/help" in rendered
             assert "/quit" in rendered
             assert app.engine_starts == 0
