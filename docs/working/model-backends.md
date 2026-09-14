@@ -9,7 +9,7 @@ remain deferred.
 **Prerequisites:** None.
 **Unblocks:** The headless agent engine every phase of
 [tui-harness.md](tui-harness.md) depends on (now built), and the benchmark
-harness deferred to phases 4–5 below.
+harness of phases 4–5 (now built, under [benchmark.md](benchmark.md)).
 **Branch:** implemented on `agent/model-backends-impl`, off `dev` — the
 maintainer redirected the base from `main` to `dev` at implementation time
 (`dev` carries the current plan doc and the 49-tool registry the design
@@ -165,7 +165,7 @@ always set an explicit timeout, never enable redirect following (section 5, S3).
 | `tools/llm/replay_backend.py` | `ReplayBackend` — replays a recorded model transcript. Test-only; phase 4. |
 | `tools/agent/` | The headless loop: `events.py`, `prompt.py`, `engine.py`, later `policy.py`. Built in Phase 0c. |
 | `tools/bench/` | Harness code, phases 4–5: `tasks.py`, `fixtures.py`, `graders/{trajectory,efficiency,answer,protocol}.py`, `harness.py`, `report.py`, `cli.py`. |
-| `benchmarks/` | The corpus — data, versioned, reviewed: `suites/core/*.yaml`, `fixtures/*.json`, `prices.json`. |
+| `benchmarks/` | The corpus — data, versioned, reviewed. As built: `suites/<suite>/<task-id>.yaml` (one task per file), `fixtures/<tool>.yaml`, `transcripts/`. No `prices.json` — see open question 3. |
 
 **Naming.** `tools/llm/`, not `tools/backends/` — `algorithms/query/binding.py`
 already defines a `Backend` class and the collision would be actively
@@ -434,9 +434,19 @@ Nine requirements, from the security review of this design. Each is an
 acceptance criterion with a test, not advice. IDs are referenced from the
 rollout in section 9.
 
-**Status (2026-09-09):** S3, S4, S8, S9 **implemented and tested** in phases
-−1–3. S1, S2, S5, S6, S7 belong to the benchmark harness (phases 4–5) and are
-**not yet built** — no judge, no fixture store, no suite loader exists.
+**Status (2026-09-13):** all nine **implemented and tested.** S3, S4, S8 and S9
+landed in phases −1–3; S1, S2, S5, S6 and S7 landed with the benchmark harness
+(phases 4–5), whose architecture and rollout are
+[benchmark.md](benchmark.md) — see its section 10 for the test that carries
+each one.
+
+| ID | Where | Test |
+| --- | --- | --- |
+| S1 | `tools/bench/judge.py` — `ask(answer_key, answer_text, backend)` and no store access | `tests/test_bench_judge.py` |
+| S2 | `tools/bench/record.py` — credential scan over the serialized entry, refusing the write | `tests/test_bench_record.py` |
+| S5 | `tools/bench/tasks.py`, `tools/bench/fixtures.py` — `yaml.safe_load` only | `tests/test_bench_tasks.py`, `tests/test_bench_fixtures.py` |
+| S6 | `tools/bench/tasks.py`, `tools/bench/fixtures.py` — bare names, rejected before resolution and re-checked with `tools.config.within` | both of the above |
+| S7 | `tools/bench/fixtures.py` — `path`/`subdir`/`ext` rejected; the shim reserves its own path | `tests/test_bench_fixtures.py` |
 
 ### S1 — The judge never sees untrusted content (HIGH)
 
@@ -629,12 +639,24 @@ mode makes runaway loops free, which is a second reason it is the default.
 
 ---
 
-## 6. Benchmarking — deferred to phases 4–5
+## 6. Benchmarking — the design summary; see [benchmark.md](benchmark.md)
 
-**Nothing in this section is planned work yet.** It is the design the port is
-built to serve, and it is why the port is provider-neutral at all. The phases
-that implement it get their own detailed sequencing, written once the port lands
-and the fault taxonomy is real rather than predicted.
+**This section is the design summary. [benchmark.md](benchmark.md) is the
+architecture, the rollout, and what actually shipped** — it was written once
+the port landed and the fault taxonomy was real rather than predicted, as this
+section said it would be. Where the two disagree, benchmark.md section 15
+enumerates the divergences with reasons; they are not silent. The ones worth
+knowing before reading on:
+
+* **Local tools run live.** 6.3 below implies every tool result is replayed;
+  replaying `compute_pulsar_periodogram` would replace the measurement with a
+  guess about the measurement.
+* **`grade` is a separate verb** from `run`, so a grader fix never costs a
+  re-spend.
+* **There is no cost axis, no price table, and no `estimated_usd`** — see open
+  question 3 in section 11, now closed as *not built*.
+* **Two headline axes and two diagnostic ones**, not four co-equal ones.
+* **Efficiency is three clocks, not one**, and four token classes, not one.
 
 ### 6.1 What is measured
 
@@ -703,6 +725,17 @@ and output tokens, wall-clock per turn, and estimated USD from
 `benchmarks/prices.json` — a hand-maintained table carrying a `retrieved_on`
 date and an explicit note that it is not fetched. Ollama runs cost zero and report
 wall-clock only.
+
+> **As built, this paragraph is three divergences deep** (benchmark.md 15.3,
+> 15.8, 15.9). There is **no cost axis and no `prices.json`**: tokens are the
+> measurement and money is the reader's arithmetic, with spending bounded in
+> tokens instead. "Wall-clock per turn" became **three clocks reported
+> separately** — model time, tool time, wall clock — because tool execution
+> dominates wall clock here and an undivided figure ranks models by which
+> tools they called. And the token counts stay in **four classes**, because
+> `SYSTEM_PROMPT` plus 55 schemas is a large fixed prefix resent every turn and
+> folding cache reads into one input number hides a real difference in work
+> done.
 
 **Answer correctness.** Deterministic first: regex assertions, numeric
 comparison with tolerance, and artifact-path presence checks against an answer
@@ -822,8 +855,9 @@ each with the full suite green and the Phase 0c gate (an unedited
 | — KEPLER_MODEL_BACKEND wiring | `feat(runner): honor KEPLER_MODEL_BACKEND in the console shim` | the shim builds a spec through `build_backend` when the var is set |
 | docs | this commit | this document, `tool-architecture.md` §10, `README.md`, `CLAUDE.md` |
 
-Not done (deferred): phases 4–5, the benchmark harness (section 6) and manifest
-v2 (section 7), which carry S1, S2, S5, S6, S7.
+Phases 4–5 — the benchmark harness (section 6) and manifest v2 (section 7),
+carrying S1, S2, S5, S6, S7 — landed on 2026-09-13 under
+[benchmark.md](benchmark.md); see the phase table below.
 
 ### Global constraints
 
@@ -1196,15 +1230,29 @@ and behavior changes."* Docs land last and alone.
       written and is now quietly wrong — `CLAUDE.md` already carries the scars of
       stale `EXTRACTION.md` references.
 
-### Phases 4–5 — the benchmark harness (deferred)
+### Phases 4–5 — the benchmark harness — **done (2026-09-13)**
 
-Not planned here. Their content is section 6 plus the manifest v2 payload of
-section 7, and they carry the remaining security requirements.
+Planned, built and landed under [benchmark.md](benchmark.md), which is the
+architecture and the sequencing; this table is the index. Their content is
+section 6 plus the manifest v2 payload of section 7, and they carried the
+remaining security requirements.
 
-| Phase | Content | Done when |
+| Phase | Content | Outcome |
 | --- | --- | --- |
-| **4** | Manifest v2, `ReplayBackend`, fixture store and matching (S2, S6, S7). | v1 manifests still readable; traversal rejected. |
-| **5** | Harness, four graders, record mode, CLI, report, docs (S1, S5). | The full suite runs offline against `ReplayBackend` in CI. |
+| **4a** | Manifest v2 + the engine wiring | `schema_version: 2`, `backend`, `usage_totals`, per-turn latency/usage/`raw_stop_reason`, the `artifact_subdir` override. `tests/test_runner_session.py` passed unedited. All four adapters confirmed to populate `latency_ms` and `usage`. |
+| **4b** | `ReplayBackend` + the transcript format | `tools/llm/replay_backend.py`; exhaustion raises rather than wrapping. Not reachable from `build_backend`. |
+| **4c** | The tool plane and fixture store (S5, S6, S7) | `tools/bench/plane.py` classifies all 55 tools; B1 asserts the plane is closed. |
+| **4d** | Record mode (S2) | Credential scan refuses the write; third-party prose flagged for review. |
+| **5a** | Task loader, run loop, `kepler-bench run` (S5, S6, B2, B4, B5, B7) | The smoke suite runs end to end offline, no socket, in milliseconds. |
+| **5b** | The four graders and `grade` | Three kinds of right answer; four fidelity families; three clocks. |
+| **5c** | The matrix and `compare` | Headline axes first; no blended score by default. |
+| **5d** | The corpus | 16 tasks over five suites. **The 7.1.9 calibration gate is unmet** — no suite has been run against a real model; each ships a `calibration.md` saying so. |
+| **5e** | The judge (S1) | Two strings in, a structured verdict out; unparseable output is an error, never a pass. |
+
+**Not done:** the calibration run. A suite is untrusted until it has been run
+against at least three backends of different tiers, and that needs credentials
+or a local Ollama daemon. Until then the harness is built and tested but its
+answer keys are unvalidated against real models.
 
 Phases -1 through 1 are worth landing regardless of whether any non-Anthropic
 backend ever ships: they fix a misconfigured secret-scan control, add argument
@@ -1267,10 +1315,16 @@ against `qwen3.8:27b-mlx` recorded three findings:
 None of the three is lossy, so `OllamaBackend` stays a thin `OpenAIBackend`
 subclass over `/v1/chat/completions`.
 
-**3. Is the price table maintainable?** *Open — belongs to the benchmark
-phases.* A stale price table produces confident wrong cost numbers. Leaning
-toward keeping estimated USD but printing the `retrieved_on` date in every
-report header, so a reader can discount a stale figure rather than trust it.
+**3. Is the price table maintainable?** *Closed as **not built** (2026-09-13).*
+Not "resolved" — the feature was dropped. There is no cost axis, no
+`benchmarks/prices.json`, and no `estimated_usd` in the manifest. A price is
+not a property of a session: writing one into a durable record freezes a
+number that ages badly, and it would make `tools/sessions.py` — infrastructure
+every tool run touches — depend on a benchmark data file needing maintenance
+forever. The question it answers is one a reader can answer themselves from the
+token counts and their own current pricing page. Spending is *bounded* instead,
+in tokens: `--max-tokens` is required for any live backend and is checked
+before dispatching each turn. See benchmark.md sections 5.7 and 15.3.
 
 **4. How large should the seed suite be?** *Resolved: eight tasks, one per
 confirmed-live failure mode `SYSTEM_PROMPT` already documents.* Smallest suite

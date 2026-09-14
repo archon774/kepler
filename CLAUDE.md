@@ -237,8 +237,35 @@ the four adapters. Its rules:
   make a weak model's life easier (`schema.py`); the string `"None"` is never
   coerced to `None` (`validation.py`).
 
-`docs/working/model-backends.md` is the full design; `docs/tool-architecture.md`
-section 10 is the summary.
+`tools/bench/` owns the model benchmark harness and nothing else: the tool
+plane (`plane.py`), the fixture store (`fixtures.py`), the task loader
+(`tasks.py`), the run loop (`harness.py`), the four graders, the report, and
+the `kepler-bench` CLI. Its rules:
+
+- **It owns no tool and adds nothing to the tool surface.** It reads
+  `tools/registry.py`'s schemas and substitutes `run_session`'s
+  `tool_functions=` mapping, and it reads the session manifest the engine
+  already writes. It is in `NOT_TOOL_MODULES`.
+- **Nothing under `algorithms/` or `tools/llm/` imports it.** The dependency
+  runs one way: tools/bench → tools/agent → tools/llm → tools/registry.
+- **The tool plane is closed.** All 55 registered tools are classified local
+  (26, run live), remote (22, always replayed) or mixed (7, decided per call
+  from the arguments). An unclassified tool raises rather than defaulting, and
+  a test asserts the plane covers the registry — so **a new registry tool must
+  be classified in the same commit that adds it**. Without that, the first new
+  remote tool would run live, against a real service, inside a run that
+  believes it is offline.
+- The classification is **per tool, never per module**:
+  `get_literature_cluster_params` looks local and reaches VizieR;
+  `tools.hr_diagram` spans all three classes.
+- Class-L tools are **not** replayed. Replaying `compute_pulsar_periodogram`
+  would replace the measurement with a guess about the measurement.
+- Zero new dependencies; nothing here opens a socket under a plain
+  `uv run pytest`, and that is a test (B2), not a convention.
+
+`docs/working/model-backends.md` is the port's full design and
+`docs/working/benchmark.md` the harness's; `docs/tool-architecture.md`
+sections 10 and 10.1 are the summaries.
 
 ### Vendored `skylib` is consolidated
 

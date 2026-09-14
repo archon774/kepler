@@ -1,10 +1,19 @@
 # Benchmarking Models on the Kepler Tool Surface
 
-**Status:** Design and rollout, not started. This is the detailed sequencing
-[model-backends.md](model-backends.md) deferred: its section 9 says phases 4–5
-"get their own detailed sequencing, written once the port lands and the fault
-taxonomy is real rather than predicted." The port landed on 2026-09-09; the
-taxonomy is real. This is that document.
+**Status:** **Built, and uncalibrated (2026-09-13).** Every phase of the
+section 14 rollout has landed on `agent/model-benchmark`, one commit per phase,
+with the full suite green. **One gate is unmet:** §7.1.9 makes a suite
+untrusted until it has been run against at least three backends of different
+tiers, and that needs provider credentials or a local Ollama daemon. Until that
+run happens the harness is built and tested but its answer keys are unvalidated
+against real models — each suite ships a `calibration.md` saying so, and a test
+asserts it does. See §14 for the per-phase record.
+
+This is the detailed sequencing [model-backends.md](model-backends.md)
+deferred: its section 9 says phases 4–5 "get their own detailed sequencing,
+written once the port lands and the fault taxonomy is real rather than
+predicted." The port landed on 2026-09-09; the taxonomy is real. This is that
+document.
 **Date:** 2026-09-13
 **Prerequisites:** [model-backends.md](model-backends.md) phases −1–3 —
 **met**: `tools/llm/` and `tools/agent/` exist, `tools/runner.py` is a shim,
@@ -1448,7 +1457,27 @@ python3 -m compileall tools algorithms tests
 git diff --check
 ```
 
-### Phases
+### Phases — all landed 2026-09-13
+
+Delivered on `agent/model-benchmark` off `dev`, one commit per phase, each with
+`uv run pytest` green, `compileall` clean and `git diff --check` clean.
+
+| Phase | Commit | Outcome |
+| --- | --- | --- |
+| **4a** | `Extend the session manifest to schema version 2` | v2 payload + the four-line engine wiring. `tests/test_runner_session.py` passed **unedited**. First task discharged: all four adapters do populate `latency_ms` and `usage` (Ollama through `OpenAIBackend.complete`); Gemini and Ollama gained the missing assertions. |
+| — | `Record a list-returning tool's result instead of crashing the loop` | **Not a benchmark phase.** A pre-existing defect the harness surfaced: `list_photometric_catalogs`, `list_artifacts` and `list_zeropoint_references` return `list[Model]`, and `.model_dump()` on a list raised mid-dispatch. Separate commit, at the maintainer's direction. |
+| **4b** | `Add ReplayBackend and the recorded-transcript format` | `tools/llm/replay_backend.py`, `benchmarks/transcripts/smoke.json`. |
+| **4c** | `Add the benchmark tool plane and fixture store` | `plane.py` (B1 closed), `fixtures.py` (B3, S5, S6, S7). Open question 1 answered: the class-M predicate is asserted against the tool's own registry schema. |
+| **4d** | `Add benchmark record mode with the credential scan` | S2, plus imperative-string flagging for review. |
+| **5a** | `Add the benchmark task loader, run loop, and kepler-bench run` | S5, S6, B2, B4, B5, B7. |
+| **5b** | `Add the four benchmark graders and the grade verb` | The three kinds of right answer, the four fidelity families, three clocks. |
+| **5c** | `Add the benchmark matrix and the compare/record verbs` | B6; headline axes first, no blended score by default. |
+| **5d** | `Add the benchmark corpus` | 16 tasks, five suites. **Calibration gate unmet**; two pulsar task premises were measured and both original guesses were wrong (§9.3). |
+| **5e** | `Add the opt-in LLM judge, isolated by construction` | S1. |
+| **docs** | this commit | this document, model-backends.md §5/§6/§9/§11, `docs/working/README.md`, `docs/tool-architecture.md` §10.1, `CLAUDE.md`. |
+
+The original per-phase gate table, kept as the specification each phase was
+built against:
 
 | Phase | Content | Gate |
 | --- | --- | --- |
@@ -1493,27 +1522,29 @@ adapters; `tools/runner.py`; anything under `algorithms/`.
 
 ### Documentation phase
 
-- [ ] Update this document's status per phase with PR numbers, and mark S1,
+- [x] Update this document's status per phase with PR numbers, and mark S1,
       S2, S5, S6, S7 implemented in **both** this document and
       model-backends.md section 5 — that document's status block currently
       says they are "not yet built," and leaving it saying so is exactly the
       stale-documentation failure `CLAUDE.md` already carries scars from.
-- [ ] model-backends.md: mark phases 4–5 done in the section 9 status table,
+- [x] model-backends.md: mark phases 4–5 done in the section 9 status table,
       record that open question 3 (the price table) is **closed as not built** —
       no cost axis, no price table — and point section 6 at this document.
-- [ ] `docs/working/README.md`: add the row, and state that the benchmark is
+- [x] `docs/working/README.md`: add the row, and state that the benchmark is
       the Model track's second half rather than a new track.
-- [ ] `docs/tool-architecture.md`: a subsection describing `tools/bench/` —
+- [x] `docs/tool-architecture.md`: a subsection describing `tools/bench/` —
       the three tool classes, that the harness reads manifests and substitutes
       `tool_functions`, and that it adds nothing to the tool surface.
-- [ ] `CLAUDE.md`: extend *Python domain boundaries* with `tools/bench/` — it
+- [x] `CLAUDE.md`: extend *Python domain boundaries* with `tools/bench/` — it
       reads the registry and the manifest and owns no tool; nothing under
       `algorithms/` or `tools/llm/` imports it; the plane is closed and a new
       registry tool must be classified in the same commit that adds it.
-- [ ] **Verify every claim against the code before writing it.**
+- [x] **Verify every claim against the code before writing it.**
 - [ ] When the track lands, fold the durable outcome into a top-level
       `docs/` reference and delete both working documents, per
-      `docs/working/README.md`'s lifecycle rule.
+      `docs/working/README.md`'s lifecycle rule. **Blocked on the §7.1.9
+      calibration run** — a harness whose answer keys have never met a real
+      model is not a landed track.
 
 ---
 

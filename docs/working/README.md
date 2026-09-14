@@ -16,19 +16,30 @@ writes the code.
 | --- | --- | --- | --- | --- | --- |
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
 | Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P7 complete; P8–P9 remain | `dev` | P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | The two asset-gated evidence gaps (NGC 5286 B from pixels, the ATLAS backend); the TUI stateless prerequisite is met |
-| Benchmark | [benchmark.md](benchmark.md) | Design and rollout; not started | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
+| Benchmark | [benchmark.md](benchmark.md) | Built; **uncalibrated** — every phase landed, the 7.1.9 calibration gate is unmet | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 **The model track was implemented on `dev`** (the maintainer redirected the
 base from `main`, since `dev` carries the current plan and registry). Phases
 −1–3 are done — `tools/llm/` and `tools/agent/` exist; `tools/runner.py` is a
-shim over them. The remaining model work is the deferred benchmark harness
-(phases 4–5), and it now has its own document: **[benchmark.md](benchmark.md)**
-is the architecture and sequencing for those two phases, which
-`model-backends.md` section 9 deliberately left unplanned until the port
-landed. The two are one track in two documents — `model-backends.md` section 6
-stays the design summary, `benchmark.md` is the plan. Every other branch here
+shim over them. **The benchmark harness is the same track's second half, not a new track.**
+Phases 4–5 of the model port are what [benchmark.md](benchmark.md) plans and
+what `tools/bench/` now implements; `model-backends.md` section 9 deliberately
+left them unplanned until the port landed and the fault taxonomy was real
+rather than predicted. The two are one track in two documents —
+`model-backends.md` section 6 stays the design summary, `benchmark.md` is the
+architecture, the plan, and the record of what shipped. Every other branch here
 targets `dev`.
+
+Every phase of the benchmark rollout (4a–4d, 5a–5e) has landed, and all nine
+of `model-backends.md`'s security requirements are now implemented and tested.
+**One gate is unmet and blocks calling the track done:** §7.1.9 makes a suite
+untrusted until it has been run against at least three backends of different
+tiers, which needs provider credentials or a local Ollama daemon. Until that
+run happens the harness is built and tested but its answer keys are unvalidated
+against real models, and each suite's `calibration.md` says so in those words.
+Only after it does should the durable outcome fold into a top-level `docs/`
+reference and both working documents be deleted, per the lifecycle rule below.
 
 ## Start here
 
