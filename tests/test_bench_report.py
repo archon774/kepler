@@ -481,26 +481,77 @@ def test_the_board_names_the_backends_the_measurements_disagree_on():
 # --- what the trial count will and will not support ------------------------
 
 
+def _row(passed, trials):
+    """A matrix row carrying only what a separation test reads."""
+
+    return {"pass_rate": passed / trials, "effective_trials": float(trials)}
+
+
 def test_a_two_item_gap_at_this_trial_count_is_not_a_separation():
     """The correction that motivated the interval column.
 
-    23/24 and 21/24 look like a ranking and are not one: two items across
-    twenty-four trials carry intervals several times the gap's own width.
+    23/24 and 21/24 look like a ranking and are not one.
     """
 
-    from tools.bench.report import separated, wilson_interval
+    from tools.bench.report import separated
 
-    top = {"pass_interval": list(wilson_interval(23, 24))}
-    second = {"pass_interval": list(wilson_interval(21, 24))}
-    assert not separated(top, second)
+    assert not separated(_row(23, 24), _row(21, 24))
 
 
 def test_a_wide_gap_is_separated():
-    from tools.bench.report import separated, wilson_interval
+    from tools.bench.report import separated
 
-    top = {"pass_interval": list(wilson_interval(23, 24))}
-    bottom = {"pass_interval": list(wilson_interval(10, 24))}
-    assert separated(top, bottom)
+    assert separated(_row(23, 24), _row(8, 24))
+
+
+def test_separation_asks_about_the_difference_not_about_overlap():
+    """Two 95% intervals can overlap while their difference excludes zero.
+
+    The overlap test errs toward modesty, which is why the mistake survives
+    review: it never claims a difference that is not there, it denies ones that
+    are. "Their intervals overlap" is not "no difference was shown".
+    """
+
+    from tools.bench.report import difference_interval, separated, wilson_interval
+
+    a, b = _row(45, 60), _row(32, 60)
+    first, second = wilson_interval(45, 60), wilson_interval(32, 60)
+    # The individual intervals do overlap ...
+    assert first[0] < second[1]
+    # ... and the difference between them still excludes zero.
+    low, high = difference_interval(45, 60, 32, 60)
+    assert low > 0
+    assert separated(a, b)
+
+
+def test_the_difference_interval_matches_newcombes_published_examples():
+    """Newcombe (1998), Statistics in Medicine 17:873-890, method 10."""
+
+    from tools.bench.report import difference_interval
+
+    low, high = difference_interval(56, 70, 48, 80)
+    assert low == pytest.approx(0.0524, abs=5e-5)
+    assert high == pytest.approx(0.3339, abs=5e-5)
+
+    low, high = difference_interval(9, 10, 3, 10)
+    assert low == pytest.approx(0.1705, abs=5e-5)
+    assert high == pytest.approx(0.8090, abs=5e-5)
+
+
+def test_separation_uses_the_effective_sample_size_not_the_session_count():
+    """The clustering correction has to survive into the comparison, or the
+    test re-assumes the independence the interval established is absent."""
+
+    from tools.bench.report import separated
+
+    wide = _row(40, 48)
+    narrow = _row(28, 48)
+    assert separated(wide, narrow)
+    # The same rates on the effective size of a fully clustered run are not.
+    assert not separated(
+        {"pass_rate": 40 / 48, "effective_trials": 16.0},
+        {"pass_rate": 28 / 48, "effective_trials": 16.0},
+    )
 
 
 def test_a_perfect_score_still_has_a_lower_bound():
@@ -631,3 +682,79 @@ def test_the_correctness_board_shows_what_the_repeats_were_worth():
     text = render_markdown(build_report([_pair(entries=entries)]))
     assert "n_eff" in text and "rho" in text
     assert "not a sample from a population" in text
+
+
+def test_wilson_agrees_with_scipy_everywhere_it_is_used():
+    """An independent implementation, not a restatement of the same algebra.
+
+    scipy is already a hard dependency of this repository, so the check costs
+    nothing and catches the class of error a hand-derived formula invites.
+    """
+
+    from scipy.stats import binomtest
+
+    from tools.bench.report import wilson_interval
+
+    for trials in range(2, 60):
+        for passed in range(trials + 1):
+            mine = wilson_interval(passed, trials)
+            reference = binomtest(passed, trials).proportion_ci(
+                confidence_level=0.95, method="wilson"
+            )
+            assert mine[0] == pytest.approx(reference.low, abs=1e-12)
+            assert mine[1] == pytest.approx(reference.high, abs=1e-12)
+
+
+def test_the_icc_reduces_to_the_textbook_form_on_a_balanced_design():
+    """m0 is the unbalanced-design cluster size and must collapse to the common
+    size when every cluster is the same length -- which ours are, whenever a
+    run completes."""
+
+    from tools.bench.report import design_effect
+
+    outcomes = {
+        "t1": [True, True, False],
+        "t2": [True, False, False],
+        "t3": [True, True, True],
+        "t4": [False, False, False],
+    }
+    sizes = [3, 3, 3, 3]
+    total, k = sum(sizes), len(sizes)
+    m0 = (total - sum(s * s for s in sizes) / total) / (k - 1)
+    assert m0 == pytest.approx(3.0)
+
+    props = [sum(1 for x in v if x) / len(v) for v in outcomes.values()]
+    grand = sum(sum(1 for x in v if x) for v in outcomes.values()) / total
+    msb = sum(s * (p - grand) ** 2 for s, p in zip(sizes, props)) / (k - 1)
+    msw = sum(s * p * (1 - p) for s, p in zip(sizes, props)) / (total - k)
+    expected = (msb - msw) / (msb + (m0 - 1) * msw)
+
+    rho, deff = design_effect(outcomes)
+    assert rho == pytest.approx(expected)
+    assert deff == pytest.approx(1 + (m0 - 1) * rho)
+
+
+def test_a_ragged_design_uses_m0_rather_than_the_mean_cluster_size():
+    """A partial run has clusters of different lengths, and the mean is the
+    wrong constant for a design effect."""
+
+    from tools.bench.report import design_effect
+
+    outcomes = {"t1": [True] * 8, "t2": [False, True], "t3": [True, False]}
+    sizes = [8, 2, 2]
+    total, k = sum(sizes), len(sizes)
+    m0 = (total - sum(s * s for s in sizes) / total) / (k - 1)
+    assert m0 != pytest.approx(total / k)  # the mean would be 4.0
+    _, deff = design_effect(outcomes)
+    rho, _ = design_effect(outcomes)
+    assert deff == pytest.approx(1 + (m0 - 1) * rho)
+
+
+def test_a_single_session_per_task_leaves_the_trials_alone():
+    """--repeats 1 has no clusters to correlate, so nothing is discounted."""
+
+    from tools.bench.report import design_effect
+
+    rho, deff = design_effect({"t1": [True], "t2": [False], "t3": [True]})
+    assert rho == 0.0
+    assert deff == 1.0

@@ -257,29 +257,44 @@ def design_effect(outcomes: Mapping[str, Sequence[Any]]) -> tuple[float, float]:
     if len(clusters) < 2:
         return 0.0, 1.0
     sizes = [len(c) for c in clusters]
-    mean_size = sum(sizes) / len(sizes)
-    if mean_size <= 1:
+    total = sum(sizes)
+    k = len(clusters)
+    if total <= k:  # every cluster of size 1: no repeats to be correlated
+        return 0.0, 1.0
+
+    # m0, the unbalanced-design cluster size (Donner 1986). It reduces to the
+    # common cluster size when the design is balanced, which ours is whenever a
+    # run completes -- but a partial run has ragged clusters and the mean would
+    # be the wrong constant.
+    m0 = (total - sum(size * size for size in sizes) / total) / (k - 1)
+    if m0 <= 1:
         return 0.0, 1.0
 
     props = [sum(1 for x in c if x) / len(c) for c in clusters]
-    grand = sum(props) / len(props)
-    between = mean_size * sum((p - grand) ** 2 for p in props) / (len(props) - 1)
-    within_terms = sum(
-        sum((bool(x) - p) ** 2 for x in c) for c, p in zip(clusters, props)
-    )
-    within_df = sum(size - 1 for size in sizes)
-    within = within_terms / within_df if within_df else 0.0
+    grand = sum(sum(1 for x in c if x) for c in clusters) / total
 
-    denominator = between + (mean_size - 1) * within
+    # One-way random-effects ANOVA on binary data. For a cluster of size n and
+    # proportion p, the within-cluster sum of squares is exactly n*p*(1-p).
+    between = sum(
+        size * (prop - grand) ** 2 for size, prop in zip(sizes, props)
+    ) / (k - 1)
+    within = sum(
+        size * prop * (1.0 - prop) for size, prop in zip(sizes, props)
+    ) / (total - k)
+
+    denominator = between + (m0 - 1) * within
     if denominator <= 0:
-        # No variance anywhere: every session agreed. Nothing distinguishes a
-        # deterministic model from a lucky one here, so assume full clustering
+        # No variance anywhere: every session agreed. Nothing here distinguishes
+        # a deterministic model from a lucky one, so assume full clustering
         # rather than claim the repeats were independent evidence.
         rho = 1.0
     else:
         rho = (between - within) / denominator
+    # A negative estimate means less between-cluster than within-cluster
+    # variance -- real, but it would push the effective size *above* the
+    # session count and claim more independence than sessions exist.
     rho = min(1.0, max(0.0, rho))
-    return rho, 1.0 + (mean_size - 1) * rho
+    return rho, 1.0 + (m0 - 1) * rho
 
 
 def clustered_interval(
@@ -303,25 +318,70 @@ def clustered_interval(
     return interval, rho, effective
 
 
+def difference_interval(
+    passed_a: int,
+    trials_a: int,
+    passed_b: int,
+    trials_b: int,
+):
+    """A 95% interval on the *difference* of two pass rates.
+
+    Newcombe (1998) method 10, the square-and-add hybrid score interval, built
+    from the two Wilson intervals this module already computes.
+
+    This replaced an overlap test, which was wrong in a way that is easy to
+    miss because it errs toward modesty. Two 95% intervals can overlap while
+    the difference between them is significant: the overlap test is
+    substantially more conservative than its nominal level, so "their intervals
+    overlap" is a weaker statement than "no difference was shown" and must not
+    be reported as the latter. The question "are these two backends different?"
+    is a question about the difference, so it is asked about the difference.
+    """
+
+    if trials_a <= 0 or trials_b <= 0:
+        return None
+    first = wilson_interval(passed_a, trials_a)
+    second = wilson_interval(passed_b, trials_b)
+    if first is None or second is None:
+        return None
+    rate_a, rate_b = passed_a / trials_a, passed_b / trials_b
+    delta = rate_a - rate_b
+    lower = delta - math.sqrt((rate_a - first[0]) ** 2 + (second[1] - rate_b) ** 2)
+    upper = delta + math.sqrt((first[1] - rate_a) ** 2 + (rate_b - second[0]) ** 2)
+    return max(-1.0, lower), min(1.0, upper)
+
+
+def _effective_counts(row: Mapping[str, Any]) -> tuple[int, int] | None:
+    """A row's pass count and trial count on its *effective* sample size.
+
+    The clustering correction has to survive into the comparison. Testing a
+    difference on raw session counts would re-assume the independence the
+    interval already established is not there.
+    """
+
+    effective = row.get("effective_trials")
+    rate = row.get("pass_rate")
+    if not effective or rate is None:
+        return None
+    trials = max(1, round(effective))
+    return round(rate * trials), trials
+
+
 def separated(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
-    """Whether two backends' correctness intervals fail to overlap.
+    """Whether the difference between two backends excludes zero at 95%.
 
     Reported rather than enforced: a suite that cannot separate two models is
     making a statement about the suite, and hiding it behind an ordered table
-    would be the whole failure this benchmark is meant to avoid.
+    would be the failure this benchmark exists to catch.
     """
 
-    first, second = a.get("pass_interval"), b.get("pass_interval")
-    if not first or not second:
+    first, second = _effective_counts(a), _effective_counts(b)
+    if first is None or second is None:
         return False
-    return first[1] < second[0] or second[1] < first[0]
-
-
-def _best(matrix: Mapping[str, Mapping[str, Any]], key: str) -> float | None:
-    """The best (lowest) value of a cost column across the compared backends."""
-
-    values = [row[key] for row in matrix.values() if row.get(key)]
-    return min(values) if values else None
+    interval = difference_interval(*first, *second)
+    if interval is None:
+        return False
+    return interval[0] > 0.0 or interval[1] < 0.0
 
 
 #: How each board is read off a matrix row: the column, and whether a bigger
@@ -873,13 +933,16 @@ def _separation_note(report: Mapping[str, Any]) -> list[str]:
     lines = [""]
     if overlapping:
         lines.append(
-            "**Not separated by this suite** (95% correctness intervals "
-            "overlap): " + ", ".join(overlapping) + ". Ordering these pairs on "
-            "correctness reads a difference the trial count does not support."
+            "**Not separated by this suite**: " + ", ".join(overlapping) + ". "
+            "A 95% interval on the *difference* in correctness (Newcombe 1998, "
+            "method 10, on effective sample sizes) includes zero for these "
+            "pairs -- ordering them reads a difference the trial count does "
+            "not support."
         )
     else:
         lines.append(
-            "Every pair of backends is separated at 95% on correctness."
+            "Every pair of backends is separated at 95% on correctness: each "
+            "pairwise difference interval excludes zero."
         )
     lines.append("")
     return lines
