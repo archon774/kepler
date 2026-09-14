@@ -194,6 +194,6 @@ the run directories are not:
 uv run python docs/working/figures/make.py
 ```
 
-Each figure is committed twice — the SVG is the source and diffs as text, the
-PNG is what renders wherever a reader opens this. The PNG is rasterised from
-the SVG at 2x, so the two cannot drift.
+The SVG is piped straight to `rsvg-convert` and never written out, so there is
+no intermediate on disk to drift from the PNG beside it. Rendered at 2x for a
+high-density display.

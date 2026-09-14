@@ -3,7 +3,7 @@
     uv run python docs/working/figures/make.py
 
 Lives beside the figures rather than in ``tools/bench/`` because it is
-documentation tooling: it reads a committed report and writes SVG into this
+documentation tooling: it reads a committed report and writes PNG into this
 directory, and nothing in the harness imports it. Deliberately outside the
 package so it never has to be classified in the tool plane.
 
@@ -32,42 +32,51 @@ GRID = "#dededa"
 def esc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
 
-#: Raster width. Twice the natural viewBox so the PNG stays sharp on a
-#: high-density display; the SVG beside it remains the source of truth.
+#: Raster width. Twice the natural viewBox so the figure stays sharp on a
+#: high-density display.
 PNG_SCALE = 2
 
 
 def write(stem: str, markup: str) -> None:
-    """Write the SVG and a PNG rendered from it.
+    """Rasterise one figure to PNG.
 
-    Both are committed: the SVG is the source and diffs as text, the PNG is
-    what renders everywhere a reader might open the document.
+    The SVG is piped to rsvg-convert rather than written out: PNG is the only
+    committed format, so an SVG on disk would be an intermediate that could
+    drift from the figure beside it without anything noticing.
     """
 
     import re
     import subprocess
 
-    svg_path = OUT / f"{stem}.svg"
-    svg_path.write_text(markup, encoding="utf-8")
     width = int(re.search(r'width="(\d+)"', markup).group(1))
     png_path = OUT / f"{stem}.png"
     try:
         subprocess.run(
-            ["rsvg-convert", "-w", str(width * PNG_SCALE),
-             str(svg_path), "-o", str(png_path)],
-            check=True, capture_output=True,
+            ["rsvg-convert", "-w", str(width * PNG_SCALE), "-o", str(png_path)],
+            input=markup.encode("utf-8"), check=True, capture_output=True,
         )
-        print(f"wrote {svg_path.name} and {png_path.name}")
-    except (OSError, subprocess.CalledProcessError) as exc:
-        # The SVG is written either way; only the raster needs the tool.
-        print(f"wrote {svg_path.name} (no PNG: rsvg-convert unavailable: {exc})")
+    except FileNotFoundError as exc:  # pragma: no cover - operator's toolchain
+        raise SystemExit(
+            "rsvg-convert is not on PATH; it is what turns these figures into "
+            "the PNGs the document references (dnf install librsvg2-tools)"
+        ) from exc
+    except subprocess.CalledProcessError as exc:  # pragma: no cover
+        raise SystemExit(
+            f"rsvg-convert failed on {stem}: {exc.stderr.decode(errors='replace')}"
+        ) from exc
+    print(f"wrote {png_path.name}")
+
 
 def svg(w, h, body, title, desc):
+    """One figure's markup. Title and desc are the accessible name and
+    description; a reader on a screen reader gets the finding, not "image"."""
+
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" '
             f'width="{w}" height="{h}" role="img" aria-labelledby="t d" '
             f'font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif">'
             f'<title id="t">{esc(title)}</title><desc id="d">{esc(desc)}</desc>'
             f'<rect width="{w}" height="{h}" fill="{SURFACE}"/>{body}</svg>')
+
 
 cells = {}
 for row in REPORT["per_task"]:
