@@ -124,3 +124,84 @@ def test_the_parser_exposes_the_four_verbs_documented_in_section_11():
     args = parser.parse_args(["run", "core", "--backend", "ollama/qwen3.8:27b-mlx"])
     assert args.verb == "run"
     assert args.backend == ["ollama/qwen3.8:27b-mlx"]
+
+
+# --- compare --------------------------------------------------------------
+
+
+def test_compare_renders_the_matrix_over_a_run_directory(tmp_path, capsys):
+    out = tmp_path / "run"
+    main(["run", "smoke", "--backend", "replay/smoke", "--out", str(out)])
+    capsys.readouterr()
+    assert main(["compare", str(out)]) == 0
+    printed = capsys.readouterr().out
+    assert "# Kepler model benchmark" in printed
+    assert "## Matrix" in printed
+    assert (out / "report.md").exists()
+    assert (out / "report.json").exists()
+
+
+def test_compare_grades_an_ungraded_run_rather_than_telling_you_to(tmp_path):
+    """Grading is free and repeatable; a compare over an ungraded run should
+    produce the matrix, not another command to type."""
+
+    out = tmp_path / "run"
+    main(
+        [
+            "run",
+            "smoke",
+            "--backend",
+            "replay/smoke",
+            "--out",
+            str(out),
+            "--no-grade",
+        ]
+    )
+    assert not (out / "grades.json").exists()
+    assert main(["compare", str(out)]) == 0
+    assert (out / "grades.json").exists()
+
+
+def test_run_implies_grade_unless_told_otherwise(tmp_path):
+    out = tmp_path / "run"
+    main(["run", "smoke", "--backend", "replay/smoke", "--out", str(out)])
+    grades = json.loads((out / "grades.json").read_text())
+    assert grades["grades"][0]["answer"]["passed"] is True
+
+
+# --- record ---------------------------------------------------------------
+
+
+def test_an_argument_value_is_parsed_as_json_where_it_parses():
+    """`null`, numbers and booleans must reach the tool as themselves rather
+    than as strings: that distinction is the whole of the
+    null-argument-fidelity check."""
+
+    from tools.bench.cli import _coerce
+
+    assert _coerce("null") is None
+    assert _coerce("5") == 5
+    assert _coerce("true") is True
+    assert _coerce("NGC 6334") == "NGC 6334"
+
+
+def test_a_malformed_record_argument_is_refused(capsys):
+    assert main(["record", "core/x", "--tool", "search_ned", "--argument", "name"]) == 2
+    assert "NAME=VALUE" in capsys.readouterr().err
+
+
+def test_record_refuses_a_class_l_tool(capsys):
+    """Replaying compute_pulsar_periodogram would replace the measurement
+    with a guess about the measurement."""
+
+    with pytest.raises(ValueError, match="class-L"):
+        main(
+            [
+                "record",
+                "pulsar/x",
+                "--tool",
+                "compute_pulsar_periodogram",
+                "--argument",
+                "path=x",
+            ]
+        )

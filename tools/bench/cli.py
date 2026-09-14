@@ -98,6 +98,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="turn on the advisory judge column. Off by default; it is the "
         "least trustworthy instrument here.",
     )
+    compare = sub.add_parser(
+        "compare", help="render the matrix over one or more run directories"
+    )
+    compare.add_argument("run_dirs", type=Path, nargs="+")
+    compare.add_argument(
+        "--tag",
+        default=None,
+        help="filter to the tasks carrying one tag (sourcing, null-argument, "
+        "name-resolution, ...), so a single correctness family is read on "
+        "its own.",
+    )
+    compare.add_argument(
+        "--composite",
+        action="store_true",
+        help="also print one weighted number over the two headline axes, "
+        "with its weights. Off by default: a composite hides which axis "
+        "failed.",
+    )
+    compare.add_argument("--out", type=Path, default=None)
+
+    record = sub.add_parser(
+        "record", help="capture one class-R tool's live result for review"
+    )
+    record.add_argument("task", help="suite/task-id, for naming the entry")
+    record.add_argument("--tool", required=True)
+    record.add_argument(
+        "--argument",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="an argument to call the tool with; repeat for several.",
+    )
+    record.add_argument("--fixture-root", type=Path, default=DEFAULT_FIXTURE_ROOT)
     return parser
 
 
@@ -107,6 +140,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run(args)
     if args.verb == "grade":
         return _grade(args)
+    if args.verb == "compare":
+        return _compare(args)
+    if args.verb == "record":
+        return _record(args)
     raise SystemExit(f"unknown verb {args.verb!r}")
 
 
@@ -212,6 +249,79 @@ def _grade(args: Any) -> int:
     )
     print(json.dumps(grades, indent=2, sort_keys=True))
     return 0
+
+
+def _compare(args: Any) -> int:
+    from tools.bench.grade import GRADES_NAME, grade_run
+    from tools.bench.harness import RUN_RECORD_NAME
+    from tools.bench.report import build_report, render_markdown, write_report
+
+    pairs = []
+    for run_dir in args.run_dirs:
+        record = json.loads((run_dir / RUN_RECORD_NAME).read_text(encoding="utf-8"))
+        grades_path = run_dir / GRADES_NAME
+        if not grades_path.exists():
+            # Grading is free and repeatable; a compare over an ungraded run
+            # should produce the matrix rather than an instruction to go and
+            # run another command.
+            grade_run(
+                run_dir,
+                suite_root=DEFAULT_SUITE_ROOT,
+                fixture_root=DEFAULT_FIXTURE_ROOT,
+            )
+        grades = json.loads(grades_path.read_text(encoding="utf-8"))
+        pairs.append({"record": record, "grades": grades})
+
+    report = build_report(pairs, composite=args.composite, tag=args.tag)
+    out = args.out or args.run_dirs[0]
+    md, _ = write_report(report, out)
+    print(render_markdown(report))
+    print(f"written to {md}", file=sys.stderr)
+    return 0
+
+
+def _record(args: Any) -> int:
+    from tools.bench.record import CredentialLeak, capture_entry
+
+    arguments: dict[str, Any] = {}
+    for pair in args.argument:
+        name, _, value = pair.partition("=")
+        if not name or not _:
+            print(f"--argument must be NAME=VALUE, got {pair!r}", file=sys.stderr)
+            return 2
+        arguments[name] = _coerce(value)
+
+    entry_id = args.task.split("/")[-1]
+    try:
+        captured = capture_entry(
+            args.tool,
+            arguments,
+            entry_id=entry_id,
+            content_dir=Path(args.fixture_root) / "content",
+        )
+    except CredentialLeak as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    print(captured.to_yaml())
+    if captured.reviews:
+        print(
+            f"\n{len(captured.reviews)} string(s) flagged for review before "
+            "committing this fixture.",
+            file=sys.stderr,
+        )
+    return 0
+
+
+def _coerce(value: str) -> Any:
+    """Parse an --argument value as JSON where it parses, so `null`, numbers
+    and booleans reach the tool as themselves rather than as strings. That
+    distinction is the whole of the null-argument-fidelity check."""
+
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
 
 
 def _build(spec: str) -> Any:
