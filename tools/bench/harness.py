@@ -375,6 +375,16 @@ def run_suite(
                     budget_hit = True
 
     record.finished_at = _utc_now()
+    # Re-read the backends now that they have actually been called. Some
+    # properties are only knowable after a request: `temperature_supported`
+    # starts optimistic and turns False the first time a provider refuses the
+    # parameter, so a snapshot taken before the run would record every backend
+    # as accepting it. The per-session manifests already show the truth from
+    # the second task onward; this makes run.json agree with them.
+    record.backend_details = {
+        spec: backend_record(_instance(backend, suite.tasks[0], 0))
+        for spec, backend in backends.items()
+    }
     (out_dir / RUN_RECORD_NAME).write_text(
         json.dumps(record.to_json(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

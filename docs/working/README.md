@@ -16,7 +16,7 @@ writes the code.
 | --- | --- | --- | --- | --- | --- |
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
 | Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P7 complete; P8–P9 remain | `dev` | P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | The two asset-gated evidence gaps (NGC 5286 B from pixels, the ATLAS backend); the TUI stateless prerequisite is met |
-| Benchmark | [benchmark.md](benchmark.md) | Built; **uncalibrated** — every phase landed, the 7.1.9 calibration gate is unmet | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
+| Benchmark | [benchmark.md](benchmark.md) · results: [benchmark-results.md](benchmark-results.md) | Built; **partially calibrated** — two backends of two tiers have run `core`; 7.1.9 wants three | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 **The model track was implemented on `dev`** (the maintainer redirected the
@@ -33,13 +33,18 @@ targets `dev`.
 
 Every phase of the benchmark rollout (4a–4d, 5a–5e) has landed, and all nine
 of `model-backends.md`'s security requirements are now implemented and tested.
-**One gate is unmet and blocks calling the track done:** §7.1.9 makes a suite
-untrusted until it has been run against at least three backends of different
-tiers, which needs provider credentials or a local Ollama daemon. Until that
-run happens the harness is built and tested but its answer keys are unvalidated
-against real models, and each suite's `calibration.md` says so in those words.
-Only after it does should the durable outcome fold into a top-level `docs/`
-reference and both working documents be deleted, per the lifecycle rule below.
+**The calibration gate is partially met.** §7.1.9 makes a suite untrusted
+until it has been run against at least three backends of different tiers. Two
+have run `core` — `ollama/qwen3.8:27b-mlx` (local 27B) and
+`anthropic/claude-sonnet-5` (frontier) — and the recorded scoreboard is
+[benchmark-results.md](benchmark-results.md). A third, independent backend is
+still needed, and matters more than the count suggests: three rounds of answer-key
+fixes were made against the local model before the frontier one ever ran, so
+an independent backend is the only thing that can separate genuine tuning from
+over-fitting. Until then, each suite's `calibration.md` still records what is
+and is not established. Only after that should the durable outcome fold into a
+top-level `docs/` reference and both working documents be deleted, per the
+lifecycle rule below.
 
 ## Start here
 

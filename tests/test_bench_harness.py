@@ -471,3 +471,36 @@ def test_a_run_directory_outside_the_artifact_root_still_grades(
     run = record.runs[0]
     assert run.outcome == "end_turn"
     assert (run.directory / "session_manifest.json").exists()
+
+
+def test_run_json_records_the_backend_as_it_was_after_being_called(
+    artifact_root, smoke
+):
+    """Some backend properties are only knowable after a request.
+    `temperature_supported` starts optimistic and turns False the first time a
+    provider refuses the parameter, so a snapshot taken before the run records
+    every backend as accepting it -- which is what run.json did for a real
+    claude-sonnet-5 run while its own session manifests said otherwise."""
+
+    class _Refusing(ReplayBackend):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.temperature_supported = True
+
+        def complete(self, **kwargs):
+            self.temperature_supported = False
+            return super().complete(**kwargs)
+
+    out = artifact_root / "bench" / "run-1"
+    backend = _Refusing(
+        [ModelResponse(stop_reason="end_turn", text="done")], name="refusing"
+    )
+    run_suite(
+        smoke,
+        backends={"replay/refusing": backend},
+        config=_config(out),
+        fixture_root=FIXTURE_ROOT,
+        out=out,
+    )
+    record = json.loads((out / "run.json").read_text())
+    assert record["backends"]["replay/refusing"]["temperature_supported"] is False
