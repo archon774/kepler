@@ -124,6 +124,20 @@ Model time per task:
 | `abstract-before-attribution` | `██████░░░░░░░░░░` 95 s | `█░░░░░░░░░░░░░░░` 21 s |
 | `null-argument-fidelity` | `███░░░░░░░░░░░░░` 42 s | `█░░░░░░░░░░░░░░░` 12 s |
 
+### The matched comparison
+
+The headline *tokens per answer* divides each backend by **its own** passing
+set — 8 tasks against 6 — so it is not strictly like-for-like. On the **six
+tasks both models passed**, which is the defensible comparison:
+
+| Backend | Tokens / task | Model time | Turns | Calls |
+| --- | --: | --: | --: | --: |
+| `qwen3.8:27b-mlx` | `████████░░░░░░░░` **87,172** | 576 s | 24 | 28 |
+| `claude-sonnet-5` | `████████████████` **176,578** | 147 s | 33 | 40 |
+
+The gap is **2.0×**, marginally wider than the headline's 1.9× — so the
+conclusion survives the correction rather than depending on the denominator.
+
 **Sonnet is ~3.9× faster in model time and uses ~2.5× the input tokens.** Both
 follow from the same behaviour: it takes more turns and makes more calls (56
 turns / 83 calls vs 34 / 47), and every turn re-sends the 55 tool schemas —
