@@ -564,3 +564,70 @@ def test_time_to_an_answer_counts_only_runs_that_answered():
     row = report["matrix"]["anthropic/claude-opus-5"]
     assert row["seconds_per_answer"] == 10.0
     assert "seconds to an answer" in render_markdown(report)
+
+
+# --- repeats are clustered, not independent -------------------------------
+
+
+def test_a_deterministic_backend_gets_no_credit_for_repeats():
+    """The case a naive interval flatters most.
+
+    A model answering each task the same way every repeat has learned nothing
+    new on repeats two and three. Its effective sample size is the *task*
+    count, and an interval over the session count claims precision the design
+    never bought.
+    """
+
+    from tools.bench.report import design_effect
+
+    outcomes = {"t1": [True, True, True], "t2": [False, False, False],
+                "t3": [True, True, True]}
+    rho, deff = design_effect(outcomes)
+    assert rho == pytest.approx(1.0)
+    assert deff == pytest.approx(3.0)
+
+
+def test_a_backend_that_varies_within_a_task_keeps_its_trials():
+    """The other end: answers varying freely inside a task make the repeats
+    genuinely independent evidence, and nothing is lost."""
+
+    from tools.bench.report import design_effect
+
+    outcomes = {"t1": [True, False, True], "t2": [False, True, False],
+                "t3": [True, False, False]}
+    rho, deff = design_effect(outcomes)
+    assert rho == pytest.approx(0.0)
+    assert deff == pytest.approx(1.0)
+
+
+def test_total_agreement_is_treated_as_fully_clustered():
+    """Every session passing leaves nothing to tell a deterministic model from
+    a lucky one, so assume clustering rather than claim independent evidence."""
+
+    from tools.bench.report import design_effect
+
+    rho, deff = design_effect({"t1": [True] * 3, "t2": [True] * 3})
+    assert rho == pytest.approx(1.0)
+    assert deff == pytest.approx(3.0)
+
+
+def test_the_clustered_interval_is_never_narrower_than_the_naive_one():
+    from tools.bench.report import clustered_interval, wilson_interval
+
+    outcomes = {f"t{i}": [True, True, True] for i in range(7)}
+    outcomes["t7"] = [False, False, False]
+    interval, rho, effective = clustered_interval(21, 24, outcomes)
+    naive = wilson_interval(21, 24)
+    assert effective == pytest.approx(8.0)
+    assert (interval[1] - interval[0]) > (naive[1] - naive[0])
+
+
+def test_the_correctness_board_shows_what_the_repeats_were_worth():
+    entries = [
+        _entry(task_id=f"t{i}", passed=True, repeat=r)
+        for i in range(3)
+        for r in (1, 2, 3)
+    ]
+    text = render_markdown(build_report([_pair(entries=entries)]))
+    assert "n_eff" in text and "rho" in text
+    assert "not a sample from a population" in text

@@ -181,10 +181,15 @@ def _finalize(row: dict[str, Any]) -> None:
         else None
     )
     row["scored"] = scored
-    interval = wilson_interval(row["passed"], scored)
+    # Clustered, not naive: repeats of one task are one question asked twice.
+    interval, rho, effective = clustered_interval(row["passed"], scored, outcomes)
     # A list, not a tuple: the JSON and Markdown reports are written from the
     # same object and a test holds them to the same content.
     row["pass_interval"] = list(interval) if interval else None
+    row["intra_cluster_correlation"] = round(rho, 3)
+    row["effective_trials"] = round(effective, 1)
+    naive = wilson_interval(row["passed"], scored)
+    row["pass_interval_naive"] = list(naive) if naive else None
     # Time to an answer, on the runs that reached one. The question a user
     # actually asks of a model is how long they wait for a usable answer, and
     # that is comparable across every backend however it is served.
@@ -225,6 +230,77 @@ def wilson_interval(passed: int, trials: int, *, z: float = WILSON_Z):
         z * math.sqrt(p * (1.0 - p) / trials + z * z / (4.0 * trials * trials))
     ) / denominator
     return (max(0.0, center - half), min(1.0, center + half))
+
+
+def design_effect(outcomes: Mapping[str, Sequence[Any]]) -> tuple[float, float]:
+    """Intra-cluster correlation and design effect for a backend's sessions.
+
+    A suite of ``t`` tasks run ``m`` times each yields ``t*m`` sessions, and a
+    binomial interval over them assumes ``t*m`` *independent* trials. They are
+    not independent: three repeats of one question are one question asked three
+    times. Treating them as independent understates the interval -- it reports
+    more precision than the design bought.
+
+    The correlation is estimated the standard way, from the split between
+    between-task and within-task variance, and turned into a design effect
+    ``1 + (m-1) * rho``. The effective sample size is ``t*m / deff``.
+
+    The two ends are worth stating because the useful one is the bad one. A
+    model whose answers vary freely within a task has ``rho = 0``, nothing is
+    lost, and the effective size is the session count. A model that answers each
+    task the same way every time has ``rho = 1``, a design effect of ``m``, and
+    an effective size of ``t`` -- **repeats buy it nothing at all**. The more
+    deterministic the backend, the more a naive interval flatters it.
+    """
+
+    clusters = [list(v) for v in outcomes.values() if v]
+    if len(clusters) < 2:
+        return 0.0, 1.0
+    sizes = [len(c) for c in clusters]
+    mean_size = sum(sizes) / len(sizes)
+    if mean_size <= 1:
+        return 0.0, 1.0
+
+    props = [sum(1 for x in c if x) / len(c) for c in clusters]
+    grand = sum(props) / len(props)
+    between = mean_size * sum((p - grand) ** 2 for p in props) / (len(props) - 1)
+    within_terms = sum(
+        sum((bool(x) - p) ** 2 for x in c) for c, p in zip(clusters, props)
+    )
+    within_df = sum(size - 1 for size in sizes)
+    within = within_terms / within_df if within_df else 0.0
+
+    denominator = between + (mean_size - 1) * within
+    if denominator <= 0:
+        # No variance anywhere: every session agreed. Nothing distinguishes a
+        # deterministic model from a lucky one here, so assume full clustering
+        # rather than claim the repeats were independent evidence.
+        rho = 1.0
+    else:
+        rho = (between - within) / denominator
+    rho = min(1.0, max(0.0, rho))
+    return rho, 1.0 + (mean_size - 1) * rho
+
+
+def clustered_interval(
+    passed: int, trials: int, outcomes: Mapping[str, Sequence[Any]]
+):
+    """A Wilson interval on the effective sample size, not the session count.
+
+    This answers *"re-run this same suite -- what would it score?"*. It does not
+    answer "how would this model do on questions like these": the tasks are a
+    fixed, hand-picked corpus rather than a sample from any population, and no
+    interval over them licenses that generalisation however many repeats are
+    run.
+    """
+
+    if trials <= 0:
+        return None, 0.0, 0.0
+    rho, deff = design_effect(outcomes)
+    effective = trials / deff if deff else trials
+    rate = passed / trials
+    interval = wilson_interval(round(rate * effective), max(1, round(effective)))
+    return interval, rho, effective
 
 
 def separated(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
@@ -562,7 +638,16 @@ _BOARD_BLURB: Mapping[str, str] = {
     "correctness": (
         "**Absolute.** Share of sessions whose answer passed every hard check. "
         "1.0 means every question answered correctly, and the figure means the "
-        "same whoever else was measured."
+        "same whoever else was measured.\n\n"
+        "The interval is computed on the **effective** sample size, not the "
+        "session count. Repeats of one task are one question asked several "
+        "times, so they are not independent trials; `n_eff` is the session "
+        "count divided by the design effect. A backend that answers each task "
+        "identically every repeat has `n_eff` equal to the *task* count -- for "
+        "it, repeats bought nothing. The interval answers \"re-run this same "
+        "suite, what would it score?\" and **not** \"how would it do on "
+        "questions like these\": these tasks are a fixed corpus, not a sample "
+        "from a population."
     ),
     "speed": (
         "**Relative.** Wall-clock seconds to a passing answer. There is no "
@@ -615,19 +700,23 @@ def _ranking_table(report: Mapping[str, Any]) -> list[str]:
             lines.append("Nothing measured on this board.")
             lines.append("")
         elif board == "correctness":
-            lines.append("| # | backend | correct | 95% interval |")
-            lines.append("| --: | --- | --- | --- |")
+            lines.append(
+                "| # | backend | correct | 95% interval | n_eff | rho |"
+            )
+            lines.append("| --: | --- | --- | --- | --: | --: |")
             for entry in entries:
                 row = report["matrix"][entry["backend"]]
                 lines.append(
                     "| {rank} | `{backend}` | **{rate}** ({passed}/{scored}) | "
-                    "{interval} |".format(
+                    "{interval} | {neff} of {scored} | {rho} |".format(
                         rank=entry["rank"],
                         backend=entry["backend"],
                         rate=_pct(entry["value"]),
                         passed=row["passed"],
                         scored=row["runs"] - row["incomplete"],
                         interval=_interval(entry.get("interval")),
+                        neff=_num(row.get("effective_trials"), "{:.1f}"),
+                        rho=_num(row.get("intra_cluster_correlation"), "{:.2f}"),
                     )
                 )
         else:
