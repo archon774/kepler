@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.message import Message as TextualMessage
 from textual.screen import ModalScreen
 from textual.widgets import Button, Header, Input, Static
@@ -23,6 +24,8 @@ from tools.agent.events import (
 )
 from tools.agent.policy import SessionPolicy, policy_approver
 from tools.tui.commands import help_text, parse_input, resolve
+from tools.tui.render.capability import GraphicsTier, detect_tier
+from tools.tui.widgets.artifacts import ArtifactBrowser
 from tools.tui.widgets.transcript import Transcript
 
 if TYPE_CHECKING:
@@ -58,6 +61,8 @@ class KeplerApp(App[None]):
 
     TITLE = "Kepler"
 
+    BINDINGS = [Binding("f3", "show_artifacts", "Artifacts")]
+
     CSS = """
     #transcript {
         height: 1fr;
@@ -91,7 +96,13 @@ class KeplerApp(App[None]):
             self.decision = Decision.DENY
             super().__init__()
 
-    def __init__(self, backend: "ModelBackend", *, max_turns: int = 20) -> None:
+    def __init__(
+        self,
+        backend: "ModelBackend",
+        *,
+        max_turns: int = 20,
+        graphics_tier: GraphicsTier | None = None,
+    ) -> None:
         super().__init__()
         self.backend = backend
         self.max_turns = max_turns
@@ -100,6 +111,7 @@ class KeplerApp(App[None]):
         self.current_turn = 0
         self.artifact_count = 0
         self.token_usage = None
+        self.graphics_tier = detect_tier() if graphics_tier is None else graphics_tier
         self.policy = SessionPolicy(self._request_approval)
 
     def compose(self) -> ComposeResult:
@@ -171,6 +183,16 @@ class KeplerApp(App[None]):
 
         self._append_transcript(help_text())
 
+    def show_artifacts(self, args: tuple[str, ...]) -> None:
+        """Open the current artifact browser without involving the model."""
+
+        self.push_screen(ArtifactBrowser(tier=self.graphics_tier))
+
+    def action_show_artifacts(self) -> None:
+        """Open the artifact browser from its F3 keybinding."""
+
+        self.show_artifacts(())
+
     def quit(self, args: tuple[str, ...]) -> None:
         """Exit the console through its declarative command handler."""
 
@@ -204,6 +226,7 @@ class KeplerApp(App[None]):
         parts.extend(
             [
                 f"{self.artifact_count} artifacts",
+                f"{self.graphics_tier.value} graphics",
                 "F3 artifacts",
                 "F4 sessions",
             ]

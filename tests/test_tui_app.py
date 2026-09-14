@@ -12,6 +12,7 @@ from tools.agent.events import TextDelta
 from tools.llm.base import BackendUnavailableError
 from tools.tui import __main__ as tui_main
 from tools.tui.app import KeplerApp
+from tools.tui.render.capability import GraphicsTier
 from tools.tui.widgets.transcript import Transcript
 
 
@@ -88,6 +89,36 @@ def test_help_command_renders_the_generated_command_list():
             )
             assert "/help" in rendered
             assert "/quit" in rendered
+            assert app.engine_starts == 0
+
+    _run(scenario())
+
+
+def test_artifacts_command_opens_the_browser_without_starting_the_engine():
+    async def scenario() -> None:
+        from tools.tui.widgets.artifacts import ArtifactBrowser
+
+        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        async with app.run_test() as pilot:
+            await pilot.press("/", "a", "enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ArtifactBrowser)
+            assert app.engine_starts == 0
+
+    _run(scenario())
+
+
+def test_f3_opens_the_artifact_browser_without_starting_the_engine():
+    async def scenario() -> None:
+        from tools.tui.widgets.artifacts import ArtifactBrowser
+
+        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        async with app.run_test() as pilot:
+            await pilot.press("f3")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ArtifactBrowser)
             assert app.engine_starts == 0
 
     _run(scenario())
