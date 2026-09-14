@@ -203,6 +203,20 @@ def test_usage_is_read_from_usage_metadata():
     assert response.usage.cache_read_tokens == 128
 
 
+def test_every_response_carries_a_latency_and_a_populated_usage():
+    """The benchmark's efficiency axis (docs/working/benchmark.md 7.2) has no
+    data at all if an adapter leaves either at ``None``, and a silently absent
+    field would read as an empty column rather than as an error. Asserted per
+    adapter for that reason."""
+
+    backend, _ = _backend(_fc_response())
+    response = backend.complete(messages=(), tools=[], system="s", max_tokens=64)
+    assert response.latency_ms is not None and response.latency_ms >= 0.0
+    assert response.usage is not None
+    assert response.usage.input_tokens is not None
+    assert response.usage.output_tokens is not None
+
+
 # --- Phase 3 gate: the union reaches Gemini as a nullable integer ----
 
 

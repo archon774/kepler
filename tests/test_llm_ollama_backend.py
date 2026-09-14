@@ -95,6 +95,21 @@ def test_a_tool_call_still_round_trips_through_the_compat_endpoint():
     assert str(capture.last.url).endswith("/v1/chat/completions")
 
 
+def test_every_response_carries_a_latency_and_a_populated_usage():
+    """Inherited from ``OpenAIBackend.complete``, and asserted here anyway:
+    the benchmark's efficiency axis (docs/working/benchmark.md 7.2) has no
+    data if any one adapter leaves either at ``None``, and "it is inherited"
+    is a claim about today's class body, not a test."""
+
+    capture = CapturingTransport(openai_chat_response())
+    backend = OllamaBackend(model="qwen3:8b", transport=capture())
+    response = backend.complete(messages=(), tools=[], system="s", max_tokens=64)
+    assert response.latency_ms is not None and response.latency_ms >= 0.0
+    assert response.usage is not None
+    assert response.usage.input_tokens == 120
+    assert response.usage.output_tokens == 18
+
+
 def test_the_factory_builds_it_without_a_key(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-should-be-ignored")
     backend = build_backend("ollama/qwen3:8b")

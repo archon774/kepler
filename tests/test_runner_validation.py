@@ -79,7 +79,7 @@ def test_the_string_None_is_rejected_as_stringified_null_and_never_dispatched(re
     assert registry == []  # the tool function was never called
 
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
     faults = manifest["protocol_faults"]
     assert len(faults) == 1
     assert faults[0]["type"] == "stringified_null"

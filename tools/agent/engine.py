@@ -35,7 +35,7 @@ from tools.llm.base import ModelBackend
 from tools.llm.schema import for_dialect
 from tools.llm.types import Message, ModelResponse, TextBlock, ToolResultBlock
 from tools.llm.validation import index_schemas, validate_tool_call
-from tools.sessions import AgentSession, make_cache_key
+from tools.sessions import AgentSession, backend_record, make_cache_key
 
 __all__ = ["run_session"]
 
@@ -72,6 +72,7 @@ def run_session(
             max_turns=max_turns,
             system=system,
         )
+    session.backend = backend_record(backend)
 
     messages: list[Message] = [
         Message(role="user", blocks=(TextBlock(text=user_message),))
@@ -124,9 +125,12 @@ def run_session(
 
                 session.record_turn(
                     turn=turn_number,
-                    stop_reason=response.raw_stop_reason or response.stop_reason,
+                    stop_reason=response.stop_reason,
+                    raw_stop_reason=response.raw_stop_reason,
                     assistant_text=response.text,
                     tool_call_sequences=[],
+                    usage=response.usage,
+                    latency_ms=response.latency_ms,
                 )
                 yield events.TurnFinished(
                     turn=turn_number,
@@ -272,9 +276,12 @@ def _run_tool_turn(
 
     session.record_turn(
         turn=turn_number,
-        stop_reason=response.raw_stop_reason or response.stop_reason,
+        stop_reason=response.stop_reason,
+        raw_stop_reason=response.raw_stop_reason,
         assistant_text=response.text,
         tool_call_sequences=sequences,
+        usage=response.usage,
+        latency_ms=response.latency_ms,
     )
     session.save(current_turn=turn_number)
     yield events.TurnFinished(

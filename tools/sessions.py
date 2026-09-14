@@ -1,9 +1,22 @@
-"""Agent-session manifest helpers for ``tools.runner``."""
+"""Agent-session manifest helpers for ``tools.runner``.
+
+The manifest is schema version 2 (``docs/working/benchmark.md`` section 8).
+Version 2 is *additive over version 1*: every key version 1 wrote is still
+written with the same meaning, so a recorded v1 manifest still reads. The
+new keys are the ones a benchmark needs and a console run does not --
+token accounting, per-turn latency, and the backend identity.
+
+Readers must treat an absent key as ``None``, never as ``0``: a provider
+that did not report cache tokens did not report zero of them, and folding
+the two together turns "unknown" into a measurement.
+"""
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
+import urllib.parse
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -13,19 +26,21 @@ from typing import TYPE_CHECKING, Any, Literal
 from tools.config import artifact_directory
 
 if TYPE_CHECKING:
-    from tools.llm.types import ProtocolFault
+    from tools.llm.types import ProtocolFault, Usage
 
 __all__ = [
     "AgentSession",
+    "backend_record",
     "SESSION_MANIFEST_NAME",
     "make_cache_key",
     "new_session_id",
     "list_session_manifests",
     "read_session_manifest",
+    "USAGE_FIELDS",
 ]
 
 SESSION_MANIFEST_NAME = "session_manifest.json"
-SESSION_SCHEMA_VERSION = 1
+SESSION_SCHEMA_VERSION = 2
 SESSION_ROOT_SUBDIR = "sessions"
 _TEXT_LIMIT = 4000
 
@@ -55,6 +70,22 @@ def _bounded_text(value: str) -> str | None:
     if len(value) <= _TEXT_LIMIT:
         return value
     return value[: _TEXT_LIMIT - 15] + "... [truncated]"
+
+
+def _validated_subdir(value: str | Path) -> str:
+    """Validate an artifact-subdirectory override the way ``scoped_artifacts``
+    validates its argument, and for the same reason: the value becomes a path
+    join under the artifact root, so it must stay relative and may not climb
+    out. Rejecting it here gives a caller the error at construction rather
+    than at the first artifact write, several turns in.
+    """
+
+    relative = Path(value)
+    if not str(value) or relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(
+            f"artifact_subdir must be a relative subdirectory: {value!r}"
+        )
+    return str(relative)
 
 
 def new_session_id() -> str:
@@ -88,6 +119,96 @@ def _artifact_record(value: Any) -> dict[str, Any]:
         key: _json_safe(value[key])
         for key in ("path", "format", "row_count", "columns")
         if key in value and value[key] is not None
+    }
+
+
+#: The token classes recorded per turn and rolled up into ``usage_totals``.
+#: They stay separate rather than being summed into one "input" number:
+#: SYSTEM_PROMPT plus 55 tool schemas is a large fixed prefix resent every
+#: turn, so a backend that caches it and one that does not are doing visibly
+#: different amounts of work at identical behaviour.
+USAGE_FIELDS: tuple[str, ...] = (
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "reasoning_tokens",
+)
+
+
+def _usage_record(usage: "Usage | None") -> dict[str, int | None] | None:
+    """Serialize one turn's :class:`~tools.llm.types.Usage`, or ``None``.
+
+    A backend that reported no usage at all records ``None`` for the whole
+    turn -- not a dict of zeros, which would read as "it cost nothing".
+    """
+
+    if usage is None:
+        return None
+    return {name: getattr(usage, name, None) for name in USAGE_FIELDS}
+
+
+def _usage_totals(turns: list[dict[str, Any]]) -> dict[str, int | None]:
+    """Sum each token class across turns, keeping "not reported" distinct
+    from zero.
+
+    A class stays ``None`` until some turn reports it; from then on the total
+    is the sum of the turns that did. A provider reporting cache reads on two
+    turns out of five has a real total over those two, and reporting it as
+    ``None`` would be as wrong as reporting the other three as zero.
+    """
+
+    totals: dict[str, int | None] = {name: None for name in USAGE_FIELDS}
+    for turn in turns:
+        usage = turn.get("usage")
+        if not usage:
+            continue
+        for name in USAGE_FIELDS:
+            value = usage.get(name)
+            if value is None:
+                continue
+            totals[name] = (totals[name] or 0) + value
+    return totals
+
+
+def _base_url_host(backend: Any) -> str | None:
+    """The host a backend talks to, with any userinfo stripped (S4).
+
+    ``BaseHTTPBackend`` stores the base URL privately; the Anthropic SDK
+    adapter has none of its own and records ``None``. Only the host is kept:
+    the path carries nothing worth recording and a URL can carry a credential
+    in its userinfo, which must never reach a manifest even though the port
+    never puts one there.
+    """
+
+    raw = getattr(backend, "_base_url", None)
+    if not raw:
+        return None
+    return urllib.parse.urlparse(str(raw)).hostname
+
+
+def backend_record(backend: Any) -> dict[str, Any]:
+    """Describe a :class:`~tools.llm.base.ModelBackend` for the manifest.
+
+    Capabilities are recorded alongside the spec because they are what makes
+    two runs comparable or not: a model reached through the Gemini OpenAPI
+    subset is not being asked the same question as one reached through JSON
+    Schema, and ``schema_dialect`` is where that shows.
+    """
+
+    spec = str(getattr(backend, "spec", "") or "")
+    provider, _, model = spec.partition("/")
+    capabilities = getattr(backend, "capabilities", None)
+    return {
+        "spec": spec or None,
+        "provider": provider or None,
+        "model": model or None,
+        "base_url_host": _base_url_host(backend),
+        "capabilities": (
+            dataclasses.asdict(capabilities)
+            if dataclasses.is_dataclass(capabilities)
+            else None
+        ),
     }
 
 
@@ -127,9 +248,28 @@ class AgentSession:
     turns: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     protocol_faults: list[dict[str, Any]] = field(default_factory=list)
+    #: Where this session's artifacts and manifest land, relative to the
+    #: artifact root. ``None`` keeps the default ``sessions/<session_id>``.
+    #: The benchmark harness sets it so a run's artifacts sit beside its run
+    #: record, which is what makes a reported artifact path still resolvable
+    #: when grading runs later.
+    artifact_subdir_override: str | None = None
+    #: ``{spec, provider, model, base_url_host, capabilities}`` for the backend
+    #: that drove this session, or ``None`` when nothing set it. Recorded
+    #: because two models answering identically through different schema
+    #: dialects are not the same observation.
+    backend: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.artifact_subdir_override is not None:
+            self.artifact_subdir_override = _validated_subdir(
+                self.artifact_subdir_override
+            )
 
     @property
     def artifact_subdir(self) -> str:
+        if self.artifact_subdir_override is not None:
+            return self.artifact_subdir_override
         return f"{SESSION_ROOT_SUBDIR}/{self.session_id}"
 
     @property
@@ -147,14 +287,34 @@ class AgentSession:
         stop_reason: str | None,
         assistant_text: str,
         tool_call_sequences: list[int],
+        usage: "Usage | None" = None,
+        latency_ms: float | None = None,
+        raw_stop_reason: str | None = None,
     ) -> None:
+        """Append one turn record.
+
+        ``stop_reason`` is the *normalized* value -- one of
+        ``tools.llm.types.STOP_REASONS`` -- and ``raw_stop_reason`` is the
+        provider's own string. Version 1 stored ``raw or normalized`` in the
+        single ``stop_reason`` key, which lost exactly the distinction
+        ``StopReason`` exists to make: ``length``, ``MAX_TOKENS`` and
+        ``max_tokens`` all mean the ceiling was hit, and only the normalized
+        value says so without a per-provider lookup.
+
+        The three new arguments are keyword-only and defaulted, so every
+        existing caller is unaffected.
+        """
+
         self.current_turn = turn
         self.turns.append(
             {
                 "turn": turn,
                 "stop_reason": stop_reason,
+                "raw_stop_reason": raw_stop_reason,
                 "assistant_text": _bounded_text(assistant_text),
                 "tool_call_sequences": tool_call_sequences,
+                "latency_ms": latency_ms,
+                "usage": _usage_record(usage),
             }
         )
 
@@ -162,8 +322,7 @@ class AgentSession:
         """Append a turn-stamped protocol-fault record.
 
         Faults come from pre-dispatch validation (S8) and from the model
-        adapters. ``SESSION_SCHEMA_VERSION`` stays at 1 for now: the key is
-        additive, and the bump to 2 lands with the rest of the v2 payload.
+        adapters. The protocol grader counts these by ``type``.
         """
 
         self.protocol_faults.append(
@@ -236,6 +395,8 @@ class AgentSession:
             "outcome": self.outcome,
             "user_message": self.user_message,
             "model": self.model,
+            "backend": self.backend,
+            "usage_totals": _usage_totals(self.turns),
             "max_turns": self.max_turns,
             "current_turn": self.current_turn,
             "system_prompt_sha256": _sha256(self.system),
