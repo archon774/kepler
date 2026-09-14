@@ -18,11 +18,20 @@ Running past the end of a transcript raises :class:`TranscriptExhausted`,
 loudly. A silent wrap-around would let a harness test pass against a loop that
 never terminates -- the failure mode most worth catching here, since the whole
 point of the smoke suite is to prove the loop reaches ``end_turn``.
+
+**Artifact placeholders.** A recorded answer cannot know the path a run will
+synthesize, but a real model does not know it in advance either -- it reads it
+out of the tool result it was just handed. ``{{artifact:N}}`` in a transcript's
+text is replaced at replay time with the Nth artifact path appearing in the
+conversation so far, which is exactly that information and no more. Without it
+a replayed answer could never satisfy ``must_report_artifact_path``, and the
+check would be untestable against the harness's own end-to-end run.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -57,6 +66,9 @@ REPLAY_CAPABILITIES = Capabilities(
     supports_union_types=True,
     max_output_tokens=4096,
 )
+
+#: ``{{artifact:0}}`` -- the first artifact path this session produced.
+_ARTIFACT_PLACEHOLDER = re.compile(r"\{\{artifact:(\d+)\}\}")
 
 _USAGE_FIELDS = (
     "input_tokens",
@@ -289,6 +301,64 @@ class ReplayBackend:
         )
         response = self._responses[self._index]
         self._index += 1
+        response = _fill_artifacts(response, messages)
         if on_text is not None and response.text:
             on_text(response.text)
         return response
+
+
+def _fill_artifacts(
+    response: ModelResponse, messages: Sequence[Message]
+) -> ModelResponse:
+    """Substitute ``{{artifact:N}}`` from the paths already in the conversation.
+
+    Only paths the model can actually see are available: they are read out of
+    the ``ToolResultBlock`` content already in ``messages``, the same place a
+    real model reads them from. A placeholder with no corresponding path is
+    left as it stands rather than silently blanked, so a transcript that asks
+    for an artifact the session never produced fails a
+    ``must_report_artifact_path`` check visibly.
+    """
+
+    import dataclasses
+
+    if not response.text or "{{artifact:" not in response.text:
+        return response
+
+    paths = _artifact_paths(messages)
+
+    def replace(match: "re.Match[str]") -> str:
+        index = int(match.group(1))
+        return paths[index] if index < len(paths) else match.group(0)
+
+    return dataclasses.replace(
+        response, text=_ARTIFACT_PLACEHOLDER.sub(replace, response.text)
+    )
+
+
+def _artifact_paths(messages: Sequence[Message]) -> list[str]:
+    from tools.llm.types import ToolResultBlock
+
+    paths: list[str] = []
+    for message in messages:
+        for block in message.blocks:
+            if not isinstance(block, ToolResultBlock):
+                continue
+            try:
+                payload = json.loads(block.content)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            _collect(payload, paths)
+    return paths
+
+
+def _collect(value: Any, into: list[str]) -> None:
+    if isinstance(value, Mapping):
+        for key in ("artifact", "artifacts"):
+            item = value.get(key)
+            if isinstance(item, Mapping) and item.get("path"):
+                into.append(str(item["path"]))
+            elif isinstance(item, list):
+                for entry in item:
+                    if isinstance(entry, Mapping) and entry.get("path"):
+                        into.append(str(entry["path"]))

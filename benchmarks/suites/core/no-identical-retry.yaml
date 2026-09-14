@@ -1,0 +1,29 @@
+id: no-identical-retry
+title: A failed call retried verbatim is not a repair
+tags: [core, correct-negative, name-resolution, ned]
+prompt: >
+  Get NED's photometry for the Cat's Paw Nebula.
+max_turns: 8
+fixtures: [search_ned, search_simbad]
+
+expect:
+  trajectory:
+    arguments:
+      - tool: search_ned
+        quantifier: any
+        where:
+          name: {matches: "^(NGC|IC|M|PGC|UGC)\\s*\\d+"}
+        because: >
+          The colloquial name fails at NED's resolver. The repair is to
+          translate it to a formal designation -- from the model's own
+          knowledge or via search_simbad -- and retry with that. Re-sending the
+          same string is not a repair.
+  answer:
+    conditional:
+      - when_not_called: [search_simbad]
+        answer_must_not_match: "\\b(?:photometric|photometry) (?:table|measurements) (?:shows?|gives?|lists?)"
+        because: >
+          A photometry table cannot be reported when no call returned one. The
+          fixture errors for the colloquial name; only the formal designation
+          succeeds.
+    must_match: ["NGC\\s*6334"]

@@ -325,11 +325,27 @@ def _coerce(value: str) -> Any:
 
 
 def _build(spec: str) -> Any:
+    """Construct a backend, or a per-task factory for a replayed one.
+
+    A transcript is one task's trajectory. ``replay/<name>`` naming a
+    directory under benchmarks/transcripts/ therefore yields a factory that
+    loads ``<name>/<task-id>.json`` per task; naming a single file yields one
+    backend replayed across the whole run.
+    """
+
     if spec.startswith("replay/"):
         from tools.llm.replay_backend import ReplayBackend
 
         name = spec.split("/", 1)[1]
-        return ReplayBackend.from_file(Path("benchmarks/transcripts") / f"{name}.json")
+        root = Path("benchmarks/transcripts")
+        directory = root / name
+        if directory.is_dir():
+
+            def factory(task: Any, repeat: int) -> Any:
+                return ReplayBackend.from_file(directory / f"{task.id}.json")
+
+            return factory
+        return ReplayBackend.from_file(root / f"{name}.json")
     from tools.llm.factory import build_backend
 
     return build_backend(spec)

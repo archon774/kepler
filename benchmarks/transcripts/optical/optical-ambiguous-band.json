@@ -1,0 +1,29 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "Resolving the M31 frame.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 60,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "resolve_optical_frame",
+        "arguments": {
+          "name": "M31"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "There is no single M31 frame: the bundled library holds two, m31_galaxy_r_000.fits and m31_galaxy_v_000.fits, so the reference is ambiguous between the r and v bands. Tell me which band you want, or I will describe the r-band frame -- but I am not going to pick one silently and call it 'the M31 frame'.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 60,
+      "cache_read_tokens": 11000
+    }
+  }
+]

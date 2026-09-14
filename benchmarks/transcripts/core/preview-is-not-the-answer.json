@@ -1,0 +1,31 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "The user asked for all of it, so the cap comes off: max_catalogs is JSON null.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_vizier",
+        "arguments": {
+          "target": "Cassiopeia A",
+          "category": "radio",
+          "max_catalogs": null
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "The complete historical radio photometry for this field is 4127 rows across 47 catalogs, written in full to {{artifact:0}}. The ten rows shown inline are a preview, not the data -- the full table is the file. The tool warned that the preview is the first ten of 4127 rows.",
+    "usage": {
+      "input_tokens": 13900,
+      "output_tokens": 104,
+      "cache_read_tokens": 12700
+    }
+  }
+]

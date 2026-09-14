@@ -21,6 +21,14 @@ Four properties matter more than the format:
   recorded data.
 * **``yaml.safe_load``, always** (S5). Fixture files are reviewed as
   adversarial input, not as test data.
+* **Every file states its provenance.** A recorded fixture and a hand-authored
+  one grade a model against different things -- one against what an archive
+  said, the other against what a task author believed it would say -- and a
+  reader cannot tell them apart from the entries. ``provenance`` is required
+  for that reason, and ``recorded_on`` is reported past
+  ``FIXTURE_AGE_WARNING_DAYS`` because the services behind class R change:
+  VizieR gains catalogs, ADS changes its parser, and NED's resolver behaviour
+  is already documented as unreliable.
 """
 
 from __future__ import annotations
@@ -29,6 +37,7 @@ import re
 import shutil
 import typing
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
@@ -43,6 +52,7 @@ __all__ = [
     "FixtureFile",
     "FixtureStore",
     "MISS_POLICIES",
+    "FIXTURE_AGE_WARNING_DAYS",
     "PREDICATES",
     "load_fixture_file",
     "build_error_result",
@@ -74,6 +84,12 @@ PREDICATES: tuple[str, ...] = (
 _FORBIDDEN_ARTIFACT_KEYS: tuple[str, ...] = ("path", "subdir", "ext")
 
 _CONTENT_SUBDIR = "content"
+
+#: Past this, a recorded fixture is grading a model against an archive that may
+#: no longer exist (section 17 question 3). A warning, not a refusal: a stale
+#: fixture is still a reproducible one, and forcing a re-capture to run a suite
+#: would make the harness depend on the services it exists to replay.
+FIXTURE_AGE_WARNING_DAYS = 180
 
 
 class FixtureError(ValueError):
@@ -247,6 +263,7 @@ class FixtureFile:
     entries: tuple[FixtureEntry, ...]
     miss_policy: str = "error"
     recorded_on: str | None = None
+    provenance: str = ""
     source: Path | None = None
     content_root: Path | None = None
 
@@ -285,9 +302,24 @@ def load_fixture_file(
     if not isinstance(payload, Mapping):
         raise FixtureError(f"{file} must hold a mapping at the top level")
 
-    unknown = set(payload) - {"tool", "miss_policy", "recorded_on", "entries"}
+    unknown = set(payload) - {
+        "tool",
+        "miss_policy",
+        "recorded_on",
+        "provenance",
+        "entries",
+    }
     if unknown:
         raise FixtureError(f"{file} has unknown top-level key(s) {sorted(unknown)}")
+
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, str) or not provenance.strip():
+        raise FixtureError(
+            f"{file} needs a `provenance`: where these responses came from. A "
+            "captured fixture and a hand-authored one grade a model against "
+            "different things -- what an archive said, versus what a task "
+            "author believed it would say -- and the entries do not say which."
+        )
 
     tool = payload.get("tool")
     if not isinstance(tool, str) or not tool:
@@ -329,6 +361,7 @@ def load_fixture_file(
         entries=entries,
         miss_policy=miss_policy,
         recorded_on=payload.get("recorded_on"),
+        provenance=" ".join(str(provenance).split()),
         source=file,
         content_root=fixture_root / _CONTENT_SUBDIR,
     )
@@ -508,6 +541,27 @@ class FixtureStore:
         return cls(
             files=files, miss_policy_override=miss_policy, task_id=task_id
         )
+
+    def stale(self, *, today: "date | None" = None) -> list[dict[str, Any]]:
+        """Fixture files recorded long enough ago to be a fiction now."""
+
+        from datetime import date as _date
+
+        today = today or _date.today()
+        out: list[dict[str, Any]] = []
+        for fixture in self.files.values():
+            if not fixture.recorded_on:
+                continue
+            try:
+                recorded = _date.fromisoformat(str(fixture.recorded_on))
+            except ValueError:
+                continue
+            age = (today - recorded).days
+            if age > FIXTURE_AGE_WARNING_DAYS:
+                out.append(
+                    {"tool": fixture.tool, "recorded_on": str(recorded), "age_days": age}
+                )
+        return out
 
     @property
     def miss_rate(self) -> float:

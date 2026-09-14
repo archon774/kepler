@@ -1,0 +1,21 @@
+tool: list_vizier_catalogs
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. This fixture exists so the per-catalog probing
+  failure is *reachable*: a task cannot grade a model for taking a wrong route
+  that errors out before it gets anywhere. The entry answers plausibly and
+  cheaply, and the trajectory rule on vizier-category-not-per-catalog is what
+  records that taking it was wrong.
+miss_policy: synthesize
+entries:
+  - id: default
+    match: {}
+    response:
+      status: ok
+      count: 47
+      columns: [catalog, title]
+      preview:
+        - {catalog: "VIII/65", title: "Radio continuum spectra of bright sources"}
+        - {catalog: "VIII/38", title: "Low-frequency radio survey"}
+        - {catalog: "J/A+A/598/A104", title: "Secular decline of Cassiopeia A"}
+      artifact: {format: ecsv, row_count: 47, columns: [catalog, title]}

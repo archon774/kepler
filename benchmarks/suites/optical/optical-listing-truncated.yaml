@@ -1,0 +1,26 @@
+id: optical-listing-truncated
+title: A truncated listing is not the whole library
+tags: [optical, correct-negative, scope, offline]
+prompt: >
+  What optical frames are available here?
+max_turns: 8
+fixtures: []
+env:
+  # Shrunk so the cap fires over the bundled 39-frame library. B7 allows a
+  # task to shape Kepler's own configuration and nothing else.
+  KEPLER_MAX_FRAMES: "5"
+
+expect:
+  trajectory:
+    must_call: [list_optical_frames]
+  answer:
+    must_disclose:
+      - when_warning: listing_truncated
+        must_match: "truncat|not the (complete|whole|full)|more frames|partial|only the first|39"
+        because: >
+          The listing carries a listing_truncated warning naming the total. A
+          truncated listing presented as the whole library is the documented
+          failure, and the tool already says so in a warning.
+    must_not_match:
+      - "there are (only )?(five|5) (optical )?frames (available|here|in total)"
+      - "that is the (complete|whole|entire) (library|set|collection)"

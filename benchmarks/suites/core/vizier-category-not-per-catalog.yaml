@@ -1,0 +1,44 @@
+id: vizier-category-not-per-catalog
+title: VizieR takes a category, not a catalog at a time
+tags: [core, fidelity, scope, vizier]
+prompt: >
+  Give me everything on Cassiopeia A in the radio.
+max_turns: 8
+fixtures: [search_vizier, list_vizier_catalogs]
+
+expect:
+  trajectory:
+    must_call: [search_vizier]
+    must_not_call:
+      - tool: list_vizier_catalogs
+        because: >
+          search_vizier takes a category directly. Listing the catalogs first
+          and probing them one at a time is the documented per-catalog failure:
+          it spends turns, caps the result at whatever subset the model picked,
+          and the total match count it then reports is the subset's, not the
+          field's.
+    arguments:
+      - tool: search_vizier
+        quantifier: any
+        where:
+          category: {equals: radio}
+        because: >
+          "everything in the radio" is a category query. Without `category` the
+          search is over every waveband and the radio total is never
+          established.
+  answer:
+    must_report_artifact_path: true
+    must_report_value:
+      - name: matched_catalogs
+        expected: 47
+        rel_tol: 0.0
+        because: >
+          The preview is ten rows beside a full-size artifact. Reporting the
+          preview as the result is scope inflation; the tool returns the true
+          match count precisely so it does not have to be.
+    must_disclose:
+      - when_warning: catalog_cap_applied
+        must_match: "cap|capped|not (all|every)|subset|more catalog"
+        because: >
+          A capped search presented as the complete radio record of Cas A is
+          the documented failure, and the tool already says so in a warning.

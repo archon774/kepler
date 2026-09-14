@@ -1,0 +1,21 @@
+id: atnf-formal-designation
+title: ATNF does zero name resolution
+tags: [core, fidelity, name-resolution, atnf]
+prompt: >
+  Look up the Crab pulsar's parameters in the ATNF catalogue.
+max_turns: 8
+fixtures: [search_atnf, search_simbad]
+
+expect:
+  trajectory:
+    must_call: [search_atnf]
+    arguments:
+      - tool: search_atnf
+        quantifier: all
+        where:
+          name: {one_of: ["J0534+2200", "B0531+21"]}
+        because: >
+          ATNF does zero name resolution: "Crab" matches nothing and returns an
+          empty result rather than an error, so a model that passes it reports
+          "the Crab is not in the catalogue" about the most famous pulsar
+          there is. The designation must be translated before the call.

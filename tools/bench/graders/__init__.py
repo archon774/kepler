@@ -152,20 +152,71 @@ class Evidence:
                     paths.add(str(artifact["path"]))
         return paths
 
-    def warning_codes(self) -> set[str]:
-        """Every warning code any tool raised this session.
+    def warnings(self) -> list[Mapping[str, Any]]:
+        """Every warning any tool raised this session, as the manifest wrote it.
 
-        Read from the manifest rather than the events: the manifest already
-        normalizes a warning to ``{code, message}`` whatever shape the tool
-        used, and a fidelity check should not depend on which.
+        The manifest normalizes to ``{code, message}``, but only the half of
+        the surface that raises a coded warning gets a ``code``: ``ToolResult``
+        -- what every class-R tool returns -- declares ``warnings: list[str]``
+        upstream, while ``OpticalFrameList``, ``PulsarScanList`` and the other
+        local models declare ``list[ToolWarning]``. That asymmetry is
+        extraction-preserved and not ours to fix here, so
+        :meth:`raised_warning` matches on either.
         """
 
-        codes: set[str] = set()
+        raised: list[Mapping[str, Any]] = []
         for call in self.tool_calls():
             for warning in call.get("warnings") or ():
-                if isinstance(warning, Mapping) and warning.get("code"):
-                    codes.add(str(warning["code"]))
-        return codes
+                if isinstance(warning, Mapping):
+                    raised.append(warning)
+        return raised
+
+    def warning_codes(self) -> set[str]:
+        """The coded warnings only. See :meth:`warnings` for why that is not
+        all of them."""
+
+        return {
+            str(warning["code"])
+            for warning in self.warnings()
+            if warning.get("code")
+        }
+
+    def errors(self) -> list[Mapping[str, Any]]:
+        """Every error any tool returned this session, as the manifest wrote
+        it. Always coded: the manifest normalizes ``{code, message}``."""
+
+        raised: list[Mapping[str, Any]] = []
+        for call in self.tool_calls():
+            for error in call.get("errors") or ():
+                if isinstance(error, Mapping):
+                    raised.append(error)
+        return raised
+
+    def raised_signal(self, name: str) -> bool:
+        """Whether a bounding signal identified by ``name`` fired this session.
+
+        Warnings *and* errors, because which of the two a tool uses for the
+        same situation is not consistent across this surface and is not the
+        model's concern: ``list_optical_frames`` reports a truncated listing as
+        a ``listing_truncated`` warning, while ``resolve_optical_frame``
+        reports an ambiguous name as an ``ambiguous`` *error*. Both are a
+        bound the answer has to acknowledge, and a check that fired for one and
+        silently never for the other would grade the tool's choice rather than
+        the model's.
+
+        Matched against the ``code`` where there is one, and otherwise
+        case-folded against the message -- ``ToolResult``, what every class-R
+        tool returns, declares ``warnings: list[str]`` upstream and has nowhere
+        to put a code.
+        """
+
+        folded = name.casefold()
+        for signal in self.warnings() + self.errors():
+            if signal.get("code") and str(signal["code"]).casefold() == folded:
+                return True
+            if folded in str(signal.get("message", "")).casefold():
+                return True
+        return False
 
 
 def load_evidence(directory: str | Path) -> Evidence:

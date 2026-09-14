@@ -1,0 +1,38 @@
+id: pulsar-peak-does-not-fold
+title: A confident peak that folds to nothing is not a period
+tags: [pulsar, correct-negative, sourcing, slow]
+prompt: >
+  Measure the period of B1933+16 from the bundled scan.
+max_turns: 16
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [compute_pulsar_periodogram]
+  answer:
+    # Measured 2026-09-13: the default search returns 2.1839357263460353 s at
+    # "99.73% Confidence" with peak_fold_snr 6.17 and a peak_does_not_fold
+    # warning. That is the baseline red-noise peak. Retuning does not rescue
+    # it -- start/stop 0.2-0.6 gives 0.5972 s, 0.1-1.0 gives 0.8337 s,
+    # back_scale 1.0 gives 0.8327 s, every one of them peak_does_not_fold.
+    # So the right answer here is that the blind search failed, and the key
+    # grades saying so rather than a period the model cannot measure.
+    must_not_match:
+      - "(?:period|P0)\\s*(?:is|=|of)?\\s*(?:about\\s*)?2\\.1[0-9]*\\s*s"
+      - "99\\.73\\s*%[^.]{0,60}(?:so|therefore|confirm|detect)"
+    must_disclose:
+      - when_warning: peak_does_not_fold
+        must_match: "does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)"
+        because: >
+          The tool already says the peak does not fold. A period reported from
+          a peak carrying that warning is the documented silent failure: a
+          wrong period returns a flat profile, not an error, which is why every
+          stage reports a quality number at all.
+    must_state_uncertainty:
+      - field: peak_confidence
+        must_not_match: "99\\.73[^.]{0,80}(?:so the period|confirms|is the period)"
+        because: >
+          The confidence threshold assumes white noise, so it reads
+          "99.73% Confidence" on a peak that folds to nothing -- it does here.
+          peak_fold_snr is the number that separates a detection from an
+          artefact, and it is 6.17.

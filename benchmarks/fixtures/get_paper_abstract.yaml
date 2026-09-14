@@ -1,0 +1,37 @@
+tool: get_paper_abstract
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. The abstract text below is a PARAPHRASE written
+  to carry the two facts the abstract-before-attribution task turns on -- the
+  rate is 0.670 +/- 0.019 %/yr, and it is an average over six decades that the
+  paper states is not constant. It is NOT the published abstract and must not
+  be quoted as one. Replace with a `kepler-bench record` capture once
+  ADS_DEV_KEY is available; that capture is also what would make the numbers
+  here authoritative rather than merely correct-as-far-as-this-task-needs.
+miss_policy: error
+entries:
+  - id: trotter-2017
+    match:
+      bibcode: {equals: "2017MNRAS.469.1299T"}
+    response:
+      status: ok
+      count: 1
+      columns: [bibcode, abstract]
+      preview:
+        - bibcode: "2017MNRAS.469.1299T"
+          abstract: >-
+            We report long-term monitoring of the flux density of Cassiopeia A.
+            Averaged over six decades we measure a secular decline of
+            0.670 +/- 0.019 per cent per year at 1.4 GHz. The decline is
+            explicitly not constant: the rate varies with epoch and with
+            frequency, so a single figure quoted without its averaging interval
+            and observing frequency misrepresents the measurement.
+
+  - id: default
+    match: {}
+    response:
+      status: not_found
+      count: 0
+      errors:
+        - code: not_found
+          message: No abstract is available for that bibcode.

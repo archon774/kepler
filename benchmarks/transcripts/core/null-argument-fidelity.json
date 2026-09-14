@@ -1,0 +1,31 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "'Complete, nothing capped' means max_catalogs must be JSON null. Omitting it would cap at the default, and the string \"None\" is not null.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_vizier",
+        "arguments": {
+          "target": "Cassiopeia A",
+          "category": "radio",
+          "max_catalogs": null
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "Every matched VizieR radio catalogue for this field: 47 catalogs, 4127 rows, uncapped, written in full to {{artifact:0}}. I passed max_catalogs as JSON null rather than omitting it, since an omitted value caps at the default rather than lifting the cap.",
+    "usage": {
+      "input_tokens": 13700,
+      "output_tokens": 98,
+      "cache_read_tokens": 12500
+    }
+  }
+]

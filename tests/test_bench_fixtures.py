@@ -34,9 +34,18 @@ def fixture_root(tmp_path, monkeypatch):
     return root
 
 
+#: Every fixture file must state where its responses came from, so these
+#: synthetic ones get a stock line rather than each test repeating it. The
+#: requirement itself is asserted directly, below.
+_PROVENANCE = "provenance: Synthetic, written inline by this test module.\n"
+
+
 def write(root, name, body):
     path = root / f"{name}.yaml"
-    path.write_text(textwrap.dedent(body), encoding="utf-8")
+    text = textwrap.dedent(body)
+    if "provenance:" not in text:
+        text = text.replace("tool: ", _PROVENANCE + "tool: ", 1)
+    path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -492,3 +501,71 @@ def test_an_error_result_uses_the_tools_own_return_model():
     )
     assert isinstance(result, ToolResult)
     assert result.model_dump()["errors"][0]["code"] == "fixture_miss"
+
+
+# --- provenance -----------------------------------------------------------
+
+
+def test_a_fixture_without_a_provenance_is_rejected(fixture_root):
+    """A captured fixture and a hand-authored one grade a model against
+    different things -- what an archive said, versus what a task author
+    believed it would say -- and the entries do not say which."""
+
+    path = fixture_root / "search_ned.yaml"
+    path.write_text(
+        "tool: search_ned\nentries: []\n", encoding="utf-8"
+    )
+    with pytest.raises(FixtureError, match="provenance"):
+        load_fixture_file(path)
+
+
+def test_provenance_is_kept_as_one_line(fixture_root):
+    path = write(
+        fixture_root,
+        "search_ned",
+        """
+        tool: search_ned
+        provenance: >
+          Captured live on 2026-09-13 against NED's
+          photometry endpoint.
+        entries: []
+        """,
+    )
+    fixture = load_fixture_file(path)
+    assert "\n" not in fixture.provenance
+    assert fixture.provenance.startswith("Captured live")
+
+
+def test_a_fixture_recorded_long_ago_is_reported_as_stale(fixture_root):
+    """The services behind class R change: VizieR gains catalogs, ADS changes
+    its parser, NED's resolver behaviour is already documented as unreliable.
+    A warning, not a refusal -- a stale fixture is still a reproducible one,
+    and forcing a re-capture to run a suite would make the harness depend on
+    the services it exists to replay."""
+
+    from datetime import date
+
+    write(
+        fixture_root,
+        "search_ned",
+        """
+        tool: search_ned
+        recorded_on: 2020-01-01
+        entries:
+          - id: default
+            match: {}
+            response: {status: not_found, count: 0}
+        """,
+    )
+    store = FixtureStore.load(["search_ned"], root=fixture_root)
+    stale = store.stale(today=date(2026, 9, 13))
+    assert stale and stale[0]["tool"] == "search_ned"
+    assert stale[0]["age_days"] > 180
+
+
+def test_a_recent_fixture_is_not_reported_as_stale(fixture_root):
+    from datetime import date
+
+    write(fixture_root, "search_ned", NED_OK)
+    store = FixtureStore.load(["search_ned"], root=fixture_root)
+    assert store.stale(today=date(2026, 9, 20)) == []

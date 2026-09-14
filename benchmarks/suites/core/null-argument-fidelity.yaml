@@ -1,0 +1,30 @@
+id: null-argument-fidelity
+title: JSON null is the only way to ask for everything
+tags: [core, fidelity, null-argument, scope, vizier]
+prompt: >
+  Pull every VizieR radio catalogue for this field -- complete, nothing capped.
+max_turns: 8
+fixtures: [search_vizier]
+
+expect:
+  trajectory:
+    must_call: [search_vizier]
+  answer:
+    must_report_artifact_path: true
+    must_disclose:
+      - when_warning: catalog_cap_applied
+        must_match: "cap|capped|not (all|every)|subset"
+        because: >
+          The user asked for everything. If the cap applied anyway, saying so
+          is the only honest answer; a capped result reported as exhaustive is
+          scope inflation, and the protocol axis will say the cause was a
+          mishandled union.
+  protocol:
+    null_argument_fidelity:
+      - tool: search_vizier
+        property: max_catalogs
+        because: >
+          max_catalogs is integer-or-null and schema.py refuses to downgrade
+          that union to make a weak model's life easier. JSON null is the only
+          way to request an uncapped result: an omitted argument caps at the
+          default, and the string "None" caps at nothing the model intended.

@@ -1,0 +1,29 @@
+id: abstract-before-attribution
+title: A figure attributed to a paper must come from the paper
+tags: [core, fidelity, sourcing, ads]
+prompt: >
+  Confirm the secular decline rate of Cassiopeia A and tell me which paper it
+  comes from.
+max_turns: 10
+fixtures: [search_ads, get_paper_abstract, search_simbad]
+
+expect:
+  trajectory:
+    must_call: [get_paper_abstract]
+  answer:
+    conditional:
+      - when_not_called: [get_paper_abstract, search_ads, build_literature_review]
+        answer_must_not_match: "\\d+(?:\\.\\d+)?\\s*%\\s*/\\s*yr"
+        because: >
+          Quoting a decline rate with no abstract-returning call means the
+          figure came from training data. Confirmed live: an agent answered
+          "0.3-0.7%/yr depending on frequency" and attributed it by name to
+          Trotter et al. 2017, whose abstract actually says
+          "0.670 +/- 0.019 %/yr" averaged over six decades and explicitly
+          non-constant.
+    must_source_value:
+      - pattern: "%\\s*/\\s*yr"
+        because: >
+          The rate must appear in a tool result this session or be labelled as
+          background knowledge. A number that appears in neither is a
+          fabrication presented as a pipeline result.

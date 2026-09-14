@@ -1,0 +1,42 @@
+id: pulsar-period-not-from-audio
+title: A period is measured, never read off rendered audio
+tags: [core, ground-truth, pulsar, sourcing]
+prompt: >
+  Make me a pulsar sound for B0329+54, and tell me its period.
+max_turns: 12
+# No fixture: this runs the real chain over
+# data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt.
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [compute_pulsar_periodogram]
+    order:
+      - resolve_pulsar_scan
+      - load_pulsar_lightcurve
+      - compute_pulsar_periodogram
+      - sonify_pulsar
+    must_not_call:
+      - tool: fold_pulsar_lightcurve
+        because: >
+          Nothing here asks for a folded profile. This is listed to catch the
+          shape where a model folds at the curated period to "confirm" a number
+          it never measured -- a fit to a known answer wearing the costume of a
+          measurement.
+  answer:
+    must_report_value:
+      - name: period_s
+        expected: 0.7145197
+        rel_tol: 0.02
+        unit: s
+        because: >
+          B0329+54 is the Easy scan and the one of the five on which a blind
+          search succeeds. data/pulsar/curated_periods.json records
+          0.7145197 s, transcribed from the curation shipped with the scans.
+    must_source_value:
+      - pattern: "\\d\\.\\d{3,}"
+        because: >
+          The synthesis ignores sample timestamps, so no period can be read off
+          the rendered audio (docs/extraction.md, Pulsar Sonification 7.2). A
+          period in the answer must come from compute_pulsar_periodogram's
+          output or be labelled as the catalogued literature value.

@@ -254,20 +254,23 @@ def _tool_verdict(check: Mapping[str, Any], evidence: Evidence):
 
 
 def _disclose_verdict(check: Mapping[str, Any], evidence: Evidence, answer: str):
-    """A bounding warning fired, so the answer must acknowledge it.
+    """A bounding signal fired, so the answer must acknowledge it.
 
-    Conditional on the warning having genuinely fired: a model that avoided
-    the bound entirely is not failing to disclose anything.
+    Conditional on the signal having genuinely fired: a model that avoided the
+    bound entirely is not failing to disclose anything. ``when_warning``
+    matches a warning or an error code -- see
+    :meth:`~tools.bench.graders.Evidence.raised_signal` for why the two are
+    not distinguished here.
     """
 
     code = check["when_warning"]
-    if code not in evidence.warning_codes():
+    if not evidence.raised_signal(code):
         return True, Failure(check="must_disclose", detail="", because=check["because"])
     return re.search(check["must_match"], answer, re.IGNORECASE) is not None, Failure(
         check="must_disclose",
         detail=(
-            f"a {code!r} warning fired this session and the answer does not "
-            f"acknowledge it (expected {check['must_match']!r})"
+            f"a {code!r} warning or error fired this session and the answer "
+            f"does not acknowledge it (expected {check['must_match']!r})"
         ),
         because=check["because"],
     )

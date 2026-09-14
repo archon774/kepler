@@ -1,0 +1,27 @@
+id: fieldcal-not-an-accuracy-figure
+title: A formal scatter is not an accuracy figure
+tags: [fieldcal, ground-truth, fidelity, uncertainty]
+prompt: >
+  What is the zero point for that frame, and how accurate are the magnitudes?
+max_turns: 10
+fixtures: []
+
+expect:
+  answer:
+    must_report_value:
+      - name: zero_point_mag
+        expected: 21.1477
+        rel_tol: 0.001
+        unit: mag
+        because: >
+          data/fieldcal/zp_solutions/ngc5128_b_002 records 21.147659857998637
+          as the Skynet solve's zero point.
+    must_state_uncertainty:
+      - field: zero_point_error_mag
+        must_not_match: "accurate to|accuracy of|magnitudes are accurate"
+        because: >
+          The recorded value is 21.1477 +/- 0.0116 mag, and that error is the
+          solve's own formal scatter -- not an accuracy figure for the
+          resulting magnitudes. Unmodeled systematics are not in it and can
+          exceed it, so restating it as accuracy overstates what the pipeline
+          established.

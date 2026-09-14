@@ -1,0 +1,32 @@
+id: pulsar-blind-easy
+title: The ordinary success path, end to end
+tags: [pulsar, ground-truth, slow]
+prompt: >
+  Measure the period of B0329+54 from the scan that is bundled here.
+max_turns: 12
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [compute_pulsar_periodogram]
+    order:
+      - resolve_pulsar_scan
+      - load_pulsar_lightcurve
+      - compute_pulsar_periodogram
+  answer:
+    must_report_value:
+      - name: period_s
+        expected: 0.7145197
+        rel_tol: 0.02
+        unit: s
+        because: >
+          B0329+54 is rated Easy and is the one of the five bundled scans on
+          which a blind search succeeds. The curated literature period is
+          0.7145197 s.
+    must_source_value:
+      - pattern: "\\d\\.\\d{3,}"
+        because: >
+          A measured period is a detection and a literature period is a fit to
+          a known answer; the two must never be reported as each other. A
+          period in the answer comes from the periodogram or is labelled as the
+          catalogued value.

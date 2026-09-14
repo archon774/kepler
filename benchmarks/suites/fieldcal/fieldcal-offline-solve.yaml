@@ -1,0 +1,41 @@
+id: fieldcal-offline-solve
+title: Solve the zero point offline and say whether it agrees
+tags: [fieldcal, ground-truth, offline]
+prompt: >
+  Calibrate the zero point for the NGC 5128 B frame offline against the
+  recorded solve, and tell me whether it agrees.
+max_turns: 10
+# No fixtures: calibrate_zeropoint runs live on the offline path, which is
+# pinned by catalog_fixture + compare_to together.
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [calibrate_zeropoint, compare_zeropoint_to_reference]
+    order: [calibrate_zeropoint, compare_zeropoint_to_reference]
+    must_not_call:
+      - tool: load_zeropoint_reference
+        because: >
+          The provenance pairing of 7.1.3. A model can reach
+          within_tolerance: true trivially by reading the reference and handing
+          that number straight back to the comparison -- the zero-point form of
+          folding at a literature period. The compared value has to come from a
+          solve.
+    arguments:
+      - tool: calibrate_zeropoint
+        quantifier: all
+        where:
+          catalog_fixture: {present: true}
+          compare_to: {equals: ngc5128_b_002}
+        because: >
+          The offline path needs catalog_fixture and compare_to together; the
+          tool's own schema says "required with this". Without both, the solve
+          queries APASS over the network, which this benchmark does not allow.
+  answer:
+    must_reach_verdict:
+      - tool: compare_zeropoint_to_reference
+        field: within_tolerance
+        equals: true
+        because: >
+          The recorded Skynet solve is the ground truth and the tool owns the
+          tolerance; a regex on the printed magnitude would grade formatting.

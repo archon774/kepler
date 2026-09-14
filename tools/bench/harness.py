@@ -305,10 +305,16 @@ def run_suite(
 ) -> RunRecord:
     """Run every ``(backend, task, repeat)`` and write the run directory.
 
-    ``backends`` maps a spec to a constructed ``ModelBackend``; the harness
-    never builds one itself, so a test can hand it a ``ReplayBackend`` and the
-    CLI can hand it a real adapter without this function knowing the
-    difference.
+    ``backends`` maps a spec to a constructed ``ModelBackend``, or to a
+    zero-argument factory returning one. The harness never builds a backend
+    itself, so a test can hand it a ``ReplayBackend`` and the CLI can hand it a
+    real adapter without this function knowing the difference.
+
+    The factory form exists for replay: a transcript is *one task's*
+    trajectory, so a suite replayed end to end needs a fresh backend per
+    ``(task, repeat)`` rather than one instance consumed across the whole run.
+    It is the same principle as repeats sharing nothing, extended to the model
+    side.
     """
 
     fixture_root = Path(fixture_root)
@@ -327,8 +333,13 @@ def run_suite(
             for key, value in sorted(os.environ.items())
             if key.startswith("KEPLER_")
         },
+        # A factory is asked for one representative instance so the run
+        # record can state the backend's identity and capabilities. The first
+        # task is the representative: a factory keyed on the task still
+        # produces the same spec and dialect for all of them.
         backend_details={
-            spec: backend_record(backend) for spec, backend in backends.items()
+            spec: backend_record(_instance(backend, suite.tasks[0], 0))
+            for spec, backend in backends.items()
         },
     )
     record.corpus_dirty = _corpus_dirty(
@@ -345,7 +356,7 @@ def run_suite(
                 task_run = _run_one(
                     suite=suite,
                     task=task,
-                    backend=backend,
+                    backend=_instance(backend, task, repeat),
                     spec=spec,
                     repeat=repeat,
                     config=config,
@@ -365,6 +376,19 @@ def run_suite(
     return record
 
 
+def _instance(backend: Any, task: Task, repeat: int) -> Any:
+    """Resolve a backend entry to a backend.
+
+    A plain ``ModelBackend`` is used as-is; a callable is invoked per
+    ``(task, repeat)``. ``ModelBackend`` instances are not callable, so the
+    two never collide.
+    """
+
+    if callable(backend):
+        return backend(task, repeat)
+    return backend
+
+
 def _dry_run_ceiling(
     suite: Suite, config: RunConfig, backends: Mapping[str, Any]
 ) -> int:
@@ -373,7 +397,14 @@ def _dry_run_ceiling(
 
     per_turn = max(
         (
-            int(getattr(backend.capabilities, "max_output_tokens", 0) or 0)
+            int(
+                getattr(
+                    _instance(backend, suite.tasks[0], 0).capabilities,
+                    "max_output_tokens",
+                    0,
+                )
+                or 0
+            )
             for backend in backends.values()
         ),
         default=0,

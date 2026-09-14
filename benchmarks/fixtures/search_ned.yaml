@@ -1,0 +1,61 @@
+tool: search_ned
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. These entries were written against
+  tools/ned.py's return model and NED's documented resolver behaviour, not
+  taken from a live response. They reproduce the shape of the failure the core
+  suite grades -- the colloquial name fails, the formal designation succeeds --
+  with plausible rather than actual row counts. Replace with a
+  `kepler-bench record` capture before trusting any absolute number here.
+miss_policy: error
+entries:
+  # The formal designation succeeds. Matched loosely on the designation so any
+  # spelling a model produces ("NGC6334", "NGC 6334") lands here.
+  - id: ngc6334-photometry
+    match:
+      name: {matches: "^NGC\\s*6334"}
+      table: {equals: photometry}
+    response:
+      status: ok
+      count: 214
+      columns: [Frequency, "Flux Density", "Upper limit of uncertainty", Refcode]
+      preview:
+        - {Frequency: 1.4e9, "Flux Density": 191.0, Refcode: "1990ApJS...74..181Z"}
+        - {Frequency: 4.85e9, "Flux Density": 176.0, Refcode: "1994ApJS...91..111W"}
+        - {Frequency: 8.35e9, "Flux Density": 168.0, Refcode: "1997ApJ...482..245L"}
+      artifact:
+        format: ecsv
+        row_count: 214
+        columns: [Frequency, "Flux Density", "Upper limit of uncertainty", Refcode]
+
+  - id: ngc6334-any-table
+    match:
+      name: {matches: "^NGC\\s*6334"}
+    response:
+      status: ok
+      count: 31
+      columns: [Object Name, RA, DEC, Type]
+      preview:
+        - {"Object Name": "NGC 6334", RA: 260.1958, DEC: -35.7833, Type: "HII"}
+      artifact: {format: ecsv, row_count: 31, columns: [Object Name, RA, DEC, Type]}
+
+  # The colloquial name: NED's resolver returns nothing and the tool surfaces
+  # it as an error. Case-folded `contains`, so "Cat's Paw", "cat's paw nebula"
+  # and "the Cat's Paw" all land here.
+  - id: colloquial-name-does-not-resolve
+    match:
+      name: {contains: "cat"}
+    response:
+      status: error
+      count: 0
+      errors:
+        - code: provider_unavailable
+          message: >
+            NED's name resolver returned no object for that string. NED indexes
+            catalog designations; a colloquial name is not one.
+
+  - id: default
+    match: {}
+    response:
+      status: not_found
+      count: 0

@@ -1,0 +1,21 @@
+id: ned-formal-designation
+title: NED needs a formal catalog designation
+tags: [core, fidelity, name-resolution, ned]
+prompt: >
+  What does NED have on the Cat's Paw Nebula?
+max_turns: 8
+fixtures: [search_ned, search_simbad]
+
+expect:
+  trajectory:
+    must_call: [search_ned]
+    arguments:
+      - tool: search_ned
+        quantifier: all
+        where:
+          name: {matches: "^(NGC|IC|M|PGC|UGC)\\s*\\d+"}
+        because: >
+          NED's resolver is unreliable with colloquial names; the system prompt
+          requires translating to a formal designation first. Quantifier `all`:
+          one lucky retry after two colloquial attempts is not the behaviour
+          being graded.

@@ -1,0 +1,27 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "Listing the bundled optical frames.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 60,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "list_optical_frames",
+        "arguments": {}
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "I can show you five frames, but that is not the whole library: the listing was truncated at the current cap of 5 and the tool reports 39 frames in total. Raising KEPLER_MAX_FRAMES is an operator decision, not one I can make from here.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 60,
+      "cache_read_tokens": 11000
+    }
+  }
+]
