@@ -355,7 +355,7 @@ class PhotometryTargetLibrary(KeplerToolModel):
     """The local FITS library ``run_photometry_on_target`` can actually run on.
 
     There is no live image archive behind photometry -- ``categories`` is
-    exactly ``tools.claude_photometry_haiku_tool.list_bundled_targets()``'s
+    exactly ``tools.photometry_pipeline.list_bundled_targets()``'s
     output (bundled ``data/optical/`` stems grouped by the category
     embedded in each filename), not a query result.
     """

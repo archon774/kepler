@@ -1,15 +1,13 @@
-#!/usr/bin/env python
-"""Claude photometry plotting tool using this repo's photometry pipeline.
+"""Reusable FITS photometry and plotting pipeline for Kepler tools.
 
-This script loads a FITS image, runs source extraction and photometry using the
-repository's `algorithms.photometry` modules, saves a plot, and optionally
-summarizes the results with Claude.
+The registered ``tools.photometry`` wrapper imports this module to resolve
+local FITS targets, extract sources, compute photometry, select a zero point,
+and write plots. It deliberately contains no command-line entry point and no
+model-provider client.
 """
 
 from __future__ import annotations
 
-import argparse
-import os
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -18,7 +16,6 @@ from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-import requests
 from astropy.io import fits
 from matplotlib.patches import FancyBboxPatch, Polygon
 
@@ -26,10 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Generated plots default to the user's Downloads folder rather than next to the
-# source FITS file — bundled data targets live inside the repo tree, and
-# this repo's convention is to never write generated artifacts there (see
-# CLAUDE.md: "Do not commit downloaded FITS products, generated plots, ...").
+# Retained for callers that choose an output path compatible with the retired
+# standalone command-line interface. The pipeline itself never writes there.
 DEFAULT_OUTPUT_DIR = Path.home() / "Downloads"
 
 from algorithms.photometry.photometry import PhotometrySettings, run_photometry
@@ -329,110 +324,6 @@ def select_zero_point_mag(
         print(f"Field calibration could not solve a zero point: {error}", file=sys.stderr)
 
     return ZeroPointResolution(None, "none", verified=False)
-
-API_URL = "https://api.anthropic.com/v1/messages"
-API_VERSION = "2023-06-01"
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Run photometry on a FITS file using the repo's photometry pipeline, "
-            "save a plot, and optionally summarize results with Claude."
-        )
-    )
-    parser.add_argument(
-        "fits_path",
-        nargs="?",
-        default=None,
-        help="Path to the FITS file to analyze, or a target name such as ngc1846_cluster_r_000. "
-        "Omit when using --list-targets.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Output PNG path for the photometry plot. Defaults to "
-        f"{DEFAULT_OUTPUT_DIR / '<fitsname>_photometry.png'}",
-    )
-    parser.add_argument(
-        "--model",
-        default="claude-sonnet-5",
-        help="Claude model name to use for the API call.",
-    )
-    parser.add_argument(
-        "--max-tokens",
-        type=int,
-        default=1024,
-        help="Maximum token budget for the Claude summary request.",
-    )
-    parser.add_argument(
-        "--zero-point",
-        type=float,
-        default=None,
-        help="Optional photometric zero point to apply to the output magnitudes. "
-        "Overrides both the FITS header and field calibration.",
-    )
-    parser.add_argument(
-        "--no-field-cal",
-        action="store_true",
-        help="Skip the live field-calibration zero-point solve (no catalog query over "
-        "the network); fall back to the FITS header or instrumental magnitudes only.",
-    )
-    parser.add_argument(
-        "--catalogs",
-        nargs="+",
-        default=None,
-        metavar="CATALOG",
-        help="Reference catalogs to query for field calibration (e.g. APASS PanSTARRS). "
-        "Defaults to catalogs that support the image's FILTER keyword.",
-    )
-    parser.add_argument(
-        "--no-zp-plot",
-        action="store_true",
-        help="Skip saving the zero-point calibration diagnostic plot (fit line, "
-        "residuals, kept/rejected calibration stars) even when a verified "
-        "field-calibration solve is available.",
-    )
-    parser.add_argument(
-        "--zp-plot-output",
-        type=Path,
-        default=None,
-        help="Output PNG path for the zero-point calibration plot. Defaults to "
-        "'<output>_zeropoint.png' next to the main photometry plot.",
-    )
-    parser.add_argument(
-        "--no-claude",
-        action="store_true",
-        help="Skip the Claude API call and only generate the photometry plot.",
-    )
-    parser.add_argument(
-        "--check-only",
-        action="store_true",
-        help="Only resolve the requested FITS file and report whether it exists locally.",
-    )
-    parser.add_argument(
-        "--list-targets",
-        action="store_true",
-        help="List the FITS targets bundled under data/optical, grouped by "
-        "category, and exit. There is no live archive query behind this tool — a "
-        "target only resolves if it's in this list.",
-    )
-    parser.add_argument(
-        "--credits",
-        action="store_true",
-        help="Print a credits card for the mentor behind this project and exit. "
-        "Easter egg; does not touch a FITS file.",
-    )
-    parser.add_argument(
-        "--credits-output",
-        type=Path,
-        default=None,
-        help="Output PNG path for --credits. Defaults to "
-        f"{DEFAULT_OUTPUT_DIR / 'dan_reichart_credits.png'}",
-    )
-    return parser.parse_args()
-
 
 def load_fits_image(fits_path: Path) -> tuple[np.ndarray, object]:
     with fits.open(fits_path) as hdulist:
@@ -992,162 +883,6 @@ def describe_extreme_source(result: object, label: str, snr_floor: float = 5.0) 
     return line
 
 
-def build_claude_prompt(
-    fits_path: Path,
-    results: Sequence[object],
-    zero_point: ZeroPointResolution,
-) -> str:
-    stats = compute_magnitude_stats(results)
-    outliers = find_magnitude_outliers(results, stats)
-
-    # Confirmed live: flux and mag looked mutually inconsistent by several
-    # magnitudes on a real bundled frame until this was accounted for --
-    # `mag` is never the bare `-2.5*log10(flux) + zero_point` a reader would
-    # otherwise assume; `flux` is a raw per-exposure aperture sum, not a
-    # per-second rate. Stated once here (it's one FITS-header value per
-    # frame, not per-source) rather than repeated in each mag_basis branch.
-    exposure_seconds = getattr(results[0], "exp_length", None) if results else None
-    exposure_note = (
-        f"Exposure time: {exposure_seconds:.3f} seconds. Every mag below is "
-        f"-2.5*log10(flux / {exposure_seconds:.3f}) + zero_point, never the bare "
-        "-2.5*log10(flux) + zero_point -- dividing by exposure time first is what "
-        "makes flux and mag mutually consistent; skipping it will look like a "
-        f"multi-magnitude discrepancy that isn't actually there. Whenever you state or "
-        f"use {exposure_seconds:.3f} in your answer, label it explicitly as the exposure "
-        "time in seconds -- never present it as a bare, unexplained number or "
-        "'normalization factor' in a formula."
-        if exposure_seconds
-        else "Exposure time unavailable for this frame -- flux and mag cannot be "
-        "cross-checked against each other with the formula above."
-    )
-
-    if zero_point.value is None:
-        mag_basis = (
-            f"Instrumental magnitudes only. {exposure_note} No photometric zero "
-            "point was available, so these are NOT on a standard magnitude scale "
-            "and cannot be compared to catalog or literature magnitudes."
-        )
-    elif zero_point.verified:
-        diag = zero_point.diagnostics or {}
-        mag_basis = (
-            f"Calibrated magnitudes: a zero point of {zero_point.value:.4f} was solved "
-            f"by this tool cross-matching detected sources against reference catalog(s) "
-            f"({diag.get('catalogs_queried', 'unknown')}), on the same aperture-correction "
-            f"scale applied here, so mag = -2.5*log10(flux / exposure_seconds) + zero_point "
-            f"holds exactly for these results -- no separate unreported correction term. "
-            f"{exposure_note} Solve diagnostics: "
-            f"zero-point error={diag.get('zero_point_error_mag')} mag, "
-            f"{diag.get('num_calibration_stars')} calibration stars used, "
-            f"{diag.get('rejection_percent')}% rejected during the solve. That "
-            "zero-point error is the solve's own formal/statistical uncertainty "
-            "(scatter among the calibration stars used) -- it is NOT an overall "
-            "accuracy figure for these magnitudes. Do not describe magnitudes as "
-            "'accurate to' this value; unmodeled systematic error (flat-fielding, "
-            "color terms, atmospheric variation) is not included in it and can "
-            "exceed it."
-        )
-    else:
-        origin = "a manual --zero-point override" if zero_point.source == "cli" else "the FITS header"
-        mag_basis = (
-            f"A zero point of {zero_point.value:.4f} was applied from {origin}, but this "
-            "tool did not independently verify it against a catalog. Do not describe "
-            "these magnitudes as 'calibrated' — describe them as magnitudes with an "
-            f"unverified zero point applied. {exposure_note} These magnitudes also carry "
-            "a small per-frame aperture-correction constant (typically a few hundredths "
-            "to a few tenths of a mag) that this tool does not separately report, so "
-            "expect mag to be slightly off from the formula above even after accounting "
-            "for exposure time -- that residual is expected, not an error."
-        )
-
-    lines = [
-        "You are summarizing the output of an automated aperture-photometry pipeline. "
-        "Follow these rules strictly:",
-        "1. State only what is directly supported by the numbers given below. Do not "
-        "infer physical properties — temperature, spectral type, distance, mass, "
-        "luminosity, physical size, or similar — that cannot be established from "
-        "pixel position, flux, and magnitude alone.",
-        "2. Distinguish three kinds of statements and label them accordingly: "
-        "measured facts (position, flux, magnitude as reported), mathematical "
-        "consequences (values derived from those measurements by a stated formula, "
-        "e.g. a magnitude from flux and a zero point), and hypotheses (anything else, "
-        "e.g. a source being noteworthy or unusual for the target type). Never "
-        "present a hypothesis as an established fact.",
-        f"3. {mag_basis}",
-        "4. Do not identify any source as a cluster member, foreground/background "
-        "star, or otherwise associate it with a specific population. This pipeline "
-        "performs no proper-motion, radial-velocity, or density-based membership "
-        "analysis, so there is no membership evidence available.",
-        "5. When discussing unusually bright or faint sources, use only the "
-        "full-dataset statistics and outlier list below — computed from all "
-        f"{stats.get('count', 0)} sources with an obtained photometric measurement, "
-        "not a sample. 'Obtained a measurement' means a finite mag/flux was computed --"
-        " it does NOT mean reliable. A source can have an obtained measurement with a "
-        "poor signal-to-noise ratio; do not call a count of measurements a count of "
-        "'valid' or 'good' sources.",
-        "",
-        f"FITS file: {fits_path.name}",
-        f"Sources with an obtained photometric measurement: {len(results)}",
-    ]
-
-    if zero_point.verified:
-        lines.append(f"Calibration quality (computed, not your judgment): {calibration_quality_verdict(zero_point.diagnostics)}.")
-
-    if stats.get("count", 0) > 0:
-        lines.append(
-            f"Full-dataset magnitude statistics: median={stats['median_mag']:.3f}, "
-            f"robust scatter (MAD-based sigma)={stats['robust_sigma_mag']:.3f}, "
-            f"min={stats['min_mag']:.3f}, max={stats['max_mag']:.3f}."
-        )
-        valid_mag_results = [r for r in results if r.mag is not None]
-        brightest = min(valid_mag_results, key=lambda r: r.mag)
-        faintest = max(valid_mag_results, key=lambda r: r.mag)
-        lines.append(describe_extreme_source(brightest, "Brightest detected source"))
-        lines.append(describe_extreme_source(faintest, "Faintest detected source"))
-    else:
-        lines.append("No sources have a valid magnitude; no statistics are available.")
-
-    if outliers:
-        lines.append(
-            f"Sources more than 3 robust-sigma from the full-dataset median magnitude "
-            f"({len(outliers)} of {stats.get('count', 0)}):"
-        )
-        for result in outliers[:20]:
-            lines.append(
-                f"  x={result.x:.2f}, y={result.y:.2f}, mag={result.mag:.3f}, flux={result.flux:.1f}"
-            )
-        if len(outliers) > 20:
-            lines.append(f"  ... and {len(outliers) - 20} more.")
-    else:
-        lines.append("No sources exceed 3 robust-sigma from the full-dataset median magnitude.")
-
-    lines.append(
-        "Summarize these results using only the statistics and outliers listed above."
-    )
-    return "\n".join(lines)
-
-
-def call_claude_haiku(prompt: str, model: str, max_tokens: int) -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("Please set ANTHROPIC_API_KEY in your environment to call Claude.")
-
-    headers = {
-        "content-type": "application/json",
-        "x-api-key": api_key,
-        "anthropic-version": API_VERSION,
-    }
-    payload = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-
-    response = requests.post(API_URL, json=payload, headers=headers, timeout=60)
-    response.raise_for_status()
-    data = response.json()
-    return "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
-
-
 def summarize_results(results: Sequence[object], magnitude_label: str) -> str:
     mags = [float(r.mag) for r in results if r.mag is not None]
     fluxes = [float(r.flux) for r in results if r.flux is not None]
@@ -1158,118 +893,3 @@ def summarize_results(results: Sequence[object], magnitude_label: str) -> str:
         f"median {magnitude_label} {np.median(mags):.3f}, "
         f"median flux {np.median(fluxes):.1f}."
     )
-
-
-def main() -> int:
-    args = parse_args()
-
-    if args.credits:
-        output_path = args.credits_output or DEFAULT_OUTPUT_DIR / "dan_reichart_credits.png"
-        saved = render_credits_card(output_path)
-        if saved is not None:
-            print(f"Saved credits card to: {saved}")
-        # --credits alone is a pure easter egg and exits here. Paired with a
-        # FITS target (e.g. `... ngc1846_cluster_r_000 --credits`), it's a
-        # garnish on top of a real run -- fall through to actually do the
-        # photometry rather than short-circuiting it.
-        if args.fits_path is None:
-            return 0
-
-    if args.list_targets:
-        targets = list_bundled_targets()
-        if not targets:
-            print("No bundled FITS targets found under data/optical.", file=sys.stderr)
-            return 1
-        total = sum(len(stems) for stems in targets.values())
-        print(f"{total} bundled FITS targets under data/optical:")
-        for category, stems in targets.items():
-            print(f"\n{category} ({len(stems)}):")
-            for stem in stems:
-                print(f"  {stem}")
-        return 0
-
-    if args.fits_path is None:
-        print(
-            "Missing FITS target. Pass a path or target name, or use --list-targets "
-            "to see what's bundled under data/optical.",
-            file=sys.stderr,
-        )
-        return 1
-
-    try:
-        fits_path = resolve_fits_path(args.fits_path)
-    except FileNotFoundError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-
-    if args.check_only:
-        print(f"FOUND {fits_path}")
-        return 0
-
-    output_path = args.output or DEFAULT_OUTPUT_DIR / f"{fits_path.stem}_photometry.png"
-    print(f"Loading FITS image from: {fits_path}")
-    data, results, zero_point = compute_photometry(
-        fits_path,
-        zero_point_mag=args.zero_point,
-        use_field_cal=not args.no_field_cal,
-        catalogs=args.catalogs,
-    )
-    print(f"Detected {len(results)} sources.")
-
-    magnitude_label = magnitude_label_for(zero_point)
-    zero_point_source_text = {
-        "cli": "the --zero-point override (unverified)",
-        "header": "the FITS header (unverified)",
-        "field-cal": "a live field-calibration catalog solve (verified)",
-        "none": None,
-    }[zero_point.source]
-    if zero_point_source_text is not None:
-        print(f"Photometric zero point resolved from: {zero_point_source_text}")
-        if zero_point.verified and zero_point.diagnostics:
-            diag = zero_point.diagnostics
-            print(
-                f"  zero-point error={diag.get('zero_point_error_mag')} mag, "
-                f"{diag.get('num_calibration_stars')} calibration stars, "
-                f"{diag.get('rejection_percent')}% rejected, "
-                f"catalogs={diag.get('catalogs_queried')}"
-            )
-            print(f"  Calibration quality: {calibration_quality_verdict(diag)}")
-    else:
-        print(
-            "No photometric zero point was available; magnitudes will be reported as instrumental only.",
-            file=sys.stderr,
-        )
-
-    valid_mag_results = [r for r in results if r.mag is not None]
-    if valid_mag_results:
-        brightest = min(valid_mag_results, key=lambda r: r.mag)
-        faintest = max(valid_mag_results, key=lambda r: r.mag)
-        print(describe_extreme_source(brightest, "Brightest source"))
-        print(describe_extreme_source(faintest, "Faintest source"))
-
-    print(f"Saving photometry plot to: {output_path}")
-    plot_photometry(data, results, output_path, magnitude_label=magnitude_label)
-    print(summarize_results(results, magnitude_label))
-    print(f"For a visual check, see the saved plot: {output_path}")
-
-    if not args.no_zp_plot:
-        zp_output_path = args.zp_plot_output or output_path.with_name(f"{output_path.stem}_zeropoint.png")
-        zp_plot_saved = plot_zero_point_solution(zero_point, zp_output_path)
-        if zp_plot_saved is not None:
-            print(f"Saved zero-point calibration plot to: {zp_plot_saved}")
-
-    if not args.no_claude:
-        try:
-            prompt = build_claude_prompt(fits_path, results, zero_point)
-            print(f"Calling Claude model {args.model} for a summary...")
-            summary = call_claude_haiku(prompt, args.model, args.max_tokens)
-            print("\nClaude summary:\n" + summary)
-        except Exception as exc:
-            print(f"Claude API call failed: {exc}", file=sys.stderr)
-            return 1
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

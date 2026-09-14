@@ -1,7 +1,6 @@
 # Kepler TUI Agentic Harness
 
-**Status:** Design approved; implementation pending. No code exists — PR #48 was
-documentation only.
+**Status:** Design approved; Phase C complete. Phases B and D–G remain.
 **Date:** 2026-09-07
 **Prerequisites:** [model-backends.md](model-backends.md) phases -1 to 3, and the
 merged stateless optical rollout from [optical-tools.md](optical-tools.md).
@@ -41,11 +40,10 @@ function interleaving five concerns: the model loop, tool dispatch, the
 repeated-call cache, session recording, and printing. Nothing in it can render to
 anything but a stream, and nothing in it can pause mid-turn to ask a question.
 
-**`tools/claude_photometry_haiku_tool.py` is not primarily a model caller.** Of
-its 1,270 lines, roughly 270 are the Anthropic path and CLI — the endpoint
-constants, argument parsing, prompt building, the API call, the result summary,
-and `main()`. The remaining ~1,000 lines are a photometry and plotting pipeline
-the registry depends on:
+**`tools/photometry_pipeline.py` is a reusable photometry and plotting
+pipeline, not a model caller.** Phase C moved the former module with history,
+removed its Anthropic path and CLI, and retained the pipeline the registry
+depends on:
 
 | Consumer | Uses |
 | --- | --- |
@@ -468,7 +466,7 @@ changes stay separated per `CLAUDE.md`.
 | --- | --- | --- |
 | **A** | `tools/agent/`: events, engine, `SYSTEM_PROMPT` moved. `runner.py` becomes a shim. **Owned by [model-backends.md](model-backends.md) Phase 0c — not a PR of this rollout.** | `tests/test_runner_session.py` passes **unedited**. |
 | **B** | Approval policy and approver wiring. | A denied call never dispatches. |
-| **C** | `photometry_pipeline.py` rename, five import sites, docs. | Suite green. |
+| **C** | `photometry_pipeline.py` rename, consumer imports, docs. | **Complete** — `72d0bd7`; suite green. |
 | **D** | Textual dependency (eight pins, regenerated lockfile) and the TUI: application shell, slash-command registry, transcript, streaming, tool tree, status bar. | A real session runs end to end. |
 | **E** | Artifact rendering: probe, tiers, and the artifact browser. | Half-block path green in CI. |
 | **F** | Session browser and resume. | A resumed session continues a prior trace. |
@@ -555,14 +553,14 @@ dialects; anything under `algorithms/`.
 Ships as the first TUI-scoped PR, after the stateless optical rollout merges. It
 removes the repository's second Anthropic caller.
 
-- [ ] **Record the current state first** so the diff is checkable: run the four
-      affected test files, and grep for the old module name. The grep should
-      list exactly `tools/photometry.py`, `tools/optical.py`, and three test
-      files. **If it finds more, add them rather than following this document
-      blindly.**
-- [ ] Rename the module **with history preserved** (`git mv`), then update every
+- [x] **Record the current state first** so the diff is checkable: run the four
+      affected test files, and grep for the old module name. The original audit
+      expected `tools/photometry.py`, `tools/optical.py`, and three test files;
+      the Phase C audit found additional optical-test and source-docstring
+      references, which were migrated in the same commit.
+- [x] Rename the module **with history preserved** (`git mv`), then update every
       import site.
-- [ ] Delete exactly these and nothing else:
+- [x] Delete exactly these and nothing else:
 
       | Symbol | Why |
       | --- | --- |
@@ -572,17 +570,17 @@ removes the repository's second Anthropic caller.
       | `call_claude_haiku()` | Posts to the Anthropic API. |
       | `main()` and its entry guard | The retired CLI. |
       | `import argparse`, `import requests` | Now unused. |
-- [ ] **`summarize_results` and `render_credits_card` are NOT deleted.** Both
+- [x] **`summarize_results` and `render_credits_card` are NOT deleted.** Both
       are non-LLM — a numeric summary and a matplotlib credits card — and both
       are used by the photometry smoke test. Verified before this was written.
-- [ ] Replace the module docstring so the module's name and its contents agree.
-- [ ] Remove `test_check_only_cli_resolves_bundled_subject`, which runs the
+- [x] Replace the module docstring so the module's name and its contents agree.
+- [x] Remove `test_check_only_cli_resolves_bundled_subject`, which runs the
       module as a subprocess with `--check-only` — a CLI that no longer exists —
       along with any imports it alone needed. **Its coverage is not lost** —
       path resolution for a bundled subject is already asserted by the registry
       smoke test and the optical registry test. Confirm that by grep before
       deleting.
-- [ ] Update `NOT_TOOL_MODULES` to name the renamed module, with a comment saying
+- [x] Update `NOT_TOOL_MODULES` to name the renamed module, with a comment saying
       its public surface is re-exported through `tools.optical` and
       `tools.photometry`.
 
@@ -782,8 +780,8 @@ tested there.
   synchronous and importable, and the document phase G.3 folds this one into.
 * `tools/runner.py` — `SYSTEM_PROMPT` and the loop being replaced.
 * `tools/artifacts.py` — the `ContextVar` that makes the thread worker safe.
-* `tools/claude_photometry_haiku_tool.py` — the Anthropic path being deleted and,
-  by omission, the pipeline being kept.
+* `tools/photometry_pipeline.py` — the retained reusable pipeline; its former
+  Anthropic path and CLI were removed in Phase C.
 * `.github/workflows/ci.yml` — the assertion phase G.2 must edit.
 * `docs/extraction.md` (Pulsar Sonification section 7.2) — why the waveform is
   presentational only.

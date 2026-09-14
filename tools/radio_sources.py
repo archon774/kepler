@@ -25,7 +25,7 @@ Three functions, the first two usable standalone, the third chaining them:
 
 Source extraction reuses ``algorithms.photometry`` directly (the same two
 calls ``algorithms/hrdiagram_py/observations.py`` and
-``tools/claude_photometry_haiku_tool.py`` each already make, with their own
+``tools/photometry_pipeline.py`` each already make, with their own
 settings) rather than importing either of those -- this domain needs neither
 a Gaia handoff nor an optical zero-point solve: a calibrated radio map's
 pixel values are already physical flux density, so magnitudes do not apply

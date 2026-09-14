@@ -17,9 +17,9 @@ NOT_TOOL_MODULES = {
     "tools.registry",
     "tools.runner",
     "tools.sessions",
-    # A CLI entry point; its library halves are re-exported through
+    # A reusable pipeline; its public surface is re-exported through
     # tools.optical and tools.photometry instead.
-    "tools.claude_photometry_haiku_tool",
+    "tools.photometry_pipeline",
     # The provider-neutral model port -- a backend interface for the agent
     # loop, not a callable tool. pkgutil.iter_modules yields it as a package.
     "tools.llm",

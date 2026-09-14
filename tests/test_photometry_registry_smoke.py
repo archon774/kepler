@@ -5,7 +5,7 @@ from pathlib import Path
 
 from astropy.io import fits
 
-from tools.claude_photometry_haiku_tool import resolve_fits_path
+from tools.photometry_pipeline import resolve_fits_path
 from tools.photometry import list_photometry_targets, run_photometry_on_target
 
 
