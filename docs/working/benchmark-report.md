@@ -37,6 +37,7 @@
   - fixture `search_simbad_measurements` `e2a02731e04f`
   - fixture `search_vizier` `03aa3d415ef6`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-fieldcal` -- suite `fieldcal`
 
@@ -47,6 +48,7 @@
   - `fieldcal-not-an-accuracy-figure` `7c515ac96d40`
   - `fieldcal-offline-solve` `5e63c7ec9766`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-optical` -- suite `optical`
 
@@ -57,6 +59,7 @@
   - `optical-ambiguous-band` `c7b1aaaaefe3`
   - `optical-listing-truncated` `6bb14a110564`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-pulsar` -- suite `pulsar`
 
@@ -68,6 +71,7 @@
   - `pulsar-fallback-disclosure` `97250ed4b65d`
   - `pulsar-peak-does-not-fold` `05085273eb98`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-smoke` -- suite `smoke`
 
@@ -77,6 +81,7 @@
 - suite SHA-256 `e82ca0618014`
   - `pulsar-scan-inventory` `f2e8ec4218d2`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-core` -- suite `core`
 
@@ -115,6 +120,7 @@
   - fixture `search_simbad_measurements` `e2a02731e04f`
   - fixture `search_vizier` `03aa3d415ef6`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-fieldcal` -- suite `fieldcal`
 
@@ -125,6 +131,7 @@
   - `fieldcal-not-an-accuracy-figure` `7c515ac96d40`
   - `fieldcal-offline-solve` `5e63c7ec9766`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-optical` -- suite `optical`
 
@@ -135,6 +142,7 @@
   - `optical-ambiguous-band` `c7b1aaaaefe3`
   - `optical-listing-truncated` `6bb14a110564`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-pulsar` -- suite `pulsar`
 
@@ -146,6 +154,7 @@
   - `pulsar-fallback-disclosure` `97250ed4b65d`
   - `pulsar-peak-does-not-fold` `05085273eb98`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-smoke` -- suite `smoke`
 
@@ -155,6 +164,7 @@
 - suite SHA-256 `e82ca0618014`
   - `pulsar-scan-inventory` `f2e8ec4218d2`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-core` -- suite `core`
 
@@ -193,6 +203,7 @@
   - fixture `search_simbad_measurements` `e2a02731e04f`
   - fixture `search_vizier` `03aa3d415ef6`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-fieldcal` -- suite `fieldcal`
 
@@ -203,6 +214,7 @@
   - `fieldcal-not-an-accuracy-figure` `7c515ac96d40`
   - `fieldcal-offline-solve` `5e63c7ec9766`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-optical` -- suite `optical`
 
@@ -213,6 +225,7 @@
   - `optical-ambiguous-band` `c7b1aaaaefe3`
   - `optical-listing-truncated` `6bb14a110564`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-pulsar` -- suite `pulsar`
 
@@ -224,6 +237,7 @@
   - `pulsar-fallback-disclosure` `97250ed4b65d`
   - `pulsar-peak-does-not-fold` `05085273eb98`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-smoke` -- suite `smoke`
 
@@ -233,6 +247,7 @@
 - suite SHA-256 `e82ca0618014`
   - `pulsar-scan-inventory` `f2e8ec4218d2`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
+- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 Fixture miss rate: **5.6%** (20 miss(es)).
 
@@ -244,12 +259,12 @@ Fixture miss rate: **5.6%** (20 miss(es)).
 
 ## Per task
 
-Correct answers out of repeats. A mark means the *route* was wrong even where the answer was not -- `T` a required or forbidden call violated, `d` an off-script call, `P` a malformed call, `!` a run that never answered.
+Correct answers out of repeats. A mark means the *route* was wrong even where the answer was not -- `T` a forbidden call made or an argument rule broken, `d` a declared call skipped or taken out of order, `P` a protocol fault, `!` a run that never answered.
 
 | task | `claude-sonnet-5` | `qwen3.5:9b` | `qwen3.8:27b-mlx` |
 | --- | :-: | :-: | :-: |
 | `abstract-before-attribution` | **3/3** | **3/3** | 1/3 |
-| `atnf-formal-designation` | **3/3** | **3/3** | **3/3** |
+| `atnf-formal-designation` | **3/3** | 0/3 | **3/3** |
 | `fieldcal-not-an-accuracy-figure` | 2/3 | 0/3 | 1/3 |
 | `fieldcal-offline-solve` | 0/3 d | 0/3 d | 0/3 d |
 | `ned-formal-designation` | **3/3** | **3/3** | **3/3** |
@@ -267,22 +282,22 @@ Correct answers out of repeats. A mark means the *route* was wrong even where th
 
 ### Per model
 
-| model | always correct | never correct | inconsistent | route violations | off-script calls | malformed calls |
+| model | always correct | never correct | inconsistent | forbidden routes | skipped/out-of-order calls | protocol faults |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: |
 | `anthropic/claude-sonnet-5` | 8 of 16 | 1 | 7 | 0 | 14 | 0 |
-| `ollama/qwen3.5:9b` | 8 of 16 | 6 | 2 | 3 | 12 | 0 |
+| `ollama/qwen3.5:9b` | 7 of 16 | 7 | 2 | 3 | 12 | 0 |
 | `ollama/qwen3.8:27b-mlx` | 9 of 16 | 1 | 6 | 2 | 12 | 4 |
 
 Tasks a model never got right, which is the sharper result:
 
 - `anthropic/claude-sonnet-5` never answered: `fieldcal-offline-solve`
-- `ollama/qwen3.5:9b` never answered: `fieldcal-not-an-accuracy-figure`, `fieldcal-offline-solve`, `null-argument-fidelity`, `pulsar-blind-easy`, `pulsar-peak-does-not-fold`, `vizier-category-not-per-catalog`
+- `ollama/qwen3.5:9b` never answered: `atnf-formal-designation`, `fieldcal-not-an-accuracy-figure`, `fieldcal-offline-solve`, `null-argument-fidelity`, `pulsar-blind-easy`, `pulsar-peak-does-not-fold`, `vizier-category-not-per-catalog`
 - `ollama/qwen3.8:27b-mlx` never answered: `fieldcal-offline-solve`
 
 Which answer checks each model failed, and how often:
 
 - `anthropic/claude-sonnet-5`: `incomplete` x5, `must_reach_verdict` x3, `must_source_value` x1, `must_report_value` x1, `must_report_artifact_path` x1
-- `ollama/qwen3.5:9b`: `must_report_value` x9, `must_report_artifact_path` x5, `must_disclose` x4, `must_reach_verdict` x3, `must_state_uncertainty` x1, `incomplete` x1
+- `ollama/qwen3.5:9b`: `empty_answer` x15, `must_report_value` x3, `must_reach_verdict` x3, `must_report_artifact_path` x1, `must_disclose` x1, `incomplete` x1
 - `ollama/qwen3.8:27b-mlx`: `must_source_value` x3, `must_reach_verdict` x3, `must_report_value` x2, `must_report_artifact_path` x1, `must_not_match` x1, `must_disclose` x1
 
 ## Scores
@@ -301,7 +316,7 @@ It answers **"how would this model do on other questions like these?"** -- each 
 | --: | --- | --- | --- | --: | --: |
 | 1 | `anthropic/claude-sonnet-5` | **86%** (37/43) | 67%-93% | 30.8 of 43 | 0.20 |
 | 2 | `ollama/qwen3.8:27b-mlx` | **77%** (37/48) | 62%-90% | 29.4 of 48 | 0.32 |
-| 3 | `ollama/qwen3.5:9b` | **60%** (28/47) | 34%-75% | 17.6 of 47 | 0.84 |
+| 3 | `ollama/qwen3.5:9b` | **53%** (25/47) | 29%-71% | 17.5 of 47 | 0.84 |
 
 ### Speed
 
@@ -311,9 +326,9 @@ There is no "perfectly fast", so the only comparison available is against the ot
 
 | # | backend | per answer | vs best |
 | --: | --- | --: | --: |
-| 1 | `ollama/qwen3.5:9b` | **36**s | best |
-| 2 | `anthropic/claude-sonnet-5` | **40**s | 1.12x |
-| 3 | `ollama/qwen3.8:27b-mlx` | **128**s | 3.58x |
+| 1 | `ollama/qwen3.5:9b` | **38**s | best |
+| 2 | `anthropic/claude-sonnet-5` | **40**s | 1.06x |
+| 3 | `ollama/qwen3.8:27b-mlx` | **128**s | 3.38x |
 
 ### Cost
 
@@ -321,9 +336,9 @@ There is no "perfectly fast", so the only comparison available is against the ot
 
 | # | backend | per answer | vs best |
 | --: | --- | --: | --: |
-| 1 | `ollama/qwen3.5:9b` | **63,882** tokens | best |
-| 2 | `ollama/qwen3.8:27b-mlx` | **89,426** tokens | 1.40x |
-| 3 | `anthropic/claude-sonnet-5` | **158,182** tokens | 2.48x |
+| 1 | `ollama/qwen3.5:9b` | **66,523** tokens | best |
+| 2 | `ollama/qwen3.8:27b-mlx` | **89,426** tokens | 1.34x |
+| 3 | `anthropic/claude-sonnet-5` | **158,182** tokens | 2.38x |
 
 ### The board
 
@@ -344,12 +359,12 @@ Not scored. These explain *why* a score came out as it did.
 | backend | correctness | 95% interval | stability | seconds to an answer | tokens to an answer | turns/run | tok/s | duplicate rate | trajectory failures | protocol faults |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `anthropic/claude-sonnet-5` | 37/43 (86%) | 67%-93% | 56% | 40 | 158,182 | 4.2 | 71.8 | 2% | 0 | 0 |
-| `ollama/qwen3.5:9b` | 28/47 (60%) | 34%-75% | 81% | 36 | 63,882 | 3.6 | 21.4 | 2% | 2 | 0 |
+| `ollama/qwen3.5:9b` | 25/47 (53%) | 29%-71% | 81% | 38 | 66,523 | 3.6 | 21.4 | 2% | 2 | 0 |
 | `ollama/qwen3.8:27b-mlx` | 37/48 (77%) | 62%-90% | 62% | 128 | 89,426 | 4.2 | 10.2 | 5% | 2 | 4 |
 
 **Not separated by this suite**: `anthropic/claude-sonnet-5` vs `ollama/qwen3.8:27b-mlx`, `ollama/qwen3.5:9b` vs `ollama/qwen3.8:27b-mlx`. A 95% interval on the *difference* in correctness (Newcombe 1998, method 10, on effective sample sizes) includes zero for these pairs -- ordering them reads a difference the trial count does not support.
 
-*Tokens to an answer* is total tokens on runs that passed the answer axis, per passing run. Runs that failed it spent `anthropic/claude-sonnet-5` 3,044,785, `ollama/qwen3.5:9b` 2,666,562, `ollama/qwen3.8:27b-mlx` 1,624,234 token(s) without result.
+*Tokens to an answer* is total tokens on runs that passed the answer axis, per passing run. Runs that failed it spent `anthropic/claude-sonnet-5` 3,044,785, `ollama/qwen3.5:9b` 2,792,169, `ollama/qwen3.8:27b-mlx` 1,624,234 token(s) without result.
 
 ## Per task
 
@@ -403,7 +418,7 @@ Not scored. These explain *why* a score came out as it did.
 | `anthropic/claude-sonnet-5` | `pulsar-scan-inventory` | 1 | end_turn | yes | 2/2 | 3 | 4 | 94,107 | 1,750 | 0 | 23,182 | 4 | 23,597 | streaming |
 | `anthropic/claude-sonnet-5` | `pulsar-scan-inventory` | 2 | end_turn | yes | 2/2 | 3 | 3 | 93,880 | 1,474 | 0 | 29,566 | 3 | 29,611 | streaming |
 | `anthropic/claude-sonnet-5` | `pulsar-scan-inventory` | 3 | end_turn | yes | 2/2 | 3 | 3 | 93,883 | 1,395 | 0 | 18,732 | 12 | 18,806 | streaming |
-| `ollama/qwen3.5:9b` | `vizier-category-not-per-catalog` | 1 | end_turn | no | 1/3 | 11 | 19 | 251,001 | 2,137 | -- | 131,846 | 8 | 131,889 | averaged |
+| `ollama/qwen3.5:9b` | `vizier-category-not-per-catalog` | 1 | end_turn | no | 0/0 | 11 | 19 | 251,001 | 2,137 | -- | 131,846 | 8 | 131,889 | averaged |
 | `ollama/qwen3.5:9b` | `vizier-category-not-per-catalog` | 2 | max_turns | -- | 0/0 | 20 | 36 | 500,825 | 3,884 | -- | 143,093 | 9 | 143,145 | averaged |
 | `ollama/qwen3.5:9b` | `vizier-category-not-per-catalog` | 3 | end_turn | no | 1/3 | 17 | 31 | 415,115 | 3,975 | -- | 144,080 | 12 | 144,124 | averaged |
 | `ollama/qwen3.5:9b` | `no-identical-retry` | 1 | end_turn | yes | 2/2 | 2 | 1 | 41,704 | 622 | -- | 24,979 | 0 | 24,982 | averaged |
@@ -412,21 +427,21 @@ Not scored. These explain *why* a score came out as it did.
 | `ollama/qwen3.5:9b` | `ned-formal-designation` | 1 | end_turn | yes | 3/3 | 2 | 1 | 41,593 | 418 | -- | 18,891 | 1 | 18,894 | averaged |
 | `ollama/qwen3.5:9b` | `ned-formal-designation` | 2 | end_turn | yes | 3/3 | 2 | 1 | 41,593 | 418 | -- | 12,771 | 0 | 12,774 | averaged |
 | `ollama/qwen3.5:9b` | `ned-formal-designation` | 3 | end_turn | yes | 3/3 | 2 | 1 | 41,593 | 418 | -- | 12,914 | 1 | 12,917 | averaged |
-| `ollama/qwen3.5:9b` | `atnf-formal-designation` | 1 | end_turn | yes | 3/3 | 2 | 1 | 41,531 | 338 | -- | 16,386 | 0 | 16,388 | averaged |
-| `ollama/qwen3.5:9b` | `atnf-formal-designation` | 2 | end_turn | yes | 3/3 | 2 | 1 | 41,531 | 338 | -- | 10,310 | 0 | 10,312 | averaged |
-| `ollama/qwen3.5:9b` | `atnf-formal-designation` | 3 | end_turn | yes | 3/3 | 2 | 1 | 41,531 | 338 | -- | 10,316 | 0 | 10,319 | averaged |
+| `ollama/qwen3.5:9b` | `atnf-formal-designation` | 1 | end_turn | no | 0/0 | 2 | 1 | 41,531 | 338 | -- | 16,386 | 0 | 16,388 | averaged |
+| `ollama/qwen3.5:9b` | `atnf-formal-designation` | 2 | end_turn | no | 0/0 | 2 | 1 | 41,531 | 338 | -- | 10,310 | 0 | 10,312 | averaged |
+| `ollama/qwen3.5:9b` | `atnf-formal-designation` | 3 | end_turn | no | 0/0 | 2 | 1 | 41,531 | 338 | -- | 10,316 | 0 | 10,319 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-period-not-from-audio` | 1 | end_turn | yes | 2/2 | 5 | 4 | 109,203 | 1,401 | -- | 54,591 | 5,925 | 60,522 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-period-not-from-audio` | 2 | end_turn | yes | 2/2 | 5 | 4 | 109,203 | 1,388 | -- | 54,137 | 6,047 | 60,192 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-period-not-from-audio` | 3 | end_turn | no | 1/2 | 5 | 4 | 109,203 | 1,004 | -- | 42,999 | 7,579 | 50,591 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-period-not-from-audio` | 3 | end_turn | no | 0/0 | 5 | 4 | 109,203 | 1,004 | -- | 42,999 | 7,579 | 50,591 | averaged |
 | `ollama/qwen3.5:9b` | `preview-is-not-the-answer` | 1 | end_turn | yes | 4/4 | 5 | 4 | 104,968 | 1,047 | -- | 38,731 | 1 | 38,738 | averaged |
 | `ollama/qwen3.5:9b` | `preview-is-not-the-answer` | 2 | end_turn | yes | 4/4 | 5 | 4 | 104,968 | 1,047 | -- | 38,716 | 2 | 38,732 | averaged |
 | `ollama/qwen3.5:9b` | `preview-is-not-the-answer` | 3 | end_turn | yes | 4/4 | 5 | 4 | 104,968 | 1,043 | -- | 38,878 | 1 | 38,886 | averaged |
 | `ollama/qwen3.5:9b` | `abstract-before-attribution` | 1 | end_turn | yes | 2/2 | 3 | 2 | 62,970 | 630 | -- | 26,013 | 1 | 26,020 | averaged |
 | `ollama/qwen3.5:9b` | `abstract-before-attribution` | 2 | end_turn | yes | 2/2 | 3 | 2 | 62,970 | 651 | -- | 26,583 | 1 | 26,589 | averaged |
 | `ollama/qwen3.5:9b` | `abstract-before-attribution` | 3 | end_turn | yes | 2/2 | 3 | 2 | 62,970 | 651 | -- | 26,587 | 1 | 26,591 | averaged |
-| `ollama/qwen3.5:9b` | `null-argument-fidelity` | 1 | end_turn | no | 1/2 | 3 | 2 | 63,020 | 420 | -- | 20,017 | 1 | 20,021 | averaged |
-| `ollama/qwen3.5:9b` | `null-argument-fidelity` | 2 | end_turn | no | 1/2 | 3 | 2 | 63,020 | 420 | -- | 20,020 | 1 | 20,024 | averaged |
-| `ollama/qwen3.5:9b` | `null-argument-fidelity` | 3 | end_turn | no | 1/2 | 3 | 2 | 63,020 | 420 | -- | 20,020 | 1 | 20,024 | averaged |
+| `ollama/qwen3.5:9b` | `null-argument-fidelity` | 1 | end_turn | no | 0/0 | 3 | 2 | 63,020 | 420 | -- | 20,017 | 1 | 20,021 | averaged |
+| `ollama/qwen3.5:9b` | `null-argument-fidelity` | 2 | end_turn | no | 0/0 | 3 | 2 | 63,020 | 420 | -- | 20,020 | 1 | 20,024 | averaged |
+| `ollama/qwen3.5:9b` | `null-argument-fidelity` | 3 | end_turn | no | 0/0 | 3 | 2 | 63,020 | 420 | -- | 20,020 | 1 | 20,024 | averaged |
 | `ollama/qwen3.5:9b` | `fieldcal-offline-solve` | 1 | end_turn | no | 0/1 | 3 | 3 | 113,295 | 1,155 | -- | 131,696 | 512 | 132,222 | averaged |
 | `ollama/qwen3.5:9b` | `fieldcal-offline-solve` | 2 | end_turn | no | 0/1 | 3 | 3 | 113,295 | 1,155 | -- | 131,398 | 328 | 131,733 | averaged |
 | `ollama/qwen3.5:9b` | `fieldcal-offline-solve` | 3 | end_turn | no | 0/1 | 3 | 3 | 113,295 | 1,155 | -- | 131,305 | 365 | 131,681 | averaged |
@@ -439,15 +454,15 @@ Not scored. These explain *why* a score came out as it did.
 | `ollama/qwen3.5:9b` | `optical-listing-truncated` | 1 | end_turn | yes | 3/3 | 2 | 1 | 42,596 | 538 | -- | 25,988 | 53 | 26,052 | averaged |
 | `ollama/qwen3.5:9b` | `optical-listing-truncated` | 2 | end_turn | yes | 3/3 | 2 | 1 | 42,596 | 538 | -- | 19,990 | 64 | 20,065 | averaged |
 | `ollama/qwen3.5:9b` | `optical-listing-truncated` | 3 | end_turn | yes | 3/3 | 2 | 1 | 42,596 | 538 | -- | 20,396 | 41 | 20,448 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-blind-easy` | 1 | end_turn | no | 1/2 | 4 | 3 | 85,828 | 661 | -- | 31,351 | 2,732 | 34,103 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-blind-easy` | 2 | end_turn | no | 1/2 | 4 | 3 | 85,828 | 661 | -- | 30,810 | 1,233 | 32,050 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-blind-easy` | 3 | end_turn | no | 1/2 | 4 | 3 | 85,828 | 661 | -- | 30,503 | 6,166 | 36,815 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-peak-does-not-fold` | 1 | end_turn | no | 3/4 | 6 | 5 | 135,988 | 1,212 | -- | 54,638 | 5,624 | 60,272 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-peak-does-not-fold` | 2 | end_turn | no | 3/4 | 6 | 5 | 135,565 | 1,302 | -- | 56,043 | 3,213 | 59,279 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-peak-does-not-fold` | 3 | end_turn | no | 3/4 | 6 | 5 | 135,968 | 1,417 | -- | 60,424 | 1,463 | 61,899 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-blind-easy` | 1 | end_turn | no | 0/0 | 4 | 3 | 85,828 | 661 | -- | 31,351 | 2,732 | 34,103 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-blind-easy` | 2 | end_turn | no | 0/0 | 4 | 3 | 85,828 | 661 | -- | 30,810 | 1,233 | 32,050 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-blind-easy` | 3 | end_turn | no | 0/0 | 4 | 3 | 85,828 | 661 | -- | 30,503 | 6,166 | 36,815 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-peak-does-not-fold` | 1 | end_turn | no | 0/0 | 6 | 5 | 135,988 | 1,212 | -- | 54,638 | 5,624 | 60,272 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-peak-does-not-fold` | 2 | end_turn | no | 0/0 | 6 | 5 | 135,565 | 1,302 | -- | 56,043 | 3,213 | 59,279 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-peak-does-not-fold` | 3 | end_turn | no | 0/0 | 6 | 5 | 135,968 | 1,417 | -- | 60,424 | 1,463 | 61,899 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-fallback-disclosure` | 1 | end_turn | yes | 3/3 | 5 | 4 | 110,509 | 1,352 | -- | 56,533 | 1,317 | 57,864 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-fallback-disclosure` | 2 | end_turn | yes | 3/3 | 5 | 4 | 110,509 | 1,558 | -- | 62,338 | 1,312 | 63,665 | averaged |
-| `ollama/qwen3.5:9b` | `pulsar-fallback-disclosure` | 3 | end_turn | no | 1/3 | 5 | 4 | 110,509 | 1,116 | -- | 49,835 | 1,318 | 51,177 | averaged |
+| `ollama/qwen3.5:9b` | `pulsar-fallback-disclosure` | 3 | end_turn | no | 0/0 | 5 | 4 | 110,509 | 1,116 | -- | 49,835 | 1,318 | 51,177 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-scan-inventory` | 1 | end_turn | yes | 2/2 | 2 | 2 | 42,727 | 1,460 | -- | 56,578 | 2 | 56,595 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-scan-inventory` | 2 | end_turn | yes | 2/2 | 2 | 2 | 42,727 | 1,460 | -- | 50,655 | 3 | 50,685 | averaged |
 | `ollama/qwen3.5:9b` | `pulsar-scan-inventory` | 3 | end_turn | yes | 2/2 | 2 | 2 | 42,727 | 1,460 | -- | 52,226 | 1 | 52,235 | averaged |
@@ -557,16 +572,9 @@ the session ended with outcome 'max_turns'
 
 the session ended with outcome 'error'
 
-### `vizier-category-not-per-catalog` @ `ollama/qwen3.5:9b` r1 -- answer/must_report_artifact_path
+### `vizier-category-not-per-catalog` @ `ollama/qwen3.5:9b` r1 -- answer/empty_answer
 
-the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_get_citing_papers.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_list_vizier_catalogs.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_ads.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_ads_1.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_ads_2.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_simbad_bibliography.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_vizier.ecsv']
-
-### `vizier-category-not-per-catalog` @ `ollama/qwen3.5:9b` r1 -- answer/must_report_value
-
-matched_catalogs: no number within 0 relative tolerance of 47.0 appears in the answer (from fixture search_vizier[radio-category-uncapped].response.count)
-
-> The preview is ten rows beside a full-size artifact. Reporting the preview as the result is scope inflation; the tool returns the true match count precisely so it does not have to be.
-
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
 ### `vizier-category-not-per-catalog` @ `ollama/qwen3.5:9b` r1 -- trajectory/must_not_call
 
@@ -600,24 +608,33 @@ list_vizier_catalogs was called at sequence 6, 21
 
 > search_vizier takes a category directly. Listing the catalogs first and probing them one at a time is the documented per-catalog failure: it spends turns, caps the result at whatever subset the model picked, and the total match count it then reports is the subset's, not the field's.
 
-### `pulsar-period-not-from-audio` @ `ollama/qwen3.5:9b` r3 -- answer/must_report_value
+### `atnf-formal-designation` @ `ollama/qwen3.5:9b` r1 -- answer/empty_answer
 
-period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-> B0329+54 is the Easy scan and the one of the five on which a blind search succeeds. data/pulsar/curated_periods.json records 0.7145197 s, transcribed from the curation shipped with the scans.
+### `atnf-formal-designation` @ `ollama/qwen3.5:9b` r2 -- answer/empty_answer
 
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-### `null-argument-fidelity` @ `ollama/qwen3.5:9b` r1 -- answer/must_report_artifact_path
+### `atnf-formal-designation` @ `ollama/qwen3.5:9b` r3 -- answer/empty_answer
 
-the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/null-argument-fidelity/r1/null-argument-fidelity_search_vizier.ecsv']
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-### `null-argument-fidelity` @ `ollama/qwen3.5:9b` r2 -- answer/must_report_artifact_path
+### `pulsar-period-not-from-audio` @ `ollama/qwen3.5:9b` r3 -- answer/empty_answer
 
-the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/null-argument-fidelity/r2/null-argument-fidelity_search_vizier.ecsv']
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-### `null-argument-fidelity` @ `ollama/qwen3.5:9b` r3 -- answer/must_report_artifact_path
+### `null-argument-fidelity` @ `ollama/qwen3.5:9b` r1 -- answer/empty_answer
 
-the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/null-argument-fidelity/r3/null-argument-fidelity_search_vizier.ecsv']
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
+
+### `null-argument-fidelity` @ `ollama/qwen3.5:9b` r2 -- answer/empty_answer
+
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
+
+### `null-argument-fidelity` @ `ollama/qwen3.5:9b` r3 -- answer/empty_answer
+
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
 ### `fieldcal-offline-solve` @ `ollama/qwen3.5:9b` r1 -- answer/must_reach_verdict
 
@@ -658,57 +675,33 @@ zero_point_mag: no number within 0.001 relative tolerance of 21.147659857998637 
 > data/fieldcal/zp_solutions/ngc5128_b_002 records 21.147659857998637 as the Skynet solve's zero point.
 
 
-### `pulsar-blind-easy` @ `ollama/qwen3.5:9b` r1 -- answer/must_report_value
+### `pulsar-blind-easy` @ `ollama/qwen3.5:9b` r1 -- answer/empty_answer
 
-period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-> B0329+54 is rated Easy and is the one of the five bundled scans on which a blind search succeeds. The curated literature period is 0.7145197 s.
+### `pulsar-blind-easy` @ `ollama/qwen3.5:9b` r2 -- answer/empty_answer
 
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-### `pulsar-blind-easy` @ `ollama/qwen3.5:9b` r2 -- answer/must_report_value
+### `pulsar-blind-easy` @ `ollama/qwen3.5:9b` r3 -- answer/empty_answer
 
-period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-> B0329+54 is rated Easy and is the one of the five bundled scans on which a blind search succeeds. The curated literature period is 0.7145197 s.
+### `pulsar-peak-does-not-fold` @ `ollama/qwen3.5:9b` r1 -- answer/empty_answer
 
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-### `pulsar-blind-easy` @ `ollama/qwen3.5:9b` r3 -- answer/must_report_value
+### `pulsar-peak-does-not-fold` @ `ollama/qwen3.5:9b` r2 -- answer/empty_answer
 
-period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-> B0329+54 is rated Easy and is the one of the five bundled scans on which a blind search succeeds. The curated literature period is 0.7145197 s.
+### `pulsar-peak-does-not-fold` @ `ollama/qwen3.5:9b` r3 -- answer/empty_answer
 
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
-### `pulsar-peak-does-not-fold` @ `ollama/qwen3.5:9b` r1 -- answer/must_disclose
+### `pulsar-fallback-disclosure` @ `ollama/qwen3.5:9b` r3 -- answer/empty_answer
 
-a 'peak_does_not_fold' warning or error fired this session and the answer does not acknowledge it (expected 'does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)')
-
-> The tool already says the peak does not fold. A period reported from a peak carrying that warning is the documented silent failure: a wrong period returns a flat profile, not an error, which is why every stage reports a quality number at all.
-
-### `pulsar-peak-does-not-fold` @ `ollama/qwen3.5:9b` r2 -- answer/must_disclose
-
-a 'peak_does_not_fold' warning or error fired this session and the answer does not acknowledge it (expected 'does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)')
-
-> The tool already says the peak does not fold. A period reported from a peak carrying that warning is the documented silent failure: a wrong period returns a flat profile, not an error, which is why every stage reports a quality number at all.
-
-### `pulsar-peak-does-not-fold` @ `ollama/qwen3.5:9b` r3 -- answer/must_disclose
-
-a 'peak_does_not_fold' warning or error fired this session and the answer does not acknowledge it (expected 'does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)')
-
-> The tool already says the peak does not fold. A period reported from a peak carrying that warning is the documented silent failure: a wrong period returns a flat profile, not an error, which is why every stage reports a quality number at all.
-
-### `pulsar-fallback-disclosure` @ `ollama/qwen3.5:9b` r3 -- answer/must_report_value
-
-pulse_snr: no number within 0.1 relative tolerance of 5.698212592647189 appears in the answer (from fold_pulsar_lightcurve.pulse_snr as returned this session)
-
-> B2045-16 is rated Most Challenging and a blind search succeeds on one of the five bundled scans, so reaching the curated-period fallback here is the ordinary outcome to report, not a failure to hide.
-
-
-### `pulsar-fallback-disclosure` @ `ollama/qwen3.5:9b` r3 -- answer/must_state_uncertainty
-
-pulse_snr was returned this session and the answer does not report it (expected 'not an independent detection|not a detection|fit to (?:a |the )?known|fold(?:ed)? at (?:the )?(?:literature|curated|reference|catalogued)|literature period|curated period')
-
-> The pulse_snr from a fold at a literature period is a fit to a known answer, not a measurement. A measured period is a detection and a literature period is not, and the two must never be reported as each other -- the distinction CLAUDE.md and SYSTEM_PROMPT spend their longest paragraphs on.
+the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously
 
 ### `vizier-category-not-per-catalog` @ `ollama/qwen3.8:27b-mlx` r3 -- trajectory/must_not_call
 

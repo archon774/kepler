@@ -22,11 +22,11 @@
       {
         "backend": "ollama/qwen3.5:9b",
         "interval": [
-          0.33716415642042774,
-          0.7544048187299437
+          0.29031021505169974,
+          0.7096897849483003
         ],
         "rank": 3,
-        "value": 0.5957446808510638
+        "value": 0.5319148936170213
       }
     ],
     "correctness_unmeasured": [],
@@ -35,18 +35,18 @@
         "backend": "ollama/qwen3.5:9b",
         "rank": 1,
         "times_best": 1.0,
-        "value": 63881.607142857145
+        "value": 66523.12
       },
       {
         "backend": "ollama/qwen3.8:27b-mlx",
         "rank": 2,
-        "times_best": 1.3998717010057744,
+        "times_best": 1.3442853259746996,
         "value": 89426.05405405405
       },
       {
         "backend": "anthropic/claude-sonnet-5",
         "rank": 3,
-        "times_best": 2.4761820117134214,
+        "times_best": 2.3778572996348712,
         "value": 158182.48648648648
       }
     ],
@@ -56,18 +56,18 @@
         "backend": "ollama/qwen3.5:9b",
         "rank": 1,
         "times_best": 1.0,
-        "value": 35.85920773499529
+        "value": 38.02265677443938
       },
       {
         "backend": "anthropic/claude-sonnet-5",
         "rank": 2,
-        "times_best": 1.1245013911478303,
+        "times_best": 1.0605184488467607,
         "value": 40.32372898346124
       },
       {
         "backend": "ollama/qwen3.8:27b-mlx",
         "rank": 3,
-        "times_best": 3.58027165109959,
+        "times_best": 3.37655797295053,
         "value": 128.38570488449477
       }
     ],
@@ -131,8 +131,12 @@
     },
     "atnf-formal-designation\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
-      "checks": [],
-      "correct": 3,
+      "checks": [
+        "empty_answer",
+        "empty_answer",
+        "empty_answer"
+      ],
+      "correct": 0,
       "faults": 0,
       "incomplete": 0,
       "repeats": 3,
@@ -348,9 +352,9 @@
     "null-argument-fidelity\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
       "checks": [
-        "must_report_artifact_path",
-        "must_report_artifact_path",
-        "must_report_artifact_path"
+        "empty_answer",
+        "empty_answer",
+        "empty_answer"
       ],
       "correct": 0,
       "faults": 0,
@@ -516,9 +520,9 @@
     "pulsar-blind-easy\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
       "checks": [
-        "must_report_value",
-        "must_report_value",
-        "must_report_value"
+        "empty_answer",
+        "empty_answer",
+        "empty_answer"
       ],
       "correct": 0,
       "faults": 0,
@@ -561,8 +565,7 @@
     "pulsar-fallback-disclosure\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
       "checks": [
-        "must_report_value",
-        "must_state_uncertainty"
+        "empty_answer"
       ],
       "correct": 2,
       "faults": 0,
@@ -607,9 +610,9 @@
     "pulsar-peak-does-not-fold\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
       "checks": [
-        "must_disclose",
-        "must_disclose",
-        "must_disclose"
+        "empty_answer",
+        "empty_answer",
+        "empty_answer"
       ],
       "correct": 0,
       "faults": 0,
@@ -652,7 +655,7 @@
     "pulsar-period-not-from-audio\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
       "checks": [
-        "must_report_value"
+        "empty_answer"
       ],
       "correct": 2,
       "faults": 0,
@@ -737,8 +740,7 @@
     "vizier-category-not-per-catalog\u0000ollama/qwen3.5:9b": {
       "backend": "ollama/qwen3.5:9b",
       "checks": [
-        "must_report_artifact_path",
-        "must_report_value",
+        "empty_answer",
         "incomplete",
         "must_report_artifact_path",
         "must_disclose"
@@ -871,17 +873,8 @@
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
       "because": null,
-      "check": "must_report_artifact_path",
-      "detail": "the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_get_citing_papers.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_list_vizier_catalogs.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_ads.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_ads_1.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_ads_2.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_simbad_bibliography.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/vizier-category-not-per-catalog/r1/vizier-category-not-per-catalog_search_vizier.ecsv']",
-      "repeat": 1,
-      "task_id": "vizier-category-not-per-catalog"
-    },
-    {
-      "axis": "answer",
-      "backend": "ollama/qwen3.5:9b",
-      "because": "The preview is ten rows beside a full-size artifact. Reporting the preview as the result is scope inflation; the tool returns the true match count precisely so it does not have to be.\n",
-      "check": "must_report_value",
-      "detail": "matched_catalogs: no number within 0 relative tolerance of 47.0 appears in the answer (from fixture search_vizier[radio-category-uncapped].response.count)",
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 1,
       "task_id": "vizier-category-not-per-catalog"
     },
@@ -942,9 +935,36 @@
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "B0329+54 is the Easy scan and the one of the five on which a blind search succeeds. data/pulsar/curated_periods.json records 0.7145197 s, transcribed from the curation shipped with the scans.\n",
-      "check": "must_report_value",
-      "detail": "period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
+      "repeat": 1,
+      "task_id": "atnf-formal-designation"
+    },
+    {
+      "axis": "answer",
+      "backend": "ollama/qwen3.5:9b",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
+      "repeat": 2,
+      "task_id": "atnf-formal-designation"
+    },
+    {
+      "axis": "answer",
+      "backend": "ollama/qwen3.5:9b",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
+      "repeat": 3,
+      "task_id": "atnf-formal-designation"
+    },
+    {
+      "axis": "answer",
+      "backend": "ollama/qwen3.5:9b",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 3,
       "task_id": "pulsar-period-not-from-audio"
     },
@@ -952,8 +972,8 @@
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
       "because": null,
-      "check": "must_report_artifact_path",
-      "detail": "the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/null-argument-fidelity/r1/null-argument-fidelity_search_vizier.ecsv']",
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 1,
       "task_id": "null-argument-fidelity"
     },
@@ -961,8 +981,8 @@
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
       "because": null,
-      "check": "must_report_artifact_path",
-      "detail": "the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/null-argument-fidelity/r2/null-argument-fidelity_search_vizier.ecsv']",
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 2,
       "task_id": "null-argument-fidelity"
     },
@@ -970,8 +990,8 @@
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
       "because": null,
-      "check": "must_report_artifact_path",
-      "detail": "the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-5-9b-core/ollama_qwen3.5_9b/null-argument-fidelity/r3/null-argument-fidelity_search_vizier.ecsv']",
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 3,
       "task_id": "null-argument-fidelity"
     },
@@ -1032,72 +1052,63 @@
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "B0329+54 is rated Easy and is the one of the five bundled scans on which a blind search succeeds. The curated literature period is 0.7145197 s.\n",
-      "check": "must_report_value",
-      "detail": "period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 1,
       "task_id": "pulsar-blind-easy"
     },
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "B0329+54 is rated Easy and is the one of the five bundled scans on which a blind search succeeds. The curated literature period is 0.7145197 s.\n",
-      "check": "must_report_value",
-      "detail": "period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 2,
       "task_id": "pulsar-blind-easy"
     },
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "B0329+54 is rated Easy and is the one of the five bundled scans on which a blind search succeeds. The curated literature period is 0.7145197 s.\n",
-      "check": "must_report_value",
-      "detail": "period_s: no number within 0.02 relative tolerance of 0.7145197 s appears in the answer (from dataset pulsar/curated_periods.json:pulsars.b0329.period_s)",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 3,
       "task_id": "pulsar-blind-easy"
     },
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "The tool already says the peak does not fold. A period reported from a peak carrying that warning is the documented silent failure: a wrong period returns a flat profile, not an error, which is why every stage reports a quality number at all.",
-      "check": "must_disclose",
-      "detail": "a 'peak_does_not_fold' warning or error fired this session and the answer does not acknowledge it (expected 'does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)')",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 1,
       "task_id": "pulsar-peak-does-not-fold"
     },
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "The tool already says the peak does not fold. A period reported from a peak carrying that warning is the documented silent failure: a wrong period returns a flat profile, not an error, which is why every stage reports a quality number at all.",
-      "check": "must_disclose",
-      "detail": "a 'peak_does_not_fold' warning or error fired this session and the answer does not acknowledge it (expected 'does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)')",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 2,
       "task_id": "pulsar-peak-does-not-fold"
     },
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "The tool already says the peak does not fold. A period reported from a peak carrying that warning is the documented silent failure: a wrong period returns a flat profile, not an error, which is why every stage reports a quality number at all.",
-      "check": "must_disclose",
-      "detail": "a 'peak_does_not_fold' warning or error fired this session and the answer does not acknowledge it (expected 'does not fold|did not fold|folds? to (?:a )?(?:flat|nothing)|not a (?:real )?(?:period|detection)|red noise|spurious|no (?:period|detection)')",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 3,
       "task_id": "pulsar-peak-does-not-fold"
     },
     {
       "axis": "answer",
       "backend": "ollama/qwen3.5:9b",
-      "because": "B2045-16 is rated Most Challenging and a blind search succeeds on one of the five bundled scans, so reaching the curated-period fallback here is the ordinary outcome to report, not a failure to hide.\n",
-      "check": "must_report_value",
-      "detail": "pulse_snr: no number within 0.1 relative tolerance of 5.698212592647189 appears in the answer (from fold_pulsar_lightcurve.pulse_snr as returned this session)",
-      "repeat": 3,
-      "task_id": "pulsar-fallback-disclosure"
-    },
-    {
-      "axis": "answer",
-      "backend": "ollama/qwen3.5:9b",
-      "because": "The pulse_snr from a fold at a literature period is a fit to a known answer, not a measurement. A measured period is a detection and a literature period is not, and the two must never be reported as each other -- the distinction CLAUDE.md and SYSTEM_PROMPT spend their longest paragraphs on.",
-      "check": "must_state_uncertainty",
-      "detail": "pulse_snr was returned this session and the answer does not report it (expected 'not an independent detection|not a detection|fit to (?:a |the )?known|fold(?:ed)? at (?:the )?(?:literature|curated|reference|catalogued)|literature period|curated period')",
+      "because": null,
+      "check": "empty_answer",
+      "detail": "the session ended 'end_turn' and wrote no answer text; every negative check would pass vacuously",
       "repeat": 3,
       "task_id": "pulsar-fallback-disclosure"
     },
@@ -1302,7 +1313,7 @@
         "finished_at": "2026-09-14T18:08:30.676458+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-core",
         "seed": null,
@@ -1340,7 +1351,7 @@
         "finished_at": "2026-09-14T18:21:59.656983+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-fieldcal",
         "seed": null,
@@ -1378,7 +1389,7 @@
         "finished_at": "2026-09-14T18:23:26.630269+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-optical",
         "seed": null,
@@ -1417,7 +1428,7 @@
         "finished_at": "2026-09-14T18:19:52.132845+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-pulsar",
         "seed": null,
@@ -1454,7 +1465,7 @@
         "finished_at": "2026-09-14T18:24:41.887940+00:00",
         "git_head": "3a2877723baa746ff5d5492f6df215089c06b00e",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-smoke",
         "seed": null,
@@ -1520,7 +1531,7 @@
         "finished_at": "2026-09-14T16:47:54.676030+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-core",
         "seed": null,
@@ -1557,7 +1568,7 @@
         "finished_at": "2026-09-14T17:02:52.759790+00:00",
         "git_head": "ba3c9de8cbe2f042abc7c381eec08a5050dea64d",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-fieldcal",
         "seed": null,
@@ -1594,7 +1605,7 @@
         "finished_at": "2026-09-14T17:05:40.651702+00:00",
         "git_head": "ba3c9de8cbe2f042abc7c381eec08a5050dea64d",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-optical",
         "seed": null,
@@ -1632,7 +1643,7 @@
         "finished_at": "2026-09-14T16:55:34.965787+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-pulsar",
         "seed": null,
@@ -1668,7 +1679,7 @@
         "finished_at": "2026-09-14T17:08:22.963550+00:00",
         "git_head": "9e560fa54fe24bf6003d59d5aebdab13f225f75c",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-smoke",
         "seed": null,
@@ -1734,7 +1745,7 @@
         "finished_at": "2026-09-14T14:52:51.489170+00:00",
         "git_head": "decb29519e583ba18261f7ac2636f94655f986e4",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-core",
         "seed": null,
@@ -1771,7 +1782,7 @@
         "finished_at": "2026-09-14T16:15:16.882825+00:00",
         "git_head": "fb9dfc770eea2dd43f7875771c2c2ef7834f7043",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-fieldcal",
         "seed": null,
@@ -1808,7 +1819,7 @@
         "finished_at": "2026-09-14T16:19:45.709882+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-optical",
         "seed": null,
@@ -1846,7 +1857,7 @@
         "finished_at": "2026-09-14T15:45:54.934127+00:00",
         "git_head": "decb29519e583ba18261f7ac2636f94655f986e4",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-pulsar",
         "seed": null,
@@ -1882,7 +1893,7 @@
         "finished_at": "2026-09-14T16:22:51.945682+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": null,
+        "judge": "anthropic/claude-sonnet-5",
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-smoke",
         "seed": null,
@@ -2029,11 +2040,11 @@
       "wall_ms_without_result": 579673.09187504
     },
     "ollama/qwen3.5:9b": {
-      "cold_answers": 10,
+      "cold_answers": 9,
       "cold_latency": true,
       "duplicate_calls": 3,
       "duplicate_rate": 0.0189873417721519,
-      "effective_trials": 17.6,
+      "effective_trials": 17.5,
       "fault_total": 0,
       "flaky_tasks": [
         "pulsar-fallback-disclosure",
@@ -2041,26 +2052,26 @@
         "vizier-category-not-per-catalog"
       ],
       "incomplete": 1,
-      "intra_cluster_correlation": 0.838,
+      "intra_cluster_correlation": 0.842,
       "model_time_ms": 2017224.4255929254,
       "output_tokens": 43245,
       "pass_interval": [
-        0.33716415642042774,
-        0.7544048187299437
+        0.29031021505169974,
+        0.7096897849483003
       ],
       "pass_interval_naive": [
-        0.4534212295011096,
-        0.7235996548079124
+        0.39232383220194805,
+        0.6666831292343927
       ],
-      "pass_rate": 0.5957446808510638,
-      "passed": 28,
+      "pass_rate": 0.5319148936170213,
+      "passed": 25,
       "rank_correctness": 3,
       "rank_cost": 1,
       "rank_speed": 1,
       "runs": 48,
       "scored": 47,
-      "seconds_per_answer": 35.85920773499529,
-      "seconds_per_answer_warm": 32.378341882466756,
+      "seconds_per_answer": 38.02265677443938,
+      "seconds_per_answer_warm": 34.78297445192234,
       "stability": 0.8125,
       "task_outcomes": {
         "abstract-before-attribution": [
@@ -2069,9 +2080,9 @@
           true
         ],
         "atnf-formal-designation": [
-          true,
-          true,
-          true
+          false,
+          false,
+          false
         ],
         "fieldcal-not-an-accuracy-figure": [
           false,
@@ -2145,17 +2156,17 @@
         ]
       },
       "tasks": 16,
-      "tokens_per_answer": 63881.607142857145,
+      "tokens_per_answer": 66523.12,
       "tokens_per_second": 21.437872480296257,
-      "tokens_to_an_answer": 1788685,
-      "tokens_without_result": 2666562,
+      "tokens_to_an_answer": 1663078,
+      "tokens_without_result": 2792169,
       "tool_calls": 158,
       "trajectory_failures": 2,
       "turns": 172,
       "turns_per_run": 3.5833333333333335,
-      "wall_ms_cold": 358592.0773499529,
-      "wall_ms_to_answer": 906593.5727090691,
-      "wall_ms_without_result": 1300344.5396460593
+      "wall_ms_cold": 342203.91096995445,
+      "wall_ms_to_answer": 869574.3612980586,
+      "wall_ms_without_result": 1337363.7510570697
     },
     "ollama/qwen3.8:27b-mlx": {
       "cold_answers": 12,
@@ -3419,12 +3430,11 @@
     },
     {
       "answer_failures": [
-        "must_report_artifact_path",
-        "must_report_value"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/3",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 251001,
@@ -3633,10 +3643,12 @@
       "wall_ms": 12916.6065499885
     },
     {
-      "answer_failures": [],
+      "answer_failures": [
+        "empty_answer"
+      ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "3/3",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 41531,
@@ -3644,7 +3656,7 @@
       "model_time_ms": 16385.744911967777,
       "outcome": "end_turn",
       "output_tokens": 338,
-      "passed": true,
+      "passed": false,
       "rate_kind": "averaged",
       "repeat": 1,
       "task_id": "atnf-formal-designation",
@@ -3656,10 +3668,12 @@
       "wall_ms": 16388.166379998438
     },
     {
-      "answer_failures": [],
+      "answer_failures": [
+        "empty_answer"
+      ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "3/3",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 41531,
@@ -3667,7 +3681,7 @@
       "model_time_ms": 10309.79725101497,
       "outcome": "end_turn",
       "output_tokens": 338,
-      "passed": true,
+      "passed": false,
       "rate_kind": "averaged",
       "repeat": 2,
       "task_id": "atnf-formal-designation",
@@ -3679,10 +3693,12 @@
       "wall_ms": 10312.106631987263
     },
     {
-      "answer_failures": [],
+      "answer_failures": [
+        "empty_answer"
+      ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "3/3",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 41531,
@@ -3690,7 +3706,7 @@
       "model_time_ms": 10316.348860040307,
       "outcome": "end_turn",
       "output_tokens": 338,
-      "passed": true,
+      "passed": false,
       "rate_kind": "averaged",
       "repeat": 3,
       "task_id": "atnf-formal-designation",
@@ -3749,11 +3765,11 @@
     },
     {
       "answer_failures": [
-        "must_report_value"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 109203,
@@ -3912,11 +3928,11 @@
     },
     {
       "answer_failures": [
-        "must_report_artifact_path"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 63020,
@@ -3937,11 +3953,11 @@
     },
     {
       "answer_failures": [
-        "must_report_artifact_path"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 63020,
@@ -3962,11 +3978,11 @@
     },
     {
       "answer_failures": [
-        "must_report_artifact_path"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 63020,
@@ -4275,11 +4291,11 @@
     },
     {
       "answer_failures": [
-        "must_report_value"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 85828,
@@ -4300,11 +4316,11 @@
     },
     {
       "answer_failures": [
-        "must_report_value"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 85828,
@@ -4325,11 +4341,11 @@
     },
     {
       "answer_failures": [
-        "must_report_value"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 85828,
@@ -4350,11 +4366,11 @@
     },
     {
       "answer_failures": [
-        "must_disclose"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "3/4",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 135988,
@@ -4375,11 +4391,11 @@
     },
     {
       "answer_failures": [
-        "must_disclose"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "3/4",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 135565,
@@ -4400,11 +4416,11 @@
     },
     {
       "answer_failures": [
-        "must_disclose"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "3/4",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 135968,
@@ -4471,12 +4487,11 @@
     },
     {
       "answer_failures": [
-        "must_report_value",
-        "must_state_uncertainty"
+        "empty_answer"
       ],
       "backend": "ollama/qwen3.5:9b",
       "cache_read_tokens": null,
-      "checks": "1/3",
+      "checks": "0/0",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 110509,
