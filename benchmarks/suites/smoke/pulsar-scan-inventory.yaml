@@ -1,0 +1,28 @@
+id: pulsar-scan-inventory
+title: What pulsar scans are bundled here?
+tags: [smoke, local]
+prompt: >
+  What pulsar scans are bundled here, and what is known about B0329+54?
+max_turns: 6
+# No fixtures: every tool this task touches is class L and runs live. Header
+# reads only -- no periodogram, no fold, no synthesis -- so the whole task is
+# well under a second.
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [list_pulsar_scans, resolve_pulsar_scan]
+    must_not_call: [compute_pulsar_periodogram, fold_pulsar_lightcurve]
+    order: [list_pulsar_scans, resolve_pulsar_scan]
+  answer:
+    must_match: ["0\\.7145197|0\\.71452"]
+    # The curated period is a reference to check a measurement against, never a
+    # measurement. This task runs no periodogram, so an answer presenting the
+    # catalogued value as a result is exactly the failure CLAUDE.md and
+    # SYSTEM_PROMPT spend their longest paragraphs on.
+    must_source_value:
+      - pattern: "\\d+\\.\\d{4,}"
+        because: >
+          No periodogram ran in this task, so any period in the answer came
+          from the scan listing's curated_period_s. It must be reported as a
+          literature reference, not as something measured here.

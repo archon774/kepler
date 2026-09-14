@@ -1,0 +1,9 @@
+id: smoke
+description: >
+  The harness's own regression test, not a measurement. One task, both sides
+  replayed -- a recorded model transcript against header-read-only class-L
+  tools -- so load -> run -> grade -> report runs end to end offline, with no
+  key and no socket, in under a second. It is why the benchmark needs no CI
+  job of its own.
+tasks:
+  - pulsar-scan-inventory
