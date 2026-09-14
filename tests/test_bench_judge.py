@@ -194,3 +194,35 @@ def test_the_judge_column_is_separate_from_the_deterministic_score(tmp_path):
     # The judge disagrees, and the deterministic answer axis is untouched.
     assert graded["judge"]["metrics"]["verdict"] == "fail"
     assert graded["answer"]["passed"] is True
+
+
+# --- the reply budget -----------------------------------------------------
+
+
+def test_a_truncated_reply_is_diagnosed_as_truncation_not_as_malformed():
+    """The budget was 256 tokens, which a reasoning model spends before it
+    says anything: every session came back with empty text and was filed as
+    "the judge returned no JSON object", sending a reader to look for a
+    prompt-following failure in a model that never got to reply."""
+
+    backend = ReplayBackend(
+        [ModelResponse(stop_reason="max_tokens", text="")], name="j"
+    )
+    with pytest.raises(JudgeError, match="truncated"):
+        ask("RUBRIC", "ANSWER", backend)
+
+
+def test_a_reply_that_arrived_is_parsed_even_at_the_ceiling():
+    """Truncation is only a diagnosis when nothing came back. A model that
+    emitted its verdict and then hit the ceiling has still answered."""
+
+    backend = ReplayBackend(
+        [
+            ModelResponse(
+                stop_reason="max_tokens",
+                text='{"verdict": "pass", "confidence": 0.5, "reason": "ok"} and',
+            )
+        ],
+        name="j",
+    )
+    assert ask("RUBRIC", "ANSWER", backend).passed is True

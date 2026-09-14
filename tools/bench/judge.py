@@ -60,6 +60,15 @@ _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 #: is not a trade worth making silently.
 _MAX_CHARS = 20000
 
+#: The reply budget. One JSON object needs a few dozen tokens, so this was 256
+#: -- which silently produced an empty reply on every reasoning model, because
+#: the budget is spent on reasoning the adapter never surfaces as text and the
+#: response comes back truncated with nothing in it. A judge that reports
+#: "malformed" on every session is worse than no judge, so the budget is set
+#: for a model that thinks before it answers, and :func:`ask` distinguishes
+#: truncation from a malformed reply rather than blaming the model.
+_MAX_TOKENS = 4096
+
 
 class JudgeError(RuntimeError):
     """The judge could not be read. Never silently a pass."""
@@ -108,9 +117,18 @@ def ask(answer_key: str, answer_text: str, backend: Any) -> Verdict:
         messages=(Message(role="user", blocks=(TextBlock(text=payload),)),),
         tools=[],
         system=JUDGE_PROMPT,
-        max_tokens=256,
+        max_tokens=_MAX_TOKENS,
         temperature=0.0,
     )
+    if response.stop_reason == "max_tokens" and not (response.text or "").strip():
+        # A distinct diagnosis, not a verdict: the instrument ran out of room
+        # before it said anything. Reporting this as "no JSON object" sent a
+        # reader looking for a prompt-following failure in a model that never
+        # got to reply.
+        raise JudgeError(
+            f"the judge's reply was truncated at the {_MAX_TOKENS}-token "
+            "budget before it emitted a verdict"
+        )
     return parse(response.text)
 
 
