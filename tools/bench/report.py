@@ -223,6 +223,14 @@ def wilson_interval(passed: int, trials: int, *, z: float = WILSON_Z):
 
     if trials <= 0:
         return None
+    if passed < 0 or passed > trials:
+        # p outside [0, 1] drives p(1-p) negative and the square root raises a
+        # bare ValueError from inside the arithmetic. That is a caller error --
+        # a count larger than the number of trials -- and it should say so
+        # rather than surface as a domain error in a formula.
+        raise ValueError(
+            f"wilson_interval: passed={passed} is not in [0, {trials}]"
+        )
     p = passed / trials
     denominator = 1.0 + z * z / trials
     center = (p + z * z / (2 * trials)) / denominator
@@ -302,11 +310,29 @@ def clustered_interval(
 ):
     """A Wilson interval on the effective sample size, not the session count.
 
-    This answers *"re-run this same suite -- what would it score?"*. It does not
-    answer "how would this model do on questions like these": the tasks are a
-    fixed, hand-picked corpus rather than a sample from any population, and no
-    interval over them licenses that generalisation however many repeats are
-    run.
+    **Where this interval comes from.** Each task is treated as a draw from the
+    population of questions one could ask about this tool surface, and each
+    repeat as a Bernoulli draw within that task. Two levels of randomness, so
+    the variance has two terms, and the design effect is what folds the second
+    into an effective sample size.
+
+    So it answers *"how would this model do on other questions like these?"* --
+    which is what a reader meeting a benchmark number wants to know. It does
+    **not** answer "re-run this same suite, what would it score?". Those are
+    different questions with different answers, and for a model that answers
+    each task the same way every repeat they are as far apart as they get: its
+    re-run score is perfectly reproducible, a point, while its score on a fresh
+    set of eight questions is barely pinned down at all.
+
+    Simulated rather than argued, in ``tests/test_bench_report.py``: against a
+    population where each task is reliably passed or reliably failed, a naive
+    Wilson interval over the session count covers the population mean about 74%
+    of the time at a nominal 95%. This one covers it about 94%.
+
+    The assumption it rests on is the one worth stating: that these tasks are
+    exchangeable with the questions a reader cares about. They are hand-picked
+    from documented failure modes, not drawn at random, so that is a judgement
+    about the corpus and not something the arithmetic establishes.
     """
 
     if trials <= 0:
@@ -704,10 +730,16 @@ _BOARD_BLURB: Mapping[str, str] = {
         "times, so they are not independent trials; `n_eff` is the session "
         "count divided by the design effect. A backend that answers each task "
         "identically every repeat has `n_eff` equal to the *task* count -- for "
-        "it, repeats bought nothing. The interval answers \"re-run this same "
-        "suite, what would it score?\" and **not** \"how would it do on "
-        "questions like these\": these tasks are a fixed corpus, not a sample "
-        "from a population."
+        "it, repeats bought nothing.\n\n"
+        "It answers **\"how would this model do on other questions like "
+        "these?\"** -- each task a draw from the population of questions one "
+        "could ask about this tool surface, each repeat a draw within it. It "
+        "does *not* answer \"re-run this same suite, what would it score?\"; "
+        "a deterministic backend re-runs to the same number exactly, and this "
+        "interval is deliberately far wider than that. The assumption is that "
+        "these tasks are exchangeable with the questions you care about -- "
+        "they are hand-picked from documented failure modes, so that is a "
+        "judgement about the corpus, not a result of the arithmetic."
     ),
     "speed": (
         "**Relative.** Wall-clock seconds to a passing answer. There is no "

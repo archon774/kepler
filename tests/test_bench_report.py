@@ -681,7 +681,7 @@ def test_the_correctness_board_shows_what_the_repeats_were_worth():
     ]
     text = render_markdown(build_report([_pair(entries=entries)]))
     assert "n_eff" in text and "rho" in text
-    assert "not a sample from a population" in text
+    assert "other questions like these" in text
 
 
 def test_wilson_agrees_with_scipy_everywhere_it_is_used():
@@ -758,3 +758,60 @@ def test_a_single_session_per_task_leaves_the_trials_alone():
     rho, deff = design_effect({"t1": [True], "t2": [False], "t3": [True]})
     assert rho == 0.0
     assert deff == 1.0
+
+
+def test_wilson_rejects_a_count_larger_than_its_trials():
+    """Outside [0, 1] the variance term goes negative and the square root
+    raises from inside the arithmetic. A caller error should say what it is."""
+
+    from tools.bench.report import wilson_interval
+
+    with pytest.raises(ValueError, match=r"not in \[0, 18\]"):
+        wilson_interval(20, 18)
+    with pytest.raises(ValueError, match=r"not in \[0, 18\]"):
+        wilson_interval(-1, 18)
+    assert wilson_interval(18, 18) is not None
+
+
+def test_the_clustered_interval_covers_a_population_the_naive_one_misses():
+    """Where the interval comes from, checked by simulation rather than argued.
+
+    Each task is a draw from the population of questions one could ask about
+    this surface; each repeat is a draw within that task. Against a population
+    where a task is either reliably passed or reliably failed -- the shape a
+    deterministic model produces -- a naive interval over the session count
+    covers the population mean far below its nominal 95%, because it counts
+    three repeats of one question as three questions.
+    """
+
+    import random
+
+    from tools.bench.report import design_effect, wilson_interval
+
+    random.seed(23)
+    tasks, repeats, trials = 8, 3, 1500
+    truth = 0.7
+    naive_hits = clustered_hits = 0
+    for _ in range(trials):
+        rates = [1.0 if random.random() < truth else 0.0 for _ in range(tasks)]
+        outcomes = {
+            f"t{i}": [random.random() < rate for _ in range(repeats)]
+            for i, rate in enumerate(rates)
+        }
+        passed = sum(sum(1 for x in v if x) for v in outcomes.values())
+        sessions = tasks * repeats
+
+        low, high = wilson_interval(passed, sessions)
+        naive_hits += low <= truth <= high
+
+        _, deff = design_effect(outcomes)
+        effective = max(1, round(sessions / deff))
+        low, high = wilson_interval(
+            round(passed / sessions * effective), effective
+        )
+        clustered_hits += low <= truth <= high
+
+    # The naive interval is badly too narrow here; the clustered one is close
+    # to nominal. Bounds are loose enough not to be flaky at this trial count.
+    assert naive_hits / trials < 0.85
+    assert 0.90 < clustered_hits / trials < 0.99
