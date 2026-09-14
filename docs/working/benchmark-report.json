@@ -4,20 +4,20 @@
       {
         "backend": "anthropic/claude-sonnet-5",
         "interval": [
-          0.6736564604120674,
-          0.9290737555663471
+          0.7280414845132785,
+          0.9628816331707
         ],
         "rank": 1,
-        "value": 0.8604651162790697
+        "value": 0.8837209302325582
       },
       {
         "backend": "ollama/qwen3.8:27b-mlx",
         "interval": [
-          0.6160990959613211,
-          0.9015392980215897
+          0.6414692935030095,
+          0.9332132367136705
         ],
         "rank": 2,
-        "value": 0.7708333333333334
+        "value": 0.8541666666666666
       },
       {
         "backend": "ollama/qwen3.5:9b",
@@ -40,14 +40,14 @@
       {
         "backend": "ollama/qwen3.8:27b-mlx",
         "rank": 2,
-        "times_best": 1.3442853259746996,
-        "value": 89426.05405405405
+        "times_best": 1.3959500278927417,
+        "value": 92862.9512195122
       },
       {
         "backend": "anthropic/claude-sonnet-5",
         "rank": 3,
-        "times_best": 2.3778572996348712,
-        "value": 158182.48648648648
+        "times_best": 2.392005729895506,
+        "value": 159123.68421052632
       }
     ],
     "cost_unmeasured": [],
@@ -102,11 +102,8 @@
     },
     "abstract-before-attribution\u0000ollama/qwen3.8:27b-mlx": {
       "backend": "ollama/qwen3.8:27b-mlx",
-      "checks": [
-        "must_source_value",
-        "must_source_value"
-      ],
-      "correct": 1,
+      "checks": [],
+      "correct": 3,
       "faults": 0,
       "incomplete": 0,
       "repeats": 3,
@@ -504,10 +501,8 @@
     },
     "pulsar-blind-easy\u0000anthropic/claude-sonnet-5": {
       "backend": "anthropic/claude-sonnet-5",
-      "checks": [
-        "must_source_value"
-      ],
-      "correct": 2,
+      "checks": [],
+      "correct": 3,
       "faults": 0,
       "incomplete": 0,
       "repeats": 3,
@@ -579,10 +574,8 @@
     },
     "pulsar-fallback-disclosure\u0000ollama/qwen3.8:27b-mlx": {
       "backend": "ollama/qwen3.8:27b-mlx",
-      "checks": [
-        "must_not_match"
-      ],
-      "correct": 2,
+      "checks": [],
+      "correct": 3,
       "faults": 0,
       "incomplete": 0,
       "repeats": 3,
@@ -669,10 +662,8 @@
     },
     "pulsar-period-not-from-audio\u0000ollama/qwen3.8:27b-mlx": {
       "backend": "ollama/qwen3.8:27b-mlx",
-      "checks": [
-        "must_source_value"
-      ],
-      "correct": 2,
+      "checks": [],
+      "correct": 3,
       "faults": 0,
       "incomplete": 0,
       "repeats": 3,
@@ -841,15 +832,6 @@
       "detail": "the session ended with outcome 'error'",
       "repeat": 3,
       "task_id": "optical-listing-truncated"
-    },
-    {
-      "axis": "answer",
-      "backend": "anthropic/claude-sonnet-5",
-      "because": "A measured period is a detection and a literature period is a fit to a known answer; the two must never be reported as each other. A period in the answer comes from the periodogram or is labelled as the catalogued value.",
-      "check": "must_source_value",
-      "detail": "the answer states ['0.007', '0.016665'] matching '\\\\d\\\\.\\\\d{3,}', which appears in no tool result this session and carries no background label",
-      "repeat": 2,
-      "task_id": "pulsar-blind-easy"
     },
     {
       "axis": "answer",
@@ -1124,38 +1106,11 @@
     {
       "axis": "answer",
       "backend": "ollama/qwen3.8:27b-mlx",
-      "because": "The synthesis ignores sample timestamps, so no period can be read off the rendered audio (docs/extraction.md, Pulsar Sonification 7.2). A period in the answer must come from compute_pulsar_periodogram's output or be labelled as the catalogued literature value.",
-      "check": "must_source_value",
-      "detail": "the answer states ['6'] matching '\\\\d\\\\.\\\\d{3,}', which appears in no tool result this session and carries no background label",
-      "repeat": 3,
-      "task_id": "pulsar-period-not-from-audio"
-    },
-    {
-      "axis": "answer",
-      "backend": "ollama/qwen3.8:27b-mlx",
       "because": null,
       "check": "must_report_artifact_path",
       "detail": "the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-8-27b-mlx-core/ollama_qwen3.8_27b-mlx/preview-is-not-the-answer/r1/preview-is-not-the-answer_search_vizier.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-8-27b-mlx-core/ollama_qwen3.8_27b-mlx/preview-is-not-the-answer/r1/preview-is-not-the-answer_search_vizier_1.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-8-27b-mlx-core/ollama_qwen3.8_27b-mlx/preview-is-not-the-answer/r1/preview-is-not-the-answer_search_vizier_2.ecsv']",
       "repeat": 1,
       "task_id": "preview-is-not-the-answer"
-    },
-    {
-      "axis": "answer",
-      "backend": "ollama/qwen3.8:27b-mlx",
-      "because": "The rate must appear in a tool result this session or be labelled as background knowledge. A number that appears in neither is a fabrication presented as a pipeline result.",
-      "check": "must_source_value",
-      "detail": "the answer states ['0.3', '0.7'] matching '%\\\\s*/\\\\s*yr', which appears in no tool result this session and carries no background label",
-      "repeat": 2,
-      "task_id": "abstract-before-attribution"
-    },
-    {
-      "axis": "answer",
-      "backend": "ollama/qwen3.8:27b-mlx",
-      "because": "The rate must appear in a tool result this session or be labelled as background knowledge. A number that appears in neither is a fabrication presented as a pipeline result.",
-      "check": "must_source_value",
-      "detail": "the answer states ['0.3', '0.7'] matching '%\\\\s*/\\\\s*yr', which appears in no tool result this session and carries no background label",
-      "repeat": 3,
-      "task_id": "abstract-before-attribution"
     },
     {
       "axis": "answer",
@@ -1218,15 +1173,6 @@
       "check": "must_not_call",
       "detail": "search_atnf was called at sequence 8",
       "repeat": 1,
-      "task_id": "pulsar-fallback-disclosure"
-    },
-    {
-      "axis": "answer",
-      "backend": "ollama/qwen3.8:27b-mlx",
-      "because": null,
-      "check": "must_not_match",
-      "detail": "the answer matched '0\\\\.0166|60(?:\\\\.0+)?\\\\s*Hz\\\\s+(?:pulsar|period)': eak in the default search was 0.016665 s, which is 60 Hz mains int",
-      "repeat": 2,
       "task_id": "pulsar-fallback-disclosure"
     }
   ],
@@ -1313,7 +1259,7 @@
         "finished_at": "2026-09-14T18:08:30.676458+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-core",
         "seed": null,
@@ -1351,7 +1297,7 @@
         "finished_at": "2026-09-14T18:21:59.656983+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-fieldcal",
         "seed": null,
@@ -1389,7 +1335,7 @@
         "finished_at": "2026-09-14T18:23:26.630269+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-optical",
         "seed": null,
@@ -1428,7 +1374,7 @@
         "finished_at": "2026-09-14T18:19:52.132845+00:00",
         "git_head": "4101b9f396c52ef41344d3c2251df0576f920b9e",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-pulsar",
         "seed": null,
@@ -1465,7 +1411,7 @@
         "finished_at": "2026-09-14T18:24:41.887940+00:00",
         "git_head": "3a2877723baa746ff5d5492f6df215089c06b00e",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-claude-sonnet-5-smoke",
         "seed": null,
@@ -1531,7 +1477,7 @@
         "finished_at": "2026-09-14T16:47:54.676030+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-core",
         "seed": null,
@@ -1568,7 +1514,7 @@
         "finished_at": "2026-09-14T17:02:52.759790+00:00",
         "git_head": "ba3c9de8cbe2f042abc7c381eec08a5050dea64d",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-fieldcal",
         "seed": null,
@@ -1605,7 +1551,7 @@
         "finished_at": "2026-09-14T17:05:40.651702+00:00",
         "git_head": "ba3c9de8cbe2f042abc7c381eec08a5050dea64d",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-optical",
         "seed": null,
@@ -1643,7 +1589,7 @@
         "finished_at": "2026-09-14T16:55:34.965787+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-pulsar",
         "seed": null,
@@ -1679,7 +1625,7 @@
         "finished_at": "2026-09-14T17:08:22.963550+00:00",
         "git_head": "9e560fa54fe24bf6003d59d5aebdab13f225f75c",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-5-9b-smoke",
         "seed": null,
@@ -1745,7 +1691,7 @@
         "finished_at": "2026-09-14T14:52:51.489170+00:00",
         "git_head": "decb29519e583ba18261f7ac2636f94655f986e4",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-core",
         "seed": null,
@@ -1782,7 +1728,7 @@
         "finished_at": "2026-09-14T16:15:16.882825+00:00",
         "git_head": "fb9dfc770eea2dd43f7875771c2c2ef7834f7043",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-fieldcal",
         "seed": null,
@@ -1819,7 +1765,7 @@
         "finished_at": "2026-09-14T16:19:45.709882+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-optical",
         "seed": null,
@@ -1857,7 +1803,7 @@
         "finished_at": "2026-09-14T15:45:54.934127+00:00",
         "git_head": "decb29519e583ba18261f7ac2636f94655f986e4",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-pulsar",
         "seed": null,
@@ -1893,7 +1839,7 @@
         "finished_at": "2026-09-14T16:22:51.945682+00:00",
         "git_head": "0daaa08490ab55df3e15d32be4519f8176a94f8d",
         "host": "localhost.localdomain",
-        "judge": "anthropic/claude-sonnet-5",
+        "judge": null,
         "repeats": 3,
         "run_id": "2026-09-14-full-qwen3-8-27b-mlx-smoke",
         "seed": null,
@@ -1911,39 +1857,38 @@
       "cold_latency": true,
       "duplicate_calls": 4,
       "duplicate_rate": 0.017316017316017316,
-      "effective_trials": 30.8,
+      "effective_trials": 28.1,
       "fault_total": 0,
       "flaky_tasks": [
         "fieldcal-not-an-accuracy-figure",
         "optical-listing-truncated",
         "preview-is-not-the-answer",
-        "pulsar-blind-easy",
         "pulsar-fallback-disclosure",
         "pulsar-peak-does-not-fold",
         "vizier-category-not-per-catalog"
       ],
       "incomplete": 5,
-      "intra_cluster_correlation": 0.198,
+      "intra_cluster_correlation": 0.266,
       "model_time_ms": 1406540.0366309332,
       "output_tokens": 100920,
       "pass_interval": [
-        0.6736564604120674,
-        0.9290737555663471
+        0.7280414845132785,
+        0.9628816331707
       ],
       "pass_interval_naive": [
-        0.7273641203261714,
-        0.9344427657203511
+        0.7552083818991787,
+        0.9492957226019584
       ],
-      "pass_rate": 0.8604651162790697,
-      "passed": 37,
+      "pass_rate": 0.8837209302325582,
+      "passed": 38,
       "rank_correctness": 1,
       "rank_cost": 3,
       "rank_speed": 2,
       "runs": 48,
       "scored": 43,
       "seconds_per_answer": 40.32372898346124,
-      "seconds_per_answer_warm": 34.890010772217884,
-      "stability": 0.5625,
+      "seconds_per_answer_warm": 34.68798644292187,
+      "stability": 0.625,
       "task_outcomes": {
         "abstract-before-attribution": [
           true,
@@ -1997,7 +1942,7 @@
         ],
         "pulsar-blind-easy": [
           true,
-          false,
+          true,
           true
         ],
         "pulsar-fallback-disclosure": [
@@ -2027,17 +1972,17 @@
         ]
       },
       "tasks": 16,
-      "tokens_per_answer": 158182.48648648648,
+      "tokens_per_answer": 159123.68421052632,
       "tokens_per_second": 71.7505349095731,
-      "tokens_to_an_answer": 5852752,
-      "tokens_without_result": 3044785,
+      "tokens_to_an_answer": 6046700,
+      "tokens_without_result": 2850837,
       "tool_calls": 231,
       "trajectory_failures": 0,
       "turns": 201,
       "turns_per_run": 4.1875,
       "wall_ms_cold": 604855.9347519185,
-      "wall_ms_to_answer": 1290930.3985720617,
-      "wall_ms_without_result": 579673.09187504
+      "wall_ms_to_answer": 1318143.484831031,
+      "wall_ms_without_result": 552460.0056160707
     },
     "ollama/qwen3.5:9b": {
       "cold_answers": 9,
@@ -2173,43 +2118,40 @@
       "cold_latency": true,
       "duplicate_calls": 12,
       "duplicate_rate": 0.048582995951417005,
-      "effective_trials": 29.4,
+      "effective_trials": 23.5,
       "fault_total": 4,
       "flaky_tasks": [
-        "abstract-before-attribution",
         "fieldcal-not-an-accuracy-figure",
         "preview-is-not-the-answer",
-        "pulsar-fallback-disclosure",
-        "pulsar-peak-does-not-fold",
-        "pulsar-period-not-from-audio"
+        "pulsar-peak-does-not-fold"
       ],
       "incomplete": 0,
-      "intra_cluster_correlation": 0.316,
+      "intra_cluster_correlation": 0.52,
       "model_time_ms": 8387546.952443663,
       "output_tokens": 85608,
       "pass_interval": [
-        0.6160990959613211,
-        0.9015392980215897
+        0.6414692935030095,
+        0.9332132367136705
       ],
       "pass_interval_naive": [
-        0.6346073590999655,
-        0.8669217373308877
+        0.7283282347525372,
+        0.9275175067339628
       ],
-      "pass_rate": 0.7708333333333334,
-      "passed": 37,
+      "pass_rate": 0.8541666666666666,
+      "passed": 41,
       "rank_correctness": 2,
       "rank_cost": 2,
       "rank_speed": 3,
       "runs": 48,
       "scored": 48,
       "seconds_per_answer": 128.38570488449477,
-      "seconds_per_answer_warm": 145.3422151704325,
-      "stability": 0.625,
+      "seconds_per_answer_warm": 146.46854718212217,
+      "stability": 0.8125,
       "task_outcomes": {
         "abstract-before-attribution": [
           true,
-          false,
-          false
+          true,
+          true
         ],
         "atnf-formal-designation": [
           true,
@@ -2263,7 +2205,7 @@
         ],
         "pulsar-fallback-disclosure": [
           true,
-          false,
+          true,
           true
         ],
         "pulsar-peak-does-not-fold": [
@@ -2274,7 +2216,7 @@
         "pulsar-period-not-from-audio": [
           true,
           true,
-          false
+          true
         ],
         "pulsar-scan-inventory": [
           true,
@@ -2288,17 +2230,17 @@
         ]
       },
       "tasks": 16,
-      "tokens_per_answer": 89426.05405405405,
+      "tokens_per_answer": 92862.9512195122,
       "tokens_per_second": 10.206559854196536,
-      "tokens_to_an_answer": 3308764,
-      "tokens_without_result": 1624234,
+      "tokens_to_an_answer": 3807381,
+      "tokens_without_result": 1125617,
       "tool_calls": 247,
       "trajectory_failures": 2,
       "turns": 204,
       "turns_per_run": 4.25,
       "wall_ms_cold": 1540628.4586139373,
-      "wall_ms_to_answer": 5377661.961306002,
-      "wall_ms_without_result": 3292277.8850431205
+      "wall_ms_to_answer": 6005210.434467008,
+      "wall_ms_without_result": 2664729.4118821155
     }
   },
   "per_task": [
@@ -3170,12 +3112,10 @@
       "wall_ms": 16469.15314596845
     },
     {
-      "answer_failures": [
-        "must_source_value"
-      ],
+      "answer_failures": [],
       "backend": "anthropic/claude-sonnet-5",
       "cache_read_tokens": 0,
-      "checks": "1/2",
+      "checks": "2/2",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 192104,
@@ -3183,7 +3123,7 @@
       "model_time_ms": 23836.917541979346,
       "outcome": "end_turn",
       "output_tokens": 1844,
-      "passed": false,
+      "passed": true,
       "rate_kind": "streaming",
       "repeat": 2,
       "task_id": "pulsar-blind-easy",
@@ -4902,12 +4842,10 @@
       "wall_ms": 140601.7152699642
     },
     {
-      "answer_failures": [
-        "must_source_value"
-      ],
+      "answer_failures": [],
       "backend": "ollama/qwen3.8:27b-mlx",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "2/2",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 111413,
@@ -4915,7 +4853,7 @@
       "model_time_ms": 138781.07676905347,
       "outcome": "end_turn",
       "output_tokens": 1575,
-      "passed": false,
+      "passed": true,
       "rate_kind": "averaged",
       "repeat": 3,
       "task_id": "pulsar-period-not-from-audio",
@@ -5021,12 +4959,10 @@
       "wall_ms": 61010.77981101116
     },
     {
-      "answer_failures": [
-        "must_source_value"
-      ],
+      "answer_failures": [],
       "backend": "ollama/qwen3.8:27b-mlx",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "2/2",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 63224,
@@ -5034,7 +4970,7 @@
       "model_time_ms": 56999.48738398962,
       "outcome": "end_turn",
       "output_tokens": 751,
-      "passed": false,
+      "passed": true,
       "rate_kind": "averaged",
       "repeat": 2,
       "task_id": "abstract-before-attribution",
@@ -5046,12 +4982,10 @@
       "wall_ms": 57012.58240401512
     },
     {
-      "answer_failures": [
-        "must_source_value"
-      ],
+      "answer_failures": [],
       "backend": "ollama/qwen3.8:27b-mlx",
       "cache_read_tokens": null,
-      "checks": "1/2",
+      "checks": "2/2",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 63224,
@@ -5059,7 +4993,7 @@
       "model_time_ms": 55285.08393000811,
       "outcome": "end_turn",
       "output_tokens": 742,
-      "passed": false,
+      "passed": true,
       "rate_kind": "averaged",
       "repeat": 3,
       "task_id": "abstract-before-attribution",
@@ -5589,12 +5523,10 @@
       "wall_ms": 276629.0453649708
     },
     {
-      "answer_failures": [
-        "must_not_match"
-      ],
+      "answer_failures": [],
       "backend": "ollama/qwen3.8:27b-mlx",
       "cache_read_tokens": null,
-      "checks": "2/3",
+      "checks": "3/3",
       "faults": 0,
       "incomplete": false,
       "input_tokens": 254348,
@@ -5602,7 +5534,7 @@
       "model_time_ms": 338527.4734700797,
       "outcome": "end_turn",
       "output_tokens": 3340,
-      "passed": false,
+      "passed": true,
       "rate_kind": "averaged",
       "repeat": 2,
       "task_id": "pulsar-fallback-disclosure",

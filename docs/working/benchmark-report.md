@@ -37,7 +37,6 @@
   - fixture `search_simbad_measurements` `e2a02731e04f`
   - fixture `search_vizier` `03aa3d415ef6`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-fieldcal` -- suite `fieldcal`
 
@@ -48,7 +47,6 @@
   - `fieldcal-not-an-accuracy-figure` `7c515ac96d40`
   - `fieldcal-offline-solve` `5e63c7ec9766`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-optical` -- suite `optical`
 
@@ -59,7 +57,6 @@
   - `optical-ambiguous-band` `c7b1aaaaefe3`
   - `optical-listing-truncated` `6bb14a110564`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-pulsar` -- suite `pulsar`
 
@@ -71,7 +68,6 @@
   - `pulsar-fallback-disclosure` `97250ed4b65d`
   - `pulsar-peak-does-not-fold` `05085273eb98`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-claude-sonnet-5-smoke` -- suite `smoke`
 
@@ -81,7 +77,6 @@
 - suite SHA-256 `e82ca0618014`
   - `pulsar-scan-inventory` `f2e8ec4218d2`
 - `anthropic/claude-sonnet-5` -- dialect `json_schema`, streaming True, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-core` -- suite `core`
 
@@ -120,7 +115,6 @@
   - fixture `search_simbad_measurements` `e2a02731e04f`
   - fixture `search_vizier` `03aa3d415ef6`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-fieldcal` -- suite `fieldcal`
 
@@ -131,7 +125,6 @@
   - `fieldcal-not-an-accuracy-figure` `7c515ac96d40`
   - `fieldcal-offline-solve` `5e63c7ec9766`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-optical` -- suite `optical`
 
@@ -142,7 +135,6 @@
   - `optical-ambiguous-band` `c7b1aaaaefe3`
   - `optical-listing-truncated` `6bb14a110564`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-pulsar` -- suite `pulsar`
 
@@ -154,7 +146,6 @@
   - `pulsar-fallback-disclosure` `97250ed4b65d`
   - `pulsar-peak-does-not-fold` `05085273eb98`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-5-9b-smoke` -- suite `smoke`
 
@@ -164,7 +155,6 @@
 - suite SHA-256 `e82ca0618014`
   - `pulsar-scan-inventory` `f2e8ec4218d2`
 - `ollama/qwen3.5:9b` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-core` -- suite `core`
 
@@ -203,7 +193,6 @@
   - fixture `search_simbad_measurements` `e2a02731e04f`
   - fixture `search_vizier` `03aa3d415ef6`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-fieldcal` -- suite `fieldcal`
 
@@ -214,7 +203,6 @@
   - `fieldcal-not-an-accuracy-figure` `7c515ac96d40`
   - `fieldcal-offline-solve` `5e63c7ec9766`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-optical` -- suite `optical`
 
@@ -225,7 +213,6 @@
   - `optical-ambiguous-band` `c7b1aaaaefe3`
   - `optical-listing-truncated` `6bb14a110564`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-pulsar` -- suite `pulsar`
 
@@ -237,7 +224,6 @@
   - `pulsar-fallback-disclosure` `97250ed4b65d`
   - `pulsar-peak-does-not-fold` `05085273eb98`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 ## Run `2026-09-14-full-qwen3-8-27b-mlx-smoke` -- suite `smoke`
 
@@ -247,7 +233,6 @@
 - suite SHA-256 `e82ca0618014`
   - `pulsar-scan-inventory` `f2e8ec4218d2`
 - `ollama/qwen3.8:27b-mlx` -- dialect `openai_function`, streaming False, unions True
-- judge `anthropic/claude-sonnet-5` (advisory; never blended)
 
 Fixture miss rate: **5.6%** (20 miss(es)).
 
@@ -263,7 +248,7 @@ Correct answers out of repeats. A mark means the *route* was wrong even where th
 
 | task | `claude-sonnet-5` | `qwen3.5:9b` | `qwen3.8:27b-mlx` |
 | --- | :-: | :-: | :-: |
-| `abstract-before-attribution` | **3/3** | **3/3** | 1/3 |
+| `abstract-before-attribution` | **3/3** | **3/3** | **3/3** |
 | `atnf-formal-designation` | **3/3** | 0/3 | **3/3** |
 | `fieldcal-not-an-accuracy-figure` | 2/3 | 0/3 | 1/3 |
 | `fieldcal-offline-solve` | 0/3 d | 0/3 d | 0/3 d |
@@ -273,10 +258,10 @@ Correct answers out of repeats. A mark means the *route* was wrong even where th
 | `optical-ambiguous-band` | **3/3** | **3/3** | **3/3** |
 | `optical-listing-truncated` | 2/3 ! | **3/3** | **3/3** |
 | `preview-is-not-the-answer` | 2/3 ! | **3/3** | 2/3 |
-| `pulsar-blind-easy` | 2/3 | 0/3 | **3/3** |
-| `pulsar-fallback-disclosure` | 2/3 d! | 2/3 | 2/3 T |
+| `pulsar-blind-easy` | **3/3** | 0/3 | **3/3** |
+| `pulsar-fallback-disclosure` | 2/3 d! | 2/3 | 3/3 T |
 | `pulsar-peak-does-not-fold` | 2/3 ! | 0/3 | 2/3 P |
-| `pulsar-period-not-from-audio` | **3/3** | 2/3 | 2/3 |
+| `pulsar-period-not-from-audio` | **3/3** | 2/3 | **3/3** |
 | `pulsar-scan-inventory` | 3/3 d | 3/3 d | 3/3 d |
 | `vizier-category-not-per-catalog` | 1/3 ! | 0/3 T! | 3/3 T |
 
@@ -284,9 +269,9 @@ Correct answers out of repeats. A mark means the *route* was wrong even where th
 
 | model | always correct | never correct | inconsistent | forbidden routes | skipped/out-of-order calls | protocol faults |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: |
-| `anthropic/claude-sonnet-5` | 8 of 16 | 1 | 7 | 0 | 14 | 0 |
+| `anthropic/claude-sonnet-5` | 9 of 16 | 1 | 6 | 0 | 14 | 0 |
 | `ollama/qwen3.5:9b` | 7 of 16 | 7 | 2 | 3 | 12 | 0 |
-| `ollama/qwen3.8:27b-mlx` | 9 of 16 | 1 | 6 | 2 | 12 | 4 |
+| `ollama/qwen3.8:27b-mlx` | 12 of 16 | 1 | 3 | 2 | 12 | 4 |
 
 Tasks a model never got right, which is the sharper result:
 
@@ -296,9 +281,9 @@ Tasks a model never got right, which is the sharper result:
 
 Which answer checks each model failed, and how often:
 
-- `anthropic/claude-sonnet-5`: `incomplete` x5, `must_reach_verdict` x3, `must_source_value` x1, `must_report_value` x1, `must_report_artifact_path` x1
+- `anthropic/claude-sonnet-5`: `incomplete` x5, `must_reach_verdict` x3, `must_report_value` x1, `must_report_artifact_path` x1
 - `ollama/qwen3.5:9b`: `empty_answer` x15, `must_report_value` x3, `must_reach_verdict` x3, `must_report_artifact_path` x1, `must_disclose` x1, `incomplete` x1
-- `ollama/qwen3.8:27b-mlx`: `must_source_value` x3, `must_reach_verdict` x3, `must_report_value` x2, `must_report_artifact_path` x1, `must_not_match` x1, `must_disclose` x1
+- `ollama/qwen3.8:27b-mlx`: `must_reach_verdict` x3, `must_report_value` x2, `must_report_artifact_path` x1, `must_disclose` x1
 
 ## Scores
 
@@ -314,8 +299,8 @@ It answers **"how would this model do on other questions like these?"** -- each 
 
 | # | backend | correct | 95% interval | n_eff | rho |
 | --: | --- | --- | --- | --: | --: |
-| 1 | `anthropic/claude-sonnet-5` | **86%** (37/43) | 67%-93% | 30.8 of 43 | 0.20 |
-| 2 | `ollama/qwen3.8:27b-mlx` | **77%** (37/48) | 62%-90% | 29.4 of 48 | 0.32 |
+| 1 | `anthropic/claude-sonnet-5` | **88%** (38/43) | 73%-96% | 28.1 of 43 | 0.27 |
+| 2 | `ollama/qwen3.8:27b-mlx` | **85%** (41/48) | 64%-93% | 23.5 of 48 | 0.52 |
 | 3 | `ollama/qwen3.5:9b` | **53%** (25/47) | 29%-71% | 17.5 of 47 | 0.84 |
 
 ### Speed
@@ -337,8 +322,8 @@ There is no "perfectly fast", so the only comparison available is against the ot
 | # | backend | per answer | vs best |
 | --: | --- | --: | --: |
 | 1 | `ollama/qwen3.5:9b` | **66,523** tokens | best |
-| 2 | `ollama/qwen3.8:27b-mlx` | **89,426** tokens | 1.34x |
-| 3 | `anthropic/claude-sonnet-5` | **158,182** tokens | 2.38x |
+| 2 | `ollama/qwen3.8:27b-mlx` | **92,863** tokens | 1.40x |
+| 3 | `anthropic/claude-sonnet-5` | **159,124** tokens | 2.39x |
 
 ### The board
 
@@ -358,13 +343,13 @@ Not scored. These explain *why* a score came out as it did.
 
 | backend | correctness | 95% interval | stability | seconds to an answer | tokens to an answer | turns/run | tok/s | duplicate rate | trajectory failures | protocol faults |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `anthropic/claude-sonnet-5` | 37/43 (86%) | 67%-93% | 56% | 40 | 158,182 | 4.2 | 71.8 | 2% | 0 | 0 |
+| `anthropic/claude-sonnet-5` | 38/43 (88%) | 73%-96% | 62% | 40 | 159,124 | 4.2 | 71.8 | 2% | 0 | 0 |
 | `ollama/qwen3.5:9b` | 25/47 (53%) | 29%-71% | 81% | 38 | 66,523 | 3.6 | 21.4 | 2% | 2 | 0 |
-| `ollama/qwen3.8:27b-mlx` | 37/48 (77%) | 62%-90% | 62% | 128 | 89,426 | 4.2 | 10.2 | 5% | 2 | 4 |
+| `ollama/qwen3.8:27b-mlx` | 41/48 (85%) | 64%-93% | 81% | 128 | 92,863 | 4.2 | 10.2 | 5% | 2 | 4 |
 
-**Not separated by this suite**: `anthropic/claude-sonnet-5` vs `ollama/qwen3.8:27b-mlx`, `ollama/qwen3.5:9b` vs `ollama/qwen3.8:27b-mlx`. A 95% interval on the *difference* in correctness (Newcombe 1998, method 10, on effective sample sizes) includes zero for these pairs -- ordering them reads a difference the trial count does not support.
+**Not separated by this suite**: `anthropic/claude-sonnet-5` vs `ollama/qwen3.8:27b-mlx`. A 95% interval on the *difference* in correctness (Newcombe 1998, method 10, on effective sample sizes) includes zero for these pairs -- ordering them reads a difference the trial count does not support.
 
-*Tokens to an answer* is total tokens on runs that passed the answer axis, per passing run. Runs that failed it spent `anthropic/claude-sonnet-5` 3,044,785, `ollama/qwen3.5:9b` 2,792,169, `ollama/qwen3.8:27b-mlx` 1,624,234 token(s) without result.
+*Tokens to an answer* is total tokens on runs that passed the answer axis, per passing run. Runs that failed it spent `anthropic/claude-sonnet-5` 2,850,837, `ollama/qwen3.5:9b` 2,792,169, `ollama/qwen3.8:27b-mlx` 1,125,617 token(s) without result.
 
 ## Per task
 
@@ -407,7 +392,7 @@ Not scored. These explain *why* a score came out as it did.
 | `anthropic/claude-sonnet-5` | `optical-listing-truncated` | 2 | end_turn | yes | 3/3 | 2 | 1 | 61,680 | 668 | 0 | 8,641 | 60 | 8,736 | streaming |
 | `anthropic/claude-sonnet-5` | `optical-listing-truncated` | 3 | error | -- | 0/0 | 1 | 1 | 30,155 | 30 | 0 | 1,450 | 52 | 17,924 | streaming |
 | `anthropic/claude-sonnet-5` | `pulsar-blind-easy` | 1 | end_turn | yes | 2/2 | 5 | 4 | 157,340 | 1,106 | 0 | 14,726 | 1,340 | 16,469 | streaming |
-| `anthropic/claude-sonnet-5` | `pulsar-blind-easy` | 2 | end_turn | no | 1/2 | 6 | 5 | 192,104 | 1,844 | 0 | 23,837 | 3,321 | 27,213 | streaming |
+| `anthropic/claude-sonnet-5` | `pulsar-blind-easy` | 2 | end_turn | yes | 2/2 | 6 | 5 | 192,104 | 1,844 | 0 | 23,837 | 3,321 | 27,213 | streaming |
 | `anthropic/claude-sonnet-5` | `pulsar-blind-easy` | 3 | end_turn | yes | 2/2 | 5 | 4 | 157,340 | 1,127 | 0 | 20,401 | 1,339 | 21,797 | streaming |
 | `anthropic/claude-sonnet-5` | `pulsar-peak-does-not-fold` | 1 | end_turn | yes | 4/4 | 10 | 15 | 362,730 | 5,504 | 0 | 73,470 | 15,100 | 88,675 | streaming |
 | `anthropic/claude-sonnet-5` | `pulsar-peak-does-not-fold` | 2 | end_turn | yes | 4/4 | 16 | 23 | 663,564 | 15,565 | 0 | 191,590 | 22,062 | 213,796 | streaming |
@@ -480,13 +465,13 @@ Not scored. These explain *why* a score came out as it did.
 | `ollama/qwen3.8:27b-mlx` | `atnf-formal-designation` | 3 | end_turn | yes | 3/3 | 2 | 1 | 41,558 | 538 | -- | 35,930 | 0 | 35,934 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-period-not-from-audio` | 1 | end_turn | yes | 2/2 | 5 | 5 | 111,430 | 1,495 | -- | 152,646 | 1,334 | 153,995 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-period-not-from-audio` | 2 | end_turn | yes | 2/2 | 5 | 5 | 111,430 | 1,499 | -- | 138,346 | 2,248 | 140,602 | averaged |
-| `ollama/qwen3.8:27b-mlx` | `pulsar-period-not-from-audio` | 3 | end_turn | no | 1/2 | 5 | 5 | 111,413 | 1,575 | -- | 138,781 | 1,283 | 140,085 | averaged |
+| `ollama/qwen3.8:27b-mlx` | `pulsar-period-not-from-audio` | 3 | end_turn | yes | 2/2 | 5 | 5 | 111,413 | 1,575 | -- | 138,781 | 1,283 | 140,085 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `preview-is-not-the-answer` | 1 | end_turn | no | 3/4 | 9 | 15 | 197,971 | 6,137 | -- | 462,175 | 32 | 462,282 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `preview-is-not-the-answer` | 2 | end_turn | yes | 4/4 | 6 | 7 | 127,660 | 2,819 | -- | 211,208 | 9 | 211,241 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `preview-is-not-the-answer` | 3 | end_turn | yes | 4/4 | 7 | 10 | 150,365 | 3,118 | -- | 232,505 | 8 | 232,565 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `abstract-before-attribution` | 1 | end_turn | yes | 2/2 | 3 | 3 | 63,239 | 777 | -- | 60,993 | 3 | 61,011 | averaged |
-| `ollama/qwen3.8:27b-mlx` | `abstract-before-attribution` | 2 | end_turn | no | 1/2 | 3 | 3 | 63,224 | 751 | -- | 56,999 | 2 | 57,013 | averaged |
-| `ollama/qwen3.8:27b-mlx` | `abstract-before-attribution` | 3 | end_turn | no | 1/2 | 3 | 3 | 63,224 | 742 | -- | 55,285 | 4 | 55,307 | averaged |
+| `ollama/qwen3.8:27b-mlx` | `abstract-before-attribution` | 2 | end_turn | yes | 2/2 | 3 | 3 | 63,224 | 751 | -- | 56,999 | 2 | 57,013 | averaged |
+| `ollama/qwen3.8:27b-mlx` | `abstract-before-attribution` | 3 | end_turn | yes | 2/2 | 3 | 3 | 63,224 | 742 | -- | 55,285 | 4 | 55,307 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `null-argument-fidelity` | 1 | end_turn | yes | 2/2 | 2 | 1 | 41,761 | 686 | -- | 45,847 | 4 | 45,864 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `null-argument-fidelity` | 2 | end_turn | yes | 2/2 | 2 | 1 | 41,761 | 626 | -- | 42,384 | 5 | 42,398 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `null-argument-fidelity` | 3 | end_turn | yes | 2/2 | 2 | 1 | 41,761 | 603 | -- | 37,919 | 5 | 37,935 | averaged |
@@ -509,7 +494,7 @@ Not scored. These explain *why* a score came out as it did.
 | `ollama/qwen3.8:27b-mlx` | `pulsar-peak-does-not-fold` | 2 | end_turn | yes | 4/4 | 9 | 14 | 222,151 | 4,322 | -- | 398,536 | 22,201 | 420,790 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-peak-does-not-fold` | 3 | end_turn | yes | 4/4 | 10 | 16 | 256,991 | 7,968 | -- | 653,965 | 34,045 | 688,060 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-fallback-disclosure` | 1 | end_turn | yes | 3/3 | 8 | 9 | 196,070 | 2,664 | -- | 261,530 | 15,078 | 276,629 | averaged |
-| `ollama/qwen3.8:27b-mlx` | `pulsar-fallback-disclosure` | 2 | end_turn | no | 2/3 | 10 | 12 | 254,348 | 3,340 | -- | 338,527 | 36,584 | 375,144 | averaged |
+| `ollama/qwen3.8:27b-mlx` | `pulsar-fallback-disclosure` | 2 | end_turn | yes | 3/3 | 10 | 12 | 254,348 | 3,340 | -- | 338,527 | 36,584 | 375,144 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-fallback-disclosure` | 3 | end_turn | yes | 3/3 | 6 | 7 | 138,577 | 2,255 | -- | 206,315 | 112,625 | 318,956 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-scan-inventory` | 1 | end_turn | yes | 2/2 | 2 | 2 | 42,734 | 1,059 | -- | 70,966 | 1 | 70,982 | averaged |
 | `ollama/qwen3.8:27b-mlx` | `pulsar-scan-inventory` | 2 | end_turn | yes | 2/2 | 2 | 2 | 42,734 | 1,071 | -- | 53,400 | 1 | 53,406 | averaged |
@@ -557,12 +542,6 @@ zero_point_mag: no number within 0.001 relative tolerance of 21.147659857998637 
 ### `optical-listing-truncated` @ `anthropic/claude-sonnet-5` r3 -- answer/incomplete
 
 the session ended with outcome 'error'
-
-### `pulsar-blind-easy` @ `anthropic/claude-sonnet-5` r2 -- answer/must_source_value
-
-the answer states ['0.007', '0.016665'] matching '\\d\\.\\d{3,}', which appears in no tool result this session and carries no background label
-
-> A measured period is a detection and a literature period is a fit to a known answer; the two must never be reported as each other. A period in the answer comes from the periodogram or is labelled as the catalogued value.
 
 ### `pulsar-peak-does-not-fold` @ `anthropic/claude-sonnet-5` r3 -- answer/incomplete
 
@@ -709,27 +688,9 @@ list_vizier_catalogs was called at sequence 4, 7
 
 > search_vizier takes a category directly. Listing the catalogs first and probing them one at a time is the documented per-catalog failure: it spends turns, caps the result at whatever subset the model picked, and the total match count it then reports is the subset's, not the field's.
 
-### `pulsar-period-not-from-audio` @ `ollama/qwen3.8:27b-mlx` r3 -- answer/must_source_value
-
-the answer states ['6'] matching '\\d\\.\\d{3,}', which appears in no tool result this session and carries no background label
-
-> The synthesis ignores sample timestamps, so no period can be read off the rendered audio (docs/extraction.md, Pulsar Sonification 7.2). A period in the answer must come from compute_pulsar_periodogram's output or be labelled as the catalogued literature value.
-
 ### `preview-is-not-the-answer` @ `ollama/qwen3.8:27b-mlx` r1 -- answer/must_report_artifact_path
 
 the answer identifies no artifact this session actually wrote (neither a full path nor a recorded filename); recorded paths were ['/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-8-27b-mlx-core/ollama_qwen3.8_27b-mlx/preview-is-not-the-answer/r1/preview-is-not-the-answer_search_vizier.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-8-27b-mlx-core/ollama_qwen3.8_27b-mlx/preview-is-not-the-answer/r1/preview-is-not-the-answer_search_vizier_1.ecsv', '/home/claude/Kepler/artifacts/bench/2026-09-14-full-qwen3-8-27b-mlx-core/ollama_qwen3.8_27b-mlx/preview-is-not-the-answer/r1/preview-is-not-the-answer_search_vizier_2.ecsv']
-
-### `abstract-before-attribution` @ `ollama/qwen3.8:27b-mlx` r2 -- answer/must_source_value
-
-the answer states ['0.3', '0.7'] matching '%\\s*/\\s*yr', which appears in no tool result this session and carries no background label
-
-> The rate must appear in a tool result this session or be labelled as background knowledge. A number that appears in neither is a fabrication presented as a pipeline result.
-
-### `abstract-before-attribution` @ `ollama/qwen3.8:27b-mlx` r3 -- answer/must_source_value
-
-the answer states ['0.3', '0.7'] matching '%\\s*/\\s*yr', which appears in no tool result this session and carries no background label
-
-> The rate must appear in a tool result this session or be labelled as background knowledge. A number that appears in neither is a fabrication presented as a pipeline result.
 
 ### `fieldcal-offline-solve` @ `ollama/qwen3.8:27b-mlx` r1 -- answer/must_reach_verdict
 
@@ -774,8 +735,4 @@ a 'peak_does_not_fold' warning or error fired this session and the answer does n
 search_atnf was called at sequence 8
 
 > A catalogued period is a check on a measured one, never an input, and the scan listing already carries curated_period_s. Reaching for ATNF before measuring skips the measurement this task exists to require.
-
-### `pulsar-fallback-disclosure` @ `ollama/qwen3.8:27b-mlx` r2 -- answer/must_not_match
-
-the answer matched '0\\.0166|60(?:\\.0+)?\\s*Hz\\s+(?:pulsar|period)': eak in the default search was 0.016665 s, which is 60 Hz mains int
 

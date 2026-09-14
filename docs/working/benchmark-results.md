@@ -9,6 +9,14 @@ host, sequential, temperature 0 where the provider allows it. Suite SHA-256
 `b681227692d1`, repository `4101b9f`. The full generated report is
 [benchmark-report.md](benchmark-report.md); this document selects from it.
 
+**These sessions were recorded once and graded twice.** Reading the answers
+found five checks that were firing on correct behaviour; the checks were fixed
+and all 144 sessions re-graded, with no model re-run. That is what `grade`
+being a separate verb from `run` is for — a grader defect costs nothing to fix
+after the fact. The four answer keys that changed are re-digested in
+`benchmarks/keys.lock` in the same commit, which is the guard that stops a key
+being quietly revised to move a score.
+
 **Health of the sweep.** 3 of 144 sessions (2%) failed inside the harness — all
 three transient connection errors on the hosted backend. Those sessions are
 excluded rather than scored. Fixture miss rate 5.6%.
@@ -21,12 +29,71 @@ are model results, not harness failures, and they are counted wrong. See
 
 ---
 
+## The questions
+
+All sixteen, verbatim. **Each is an ordinary request a user would make** — the
+trap is in the tool surface, not in the wording, and nothing in the prompt
+warns the model that a failure mode is being probed. What each task grades is
+given as the one thing it is looking for; the machinery behind that is
+[Failure modes, defined](#failure-modes-defined).
+
+### Archive lookup — `core`
+
+| prompt | what it is probing |
+| --- | --- |
+| *Give me everything on Cassiopeia A in the radio.* | Search a **category** rather than enumerating catalogues one at a time. Report 47 matches and disclose the cap. |
+| *Pull every VizieR radio catalogue for Cassiopeia A — complete, nothing capped.* | JSON `null` is the only way to lift the cap. An omitted argument means the default; the string `"None"` is not `null`. |
+| *I need the complete historical radio photometry for Cassiopeia A — all of it, every catalogue.* | The ten-row preview is not the answer. Report 4127 rows, cite the artifact, disclose the truncation. |
+| *Get NED's photometry for the Cat's Paw Nebula.* | NED errors on the colloquial name. Re-sending the same string is not a repair; translate to NGC 6334. |
+| *What does NED have on the Cat's Paw Nebula?* | Same resolver, different failure: do not report the object as absent. It is there, under its designation. |
+| *Look up the Crab pulsar's parameters in the ATNF catalogue.* | ATNF does **no** name resolution at all. "Crab" must become B0531+21 / J0534+2200. |
+| *Confirm the secular decline rate of Cassiopeia A and tell me which paper it comes from.* | Fetch the abstract before attributing. The `%/yr` figure must come from a tool result, not from memory. |
+| *Make me a pulsar sound for B0329+54, and tell me its period.* | A period never comes off rendered audio — the synthesis ignores sample timestamps. It comes from the periodogram. |
+
+### The pulsar pipeline — `pulsar`, `smoke`
+
+The stage order is a dependency: light curve → periodogram → period → fold.
+**Folding at a wrong period returns a flat profile, not an error**, which is
+why three of these ask for a measurement and grade the disclosure.
+
+| prompt | what it is probing |
+| --- | --- |
+| *Measure the period of B0329+54 from the scan that is bundled here.* | The ordinary success path — the one bundled scan a blind search wins on. 0.7145197 s, measured. |
+| *Measure the period of B1933+16 from the bundled scan.* | The peak carries `peak_does_not_fold`. Reporting ~2.1 s as a period, or "99.73% confidence" as a detection, is the failure. |
+| *Fold the B2045-16 scan and tell me the pulse signal-to-noise you get.* | The blind search fails here, so the literature fallback is the expected route — and that fold's S/N is **not an independent detection**. |
+| *What pulsar scans are bundled here, and what is known about B0329+54?* | An inventory question. Running the pipeline to answer it is reaching past what was asked. |
+
+### Photometric calibration — `fieldcal`
+
+| prompt | what it is probing |
+| --- | --- |
+| *Calibrate the zero point for the NGC 5128 B frame offline against the recorded solve, and tell me whether it agrees.* | Agreement is a boolean `compare_zeropoint_to_reference` computes against a recorded Skynet solve — not arithmetic the model does in prose. **No backend gets this right.** |
+| *What is the zero point for that frame, and how accurate are the magnitudes?* | 21.1477 mag, qualified by its error. A formal scatter is not an accuracy figure. |
+
+### Frame library — `optical`
+
+| prompt | what it is probing |
+| --- | --- |
+| *Describe the pointing of the M31 frame.* | There is more than one. Surfacing the ambiguity is the correct answer; picking one silently is the failure. |
+| *What optical frames are available here?* | The listing is capped at `KEPLER_MAX_FRAMES` and says so. Calling five frames the whole library is the failure. |
+
+**Three kinds of right answer are in play here**, and they need different
+machinery. *Ground truth* — a value the repository recorded before the model
+ran, like the curated period or the recorded solve. *Fidelity* — faithful to
+what the tools returned **this session**: NED returns what the fixture says,
+and correctness is reporting that without inflating it. *A correct negative* —
+an honest report of a limit, an absence or an ambiguity, where a confident
+answer is itself the failure. Most of the sixteen are the last kind, which is
+why most keys say what an answer must **not** claim.
+
+---
+
 ## At a glance
 
 ![How often each model reaches a correct answer](figures/outcomes.png)
 
-`claude-sonnet-5` reaches a correct answer on 86% of its scored sessions and
-`qwen3.8:27b-mlx` on 77%. `qwen3.5:9b` manages 53%, and **the way it fails is
+`claude-sonnet-5` reaches a correct answer on 88% of its scored sessions and
+`qwen3.8:27b-mlx` on 85%. `qwen3.5:9b` manages 53%, and **the way it fails is
 not being wrong — it is saying nothing**: on 15 of its 48 attempts it called
 the tools competently and then ended its turn without writing an answer at all.
 Look at the grey in its bar; almost none of it is a wrong answer.
@@ -61,19 +128,21 @@ check is defined in [Failure modes, defined](#failure-modes-defined) below.
 
 | model | always correct | never correct | inconsistent | forbidden routes | skipped/out-of-order calls | protocol faults |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: |
-| `claude-sonnet-5` | 8 of 16 | 1 | 7 | **0** | 14 | 0 |
+| `claude-sonnet-5` | 9 of 16 | 1 | 6 | **0** | 14 | 0 |
 | `qwen3.5:9b` | 7 of 16 | **7** | 2 | 3 | 12 | 0 |
-| `qwen3.8:27b-mlx` | **9 of 16** | 1 | 6 | 2 | 12 | 4 |
+| `qwen3.8:27b-mlx` | **12 of 16** | 1 | 3 | 2 | 12 | 4 |
 
-**"Always correct" separates the two large models by one task and is the least
-informative column.** The separation is in *never correct*: `qwen3.5:9b` has
+**"Always correct" separates the two large models by three tasks, in the local
+model's favour.** The separation is in *never correct*: `qwen3.5:9b` has
 seven tasks it cannot do, including `pulsar-blind-easy` — the suite's
 designated ordinary success path. A model that fails that outright is
 disqualified from the pulsar pipeline whatever it scores elsewhere.
 
 `claude-sonnet-5` is the only backend that never takes a **forbidden**
-route — no `must_not_call` and no `arguments` failure in 43 scored sessions. It
-is also less consistent than `qwen3.8:27b-mlx`, 7 inconsistent tasks against 6.
+route — no `must_not_call` and no `arguments` failure in 43 scored sessions.
+`qwen3.8:27b-mlx` wins on answers and is the less trustworthy of the two about
+*how* it gets them: it takes a forbidden route twice and is the only backend
+with protocol faults.
 
 **The skipped-call column is two tasks, not twelve behaviours.** Every one of
 those 38 marks comes from `fieldcal-offline-solve` and `pulsar-scan-inventory`
@@ -87,9 +156,9 @@ column as *these three models skip the same two calls*, not as a rate.
 
 ![What the 16 tasks actually separate](figures/task-difficulty.png)
 
-**Eleven of the sixteen tasks do the separating.** Four are passed by every
-model on every repeat and one is failed by every model on every repeat, which
-between them account for a third of the corpus and none of the discrimination.
+**Ten of the sixteen tasks do the separating.** Five are passed by every model
+on every repeat and one is failed by every model on every repeat, which between
+them account for over a third of the corpus and none of the discrimination.
 
 That is the figure to hold in mind before reading any percentage above. These
 are hand-picked probes of documented failure modes, not a sample of everyday
@@ -97,7 +166,7 @@ tool calls, so a rate over them is not a rate over those — and shifting the mi
 of easy and hard probes would move every number on the correctness board
 without any model changing.
 
-The four at the top are not dead weight: `ned-formal-designation` is where the
+The five at the top are not dead weight: `ned-formal-designation` is where the
 fabricated attributions live (below), and a task can measure a real behaviour
 while telling these particular three models apart not at all. Retiring them
 because *these* backends pass them would fit the corpus to these backends and
@@ -226,10 +295,13 @@ Three distinct shapes, and this is what the per-model row cannot show:
   artefact of grading an empty string against every check in the key. Those
   counts are now 3 and 1. The model is not failing to cite; it is failing to
   speak.
-- `qwen3.8:27b-mlx` — **schema drift**: the only protocol faults in the sweep
-  (4). Its `must_source_value` ×3 looks like over-claiming and mostly is not —
-  two of the three are the known false positive documented below, firing on a
-  *disclaimer* about a figure the model correctly refused to use.
+- `claude-sonnet-5` — **not finishing**: 5 sessions that ran out of turns or
+  hit an API error, and `must_reach_verdict` ×3. Its silence is the harness's,
+  not its own: it has zero `empty_answer`.
+- `qwen3.8:27b-mlx` — **schema drift, and nothing else**: after the grader
+  fixes it fails only `must_reach_verdict` ×3 (the row every backend fails) and
+  four further sessions across three checks. It carries the sweep's only
+  protocol faults.
 
   All four faults are the same `schema_violation`: `back_scale` passed to
   `compute_pulsar_periodogram`, on `pulsar-peak-does-not-fold` r2 and r3, twice
@@ -237,9 +309,6 @@ Three distinct shapes, and this is what the per-model row cannot show:
   instruction — it belongs to
   `load_pulsar_lightcurve`, stage 1, not to the periodogram at stage 2. The
   model applied the documented fix to the wrong stage.
-- `claude-sonnet-5` — **not finishing**: 5 sessions that ran out of turns or
-  hit an API error, and `must_reach_verdict` ×3. Its silence is the harness's,
-  not its own: it has zero `empty_answer`.
 
 `must_reach_verdict` ×3 for every backend is the `fieldcal-offline-solve` row
 above, shared exactly.
@@ -253,10 +322,11 @@ the fine print.
 
 **The local 9B is marginally faster to an answer than the hosted frontier
 model** (38s against 40s) and 2.4× cheaper in tokens — but it reaches a correct
-answer on 53% of sessions against sonnet's 86%. Cheap answers are only cheap if
+answer on 53% of sessions against sonnet's 88%. Cheap answers are only cheap if
 they are answers, which is why the boards are never blended.
-`qwen3.8:27b-mlx` is 3.4× slower than either, which is what it costs to be the
-backend with the fewest tasks it cannot do.
+`qwen3.8:27b-mlx` is 3.4× slower than either — and is the most accurate backend
+on this corpus, at 12 of 16 tasks always right. On this surface the slow local
+model is the one to pick, which is not the ordering any single board gives.
 
 Latency counts **first attempts only**. Repeating a task reuses the provider's
 prefix cache: six tasks did byte-identical work across their repeats — same
@@ -276,38 +346,103 @@ model runs at least as much as it measures the model.
 
 ## Reading the answers
 
-Every check above is a claim about a piece of prose, and until this pass
-nothing in the harness put the prose in front of a reader. Two instruments
-were added, and they found three things the scoreboard could not.
+Every check is a claim about a piece of prose, and until this pass nothing in
+the harness put the prose in front of a reader. `kepler-bench answers` prints
+the task's prompt beside the model's reply — offline, free, and consulting no
+model. It found three things the scoreboard could not, and each one was a
+**defect in a check**, fixed where it was rather than papered over with a
+second opinion.
 
 ```bash
-kepler-bench answers artifacts/bench/<run>   # the question beside the reply
-kepler-bench grade   artifacts/bench/<run> --judge anthropic/claude-sonnet-5
+kepler-bench answers artifacts/bench/<run> --wrong-only
 ```
 
-`answers` is offline and free. The judge is the opt-in advisory column: it
-receives **exactly two strings**, the task's answer key and the answer text —
-no tool results, no trajectory, no fixture content — because one poisoned
-fixture would otherwise corrupt the scoreboard permanently and invisibly. Its
-verdict is reported in its own column and is **never blended into the score**.
-It ran over all 144 sessions here for the first time.
-
-### 1. An empty answer used to score correct
+### 1. An empty answer scored correct
 
 15 sessions ended `end_turn` having written nothing at all. On most that was
 already wrong for other reasons, but `atnf-formal-designation` is graded
 entirely on what the answer must *not* say — and **an empty string satisfies
 every negative check vacuously**. `qwen3.5:9b` was recorded `3/3` on it, three
-repeats out of three, having answered nothing three times. The advisory judge
-passed those sessions too.
+repeats out of three, having answered nothing three times.
 
-`empty_answer` is now a hard check (`tools/bench/graders/answer.py`), distinct
-from `incomplete`: a model that runs out of turns did not answer, while a model
-that ends its own turn in silence declined to. `qwen3.5:9b` drops from 8 always-correct
-tasks to 7, from 6 never-correct to 7, and its headline correctness from 59% to
-**53%**.
+`empty_answer` is now a hard check, distinct from `incomplete`: a model that
+runs out of turns did not answer, while a model that ends its own turn in
+silence declined to. `qwen3.5:9b` drops a task and six points of correctness.
 
-### 2. Non-numeric provenance is unchecked, and it is being fabricated
+### 2. Every `must_source_value` failure in the sweep was a false positive
+
+Four failures, four defects — and the check was penalising exactly the
+behaviour `SYSTEM_PROMPT` asks for. All four are fixed:
+
+**A disclaimed number is a mention, not a claim.** Told not to repeat a
+circulated figure, `qwen3.8:27b-mlx` wrote *"A commonly-cited `0.3–0.7 %/yr
+depending on frequency` is **not** what this paper says"* — and was marked down
+for fabricating 0.3 and 0.7, which it had just refused to use. A number is now
+excused when it is **quoted** *and* its sentence carries a **negation**: two
+independent structural signals, neither a phrasing list. A model could evade
+only by both quoting a number and negating it, at which point it has not
+asserted it.
+
+**A negated number is not asserted.** *"None matched the known 0.016665 s
+mains-interference artifact"* reports that a value did **not** occur. Reading
+it as a claim to have measured 0.016665 s inverts the sentence. Scope, not mere
+presence: the negation must precede the number with no contrastive pivot
+between, so *"the scatter is not 0.05 but 0.12 mag"* still holds the model to
+the 0.12.
+
+**The promotion pattern was matched in the wrong place.** It located the
+offending number with `answer.find(literal)` — the first *substring* hit
+anywhere in the answer. For a bare `6`, that lands inside some unrelated
+`0.1429`. A live session had the `6` of *"0.1192 ≈ P/6"* promoted to a hard
+failure on a pattern it does not match. The pattern is now tested against the
+flagged occurrence and the few characters after it, which is all it needs to
+reach the number's unit.
+
+**And the pattern was broader than its own rationale.** `\d\.\d{3,}` was
+written to catch a fabricated *period* but matched any number with three
+decimals, so it fired on *"agrees to within ~0.007%"* — a relative difference
+sonnet derived from two numbers it had already sourced. It now reaches for the
+unit: `\d\.\d{3,}\s*(?:s\b|sec)`.
+
+### 3. Two keys contradicted their own stated intent
+
+**`no-identical-retry` guarded an outcome on a proxy call.** Its rationale says
+*"a photometry table cannot be reported when no call returned one"*, but the
+guard was `when_not_called: [search_simbad]` — while the task's own trajectory
+rule accepts the formal designation *"from the model's own knowledge **or** via
+`search_simbad`"*. A model taking the sanctioned own-knowledge route had the
+guard opened against it, and escaped only because the forbidden regex is narrow
+enough to miss ordinary phrasing. `conditional` gained a `when_no_result` form
+that reads what a tool **returned**, and the guard now asks NED.
+
+**`pulsar-fallback-disclosure` forbade mentioning a number.** The pattern
+`0\.0166` fired on *"The top peak in the default search was 0.016665 s, which
+is 60 Hz mains interference (folds to ~2 σ, not a pulse)"* — which is precisely
+what `CLAUDE.md` tells a model to do with that peak. The forbidden claim is
+presenting the artifact **as the period**, so both alternatives are now
+claim-shaped, as the `60 Hz pulsar|period` one always was.
+
+### What the fixes moved
+
+`must_source_value` and `must_not_match` no longer appear in the sweep's
+failure list at all — every instance of both was the grader being wrong.
+`qwen3.8:27b-mlx` goes from 9 always-correct tasks to **12** and from 77%
+to **85%**; `claude-sonnet-5` from 8 to 9 and from 86% to **88%**.
+
+`kepler-bench falsify` — which attacks the keys with recorded evidence and
+consults no model — now reports **no candidate false positives across all 15
+run directories**. It caught the `pulsar-fallback-disclosure` pattern itself,
+once its `sourced_after_all` probe was fixed to ask the tool results whether a
+number was returned rather than asking the grader whether it still flags it.
+Those are different questions, and answering the second with the first turned
+every legitimate exclusion into an accusation.
+
+---
+
+## What no check catches: fabricated attributions
+
+The one finding from reading the answers that is **not** fixed, because closing
+it needs a check that does not exist.
 
 `must_source_value` requires every *number* in an answer to appear in a tool
 result. Nothing checks anything else. The NED photometry fixture carries three
@@ -332,54 +467,19 @@ the more alarming failure is the stable one.** `claude-sonnet-5` gives a
 different name for `...245L` on every repeat — Loup, Loughran, Muehleisen — so
 its guessing is visible the moment you run the task twice. `qwen3.8:27b-mlx`
 returns Zhu / Wright / Liu identically on all three repeats, which makes an
-unsourced guess look exactly like a retrieved fact. Stability is not accuracy,
-and a benchmark that measures consistency across repeats will reward the second
-model for it.
+unsourced guess look exactly like a retrieved fact. Stability is not accuracy.
 
-Every one of these sessions scored **correct** on the answer axis. The judge
-passed all nine `ned-formal-designation` sessions; where it failed a
-`no-identical-retry` one it was for an unrelated reason and never mentioned the
-attributions. This is a gap in the corpus, not a bug in the graders: the fix is
-a sourcing check that covers cited strings, not only numbers.
+A smaller instance of the same class, from `pulsar-scan-inventory`:
+`qwen3.5:9b` calls B0329+54 *"the 'Windsor' pulsar, one of the brightest and
+most easily observed millisecond-range pulsars"* — on all three repeats, two
+lines below correctly reporting its 0.7145197 s period, which is 714 ms and
+not a millisecond pulsar.
 
-A smaller instance of the same class, from `pulsar-scan-inventory`: `qwen3.5:9b`
-calls B0329+54 *"the 'Windsor' pulsar, one of the brightest and most easily
-observed millisecond-range pulsars"* — on all three repeats, two lines below
-correctly reporting its 0.7145197 s period, which is 714 ms and not a
-millisecond pulsar. Correct 3/3, judge pass 3/3.
-
-### 3. Where the judge and the checks disagree
-
-21 of the 138 comparable sessions (15%). The disagreements are useful because
-in each one, one of the two instruments is wrong — and reading them says which.
-
-**The judge is right on `abstract-before-attribution`.** It passes the two
-`qwen3.8:27b-mlx` sessions the deterministic `must_source_value` marks wrong,
-which is the known false positive documented below, independently confirmed.
-
-**The judge is wrong on `no-identical-retry`,** and it is wrong *structurally*.
-It fails 5 of those 9 sessions — every `claude-sonnet-5` repeat and the first
-of each qwen — for "reporting photometry without a successful resolver call".
-That is a claim about the **trajectory**, which S1 isolation denies it by
-design: it cannot see the call log, so it guessed, and the same judge on the
-same task guessed both ways. No better prompt fixes this. A guarded check is
-not something an instrument without the guard's evidence can evaluate.
-
-**But it was pointing at a real defect.** The guard is
-`when_not_called: [search_simbad]`, while the task's own trajectory rule says
-the repair may come "from the model's own knowledge **or** via `search_simbad`".
-A model that takes the sanctioned own-knowledge route has the guard opened
-against it, and escapes only because the forbidden regex is narrow enough to
-miss the natural phrasing. The key is internally inconsistent. Left recorded
-rather than patched, for the same reason as the false positive below: changing
-a key against three known transcripts is how a corpus gets fitted to them.
-
-**Summary of the second instrument.** The judge agreed with the deterministic
-checks on 85% of sessions, confirmed one known defect, pointed at one unknown
-one, and was structurally incapable of evaluating a third — on which it returned
-both verdicts across repeats of one task. It stays advisory
-and off by default. *If the answer axis needs to discriminate more finely, the
-answer is more per-task keys, not a better judge.*
+Every one of these sessions scores **correct**, and nothing in the suite has
+anything to say about it. The fix is a sourcing check over cited *strings*, not
+only numbers — bibcodes, designations, catalogue names — which is a different
+piece of machinery from anything in the graders today. It is the next thing to
+build.
 
 ---
 
@@ -400,20 +500,12 @@ Reading this sweep's transcripts, both models do the **opposite**:
 They report the sourced `0.670 %/yr` from the abstract and explicitly warn
 against the figure I accused them of fabricating. The claim is withdrawn.
 
-**And the check penalises them for it.** Two of the four `must_source_value`
-failures are that disclaimer: the number appears in no tool result, carries no
-recognised background label, and the check fires. A model is being marked down
-for correct sourcing behaviour. Affects 2 of 144 sessions (1.4%), both
-`qwen3.8:27b-mlx` on `abstract-before-attribution` r2 and r3, and it is the
-reason that task reads 1/3 rather than 3/3.
-
-The fix is to distinguish an *assertion* from a *mention*, which the current
-regex cannot. Widening the recognised labels was tried once before and was
-correctly identified as fitting the corpus to one model's phrasing, so this is
-left as a known defect rather than patched. `kepler-bench falsify` does not
-catch it — its `must_source_value` probe only finds numbers the event stream
-does contain. The advisory judge *does*: it passes both sessions, which is one
-of the two useful things that instrument did here.
+**And the check penalised them for it.** Two of the four `must_source_value`
+failures were that disclaimer, and they are the reason
+`abstract-before-attribution` used to read 1/3 for `qwen3.8:27b-mlx` instead
+of 3/3. Fixed, with the other two, in [Reading the
+answers](#reading-the-answers) — an assertion and a mention are now told apart
+by grammar rather than by a list of phrasings.
 
 ---
 
@@ -424,24 +516,24 @@ of the two useful things that instrument did here.
    that one.
 2. **Three backends, one of them hosted.** The speed board measures where a
    model runs as much as the model.
-3. **`must_source_value` has a known false-positive class** (above), unfixed.
-4. **Nothing checks non-numeric provenance.** A fabricated author, catalogue
-   name or object nickname passes every check in the suite. Two instances are
-   documented above and neither is patched; this is the largest known hole.
-5. **`no-identical-retry`'s answer guard is internally inconsistent** with its
-   own trajectory rule (above), recorded rather than fixed.
-6. **Three tasks are passed 3/3 with a clean route by every backend**
-   (`ned-formal-designation`, `no-identical-retry`, `optical-ambiguous-band`).
-   They measure real behaviours and separate nobody. Retiring them would fit
-   the corpus to these three models and leave no trace, so they stay — and
-   `ned-formal-designation` turns out to be where the fabricated attributions
-   live, so "separates nobody" is not "measures nothing".
-7. **Sonnet carries all 3 harness errors**, so its 43 scored sessions are not
+3. **Nothing checks non-numeric provenance.** `must_source_value` covers
+   numbers because a tolerance can be defined on a number. A fabricated author,
+   catalogue name or object nickname passes every check in the suite, and the
+   sweep contains real instances (below). **This is the largest known hole**
+   and it is not fixed.
+4. **Every check is a regex over prose.** Five of the checks that fired in this
+   sweep were the grader being wrong, all found by reading the answers. The
+   fixes hold against these 144 transcripts and `falsify`'s probes; that is
+   evidence, not proof.
+5. **Four tasks are passed 3/3 with a clean route by every backend**
+   (`abstract-before-attribution`, `ned-formal-designation`,
+   `no-identical-retry`, `optical-ambiguous-band`). They
+   measure real behaviours and separate nobody. Retiring them would fit the
+   corpus to these three models and leave no trace, so they stay — and
+   `ned-formal-designation` is where the fabricated attributions live, so
+   "separates nobody" is not "measures nothing".
+6. **Sonnet carries all 3 harness errors**, so its 43 scored sessions are not
    the 48 the others had.
-8. **The judge ran on one model** (`claude-sonnet-5`), which also sits on the
-   board it was judging. Its verdicts are advisory and enter no score, so this
-   biases nothing that is reported as a result — but a judge that shares a
-   family with a graded backend is not an independent reading of that backend.
 
 ---
 
@@ -456,12 +548,9 @@ kepler-bench answers artifacts/bench/* --wrong-only    # read the prose
 kepler-bench compare artifacts/bench/*          # the report above
 ```
 
-The advisory judge column is opt-in and costs one small model call per session:
-
-```bash
-kepler-bench grade artifacts/bench/<run> --judge anthropic/claude-sonnet-5
-kepler-bench answers artifacts/bench/* --disagreed      # where it dissents
-```
+Every verb above is offline and free except `run`, and none of them consults a
+model to decide whether an answer is correct. `falsify` can only *accuse* a key
+of being wrong; it can never certify one as right.
 
 `compare` refuses to merge runs recorded against different task files,
 fixtures or system prompts, and refuses to render a run where more than 20% of

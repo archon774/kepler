@@ -665,6 +665,27 @@ conditional:
       came from training data. Confirmed live; see SYSTEM_PROMPT, SOURCING.
 ```
 
+A third guard form, **`when_no_result`**, reads what a tool *returned* rather
+than what was called, using the shared fixture predicate vocabulary:
+
+```yaml
+conditional:
+  - when_no_result:
+      tool: search_ned
+      where:
+        status: {equals: ok}
+    answer_must_not_match: "\\b(?:photometric|photometry) (?:table|measurements) (?:shows?|gives?|lists?)"
+```
+
+**Reach for it whenever the rationale is about an outcome.** `no-identical-retry`
+guarded "a photometry table cannot be reported when no call returned one" on
+*`search_simbad` not being called*, while its own trajectory rule accepts the
+formal designation "from the model's own knowledge **or** via `search_simbad`".
+A model taking the first, sanctioned route had the guard opened against it for
+doing the right thing, and escaped only because the forbidden pattern is narrow
+enough to miss ordinary phrasing. A guard on a proxy call says something
+different from what it means.
+
 **`because` is required on every hard-failure check.** It is printed verbatim
 in the report next to the failure, so a scoreboard entry explains itself
 without anyone opening the suite file. Untested convention elsewhere; here it
@@ -911,7 +932,10 @@ full result dict, so the event stream is the only place the numbers a model saw
 are recoverable. This is the main reason the harness writes `events.jsonl` at
 all, beyond bookkeeping.
 
-Three constraints, because a naive version would be worse than none:
+Five constraints, because a naive version would be worse than none — and the
+last two were added after **every one of this check's four failures in a
+144-session sweep turned out to be a false positive**, three of them on
+behaviour `SYSTEM_PROMPT` explicitly asks for:
 
 1. **It flags by default; it does not fail.** Models legitimately derive
    numbers — a mean, a unit conversion, a ratio, a rounded restatement. The
@@ -925,6 +949,36 @@ Three constraints, because a naive version would be worse than none:
    against the source this session" or similar; a number inside such a sentence
    is correctly sourced as *not* from a tool. The grader looks for the label
    within a bounded window around the number.
+4. **A disclaimed number is a mention, not a claim.** Told not to repeat a
+   circulated figure, a model wrote *A commonly-cited "0.3–0.7 %/yr depending
+   on frequency" is **not** what this paper says* — and was marked down for
+   fabricating the number it had just refused to use. A number is excused when
+   it is **quoted** *and* its sentence carries a **negation**: two independent
+   structural signals. Quoting alone would be an evasion; a model would have to
+   both quote a number and negate it, at which point it has not asserted it.
+5. **A negated number is not asserted.** *"None matched the known 0.016665 s
+   mains-interference artifact"* reports that a value did not occur. Scope, not
+   mere presence: the negation must precede the number with no contrastive
+   pivot in between, so *"not 0.05 but 0.12 mag"* still holds the model to the
+   0.12.
+
+**Both are grammatical criteria, not phrasing lists**, and that distinction is
+the whole point. Widening `BACKGROUND_LABELS` to admit the disclaimer was tried
+first and was correctly called fitting the corpus to one backend's prose.
+Negation belongs to the language, not to a model.
+
+**The promotion step reads the flagged occurrence.** It located the number with
+`answer.find(literal)` — the first *substring* hit anywhere in the answer, which
+for a bare `6` lands inside some unrelated `0.1429`. A live session had the `6`
+of *"0.1192 ≈ P/6"* promoted to a hard failure on a pattern it does not match.
+A promotion pattern is now matched against the occurrence plus a short unit
+window, which is all it needs to reach `%/yr` or `s`.
+
+**And a promotion pattern should be no broader than its own `because`.**
+`\d\.\d{3,}`, written to catch a fabricated *period*, matched any number with
+three decimals and fired on *"agrees to within ~0.007%"* — a relative difference
+derived from two numbers the model had already sourced. It now reaches for the
+unit.
 
 #### 7.1.8 What makes a task pass
 
@@ -950,9 +1004,9 @@ string satisfies every negative check vacuously, so a task whose key is
 entirely `must_not_match` — "do not say the object is missing from the
 catalogue" — scores a silent session as **correct**. That is not hypothetical:
 a live sweep recorded `qwen3.5:9b` as 3/3 on `atnf-formal-designation` on
-exactly this, in all three repeats, and the advisory judge passed it too. It
-was found by reading the answers (`kepler-bench answers`, section 11), which is
-the argument for that verb existing.
+exactly this, in all three repeats. It was found by reading the answers
+(`kepler-bench answers`, section 11), which is the argument for that verb
+existing.
 
 #### 7.1.9 Calibrating the corpus before trusting it
 
