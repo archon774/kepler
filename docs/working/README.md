@@ -16,7 +16,7 @@ writes the code.
 | --- | --- | --- | --- | --- | --- |
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
 | Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P7 complete; P8–P9 remain | `dev` | P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | The two asset-gated evidence gaps (NGC 5286 B from pixels, the ATLAS backend); the TUI stateless prerequisite is met |
-| Benchmark | [benchmark.md](benchmark.md) · results: [benchmark-results.md](benchmark-results.md) | Built; **partially calibrated** — two backends of two tiers have run `core`; 7.1.9 wants three | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
+| Benchmark | [benchmark.md](benchmark.md) · results: [benchmark-results.md](benchmark-results.md) | **Built and calibrated** — four backends, four tiers, three repeats; 7.1.9 met | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 **The model track was implemented on `dev`** (the maintainer redirected the
@@ -33,18 +33,17 @@ targets `dev`.
 
 Every phase of the benchmark rollout (4a–4d, 5a–5e) has landed, and all nine
 of `model-backends.md`'s security requirements are now implemented and tested.
-**The calibration gate is partially met.** §7.1.9 makes a suite untrusted
-until it has been run against at least three backends of different tiers. Two
-have run `core` — `ollama/qwen3.8:27b-mlx` (local 27B) and
-`anthropic/claude-sonnet-5` (frontier) — and the recorded scoreboard is
-[benchmark-results.md](benchmark-results.md). A third, independent backend is
-still needed, and matters more than the count suggests: three rounds of answer-key
-fixes were made against the local model before the frontier one ever ran, so
-an independent backend is the only thing that can separate genuine tuning from
-over-fitting. Until then, each suite's `calibration.md` still records what is
-and is not established. Only after that should the durable outcome fold into a
-top-level `docs/` reference and both working documents be deleted, per the
-lifecycle rule below.
+**The calibration gate is met.** §7.1.9 makes a suite untrusted until it has
+been run against at least three backends of different tiers. Four have now run
+`core` with three repeats each — `ollama/qwen3.5:9b`, `ollama/gemma4:12b`,
+`ollama/qwen3.8:27b-mlx` and `anthropic/claude-sonnet-5` — and the ranking,
+with its limits stated, is [benchmark-results.md](benchmark-results.md).
+
+Two limits keep this from being a finished track. Three of the four backends
+share one schema dialect, so dialect effects are not isolated; and the corpus
+was authored while watching the backend that now ranks first, which no test can
+fully rule out. Folding the durable outcome into a top-level `docs/` reference
+and deleting both working documents should wait for a second dialect.
 
 ## Start here
 

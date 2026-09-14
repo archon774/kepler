@@ -2,275 +2,243 @@
 
 **What this is:** the recorded scoreboard for [benchmark.md](benchmark.md)'s
 `core` suite. One column per backend; a new provider appends rather than
-replaces, so the grid stays diff-reviewable.
+replaces.
 
-**Status:** **partially calibrated.** Two backends of two tiers have run it.
-§7.1.9 wants **three of different tiers** before a suite is trusted, so this is
-evidence, not a verdict. The other providers the port supports (OpenAI, Gemini)
-have no credentials on this host.
+**Status:** **calibrated.** Four backends across four tiers, three repeats
+each — 96 sessions, 421 tool calls. §7.1.9's gate (three backends of different
+tiers) is met. What that licenses and what it does not is in
+[Limits](#limits-of-this-ranking).
 
-**Corpus:** de-biased — see [Why the earlier numbers are
-gone](#why-the-earlier-numbers-are-gone). Suite SHA-256 `b681227692d1`,
-clean, repository `4a0c892`.
-
-**Runs:** 2026-09-14, one host, sequential (not concurrent, so the timing
-columns are comparable), 1 repeat each.
+**Corpus:** suite SHA-256 `b681227692d1`, clean, repository `42f345a`. All 22
+class-R tools have recorded fixtures. Run 2026-09-14, one host, **sequential**,
+`--repeats 3`.
 
 ---
 
-## Headline
+## Ranking
 
-| Backend | Tier | Dialect | Correctness | Tokens per answer | Turns | Calls | Faults |
-| --- | --- | --- | --- | --- | --: | --: | --: |
-| `ollama/qwen3.8:27b-mlx` | local 27B | `openai_function` | ✅ **8 / 8** `████████████████` | `████████░░░░░░░░` **93,246** | 34 | 47 | 0 |
-| `anthropic/claude-sonnet-5` | frontier | `json_schema` | ⚠️ **6 / 7** `██████████████░░` + 1 ⏳ | `████████████████` **176,578** | 56 | 83 | 0 |
+Ordered by the composite (§7.6), which weights the two headline axes
+**0.7 correctness / 0.3 efficiency** and is off by default — a single number
+hides which axis failed, so read the columns beside it.
 
-*Tokens per answer* = tokens across runs that **passed**, ÷ the number that
-passed. **Lower is better.** ⏳ = incomplete: did not answer, and by §7.1.8
-never scored as a low pass rate.
+| # | Backend | Tier | Composite | Correctness | Stability | Tokens / answer |
+| --: | --- | --- | --: | --- | --- | --- |
+| 1 | `ollama/qwen3.8:27b-mlx` | local 27B | **0.918** | ✅ **23/24** `████████████████` 96% | 88% | `██████████░░░░░░` 85,179 |
+| 2 | `ollama/qwen3.5:9b` | local 9B | 0.787 | ⚠️ 17/24 `████████████░░░░` 71% | 75% | `████████░░░░░░░░` 72,128 |
+| 3 | `ollama/gemma4:12b` | local 12B | 0.767 | ⚠️ 16/24 `███████████░░░░░` 67% | **88%** | `████████░░░░░░░░` **70,075** |
+| 4 | `anthropic/claude-sonnet-5` | frontier | 0.745 | ✅ 21/24 `██████████████░░` 88% | 75% | `████████████████` 158,922 |
 
-**Zero protocol faults from either backend**, across 130 tool calls and both
-schema dialects. `search_vizier.max_catalogs` — the integer-or-null union
-`schema.py` refuses to downgrade — was passed as JSON `null` by both, which is
-the only correct way to request an uncapped result.
+**Read this ranking carefully.** The composite puts the frontier model last
+because it costs **2.3× the cheapest** per answer while the 27B local model
+beats it on correctness. On correctness alone the order is
+qwen3.8 (96%) → Sonnet (88%) → qwen3.5 (71%) → gemma4 (67%), which tracks tier
+except that the 27B leads. See [Limits](#limits-of-this-ranking) before
+treating either ordering as a general statement about these models.
+
+**Zero protocol faults from any backend**, across 421 tool calls and two schema
+dialects.
 
 ---
 
 ## Per-task grid
 
-| # | Task | Kind | `qwen3.8:27b-mlx` | `claude-sonnet-5` |
-| --: | --- | --- | :-: | :-: |
-| 1 | `vizier-category-not-per-catalog` | fidelity | ✅ `3/3` | ⏳ `max_turns` |
-| 2 | `no-identical-retry` | correct negative | ✅ `2/2` | ✅ `2/2` |
-| 3 | `ned-formal-designation` | fidelity | ✅ `3/3` | ❌ `2/3` |
-| 4 | `atnf-formal-designation` | fidelity | ✅ `3/3` | ✅ `3/3` |
-| 5 | `pulsar-period-not-from-audio` | ground truth | ✅ `2/2` | ✅ `2/2` |
-| 6 | `preview-is-not-the-answer` | fidelity | ✅ `4/4` | ✅ `4/4` |
-| 7 | `abstract-before-attribution` | fidelity | ✅ `2/2` | ✅ `2/2` |
-| 8 | `null-argument-fidelity` | fidelity | ✅ `2/2` | ✅ `2/2` |
+Passes out of 3 repeats. **Bold** = the task discriminated.
 
-**Two tasks discriminated; six did not.** Six tasks passed by both is what
-§7.1.9 calls "too loose or too easy" pending a third backend — do not tighten
-on two data points.
+| # | Task | Kind | `qwen3.8:27b` | `sonnet-5` | `qwen3.5:9b` | `gemma4:12b` |
+| --: | --- | --- | :-: | :-: | :-: | :-: |
+| 1 | **`vizier-category-not-per-catalog`** | fidelity | 3/3 | 3/3 | 1/3 | 0/3 |
+| 2 | `no-identical-retry` | correct negative | 3/3 | 3/3 | 3/3 | 3/3 |
+| 3 | **`ned-formal-designation`** | fidelity | 3/3 | 2/3 | 3/3 | 0/3 |
+| 4 | `atnf-formal-designation` | fidelity | 3/3 | 3/3 | 3/3 | 3/3 |
+| 5 | **`pulsar-period-not-from-audio`** | ground truth | 3/3 | 3/3 | 1/3 | 3/3 |
+| 6 | `preview-is-not-the-answer` | fidelity | 3/3 | 3/3 | 3/3 | 3/3 |
+| 7 | **`abstract-before-attribution`** | fidelity | 2/3 | 1/3 | 3/3 | 3/3 |
+| 8 | **`null-argument-fidelity`** | fidelity | 3/3 | 3/3 | 0/3 | 1/3 |
+
+**Five of eight tasks discriminated**, up from two on the previous
+two-backend run. Three are passed by everything and are candidates to tighten
+or retire (§7.1.9).
 
 ---
 
-## The one failure, and the one incomplete
+## The two findings worth the whole exercise
 
-### 3 · `ned-formal-designation` — an unciteable artifact
+### Small models fail on mechanics; large models fail on over-claiming
 
-Sonnet wrote *"full contents in the saved file"* and quoted **no path** — its
-answer contains zero path strings, so a reader cannot find the file. qwen
-quoted the full path. `must_report_artifact_path` checks the answer against
-paths in the manifest, not against a path-shaped regex, so an invented path
-would fail too.
+The failure modes invert by tier, and cleanly:
 
-A real behavioural difference, and the check that caught it is structural —
-it reads the manifest, not prose.
+| Backend | Failing checks |
+| --- | --- |
+| `qwen3.8:27b-mlx` | `must_source_value` ×1 |
+| `claude-sonnet-5` | `must_source_value` ×2, `must_report_artifact_path` ×1 |
+| `qwen3.5:9b` | `must_report_artifact_path` ×4, `must_report_value` ×3, `must_disclose` ×1 |
+| `gemma4:12b` | `must_report_artifact_path` ×6, `must_disclose` ×2, `must_report_value` ×1 |
 
-### 1 · `vizier-category-not-per-catalog` — **the suite's limit, not the model's**
+The two smaller models fail almost entirely on **citation mechanics** — not
+quoting the artifact they wrote, not reporting the number the tool returned,
+not acknowledging a warning that fired. The two larger ones pass all of that
+and fail instead on **saying more than the tools support**.
 
-| | qwen | Sonnet |
-| --- | --: | --: |
-| Turns | 7 | 20 (cap) |
-| Tool calls | 13 | 38 |
-| Fixture misses | 2 | 23 |
-| `not_found` results | — | 31 of 38 |
-| Distinct tools reached | — | 12 |
+### Both large models reproduced the exact documented fabrication
 
-Sonnet made 13 calls to `build_literature_review` alone. **No call errored** —
-every undeclared tool returned a synthesized `not_found`, the model read that
-as "try another archive," and it never ran out of archives before it ran out
-of turns.
+Task 7's failures are not generic over-claiming. `SYSTEM_PROMPT` warns about
+one specific incident by name:
 
-This is the second form of the same defect. With `miss_policy: error` the
-model was derailed by errors; with `synthesize` it is invited to retry
-forever. The root cause is unchanged: **an open-ended prompt against a sparse
-fixture world.** A real NED/ADS/SIMBAD query for Cassiopeia A returns plenty;
-an empty one punishes a model that verifies across sources.
+> *An agent asked to confirm a decline rate once answered "0.3-0.7%/yr
+> depending on frequency" and attributed it by name to a real paper (Trotter
+> et al. 2017) — the actual abstract says "0.670 +/- 0.019%/yr".*
 
-Raising the cap did not fix it and raising it further will not — see
-[Open actions](#open-actions).
+`claude-sonnet-5` emitted **0.7** and `qwen3.8:27b-mlx` emitted **0.3 and
+0.7** — the warned-about figure, in a session where no tool returned it, with
+the warning in their context. Neither smaller model did, because neither has
+the association to recall.
 
-> **A finding is hidden here.** qwen answered this in 13 calls; Sonnet made 38
-> and never answered. That difference is real and worth measuring, but
-> `incomplete` is excluded from the pass rate by design, so it does not appear
-> in the headline. The efficiency columns are where it shows.
+`must_source_value` caught it by reading `events.jsonl`, which is the only
+record of what the tools actually returned. This is the single strongest
+argument in the results for keeping that check, and for the event stream
+existing at all.
+
+### A plan prediction that did not survive contact
+
+§7.4 calls `null_argument_fidelity` "**the single most discriminating check in
+the suite for small local models**." It is not. **All four backends passed
+JSON `null` on every repeat** — including the 9B. Task 8 still discriminated,
+but on `must_report_artifact_path`, not on the union.
+
+The integer-or-null union that `schema.py` refuses to downgrade is handled
+correctly by every model tested here. That is a real result about the port's
+schema translation, and it means the prediction should be revised rather than
+repeated.
+
+---
+
+## Stability
+
+Share of tasks giving the same verdict across all three repeats (§17 q2).
+
+| Backend | Stability | Flaky tasks |
+| --- | --- | --- |
+| `qwen3.8:27b-mlx` | `██████████████░░` 88% | `abstract-before-attribution` |
+| `gemma4:12b` | `██████████████░░` 88% | `null-argument-fidelity` |
+| `claude-sonnet-5` | `████████████░░░░` 75% | `ned-formal-designation`, `abstract-before-attribution` |
+| `qwen3.5:9b` | `████████████░░░░` 75% | `vizier-category-not-per-catalog`, `pulsar-period-not-from-audio` |
+
+**No backend was stable on everything.** At `--repeats 1` every one of these
+would have looked deterministic, and six task-level results would have been
+coin flips reported as facts. `claude-sonnet-5` **cannot be given a
+temperature** — its API rejects the parameter — so nothing bounds its drift
+but repetition.
 
 ---
 
 ## Efficiency
 
-Three clocks, reported separately, never combined into one. **Tool time is
-~0.15% of wall clock here** because every remote tool is replayed; in
-production it dominates (field calibration is a 30–90 s round trip). These
-numbers measure the model, not the surface.
+Three clocks, never combined. **Tool time is ~0.1% of wall clock** because
+remote tools are replayed; in production it dominates. These measure the
+model, not the surface.
 
-| Backend | Model time | Tool time | Wall clock | Input | Output |
-| --- | --- | --- | --- | --- | --- |
-| `qwen3.8:27b-mlx` | `████████████████` 922 s | 1.4 s | 924 s | 733,006 | 12,966 |
-| `claude-sonnet-5` | `████░░░░░░░░░░░░` 236 s | 1.5 s | 239 s | 1,840,051 | 19,925 |
+| Backend | Tokens / answer | Turns / run | Duplicate calls | Model tok/s |
+| --- | --- | --: | --: | --: |
+| `gemma4:12b` | `████████░░░░░░░░` **70,075** | 3.0 | 0% | 14.0 |
+| `qwen3.5:9b` | `████████░░░░░░░░` 72,128 | 4.2 | 6% | 25.5 |
+| `qwen3.8:27b-mlx` | `██████████░░░░░░` 85,179 | 3.8 | 3% | 12.2 |
+| `claude-sonnet-5` | `████████████████` 158,922 | 4.8 | 3% | 84.0 |
 
-Model time per task:
+Tokens spent **without** reaching a passing answer — the number a cheap model
+hides behind a low per-answer figure:
 
-| Task | `qwen3.8:27b-mlx` | `claude-sonnet-5` |
-| --- | --- | --- |
-| `vizier-category-not-per-catalog` | `████████████████` 246 s | `█████░░░░░░░░░░░` 70 s ⏳ |
-| `no-identical-retry` | `██░░░░░░░░░░░░░░` 37 s | `░░░░░░░░░░░░░░░░` 8 s |
-| `ned-formal-designation` | `██████░░░░░░░░░░` 100 s | `█░░░░░░░░░░░░░░░` 19 s |
-| `atnf-formal-designation` | `██░░░░░░░░░░░░░░` 37 s | `░░░░░░░░░░░░░░░░` 5 s |
-| `pulsar-period-not-from-audio` | `█████████░░░░░░░` 138 s | `█░░░░░░░░░░░░░░░` 16 s |
-| `preview-is-not-the-answer` | `███████████████░` 227 s | `██████░░░░░░░░░░` 85 s |
-| `abstract-before-attribution` | `██████░░░░░░░░░░` 95 s | `█░░░░░░░░░░░░░░░` 21 s |
-| `null-argument-fidelity` | `███░░░░░░░░░░░░░` 42 s | `█░░░░░░░░░░░░░░░` 12 s |
+| Backend | Wasted tokens |
+| --- | --- |
+| `qwen3.8:27b-mlx` | `█░░░░░░░░░░░░░░░` 63,933 |
+| `claude-sonnet-5` | `██████░░░░░░░░░░` 375,683 |
+| `gemma4:12b` | `██████░░░░░░░░░░` 391,602 |
+| `qwen3.5:9b` | `████████████████` 1,029,527 |
 
-### The matched comparison
+**`qwen3.5:9b` is the cautionary row**: second-cheapest per answer, and it
+burned **16× more tokens than the 27B on runs that produced nothing**. A
+per-answer figure alone would have flattered it.
 
-The headline *tokens per answer* divides each backend by **its own** passing
-set — 8 tasks against 6 — so it is not strictly like-for-like. On the **six
-tasks both models passed**, which is the defensible comparison:
-
-| Backend | Tokens / task | Model time | Turns | Calls |
-| --- | --: | --: | --: | --: |
-| `qwen3.8:27b-mlx` | `████████░░░░░░░░` **87,172** | 576 s | 24 | 28 |
-| `claude-sonnet-5` | `████████████████` **176,578** | 147 s | 33 | 40 |
-
-The gap is **2.0×**, marginally wider than the headline's 1.9× — so the
-conclusion survives the correction rather than depending on the denominator.
-
-**Sonnet is ~3.9× faster in model time and uses ~2.5× the input tokens.** Both
-follow from the same behaviour: it takes more turns and makes more calls (56
-turns / 83 calls vs 34 / 47), and every turn re-sends the 55 tool schemas —
-about 15k tokens of fixed prefix. Neither number is a quality judgement, and a
-hosted API and a local daemon are **not comparable on latency at all**: one is
-network round-trip, the other is this host's own hardware.
-
-Neither backend reported cached tokens. Ollama's compatibility endpoint omits
-the field; this Anthropic run set no cache breakpoints. A dash is not a zero.
+`tok/s` is not a model comparison: three backends are a local daemon on this
+host, one is a network round trip.
 
 ---
 
-## Determinism
+## Limits of this ranking
 
-**`claude-sonnet-5` rejects `temperature`** — the API answers a request
-carrying it with a 400, so the adapter retries without it and records
-`temperature_supported: false`. The determinism §5.6 claims from temperature 0
-**does not hold for that backend**, and with 1 repeat a single run cannot
-distinguish a characteristic behaviour from a coin flip.
+§7.1.9's gate is met, and these remain true:
 
-This is not hypothetical. An earlier run of task 5 had Sonnet write that
-*"mains interference at 0.01667 s and baseline red noise near 2.1–2.2 s were
-the other candidate peaks in `top_peaks`"* — `top_peaks` actually held
-`0.71479, 0.14288, 0.17847, 0.23777, 0.11916`, and neither quoted value is in
-it. Those are real artefacts on *other* bundled scans, so it was correct
-domain knowledge attributed to this session's tool output: §7.1.4's
-fabrication family exactly, caught by `must_source_value` reading
-`events.jsonl`.
+1. **Three of four backends share a schema dialect.** Only Sonnet exercises
+   `json_schema`; the rest use `openai_function` through Ollama. Dialect
+   effects are **not** isolated — that needs OpenAI or Gemini credentials.
+2. **One frontier model, three local.** "Frontier models rank below a local
+   27B" is not supported by n=1 at that tier. What *is* supported: on this
+   surface, this 27B model was more reliable and 1.9× cheaper per answer than
+   this frontier model.
+3. **The corpus was authored while watching `qwen3.8:27b-mlx`.** Two
+   model-specific tunings were found and removed, and tests now prevent
+   recurrence — but no test proves the absence of bias in *which failure modes
+   were chosen*. The top-ranked model is the one the suite grew up with, and
+   that should be held against the result.
+4. **The fixtures are hand-authored, not captured.** The archive all four
+   faced is invented; counts like "4,127 rows" are placeholders. A model with
+   real knowledge of these archives could be penalised for contradicting one.
+5. **Three tasks discriminate nothing** and should be tightened or retired.
+6. **The suite measures documented failure modes, not answer quality.** One
+   model called B0329+54 *"a fast, bright millisecond-adjacent pulsar"* — its
+   period is 715 ms — in a passing answer. No check looks at whether an
+   object's characterisation is sane.
 
-**In this run the same task passed, because Sonnet simply did not make the
-claim** — zero mentions of `top_peaks`, mains or red noise. So the *check*
-works; whether the *behaviour* is characteristic is unresolved, and one run
-each cannot settle it. `--repeats 3` is the instrument, not more key tuning.
+### What would strengthen it most, in order
 
----
-
-## Why the earlier numbers are gone
-
-Three earlier runs are not in the tables above, because they were graded
-against a corpus that had been adjusted against one of the two models. Keeping
-them beside these would imply a comparability they do not have.
-
-| Run | Result | What it found |
-| --- | --- | --- |
-| qwen r1 | 6/8 | Two prompts with no antecedent ("this field"); two tasks passing on `0/0` checks; a `must_not_call` punishing correct behaviour; `"4,127"` parsed as `4` and `127` |
-| qwen r2 | 6/8 | Two false positives in the keys added after r1 |
-| Sonnet (biased corpus) | 5/7 + 1 ⏳ | The fixture-coverage defect, and the fabrication above |
-
-Three things were then removed as model-specific:
-
-1. **The sourcing vocabulary had been grown from one model's prose.**
-   `BACKGROUND_LABELS` reached 21 entries of which **14 were not in
-   `SYSTEM_PROMPT`** — `"paraphrase"`, `"if you've seen"`, `"commonly quoted"`
-   and others were added after watching one model hedge. Every later provider
-   was being measured against words it was never given. It is now 9 entries,
-   each a phrase the system prompt uses, **enforced by a test**.
-2. **The turn cap encoded one model's habits.** `max_turns: 8`, chosen with no
-   evidence, against one model that never exceeds 5 turns and another that
-   needs 8–20. A test now asserts no cap is tight enough to decide an outcome.
-3. **A test rejects any task file naming a model or provider.**
-
-The `4,127` parsing bug and the over-broad NED pattern were *general* defects
-that would have misjudged any provider; those fixes stand.
+1. A second frontier model, and one on a third dialect (OpenAI or Gemini).
+2. Captured fixtures replacing the hand-authored ones.
+3. Retire or tighten tasks 2, 4 and 6; add a characterisation-sanity check.
 
 ---
 
-## Corpus review
+## Runs recorded
 
-§7.1.9's table, applied. **This matters more than the scoreboard.**
+| Backend | Tier | Dialect | Passed | Tokens | Temp. settable |
+| --- | --- | --- | --- | --: | :-: |
+| `ollama/qwen3.8:27b-mlx` | local 27B | `openai_function` | 23/24 | 2,023,055 | — |
+| `anthropic/claude-sonnet-5` | frontier | `json_schema` | 21/24 | 3,713,050 | **no** |
+| `ollama/qwen3.5:9b` | local 9B | `openai_function` | 17/24 | 2,255,708 | — |
+| `ollama/gemma4:12b` | local 12B | `openai_function` | 16/24 | 1,512,801 | — |
 
-| Observed | Task(s) | Action |
-| --- | --- | --- |
-| Both pass | 2, 4, 5, 6, 7, 8 | **Pending.** Too loose, too easy, or well-handled — a third backend decides. |
-| One fails | 3 | **Keep.** Structural check, verified against the manifest. |
-| Neither completes | 1 | **Fix the suite.** See below. |
+All four were graded by the **same grader commit**, re-graded together after a
+fix to `must_report_artifact_path` (it had required a path verbatim and failed
+models that elided the middle while quoting the real filename). Re-grading was
+offline and free — that is why `run` and `grade` are separate verbs.
 
-### Open actions
+Superseded runs, kept only as the record of what they found:
 
-1. **Fixture coverage, and it is now the only blocker.** Task 1 needs recorded
-   responses for the tools a model actually reaches — `build_literature_review`,
-   `search_simbad_bibliography`, `search_simbad_measurements`, `search_casda`,
-   `get_citing_papers`, `get_referenced_papers`. Neither `error` nor
-   `synthesize` fixes a world that is simply empty. This is real capture work
-   and would change results for every provider, so it needs its own pass.
-2. **`--repeats 3`, at least for the backend that cannot set temperature.**
-   One run each cannot tell a characteristic behaviour from variance, and
-   §5.6's spread column exists for this.
-3. **Six tasks discriminate nothing yet.** Do not tighten them on two
-   backends; a third is the evidence that would justify it.
-4. **A third tier is still required** for §7.1.9. OpenAI and Gemini adapters
-   exist and are untested against a real endpoint; both need credentials.
-5. **The fixtures remain hand-authored, not captured.** Counts like "47
-   catalogs" and "4,127 rows" are plausible placeholders, so a key asserting
-   one grades the right *behaviour* against a number this repository invented.
-6. **The suite misses whole classes of error.** In a passing answer, one model
-   called B0329+54 *"a fast, bright millisecond-adjacent pulsar"*; its period
-   is 715 ms. No check looks at whether an object's characterisation is sane,
-   so nothing caught it. This suite measures a narrow set of documented
-   failure modes, not answer quality.
+| Run | Found |
+| --- | --- |
+| local r1, r2 | Two prompts with no antecedent; two tasks passing on `0/0` checks; `"4,127"` parsed as `4` and `127`; two false positives in the keys added after r1 |
+| frontier (biased corpus) | The fixture-coverage defect; a fabrication attributed to `top_peaks` |
+| two-backend (pre-repeats) | The turn cap and sourcing vocabulary tuned to one model |
 
----
+## How to add a provider
 
-## How to add a provider's results
+```bash
+kepler-bench run core --backend openai/gpt-5 \
+  --repeats 3 --max-tokens 12000000 \
+  --out artifacts/bench/<date>-core-<model>
+kepler-bench compare artifacts/bench/* --composite
+```
 
-1. Run it. `--max-tokens` is required for any live backend — there is no
-   default, because a default budget is a number nobody thinks about.
-
-   ```bash
-   kepler-bench run core \
-     --backend openai/gpt-5 \
-     --repeats 3 --max-tokens 3000000 \
-     --out artifacts/bench/<date>-core-<model>
-   ```
-
-2. `run` grades automatically; `kepler-bench grade <run-dir>` re-grades offline
-   after a grader fix, without re-spending.
-3. `kepler-bench compare <run-dir>...` merges runs into one matrix.
-4. Add a **Headline** row and one **Per-task grid** column. Keep the task order
-   fixed so the grid diffs cleanly.
-5. Re-run **Corpus review** — and if a key has to change to accommodate the new
-   provider, **re-run every backend**, or the comparison is not one.
+Add a **Ranking** row and one **Per-task grid** column. If a key must change to
+accommodate the new provider, **re-grade every backend** — never compare runs
+graded by different rules.
 
 ## Reading these numbers honestly
 
-- **Latency is one host, one day.** Comparable between models *within* a run,
-  not across runs, and not at all between a hosted API and a local daemon.
-- **Every rate here is averaged, not streaming.** Only the Anthropic adapter
-  streams natively; the others call `on_text` once with the finished text.
-- **A dash is not a zero.** A provider that did not report a token class did
-  not report zero of them.
+- **Latency is one host, one day**, and not comparable between a hosted API
+  and a local daemon.
+- **Every rate is averaged, not streaming.** Only the Anthropic adapter
+  streams natively.
+- **A dash is not a zero.** No backend reported cached tokens.
 - **There is no cost column.** Tokens are the measurement; money is the
-  reader's arithmetic against their own current pricing page (§15.3).
-- **`incomplete` is not a failure.** It did not answer badly — it did not
-  answer.
-- **Only the schema dialect varies besides the model**, deliberately (§7.1.1):
-  a model is only usable here through the dialect its provider speaks.
+  reader's arithmetic against their own pricing page (§15.3).
+- **`incomplete` is not a failure** — there were none in this sweep.
+- **Only the schema dialect varies besides the model**, deliberately (§7.1.1).

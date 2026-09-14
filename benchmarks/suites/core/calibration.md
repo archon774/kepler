@@ -1,17 +1,38 @@
 # `core` — calibration record
 
-**Status: PARTIALLY CALIBRATED.** Two backends of two tiers have run this
-suite on the de-biased corpus; §7.1.9 asks for three of different tiers. The
-recorded scoreboard is [../../../docs/working/benchmark-results.md](../../../docs/working/benchmark-results.md).
+**Status: CALIBRATED.** Four backends across four tiers, three repeats each —
+96 sessions. §7.1.9's gate is met. The scoreboard, the ranking and the limits
+are in [../../../docs/working/benchmark-results.md](../../../docs/working/benchmark-results.md).
 
-| Backend | Tier | Result |
-| --- | --- | --- |
-| `ollama/qwen3.8:27b-mlx` | local 27B | 8 / 8 |
-| `anthropic/claude-sonnet-5` | frontier | 6 / 7, 1 incomplete |
+| Backend | Tier | Passed (of 24) | Stability |
+| --- | --- | --- | --- |
+| `ollama/qwen3.8:27b-mlx` | local 27B | 23 | 88% |
+| `anthropic/claude-sonnet-5` | frontier | 21 | 75% |
+| `ollama/qwen3.5:9b` | local 9B | 17 | 75% |
+| `ollama/gemma4:12b` | local 12B | 16 | 88% |
 
-**Two tasks discriminated; six did not.** Six passed by both is what §7.1.9
-calls "too loose or too easy" — pending a third backend, because tightening on
-two data points is how a suite gets fitted to the models it has seen.
+**Five of eight tasks discriminated.** Tasks 2 (`no-identical-retry`), 4
+(`atnf-formal-designation`) and 6 (`preview-is-not-the-answer`) were passed by
+every backend on every repeat and are candidates to tighten or retire.
+
+**No backend was stable on everything.** At one repeat all four would have
+looked deterministic and six task-level results would have been coin flips
+reported as facts.
+
+### What the calibration established about the corpus
+
+* **Failure modes invert by tier.** The two smaller models fail almost entirely
+  on citation mechanics — not quoting the artifact, not reporting the returned
+  number, not acknowledging a warning. The two larger pass all of that and fail
+  on saying more than the tools support.
+* **Both larger models reproduced the exact fabrication `SYSTEM_PROMPT` warns
+  about** — the "0.3-0.7%/yr" figure from the Trotter et al. incident — in
+  sessions where no tool returned it. Neither smaller model did, lacking the
+  association. `must_source_value` caught it from `events.jsonl`.
+* **§7.4's prediction did not hold.** It calls `null_argument_fidelity` "the
+  single most discriminating check in the suite for small local models". All
+  four backends passed JSON `null` on every repeat, the 9B included. The check
+  should be revised rather than repeated.
 
 ### The calibration found bias in this suite, twice
 
