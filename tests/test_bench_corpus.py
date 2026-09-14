@@ -6,8 +6,10 @@ The end-to-end run proves plumbing, not discrimination: its transcripts were
 written to pass. What the second half of this file asserts is the thing that
 actually matters about an answer key -- that a model doing the documented wrong
 thing fails it, on the check that names the failure. That is a weaker statement
-than the 7.1.9 calibration, which needs three real backends of different tiers
-and has not been run; see each suite's calibration.md.
+than the 7.1.9 calibration, which needs three real backends of different tiers;
+that has now been run for every suite but `smoke` -- see each suite's
+calibration.md for what it found, including two tasks it showed discriminate
+nothing and one that every backend fails.
 """
 
 from __future__ import annotations

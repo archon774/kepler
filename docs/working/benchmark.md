@@ -1,13 +1,19 @@
 # Benchmarking Models on the Kepler Tool Surface
 
-**Status:** **Built, and uncalibrated (2026-09-13).** Every phase of the
+**Status:** **Built and calibrated (2026-09-14).** Every phase of the
 section 14 rollout has landed on `agent/model-benchmark`, one commit per phase,
-with the full suite green. **One gate is unmet:** §7.1.9 makes a suite
-untrusted until it has been run against at least three backends of different
-tiers, and that needs provider credentials or a local Ollama daemon. Until that
-run happens the harness is built and tested but its answer keys are unvalidated
-against real models — each suite ships a `calibration.md` saying so, and a test
-asserts it does. See §14 for the per-phase record.
+with the full suite green. **§7.1.9's gate is met for every suite but `smoke`**,
+which is exempt by construction: three backends of different tiers ran all
+sixteen tasks with three repeats each — 144 sessions. Each suite's
+`calibration.md` records what its run found, and a test asserts every suite
+states a status and names each of its tasks.
+
+What the calibration found is not a clean bill: `fieldcal-offline-solve` is
+failed by all three backends, both `optical` tasks are passed by all three and
+so discriminate nothing, and five checks were firing on correct answers and had
+to be fixed before the numbers meant anything — found by reading the prose with
+§11's `answers` verb, not by a second grader. See §14 for the per-phase record
+and `benchmark-results.md`, *Reading the answers*, for the sweep.
 
 This is the detailed sequencing [model-backends.md](model-backends.md)
 deferred: its section 9 says phases 4–5 "get their own detailed sequencing,
@@ -1589,7 +1595,7 @@ Delivered on `agent/model-benchmark` off `dev`, one commit per phase, each with
 | **5a** | `Add the benchmark task loader, run loop, and kepler-bench run` | S5, S6, B2, B4, B5, B7. |
 | **5b** | `Add the four benchmark graders and the grade verb` | The three kinds of right answer, the four fidelity families, three clocks. |
 | **5c** | `Add the benchmark matrix and the compare/record verbs` | B6; headline axes first, no blended score by default. |
-| **5d** | `Add the benchmark corpus` | 16 tasks, five suites. **Calibration gate unmet**; two pulsar task premises were measured and both original guesses were wrong (§9.3). |
+| **5d** | `Add the benchmark corpus` | 16 tasks, five suites. Two pulsar task premises were measured and both original guesses were wrong (§9.3). **Calibration gate met 2026-09-14** for every suite but `smoke`; see each `calibration.md`. |
 | ~~**5e**~~ | ~~`Add the opt-in LLM judge, isolated by construction`~~ | Built, run once over a full sweep, and **removed** — see 7.5. |
 | **docs** | this commit | this document, model-backends.md §5/§6/§9/§11, `docs/working/README.md`, `docs/tool-architecture.md` §10.1, `CLAUDE.md`. |
 

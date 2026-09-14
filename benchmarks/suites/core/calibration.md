@@ -32,10 +32,18 @@ reported as facts.
   on citation mechanics — not quoting the artifact, not reporting the returned
   number, not acknowledging a warning. The two larger pass all of that and fail
   on saying more than the tools support.
-* **Both larger models reproduced the exact fabrication `SYSTEM_PROMPT` warns
+* ~~**Both larger models reproduced the exact fabrication `SYSTEM_PROMPT` warns
   about** — the "0.3-0.7%/yr" figure from the Trotter et al. incident — in
-  sessions where no tool returned it. Neither smaller model did, lacking the
-  association. `must_source_value` caught it from `events.jsonl`.
+  sessions where no tool returned it. `must_source_value` caught it from
+  `events.jsonl`.~~ **Withdrawn 2026-09-14.** This rests entirely on
+  `must_source_value` firing, and every one of that check's firings in the
+  2026-09-14 sweep was a **false positive** — two of them on models doing the
+  opposite of what is alleged here, naming the 0.3–0.7 %/yr figure only to warn
+  against it while reporting the sourced 0.670 %/yr. The check could not tell an
+  assertion from a mention until it was fixed; it can now. The transcripts of
+  *this* run have not been re-read, so the claim is withdrawn rather than
+  inverted: there is no longer evidence for it. See
+  `docs/working/benchmark-results.md`, *Corrections to earlier reporting*.
 * **§7.4's prediction did not hold.** It calls `null_argument_fidelity` "the
   single most discriminating check in the suite for small local models". All
   four backends passed JSON `null` on every repeat, the 9B included. The check

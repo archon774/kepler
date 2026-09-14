@@ -1245,7 +1245,7 @@ remaining security requirements.
 | **5a** | Task loader, run loop, `kepler-bench run` (S5, S6, B2, B4, B5, B7) | The smoke suite runs end to end offline, no socket, in milliseconds. |
 | **5b** | The four graders and `grade` | Three kinds of right answer; four fidelity families; three clocks. |
 | **5c** | The matrix and `compare` | Headline axes first; no blended score by default. |
-| **5d** | The corpus | 16 tasks over five suites. **The 7.1.9 calibration gate is unmet** — no suite has been run against a real model; each ships a `calibration.md` saying so. |
+| **5d** | The corpus | 16 tasks over five suites. **The 7.1.9 calibration gate is met** (2026-09-14) for every suite but `smoke`, which is exempt — three backends of different tiers, three repeats, 144 sessions; each suite's `calibration.md` records what its run found. |
 | ~~**5e**~~ | ~~The judge (S1)~~ | Built, run once over a full sweep, and removed — see `benchmark.md` 7.5. S1 retired with it. |
 
 **Not done:** the calibration run. A suite is untrusted until it has been run

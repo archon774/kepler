@@ -31,12 +31,15 @@ rather than predicted. The two are one track in two documents —
 architecture, the plan, and the record of what shipped. Every other branch here
 targets `dev`.
 
-Every phase of the benchmark rollout (4a–4d, 5a–5e) has landed, and all nine
-of `model-backends.md`'s security requirements are now implemented and tested.
+Every phase of the benchmark rollout (4a–4d, 5a–5e) has landed. Eight of
+`model-backends.md`'s nine security requirements are implemented and tested;
+S1 is **retired** rather than satisfied — it confined the LLM judge, and the
+judge was removed (`benchmark.md` §7.5).
+
 **The calibration gate is met.** §7.1.9 makes a suite untrusted until it has
-been run against at least three backends of different tiers. Four have now run
-all sixteen tasks with three repeats each — `ollama/qwen3.5:9b`,
-`ollama/qwen3.8:27b-mlx` and `anthropic/claude-sonnet-5`, 144 sessions. The
+been run against at least three backends of different tiers. Three have now run
+all sixteen tasks with three repeats each — `anthropic/claude-sonnet-5`,
+`ollama/qwen3.8:27b-mlx` and `ollama/qwen3.5:9b`, 144 sessions. The
 per-task results with figures and limits are
 [benchmark-results.md](benchmark-results.md); the generated report they select
 from is [benchmark-report.md](benchmark-report.md).
