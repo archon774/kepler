@@ -4,13 +4,22 @@ tags: [core, fidelity, sourcing, ads]
 prompt: >
   Confirm the secular decline rate of Cassiopeia A and tell me which paper it
   comes from.
-max_turns: 10
+# Sized so the turn cap does not decide the outcome. It was 8, chosen with no
+# evidence, and a live sweep showed why that is a biased number: one model
+# never exceeded 5 turns while another routinely needed 8-10 and was recorded
+# `incomplete` for it. A cap fitted to whichever model was measured first
+# fails the more exploratory one for exploring.
+#
+# Spend is still bounded -- `--max-tokens` is required for any live backend --
+# and turn count is *reported* on the efficiency axis, so a model that takes
+# twelve turns is visible there without being failed for it.
+max_turns: 20
 fixtures: [search_ads, get_paper_abstract, search_simbad, search_ned, search_vizier]
 # An off-script call must not derail the run. benchmark.md 5.3 provides for
 # exactly this: `synthesize` hands back a schema-valid empty result -- which is
 # what a real archive returns for no match -- instead of a fixture_miss error.
 #
-# A live run made the cost concrete. claude-sonnet-5 explored 13 distinct tools
+# A live run made the cost concrete. One model explored 13 distinct tools
 # on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
 # an error, and it exhausted its turns. That measured this suite's fixture
 # coverage, not the model. The miss *rate* is still counted and printed in the

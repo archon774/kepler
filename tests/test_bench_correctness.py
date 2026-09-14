@@ -572,32 +572,6 @@ def test_a_comma_grouped_number_the_tools_returned_is_not_flagged(tmp_path):
     assert result.metrics["unsourced_numbers"] == []
 
 
-def test_a_hedged_attribution_is_not_a_fabrication(tmp_path):
-    """Found by a live run. The model wrote "if you've seen a range like
-    0.3-0.7 %/yr ... that's a reasonable paraphrase of the paper's point, but
-    the specific value the abstract gives is 0.670" -- a disclaimer, and the
-    most careful possible handling of the exact fabrication this check exists
-    to catch. Failing that answer punishes the behaviour it rewards."""
-
-    result = graded(
-        tmp_path,
-        SOURCE_TASK,
-        answer=(
-            "The abstract gives 0.670 +/- 0.019 %/yr averaged over six decades. "
-            "If you've seen a range like 0.3-0.7 %/yr depending on frequency, "
-            "that is a reasonable paraphrase of the paper's point that the rate "
-            "is frequency-dependent, but it is not the figure the abstract states."
-        ),
-        events=[
-            finished(
-                "get_paper_abstract",
-                {"status": "ok", "preview": [{"abstract": "0.670 +/- 0.019 %/yr"}]},
-            )
-        ],
-    )
-    assert result.passed is True
-
-
 def test_an_undisclaimed_rate_is_still_a_fabrication(tmp_path):
     """The widened vocabulary must not blunt the check itself."""
 
@@ -608,3 +582,50 @@ def test_an_undisclaimed_rate_is_still_a_fabrication(tmp_path):
         events=[finished("search_ads", {"status": "ok", "count": 1})],
     )
     assert result.passed is False
+
+
+# --- the benchmark must not be tuned to one model -------------------------
+
+
+def test_every_background_label_is_a_phrase_the_system_prompt_uses():
+    """The anti-bias guarantee, and the reason this test exists at all.
+
+    BACKGROUND_LABELS decides whether a number is a fabrication or a properly
+    labelled aside. Growing it by reading what some model happened to write
+    tunes the benchmark to that model's prose, and every later provider is then
+    measured against a vocabulary it was never given. That is not hypothetical:
+    "paraphrase", "if you've seen" and "commonly quoted" were added after
+    watching one local model hedge, and had to be removed.
+
+    Grounding each label in SYSTEM_PROMPT makes the rule fair by construction,
+    because every model is handed that prompt verbatim (7.1.1). If a label is
+    not in the contract, no model was told to write it.
+    """
+
+    from tools.agent.prompt import SYSTEM_PROMPT
+    from tools.bench.graders.answer import BACKGROUND_LABELS
+
+    prompt = " ".join(SYSTEM_PROMPT.lower().split())
+    ungrounded = [
+        label for label in BACKGROUND_LABELS if label.lower() not in prompt
+    ]
+    assert not ungrounded, (
+        f"{ungrounded} are not phrases SYSTEM_PROMPT uses. A sourcing label no "
+        "model was instructed to write measures prose style, not sourcing."
+    )
+
+
+def test_the_documented_sourcing_label_satisfies_the_check(tmp_path):
+    """The exact wording SYSTEM_PROMPT asks for must work, or the contract is
+    one no model can satisfy."""
+
+    result = graded(
+        tmp_path,
+        SOURCE_TASK,
+        answer=(
+            "The decline rate is around 0.67 %/yr. This is general background, "
+            "not independently verified against the source this session."
+        ),
+        events=[finished("search_ads", {"status": "ok", "count": 0})],
+    )
+    assert result.passed is True

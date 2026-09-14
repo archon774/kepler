@@ -3,7 +3,10 @@ title: A formal scatter is not an accuracy figure
 tags: [fieldcal, ground-truth, fidelity, uncertainty]
 prompt: >
   What is the zero point for that frame, and how accurate are the magnitudes?
-max_turns: 10
+# Sized so the turn cap does not decide the outcome; see the core suite for
+# the sweep that showed an evidence-free cap failing a more exploratory model
+# for exploring.
+max_turns: 16
 fixtures: []
 
 expect:

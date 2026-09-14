@@ -438,3 +438,47 @@ def test_silently_picking_a_band_fails_the_ambiguity_task(artifact_root):
         ],
     )
     assert "must_disclose" in _failed_checks(entry)
+
+
+# --- the corpus must not be tuned to one model ---------------------------
+
+
+@pytest.mark.parametrize("suite_id", SUITES)
+def test_no_turn_cap_is_tight_enough_to_decide_an_outcome(suite_id):
+    """A turn cap fitted to whichever model was measured first fails the more
+    exploratory one for exploring. A live sweep found one model never exceeding
+    5 turns while another routinely needed 8-10 and was recorded `incomplete`
+    against a cap of 8.
+
+    Spend is bounded by --max-tokens, and turn count is reported on the
+    efficiency axis, so an inefficient model is visible without being failed.
+    """
+
+    suite = load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT)
+    for task in suite:
+        # The smoke suite is driven by a fixed transcript, so its cap is a
+        # property of that transcript rather than of any model.
+        floor = 6 if suite_id == "smoke" else 10
+        assert task.max_turns >= floor, (
+            f"{suite_id}/{task.id} caps at {task.max_turns} turns, tight "
+            "enough that a more exploratory model would be recorded incomplete"
+        )
+
+
+def test_no_answer_key_names_a_backend_or_a_model():
+    """A key that mentions a provider is a key written for that provider."""
+
+    import re
+
+    banned = re.compile(
+        r"qwen|ollama|anthropic|claude|sonnet|opus|haiku|gpt|openai|gemini|llama",
+        re.IGNORECASE,
+    )
+    for suite_id in SUITES:
+        for path in (SUITE_ROOT / suite_id).glob("*.yaml"):
+            text = path.read_text(encoding="utf-8")
+            # `CLAUDE.md` is this repository's own instructions file, cited the
+            # way any other document is. It is not a model name.
+            text = text.replace("CLAUDE.md", "<repo-instructions>")
+            hit = banned.search(text)
+            assert not hit, f"{path} names a model/provider: {hit.group()!r}"
