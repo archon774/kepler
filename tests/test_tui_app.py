@@ -48,6 +48,32 @@ def test_engine_events_append_assistant_text_to_the_transcript():
     _run(scenario())
 
 
+def test_unknown_slash_command_renders_an_error_without_starting_the_engine():
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            await pilot.press("/", "n", "o", "p", "e", "enter")
+            assert "Unknown command: /nope" in str(
+                app.query_one("#transcript").render()
+            )
+            assert app.engine_starts == 0
+
+    _run(scenario())
+
+
+def test_help_command_renders_the_generated_command_list():
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            await pilot.press("/", "?", "enter")
+            rendered = str(app.query_one("#transcript").render())
+            assert "/help" in rendered
+            assert "/quit" in rendered
+            assert app.engine_starts == 0
+
+    _run(scenario())
+
+
 def test_main_builds_the_requested_backend_and_runs_the_app(monkeypatch):
     backend = object()
     created: list[KeplerApp] = []

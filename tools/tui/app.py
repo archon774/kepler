@@ -9,6 +9,7 @@ from textual.message import Message as TextualMessage
 from textual.widgets import Header, Input, Static
 
 from tools.agent.events import Event, TextDelta
+from tools.tui.commands import help_text, parse_input, resolve
 
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
@@ -50,6 +51,7 @@ class KeplerApp(App[None]):
         self.backend = backend
         self.max_turns = max_turns
         self.sub_title = str(getattr(backend, "spec", ""))
+        self.engine_starts = 0
         self._transcript_text = ""
 
     def compose(self) -> ComposeResult:
@@ -66,6 +68,48 @@ class KeplerApp(App[None]):
         if isinstance(message.event, TextDelta):
             self._transcript_text += message.event.text
             self.query_one("#transcript", Static).update(self._transcript_text)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Keep UI slash commands out of the headless model engine."""
+
+        parsed = parse_input(event.value)
+        event.input.value = ""
+        if parsed.kind == "message":
+            self.run_prompt(parsed.text)
+            return
+        if parsed.kind == "unknown":
+            self._append_transcript(f"Unknown command: /{parsed.name}")
+            return
+
+        command = resolve(parsed.name)
+        if command is not None:
+            handler = getattr(self, command.handler, self._command_not_available)
+            handler(parsed.args)
+
+    def run_prompt(self, text: str) -> None:
+        """Record ordinary user input until Phase D.3 starts the worker."""
+
+        self.engine_starts += 1
+        self._append_transcript(f"User: {text}")
+
+    def show_help(self, args: tuple[str, ...]) -> None:
+        """Render generated command help in the transcript."""
+
+        self._append_transcript(help_text())
+
+    def quit(self, args: tuple[str, ...]) -> None:
+        """Exit the console through its declarative command handler."""
+
+        self.exit()
+
+    def _command_not_available(self, args: tuple[str, ...]) -> None:
+        self._append_transcript("This command is not available in the current phase.")
+
+    def _append_transcript(self, text: str) -> None:
+        if self._transcript_text:
+            self._transcript_text += "\n"
+        self._transcript_text += text
+        self.query_one("#transcript", Static).update(self._transcript_text)
 
     def _status_text(self) -> str:
         return f"0/{self.max_turns} turns"
