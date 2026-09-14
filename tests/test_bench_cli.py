@@ -206,3 +206,52 @@ def test_record_refuses_a_class_l_tool(capsys):
                 "path=x",
             ]
         )
+
+
+# --- answers: reading what the model actually said ------------------------
+
+
+def _replay_run(tmp_path):
+    out = tmp_path / "run"
+    assert main(["run", "smoke", "--backend", "replay/smoke", "--out", str(out)]) == 0
+    return out
+
+
+def test_answers_prints_the_question_beside_the_reply(tmp_path, capsys):
+    """Every other verb reduces a session to a verdict. A check that fires is
+    a claim about a piece of prose, and the only way to tell a real failure
+    from a regex artefact is to read the prose."""
+
+    out = _replay_run(tmp_path)
+    assert main(["answers", str(out)]) == 0
+    printed = capsys.readouterr().out
+    record = json.loads((out / "run.json").read_text())
+    task_id = record["runs"][0]["task_id"]
+    assert f"## `{task_id}`" in printed
+    assert "replay/smoke" in printed or "smoke" in printed
+
+
+def test_answers_needs_no_grades_file(tmp_path, capsys):
+    """An ungraded run still has answers worth reading, and grading here would
+    make a read-only verb write."""
+
+    out = _replay_run(tmp_path)
+    (out / "grades.json").unlink(missing_ok=True)
+    assert main(["answers", str(out)]) == 0
+    assert "ungraded" in capsys.readouterr().out
+
+
+def test_answers_filters_to_nothing_without_failing(tmp_path, capsys):
+    out = _replay_run(tmp_path)
+    assert main(["answers", str(out), "--task", "no-such-task"]) == 0
+    assert "No sessions matched." in capsys.readouterr().err
+
+
+def test_disagreed_is_empty_when_the_judge_never_ran(tmp_path, capsys):
+    """An unjudged session has no disagreement to report. Filtered out rather
+    than shown, so an empty result means the two instruments agreed -- never
+    that only one of them was present."""
+
+    out = _replay_run(tmp_path)
+    assert main(["answers", str(out), "--disagreed"]) == 0
+    assert "No sessions matched." in capsys.readouterr().err

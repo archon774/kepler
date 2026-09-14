@@ -1,9 +1,11 @@
 """``kepler-bench`` -- the benchmark CLI.
 
-``docs/working/benchmark.md`` section 11. Four verbs over a directory on disk:
+``docs/working/benchmark.md`` section 11. Six verbs over a directory on disk:
 
 * ``run`` -- live model, replayed remote tools, live local tools.
 * ``grade`` -- offline, free, and repeatable after a grader fix.
+* ``falsify`` -- the adversarial pass over the keys. Offline, consults no model.
+* ``answers`` -- the question beside the reply, for a reader. Offline.
 * ``compare`` -- the matrix.
 * ``record`` -- live capture of one class-R tool, for human review.
 
@@ -107,6 +109,38 @@ def build_parser() -> argparse.ArgumentParser:
     falsify.add_argument("--suite-root", type=Path, default=DEFAULT_SUITE_ROOT)
     falsify.add_argument("--fixture-root", type=Path, default=DEFAULT_FIXTURE_ROOT)
 
+    answers = sub.add_parser(
+        "answers",
+        help="print the question and the model's reply for each session. "
+        "Offline, free, and the only way to audit a check against the prose "
+        "it fired on.",
+    )
+    answers.add_argument("run_dir", type=Path, nargs="+")
+    answers.add_argument("--suite-root", type=Path, default=DEFAULT_SUITE_ROOT)
+    answers.add_argument("--fixture-root", type=Path, default=DEFAULT_FIXTURE_ROOT)
+    answers.add_argument("--task", action="append", help="only these task ids")
+    answers.add_argument(
+        "--backend", action="append", help="only these backends (substring match)"
+    )
+    answers.add_argument("--repeat", type=int, action="append")
+    answers.add_argument(
+        "--wrong-only",
+        action="store_true",
+        help="only sessions the deterministic checks marked wrong.",
+    )
+    answers.add_argument(
+        "--disagreed",
+        action="store_true",
+        help="only sessions where the advisory judge and the deterministic "
+        "checks reached different verdicts. These are where one of the two "
+        "instruments is wrong, and they are the ones worth reading.",
+    )
+    answers.add_argument(
+        "--calls",
+        action="store_true",
+        help="also print the tool call sequence.",
+    )
+
     compare = sub.add_parser(
         "compare", help="render the matrix over one or more run directories"
     )
@@ -160,6 +194,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _grade(args)
     if args.verb == "falsify":
         return _falsify(args)
+    if args.verb == "answers":
+        return _answers(args)
     if args.verb == "compare":
         return _compare(args)
     if args.verb == "record":
@@ -304,6 +340,46 @@ def _grade(args: Any) -> int:
         judge=judge,
     )
     print(json.dumps(grades, indent=2, sort_keys=True))
+    return 0
+
+
+def _answers(args: Any) -> int:
+    from tools.bench.answers import render, sessions
+
+    records = list(
+        sessions(
+            args.run_dir,
+            suite_root=args.suite_root,
+            fixture_root=args.fixture_root,
+        )
+    )
+    if args.task:
+        records = [r for r in records if r["task_id"] in set(args.task)]
+    if args.backend:
+        records = [
+            r
+            for r in records
+            if any(spec in r["backend"] for spec in args.backend)
+        ]
+    if args.repeat:
+        records = [r for r in records if r["repeat"] in set(args.repeat)]
+    if args.wrong_only:
+        records = [r for r in records if r["correct"] is not True]
+    if args.disagreed:
+        # An ungraded or unjudged session has no disagreement to report; it is
+        # filtered out rather than shown, so an empty result means "the two
+        # instruments agreed everywhere", not "the judge never ran".
+        records = [
+            r
+            for r in records
+            if r["judge"]
+            and r["judge"].get("verdict") in ("pass", "fail")
+            and (r["judge"]["verdict"] == "pass") is not r["correct"]
+        ]
+    if not records:
+        print("No sessions matched.", file=sys.stderr)
+        return 0
+    print("\n".join(render(records, verbose=args.calls)))
     return 0
 
 

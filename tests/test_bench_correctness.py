@@ -703,3 +703,43 @@ def test_a_tool_result_key_fails_when_the_tool_was_never_called(tmp_path):
     result = graded(tmp_path, TOOL_RESULT_TASK, answer="Pulse S/N is about 5.7.")
     assert not result.passed
     assert "never returned a numeric" in result.failures[0].detail
+
+
+# --- an empty answer is not a correct negative ---------------------------
+
+
+def test_an_empty_answer_fails_rather_than_passing_every_negative_check(tmp_path):
+    """The whole reason ``empty_answer`` exists.
+
+    A task whose key is entirely negative -- "do not say the object is
+    missing" -- is satisfied by saying nothing at all, and the session ends
+    ``end_turn``, so no outcome marks it either. A live sweep recorded
+    ``qwen3.5:9b`` as 3/3 correct on ``atnf-formal-designation`` on exactly
+    this, three repeats out of three.
+    """
+
+    body = BARE_TASK + (
+        "expect:\n  answer:\n"
+        '    must_not_match: ["is not in the catalogue"]\n'
+    )
+    result = graded(tmp_path, body, answer="   \n")
+    assert result.passed is False
+    assert [f.check for f in result.failures] == ["empty_answer"]
+    assert result.metrics["empty_answer"] is True
+
+
+def test_an_empty_answer_is_distinct_from_an_incomplete_run(tmp_path):
+    """Two different things: one ran out of room, the other stopped talking.
+
+    Collapsing them would file a model that answers nothing under the harness
+    failures, where it is excluded from the score rather than counted wrong.
+    """
+
+    body = BARE_TASK + (
+        "expect:\n  answer:\n"
+        '    must_not_match: ["is not in the catalogue"]\n'
+    )
+    stopped = graded(tmp_path, body, answer="", outcome="end_turn")
+    ran_out = graded(tmp_path, body, answer="", outcome="max_turns")
+    assert [f.check for f in stopped.failures] == ["empty_answer"]
+    assert [f.check for f in ran_out.failures] == ["incomplete"]

@@ -40,6 +40,7 @@ __all__ = ["grade", "numbers_in", "HARD_CHECKS", "BACKGROUND_LABELS"]
 #: Checks whose failure makes ``passed`` false (7.1.8). ``must_match`` is
 #: deliberately absent -- see the module docstring.
 HARD_CHECKS: tuple[str, ...] = (
+    "empty_answer",
     "must_reach_verdict",
     "must_report_value",
     "must_report_artifact_path",
@@ -118,6 +119,28 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
             Failure(
                 check="incomplete",
                 detail=f"the session ended with outcome {evidence.outcome!r}",
+            )
+        )
+        return result
+
+    if not answer.strip():
+        # A separate failure from ``incomplete``, and it has to be: the model
+        # stopped of its own accord (``end_turn``) having said nothing, so no
+        # outcome marks it. Without this, **an empty answer passes every
+        # negative check vacuously** -- a task whose key is entirely
+        # ``must_not_match`` scores a silent session as correct, which is how
+        # ``qwen3.5:9b`` was recorded 3/3 on ``atnf-formal-designation``
+        # across a whole sweep. Nothing further runs, for the same reason it
+        # does not for an incomplete run: there is no answer to grade.
+        result.passed = False
+        result.metrics = {"empty_answer": True, "outcome": evidence.outcome}
+        result.failures.append(
+            Failure(
+                check="empty_answer",
+                detail=(
+                    f"the session ended {evidence.outcome!r} and wrote no "
+                    "answer text; every negative check would pass vacuously"
+                ),
             )
         )
         return result

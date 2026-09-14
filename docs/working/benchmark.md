@@ -326,7 +326,8 @@ contract is untouched by this work.
 | `tools/bench/graders/protocol.py` | Fault counts and `null_argument_fidelity`. |
 | `tools/bench/judge.py` | The opt-in LLM judge. Isolated by construction (S1). |
 | `tools/bench/report.py` | Matrix rendering: Markdown and JSON. |
-| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `compare`. |
+| `tools/bench/answers.py` | The audit verb's reader: the task's prompt beside the model's reply. Offline; consults no model. |
+| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `answers`, `compare`. |
 | `tools/bench/sources.py` | Mechanical resolution of an answer key's expected value. No key is ever a hand-typed literal. |
 | `tools/bench/falsify.py` | The adversarial pass over the keys themselves. Consults no model; can only accuse. |
 | `tools/llm/replay_backend.py` | `ReplayBackend` — replays a recorded model transcript. Test-only. |
@@ -930,16 +931,28 @@ Three constraints, because a naive version would be worse than none:
 Two numbers, because one would lose information:
 
 - **`passed`** — boolean, true when **every hard check is green**. Hard checks
-  are `must_reach_verdict`, `must_report_value`, `must_report_artifact_path`,
-  `must_not_match`, `conditional`, `must_disclose`, `must_label`,
-  `must_state_uncertainty`, and any promoted `must_source_value`. This is what
-  "tokens to an answer" (7.2) conditions on, and what the matrix counts.
+  are `empty_answer`, `must_reach_verdict`, `must_report_value`,
+  `must_report_artifact_path`, `must_not_match`, `conditional`,
+  `must_disclose`, `must_label`, `must_state_uncertainty`, and any promoted
+  `must_source_value`. This is what "tokens to an answer" (7.2) conditions on,
+  and what the matrix counts.
 - **`checks_passed / checks_total`** — fractional, so a near-miss and a
   complete miss are distinguishable in the per-task grid.
 
 A session whose `outcome` is `max_turns` or `budget_exceeded` is `incomplete`,
 reported in its own column and never scored as a low pass rate — a model that
 ran out of turns did not answer badly, it did not answer.
+
+**`empty_answer` is a different thing and is a hard failure.** A model that
+ends `end_turn` having written nothing has not run out of anything; it has
+declined to answer, and no outcome marks it. Without this check an empty
+string satisfies every negative check vacuously, so a task whose key is
+entirely `must_not_match` — "do not say the object is missing from the
+catalogue" — scores a silent session as **correct**. That is not hypothetical:
+a live sweep recorded `qwen3.5:9b` as 3/3 on `atnf-formal-designation` on
+exactly this, in all three repeats, and the advisory judge passed it too. It
+was found by reading the answers (`kepler-bench answers`, section 11), which is
+the argument for that verb existing.
 
 #### 7.1.9 Calibrating the corpus before trusting it
 
@@ -1392,10 +1405,24 @@ kepler-bench falsify artifacts/bench/2026-09-13-core
 # Render the matrix; --composite for a single weighted number.
 kepler-bench compare artifacts/bench/2026-09-13-core [more-run-dirs...]
 
+# Read what the models actually said. Offline, free, no model.
+kepler-bench answers artifacts/bench/2026-09-13-core --wrong-only
+kepler-bench answers artifacts/bench/2026-09-13-core --disagreed
+
 
 # Capture a fixture entry for review. Live, one tool, human-reviewed after.
 kepler-bench record core/ned-formal-designation --tool search_ned
 ```
+
+`answers` is the audit verb: every other verb reduces a session to a verdict,
+and this one prints the task's prompt beside the model's reply. A check that
+fires is a claim about a piece of prose, and the only way to separate a real
+failure from a regex artefact is to read the prose — which is how the
+`must_source_value` false positive (7.1) was found and how `empty_answer`
+(7.1.8) was found. `--wrong-only` narrows to the sessions a check failed;
+`--disagreed` narrows to the sessions where the advisory judge and the
+deterministic checks reached different verdicts, which is where one of the two
+instruments is wrong.
 
 `run` implies `grade` unless `--no-grade`; `grade` is separately invocable so a
 grader fix never costs a re-spend. `--tag` filters `compare` to the tasks
