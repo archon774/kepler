@@ -1278,6 +1278,14 @@ Offline, against synthetic astropy tables — no live provider calls:
 
 Not verified: any live VizieR or SkyServer response. See the Query section of this document, §6.
 
+*Update 2026-09-13 (P7):* the APASS and VSX mappings now also run, in the
+default suite, over **real VizieR responses** — recorded once and shipped as
+`data/fieldcal/zp_solutions/ngc5128_b_002/{apass,vsx}_response.json`, rebuilt
+as astropy tables with the dtypes astroquery 0.4.11 returned. The apostrophe
+columns (`g'mag`, `e_g'mag`, …) arrive spelled with the apostrophe from that
+astroquery version, and the `recno` column the APASS declaration requests is
+not returned at all, so sources carry no id. Landolt and USNO remain synthetic-only.
+
 ## Query
 
 _Former source: `algorithms/query/EXTRACTION.md`._
@@ -1506,6 +1514,14 @@ Offline only — no live VizieR, SkyServer or SIMBAD calls were made.
 real VizieR, SkyServer or SIMBAD traffic, so response-shape assumptions —
 astroquery's apostrophe/underscore column renaming in particular — remain
 untested against current provider behaviour.
+
+*Update 2026-09-13 (P7):* partly superseded. `tests/test_query_live.py` has
+since been run live (2026-08-12, 37 frames), and the recorded APASS and VSX
+responses described in the Catalogs section above now exercise the VizieR row
+mapping and `clip_sources_to_wcs` against real provider rows offline. The
+apostrophe columns came back *with* the apostrophe (astroquery 0.4.11), so the
+`_row_value` underscore retry was not needed for these two tables. SkyServer
+and SIMBAD responses remain unverified.
 
 ## HR Diagram / Isochrone Matching
 

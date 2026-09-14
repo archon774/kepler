@@ -115,14 +115,22 @@ The first local, no-network tools are:
 - `tools.catalogs.list_photometric_catalogs()`
 - `tools.catalogs.resolve_reference_band(catalog, image_filter)`
 - `tools.calibration.solve_zeropoint_from_measurements(measurements, catalog_sources)`
-- `tools.photometry.calibrate_zeropoint(path, catalog_sources=None, catalogs=None, compare_to=None)`
+- `tools.photometry.calibrate_zeropoint(path, catalog_sources=None, catalog_fixture=None, catalogs=None, compare_to=None)`
   -- extraction -> photometry -> catalog match -> reference magnitude ->
-  `calc_solution`. Local only when `catalog_sources` is injected; without it
-  the calibration-input helper queries a reference catalog over the network.
+  `calc_solution`. Local only when `catalog_sources` is injected or
+  `catalog_fixture` names a recorded input (`"selected_rows"`, the matched
+  APASS rows; `"full_response"`, the recorded response for the whole field
+  plus its VSX filter); without either the calibration-input helper queries
+  a reference catalog over the network.
 - `tools.fieldcal_reference.list_zeropoint_references()` /
-  `load_zeropoint_reference(field)` / `compare_zeropoint_to_reference(...)` --
-  the four recorded Skynet zero-point solves, and the offline replay
-  (`replay_catalog_sources`) that drives a real solve against them.
+  `load_zeropoint_reference(field)` / `compare_zeropoint_to_reference(...)` /
+  `replay_field_calibration(field)` -- the four recorded Skynet zero-point
+  solves, the offline replay inputs (`replay_catalog_sources`,
+  `replay_variable_sources`) that drive a real solve against them, and the
+  end-to-end selection replay that re-chooses NGC 5128 B's 35 calibration
+  stars from the recorded 132-row APASS cone (45 candidates once clipped to
+  the frame, as the live query path clips) and reproduces the recorded
+  solve bit for bit.
 - `tools.pulsar.list_pulsar_scans(...)` / `tools.pulsar.resolve_pulsar_scan(...)`
 - `tools.pulsar.load_pulsar_lightcurve(path, ...)`
 - `tools.pulsar.compute_pulsar_periodogram(path, ...)`

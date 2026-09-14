@@ -22,6 +22,9 @@ __all__ = [
     "ZeropointSolution",
     "ZeropointReference",
     "ZeropointComparison",
+    "CatalogResponseReference",
+    "FieldCalMatch",
+    "FieldCalReplay",
     "PhotometryTargetLibrary",
     "SourceSummary",
     "PhotometryRunResult",
@@ -251,6 +254,99 @@ class ZeropointComparison(KeplerToolModel):
     delta_vs_afterglow: float | None = None
     within_tolerance: bool | None = None
     tolerance_mag: float | None = None
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class CatalogResponseReference(KeplerToolModel):
+    """A recorded VizieR response shipped next to a recorded zero-point solve.
+
+    The provenance a fixture like ``apass_response.json`` carries -- what was
+    asked (``query``: shape, centre, radius), of which catalog release, when,
+    with which columns, under what licence (``provenance``) -- surfaced without
+    the rows themselves. ``replay_catalog_sources(fixture="full_response")``
+    and ``replay_variable_sources`` are what turn the rows into sources.
+    """
+
+    field: str
+    catalog: str | None = None
+    path: str | None = None
+    vizier_catalog: str | None = None
+    vizier_table: str | None = None
+    query: dict[str, Any] = Field(default_factory=dict)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    columns: list[str] = Field(default_factory=list)
+    row_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
+    errors: list[ToolError] = Field(default_factory=list)
+
+
+class FieldCalMatch(KeplerToolModel):
+    """One detection the selection replay matched to a catalog candidate.
+
+    ``detected_id`` is the recorded (Afterglow) source id; ``catalog_index``
+    is the 0-based position of the matched candidate in the recorded response
+    as ``replay_catalog_sources(field, fixture="full_response")`` returns it
+    (the whole cone, before clipping), and ``catalog_id`` the id the
+    candidate carried into ``perform_field_calibration`` -- the bookkeeping
+    ``fieldcal_source_<n>`` it assigns when, as here, the response carries
+    none. ``mag``/``mag_error`` are the recorded instrumental values the
+    solve consumed; ``ref_mag``/``ref_mag_error`` the resolved reference
+    magnitude.
+    """
+
+    detected_id: str | None = None
+    catalog_index: int | None = None
+    catalog_id: str | None = None
+    catalog_ra_deg: float | None = None
+    catalog_dec_deg: float | None = None
+    separation_arcsec: float | None = None
+    mag: float | None = None
+    mag_error: float | None = None
+    ref_mag: float | None = None
+    ref_mag_error: float | None = None
+
+
+class FieldCalReplay(KeplerToolModel):
+    """The end-to-end selection replay of a recorded field calibration.
+
+    The recorded detections and the recorded *full* catalog response go
+    through ``perform_field_calibration`` together, so -- unlike
+    ``solve_zeropoint_from_reference`` and the selected-row replay, which
+    start from the rows already known to match -- the matches are chosen
+    here: ``num_matched`` of ``num_catalog_candidates`` candidates against
+    ``num_detected_sources`` detections, after the recorded VSX rows
+    (``num_variable_sources``) have been filtered out. The candidates are
+    what the solve was handed: the recorded response (``num_catalog_rows``
+    in the cone; ``num_variable_rows`` for VSX) clipped to the frame first,
+    exactly as the live query path clips before the solve sees a row.
+    ``matches`` is in detection order, the order the solve consumed them.
+
+    ``recorded_num_matched`` / ``recorded_num_not_selected`` are the
+    counts ``fit_summary.json`` recorded, and ``selection_matches_recorded``
+    is whether the replay chose exactly the recorded rows in the recorded
+    order. ``solution`` is the zero point (ABSOLUTE, as ``calc_solution``
+    returns it) and ``comparison`` places it against the recorded solve.
+    """
+
+    field: str
+    frame_path: str | None = None
+    catalog: str | None = None
+    fixture: str = "full_response"
+    num_catalog_rows: int = 0
+    num_catalog_candidates: int = 0
+    num_variable_rows: int = 0
+    num_variable_sources: int = 0
+    num_detected_sources: int = 0
+    num_matched: int = 0
+    num_catalog_not_selected: int = 0
+    num_detections_not_selected: int = 0
+    recorded_num_matched: int | None = None
+    recorded_num_not_selected: int | None = None
+    selection_matches_recorded: bool | None = None
+    matches: list[FieldCalMatch] = Field(default_factory=list)
+    solution: ZeropointSolution | None = None
+    comparison: ZeropointComparison | None = None
     warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 

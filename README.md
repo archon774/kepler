@@ -120,13 +120,21 @@ Python functions in `tools/`:
   instrumental magnitudes, or whatever the header already carries),
   `--zero-point` (apply a value you already trust), or the recorded-solve
   replay — `tools.photometry.calibrate_zeropoint(path,
-  catalog_sources=tools.fieldcal_reference.replay_catalog_sources(field))`
-  injects the APASS rows Skynet actually matched, so extraction → photometry →
-  matching → reference magnitude → solve all run for real with no socket
-  opened, and `compare_to="ngc5128_b_002"` checks the answer against the
-  recorded Skynet solve. Only `ngc5128_galaxy_b_001.fits` can be driven that
-  way end to end; the three NGC 5286 solves have no bundled frame. Neither
-  this nor `tools.photometry` calibrates
+  catalog_fixture="selected_rows", compare_to="ngc5128_b_002")` injects the
+  APASS rows Skynet actually matched, so extraction → photometry → matching →
+  reference magnitude → solve all run for real with no socket opened, and
+  `catalog_fixture="full_response"` does the same from the recorded APASS
+  response for the whole field (with the recorded VSX variables filtered
+  out), so the matches are *chosen* rather than given. Either way
+  `compare_to` checks the answer against the recorded Skynet solve.
+  `tools.fieldcal_reference.replay_field_calibration("ngc5128_b_002")` is the
+  bit-exact form of the second path: the recorded detections through the
+  whole selection — 132 rows in the cone, 45 on the frame after the live
+  path's clipping, the recorded 35 chosen — and `21.147659857998637`
+  exactly. Only `ngc5128_galaxy_b_001.fits` can be
+  driven that way end to end; the three NGC 5286 solves have no bundled
+  frame and no recorded response. Neither this nor `tools.photometry`
+  calibrates
   against Gaia or fits an isochrone — for that, see `tools.hr_diagram` above;
   `run_photometry_on_target(..., write_source_table=True)` writes a CSV in the
   column shape `tools.hr_diagram.crossmatch_gaia` expects, as a bridge between
@@ -273,6 +281,7 @@ from tools.fieldcal_reference import (
     list_zeropoint_references,
     load_zeropoint_reference,
     replay_catalog_sources,
+    replay_field_calibration,
 )
 from tools.simbad import search_simbad
 from tools.vizier import search_vizier
@@ -317,8 +326,9 @@ and any extraction/photometry/calibration settings as explicit keyword
 arguments. Fetching the catalog rows is the caller's job — `algorithms/fieldcal/`
 opens no socket — which is what keeps the zero-point solve runnable with no
 network stack installed. In this repo the tool layer is that caller; see
-`tools.photometry.calibrate_zeropoint`, and pass it `catalog_sources=` from
-`tools.fieldcal_reference.replay_catalog_sources` for a fully offline solve.
+`tools.photometry.calibrate_zeropoint`, and pass it `catalog_fixture=` (or
+`catalog_sources=` from `tools.fieldcal_reference.replay_catalog_sources`)
+for a fully offline solve.
 
 Catalog metadata and catalog access are separate on purpose. Import
 `algorithms.catalogs` for band tables, colour transforms, and provider
