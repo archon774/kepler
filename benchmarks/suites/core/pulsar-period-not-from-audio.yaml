@@ -6,7 +6,22 @@ prompt: >
 max_turns: 12
 # No fixture: this runs the real chain over
 # data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt.
-fixtures: []
+fixtures: [search_atnf, search_simbad]
+# An off-script call must not derail the run. benchmark.md 5.3 provides for
+# exactly this: `synthesize` hands back a schema-valid empty result -- which is
+# what a real archive returns for no match -- instead of a fixture_miss error.
+#
+# A live run made the cost concrete. claude-sonnet-5 explored 13 distinct tools
+# on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
+# an error, and it exhausted its turns. That measured this suite's fixture
+# coverage, not the model. The miss *rate* is still counted and printed in the
+# report header, so the coverage gap stays visible -- it just no longer ends
+# the session.
+#
+# No key here grades a fixture miss, and the deliberate failures are matched
+# entries rather than misses, so this weakens nothing: the colloquial-name
+# error in search_ned.yaml still fires.
+miss_policy: synthesize
 
 expect:
   trajectory:
