@@ -16,16 +16,38 @@ so the native chat endpoint fallback was not taken. See
 from __future__ import annotations
 
 import dataclasses
+import os
 from typing import Any, Sequence
 
 from tools.llm.base import BackendUnavailableError, BaseHTTPBackend, OnText
 from tools.llm.openai_backend import OpenAIBackend, _CAPABILITIES
 from tools.llm.types import Message, ModelResponse
 
-__all__ = ["OllamaBackend", "OLLAMA_DEFAULT_BASE_URL", "OLLAMA_MAX_OUTPUT_TOKENS"]
+__all__ = [
+    "OllamaBackend",
+    "OLLAMA_DEFAULT_BASE_URL",
+    "OLLAMA_MAX_OUTPUT_TOKENS",
+    "OLLAMA_DEFAULT_TIMEOUT_S",
+    "OLLAMA_TIMEOUT_ENV",
+]
 
 OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1"
 OLLAMA_MAX_OUTPUT_TOKENS = 8192
+
+#: Per-request timeout, in seconds. ``BaseHTTPBackend``'s 60 s is a sensible
+#: default for a hosted API and badly wrong for a local daemon: a turn here is
+#: bounded by the host's own hardware, not by a provider's SLA. Measured on the
+#: development host, ``qwen3.8:27b-mlx`` takes **~189 s** for one turn of
+#: Kepler's real tool surface -- 15,460 prompt tokens, because the 55 registry
+#: schemas serialize to a 61 KB payload that is resent every turn -- and that is
+#: with the model already resident. A cold load adds ~30 s more.
+#:
+#: So the default is raised rather than the caller being expected to discover
+#: a ``ReadTimeout`` that looks like a daemon fault. It stays an *explicit*
+#: timeout (S3: never an unbounded request); ``OLLAMA_TIMEOUT_S`` moves it for
+#: a slower host or a larger model.
+OLLAMA_DEFAULT_TIMEOUT_S = 600.0
+OLLAMA_TIMEOUT_ENV = "OLLAMA_TIMEOUT_S"
 
 _OLLAMA_CAPABILITIES = dataclasses.replace(
     _CAPABILITIES, streaming=False, max_output_tokens=OLLAMA_MAX_OUTPUT_TOKENS
@@ -43,8 +65,10 @@ class OllamaBackend(OpenAIBackend):
         model: str,
         base_url: str | None = None,
         transport: Any = None,
+        timeout_s: float | None = None,
     ) -> None:
         resolved_base = (base_url or self._DEFAULT_BASE_URL).rstrip("/")
+        self._timeout_s = _resolve_timeout(timeout_s)
         # Skip OpenAIBackend.__init__: there is no key and a missing one must
         # never raise. Ollama authenticates with nothing.
         BaseHTTPBackend.__init__(
@@ -110,3 +134,37 @@ class OllamaBackend(OpenAIBackend):
                 "OLLAMA_BASE_URL",
                 "start the daemon with `ollama serve` and pull the model",
             ) from exc
+        except httpx.ReadTimeout as exc:
+            # A read timeout is a different fault from an unreachable daemon:
+            # the daemon answered the connection and is still thinking. Naming
+            # the variable that bounds it is the whole contract of this error,
+            # and it is the difference between "your daemon is down" and "your
+            # host needs longer for this model".
+            raise BackendUnavailableError(
+                OLLAMA_TIMEOUT_ENV,
+                f"the daemon accepted the request but did not answer within "
+                f"{self._timeout_s:g}s; a larger model or a slower host needs "
+                f"a higher {OLLAMA_TIMEOUT_ENV}",
+            ) from exc
+
+
+def _resolve_timeout(explicit: float | None) -> float:
+    """An explicit argument beats ``OLLAMA_TIMEOUT_S``, which beats the
+    default -- the same resolution order the factory uses for credentials.
+
+    A non-numeric or non-positive environment value is ignored rather than
+    raising: a malformed timeout should not make an otherwise-working daemon
+    unreachable, and the default it falls back to is a safe one.
+    """
+
+    if explicit is not None and explicit > 0:
+        return float(explicit)
+    raw = os.environ.get(OLLAMA_TIMEOUT_ENV)
+    if raw:
+        try:
+            value = float(raw)
+        except ValueError:
+            return OLLAMA_DEFAULT_TIMEOUT_S
+        if value > 0:
+            return value
+    return OLLAMA_DEFAULT_TIMEOUT_S

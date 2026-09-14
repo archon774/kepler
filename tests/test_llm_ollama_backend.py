@@ -230,3 +230,66 @@ def test_live_reference_model_completes_a_tool_using_loop_and_the_union_survives
     assert r1.faults == () or all(
         f.type != "malformed_arguments_json" for f in r1.faults
     )
+
+
+# --- the request timeout ---------------------------------------------------
+
+
+def test_the_default_timeout_is_sized_for_a_local_model_not_a_hosted_api(monkeypatch):
+    """BaseHTTPBackend's 60 s is right for a provider's SLA and wrong for a
+    local daemon. Measured on the development host: one turn of Kepler's real
+    tool surface against qwen3.8:27b-mlx takes ~189 s, with the model already
+    resident -- 15,460 prompt tokens, because the 55 registry schemas
+    serialize to a 61 KB payload resent every turn."""
+
+    from tools.llm.base import BaseHTTPBackend
+    from tools.llm.ollama_backend import OLLAMA_DEFAULT_TIMEOUT_S
+
+    monkeypatch.delenv("OLLAMA_TIMEOUT_S", raising=False)
+    assert OllamaBackend(model="qwen3:8b")._timeout_s == OLLAMA_DEFAULT_TIMEOUT_S
+    assert OLLAMA_DEFAULT_TIMEOUT_S > BaseHTTPBackend._timeout_s
+
+
+def test_the_timeout_resolution_order_is_explicit_then_env_then_default(monkeypatch):
+    monkeypatch.setenv("OLLAMA_TIMEOUT_S", "120")
+    assert OllamaBackend(model="m")._timeout_s == 120.0
+    assert OllamaBackend(model="m", timeout_s=42)._timeout_s == 42.0
+
+
+@pytest.mark.parametrize("bad", ["garbage", "0", "-5", ""])
+def test_a_malformed_timeout_falls_back_rather_than_raising(monkeypatch, bad):
+    """A malformed value should not make an otherwise-working daemon
+    unreachable, and the default it falls back to is a safe one."""
+
+    from tools.llm.ollama_backend import OLLAMA_DEFAULT_TIMEOUT_S
+
+    monkeypatch.setenv("OLLAMA_TIMEOUT_S", bad)
+    assert OllamaBackend(model="m")._timeout_s == OLLAMA_DEFAULT_TIMEOUT_S
+
+
+def test_the_timeout_reaches_the_client(monkeypatch):
+    """S3: an explicit timeout, always. Raising the default must not become
+    an unbounded request."""
+
+    backend = OllamaBackend(model="m", timeout_s=123)
+    client = backend._client()
+    assert client.timeout.read == 123.0
+    client.close()
+
+
+def test_a_read_timeout_names_the_variable_that_bounds_it():
+    """A different fault from an unreachable daemon: the daemon answered the
+    connection and is still thinking. The distinction is the difference
+    between "your daemon is down" and "your host needs longer"."""
+
+    import httpx
+
+    backend = OllamaBackend(
+        model="m",
+        timeout_s=5,
+        transport=failing_transport(httpx.ReadTimeout("timed out")),
+    )
+    with pytest.raises(BackendUnavailableError) as excinfo:
+        backend.complete(messages=(), tools=[], system="s", max_tokens=16)
+    assert excinfo.value.variable == "OLLAMA_TIMEOUT_S"
+    assert "did not answer within 5s" in str(excinfo.value)
