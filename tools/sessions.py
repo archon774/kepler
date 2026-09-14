@@ -199,7 +199,7 @@ def backend_record(backend: Any) -> dict[str, Any]:
     spec = str(getattr(backend, "spec", "") or "")
     provider, _, model = spec.partition("/")
     capabilities = getattr(backend, "capabilities", None)
-    return {
+    record = {
         "spec": spec or None,
         "provider": provider or None,
         "model": model or None,
@@ -210,6 +210,14 @@ def backend_record(backend: Any) -> dict[str, Any]:
             else None
         ),
     }
+    # A benchmark claims determinism from temperature 0. Where a provider
+    # refuses the parameter that claim does not hold, and a record that stayed
+    # silent would overstate its own reproducibility. Absent on backends that
+    # do not report it -- never assumed true.
+    supported = getattr(backend, "temperature_supported", None)
+    if supported is not None:
+        record["temperature_supported"] = bool(supported)
+    return record
 
 
 def _message_records(values: Any) -> list[dict[str, str]]:
