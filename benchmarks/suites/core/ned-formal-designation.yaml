@@ -25,6 +25,13 @@ expect:
     # cannot be a whole key.
     must_report_artifact_path: true
     must_not_match:
-      # NED answered. Reporting otherwise after a successful query is the
-      # fidelity failure this task sits next to.
-      - "NED (?:has|holds) (?:no|nothing)|not (?:in|listed in|catalogued in) NED"
+      # NED answered. Reporting the *object* as absent after a successful query
+      # is the fidelity failure this task sits next to.
+      #
+      # Anchored on the object on purpose. The first version of this pattern
+      # was `NED (?:has|holds) (?:no|nothing)` and a live run matched it against
+      # "NED has no band filter of its own" -- the model correctly explaining a
+      # real NED limitation. A negation check has to name what is being denied,
+      # or it fires on any sentence about what a service cannot do.
+      - "(?:NGC\\s*6334|the Cat's Paw[^.]{0,20})[^.]{0,40}(?:is |was )?not (?:in|listed in|catalogued in|known to) NED"
+      - "NED (?:has|holds|returned?s?) (?:no|nothing)\\s+(?:data|records?|photometry|results?|entries|measurements)"

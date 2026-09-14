@@ -570,3 +570,41 @@ def test_a_comma_grouped_number_the_tools_returned_is_not_flagged(tmp_path):
         events=[finished("search_vizier", {"status": "ok", "count": 4127})],
     )
     assert result.metrics["unsourced_numbers"] == []
+
+
+def test_a_hedged_attribution_is_not_a_fabrication(tmp_path):
+    """Found by a live run. The model wrote "if you've seen a range like
+    0.3-0.7 %/yr ... that's a reasonable paraphrase of the paper's point, but
+    the specific value the abstract gives is 0.670" -- a disclaimer, and the
+    most careful possible handling of the exact fabrication this check exists
+    to catch. Failing that answer punishes the behaviour it rewards."""
+
+    result = graded(
+        tmp_path,
+        SOURCE_TASK,
+        answer=(
+            "The abstract gives 0.670 +/- 0.019 %/yr averaged over six decades. "
+            "If you've seen a range like 0.3-0.7 %/yr depending on frequency, "
+            "that is a reasonable paraphrase of the paper's point that the rate "
+            "is frequency-dependent, but it is not the figure the abstract states."
+        ),
+        events=[
+            finished(
+                "get_paper_abstract",
+                {"status": "ok", "preview": [{"abstract": "0.670 +/- 0.019 %/yr"}]},
+            )
+        ],
+    )
+    assert result.passed is True
+
+
+def test_an_undisclaimed_rate_is_still_a_fabrication(tmp_path):
+    """The widened vocabulary must not blunt the check itself."""
+
+    result = graded(
+        tmp_path,
+        SOURCE_TASK,
+        answer="Cassiopeia A declines at 0.3-0.7 %/yr depending on frequency.",
+        events=[finished("search_ads", {"status": "ok", "count": 1})],
+    )
+    assert result.passed is False
