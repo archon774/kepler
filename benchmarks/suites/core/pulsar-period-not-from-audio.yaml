@@ -58,7 +58,7 @@ expect:
           search succeeds. data/pulsar/curated_periods.json records
           0.7145197 s, transcribed from the curation shipped with the scans.
     must_source_value:
-      - pattern: "\\d\\.\\d{3,}"
+      - pattern: "\\d\\.\\d{3,}\\s*(?:s\\b|sec)"
         because: >
           The synthesis ignores sample timestamps, so no period can be read off
           the rendered audio (docs/extraction.md, Pulsar Sonification 7.2). A

@@ -26,9 +26,15 @@ expect:
           which a blind search succeeds. The curated literature period is
           0.7145197 s.
     must_source_value:
-      - pattern: "\\d\\.\\d{3,}"
+      - pattern: "\\d\\.\\d{3,}\\s*(?:s\\b|sec)"
         because: >
           A measured period is a detection and a literature period is a fit to
           a known answer; the two must never be reported as each other. A
           period in the answer comes from the periodogram or is labelled as the
           catalogued value.
+
+          The pattern reaches for the unit rather than matching any number
+          with three decimals: the check is about a *period*, and without the
+          unit it fired on "agrees to within ~0.007%" -- a relative difference
+          the model derived from two numbers it had already sourced, marked
+          down as a fabricated period.
