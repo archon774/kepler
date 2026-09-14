@@ -525,3 +525,43 @@ def test_the_core_suite_declares_the_whole_recorded_archive():
     recorded = {path.stem for path in FIXTURE_ROOT.glob("*.yaml")}
     for task in suite:
         assert set(task.fixtures) == recorded, task.id
+
+
+# --- answer keys are mechanically determined ------------------------------
+
+
+@pytest.mark.parametrize("suite_id", SUITES)
+def test_no_answer_key_carries_a_hand_typed_number(suite_id):
+    """The correction that motivated ``tools/bench/sources.py``.
+
+    A benchmark decides what is correct by consulting the archive, the
+    repository's recorded data, or the deterministic tool -- never a literal
+    someone typed after watching a model answer, and never another model's
+    output. A literal is unfalsifiable by construction: nothing says what it
+    was a transcription *of*, so nothing can notice when it stops being true.
+    """
+
+    for task in load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT):
+        for check in task.answer.get("must_report_value", ()):
+            assert "source" in check, (
+                f"{task.id}: {check['name']} has no mechanical source"
+            )
+            assert check["source"]["kind"] in {"fixture", "dataset", "tool_result"}
+
+
+@pytest.mark.parametrize("suite_id", SUITES)
+def test_every_static_answer_key_resolves_to_its_cited_value(suite_id):
+    """Load-time resolution is the guarantee: a key citing a field the archive
+    no longer has fails the suite rather than failing every model."""
+
+    from tools.bench.sources import resolve_static
+
+    for task in load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT):
+        for check in task.answer.get("must_report_value", ()):
+            source = check["source"]
+            if source["kind"] == "tool_result":
+                assert "expected" not in check
+                continue
+            assert check["expected"] == resolve_static(
+                source, fixture_root=FIXTURE_ROOT, where=task.id
+            )

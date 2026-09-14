@@ -16,7 +16,9 @@ expect:
   answer:
     must_report_value:
       - name: period_s
-        expected: 0.7145197
+        source:
+          dataset: pulsar/curated_periods.json
+          path: pulsars.b0329.period_s
         rel_tol: 0.02
         unit: s
         because: >

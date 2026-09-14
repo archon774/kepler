@@ -228,7 +228,7 @@ def load_task(
         raise TaskError(f"{file} expect has unknown key(s) {sorted(unknown)}")
 
     trajectory = _load_trajectory(expect.get("trajectory"), file)
-    answer = _load_answer(expect.get("answer"), file)
+    answer = _load_answer(expect.get("answer"), file, fixture_root=fixture_root)
     protocol = _load_protocol(expect.get("protocol"), file)
     _require_an_answer_check(answer, file)
 
@@ -448,7 +448,9 @@ def _require_because(rule: Mapping[str, Any], where: str) -> str:
     return " ".join(because.split())
 
 
-def _load_answer(value: Any, file: Path) -> dict[str, Any]:
+def _load_answer(
+    value: Any, file: Path, *, fixture_root: str | Path | None = None
+) -> dict[str, Any]:
     if value is None:
         return {}
     answer = _require_mapping(value, f"{file} expect.answer")
@@ -471,7 +473,7 @@ def _load_answer(value: Any, file: Path) -> dict[str, Any]:
     loaded["must_report_artifact_path"] = artifact
 
     loaded["must_report_value"] = [
-        _load_value_check(item, file, index)
+        _load_value_check(item, file, index, fixture_root=fixture_root)
         for index, item in enumerate(answer.get("must_report_value") or [])
     ]
 
@@ -483,25 +485,71 @@ def _load_answer(value: Any, file: Path) -> dict[str, Any]:
     return loaded
 
 
-def _load_value_check(item: Any, file: Path, index: int) -> dict[str, Any]:
+def _load_value_check(
+    item: Any, file: Path, index: int, *, fixture_root: str | Path | None = None
+) -> dict[str, Any]:
+    """One ``must_report_value`` check.
+
+    The expected number is **named, never typed**. ``source:`` cites the
+    fixture field, repository data file, or tool return value the number comes
+    from, and the loader resolves it -- so a key cannot drift from the archive
+    it claims to transcribe, and a reader can see what the number is a
+    measurement *of*. :mod:`tools.bench.sources` carries the argument.
+    """
+
+    from tools.bench.sources import SourceError, load_source, resolve_static
+
     where = f"{file} expect.answer.must_report_value[{index}]"
     item = _require_mapping(item, where)
-    unknown = set(item) - {"name", "expected", "rel_tol", "unit", "because"}
+    # Checked before the unknown-key sweep so the corpus gets the reason
+    # rather than "unknown key ['expected']".
+    if "expected" in item:
+        raise TaskError(
+            f"{where} carries a hand-typed `expected:`. A value check names "
+            "its mechanical source instead -- `source: {fixture|dataset|"
+            "tool_result: ...}` -- so the key cannot drift from the archive "
+            "and no model's answer decides what is correct."
+        )
+    unknown = set(item) - {"name", "source", "rel_tol", "unit", "because"}
     if unknown:
         raise TaskError(f"{where} has unknown key(s) {sorted(unknown)}")
-    expected = item.get("expected")
-    if isinstance(expected, bool) or not isinstance(expected, (int, float)):
-        raise TaskError(f"{where} expected must be a number, got {expected!r}")
+    if "source" not in item:
+        raise TaskError(
+            f"{where} needs a `source:` naming where the expected number comes "
+            "from; see tools/bench/sources.py"
+        )
+    try:
+        source = load_source(item["source"], where=where)
+    except SourceError as exc:
+        raise TaskError(str(exc)) from exc
+
     rel_tol = item.get("rel_tol", 0.01)
     if isinstance(rel_tol, bool) or not isinstance(rel_tol, (int, float)) or rel_tol < 0:
         raise TaskError(f"{where} rel_tol must be a non-negative number")
-    return {
+
+    check = {
         "name": str(item.get("name") or f"value_{index}"),
-        "expected": float(expected),
+        "source": source,
         "rel_tol": float(rel_tol),
         "unit": item.get("unit"),
         "because": item.get("because"),
     }
+    # A static source resolves now, so a corpus that cites a field the archive
+    # does not have fails to load rather than failing every model at grade
+    # time. `tool_result` has no value until a session exists.
+    # A `dataset` source is repository data and resolves anywhere; a `fixture`
+    # source needs the corpus root it is relative to, which a bare load_task()
+    # may not have been given.
+    if source["kind"] == "dataset" or (
+        source["kind"] == "fixture" and fixture_root is not None
+    ):
+        try:
+            check["expected"] = resolve_static(
+                source, fixture_root=fixture_root, where=where
+            )
+        except SourceError as exc:
+            raise TaskError(str(exc)) from exc
+    return check
 
 
 _HARD_CHECK_KEYS: Mapping[str, frozenset[str]] = {

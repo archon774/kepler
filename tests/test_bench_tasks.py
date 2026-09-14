@@ -332,31 +332,107 @@ def test_a_conditional_needs_exactly_one_guard_and_one_assertion(tmp_path):
         load_task(write(tmp_path, body))
 
 
-def test_must_report_value_requires_a_number(tmp_path):
-    body = (
-        BARE
-        + "expect:\n  answer:\n    must_report_value:\n"
-        "      - name: period_s\n        expected: fast\n"
-    )
-    with pytest.raises(TaskError, match="expected must be a number"):
-        load_task(write(tmp_path, body))
+def test_must_report_value_rejects_a_hand_typed_expected(tmp_path):
+    """The whole point of tools/bench/sources.py: a key names where its number
+    comes from. A literal is a transcription, and a transcription drifts."""
 
-
-def test_must_report_value_loads_with_a_tolerance_and_a_unit(tmp_path):
     body = (
         BARE
         + "expect:\n  answer:\n    must_report_value:\n"
         "      - name: period_s\n        expected: 0.7145197\n"
+    )
+    with pytest.raises(TaskError, match="hand-typed `expected:`"):
+        load_task(write(tmp_path, body))
+
+
+def test_must_report_value_requires_a_source(tmp_path):
+    body = (
+        BARE
+        + "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: period_s\n        rel_tol: 0.02\n"
+    )
+    with pytest.raises(TaskError, match="needs a `source:`"):
+        load_task(write(tmp_path, body))
+
+
+def test_a_dataset_source_resolves_to_the_repository_value(tmp_path):
+    """Resolved at load time, against the repository's own data tree, so a key
+    citing a field the data does not have fails to load rather than failing
+    every model at grade time."""
+
+    body = (
+        BARE
+        + "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: period_s\n"
+        "        source:\n"
+        "          dataset: pulsar/curated_periods.json\n"
+        "          path: pulsars.b0329.period_s\n"
         "        rel_tol: 0.02\n        unit: s\n"
     )
     check = load_task(write(tmp_path, body)).answer["must_report_value"][0]
-    assert check == {
-        "name": "period_s",
-        "expected": 0.7145197,
-        "rel_tol": 0.02,
-        "unit": "s",
-        "because": None,
+    assert check["expected"] == 0.7145197
+    assert check["source"] == {
+        "kind": "dataset",
+        "name": "pulsar/curated_periods.json",
+        "path": "pulsars.b0329.period_s",
     }
+
+
+def test_a_dataset_source_naming_a_missing_field_fails_to_load(tmp_path):
+    body = (
+        BARE
+        + "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: period_s\n"
+        "        source:\n"
+        "          dataset: pulsar/curated_periods.json\n"
+        "          path: pulsars.b0329.orbital_period_s\n"
+    )
+    with pytest.raises(TaskError, match="has no 'orbital_period_s'"):
+        load_task(write(tmp_path, body))
+
+
+def test_a_dataset_source_cannot_climb_out_of_the_data_root(tmp_path):
+    """The corpus is data. A data file that could name an absolute path would
+    read whatever it liked at load time (S7)."""
+
+    body = (
+        BARE
+        + "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: leak\n"
+        "        source:\n"
+        "          dataset: ../pyproject.toml\n"
+        "          path: project.name\n"
+    )
+    with pytest.raises(TaskError, match="outside the data root"):
+        load_task(write(tmp_path, body))
+
+
+def test_a_source_naming_two_kinds_is_refused(tmp_path):
+    body = (
+        BARE
+        + "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: ambiguous\n"
+        "        source:\n"
+        "          dataset: pulsar/curated_periods.json\n"
+        "          path: pulsars.b0329.period_s\n"
+        "          tool_result: fold_pulsar_lightcurve\n"
+        "          field: pulse_snr\n"
+    )
+    with pytest.raises(TaskError, match="exactly one of"):
+        load_task(write(tmp_path, body))
+
+
+def test_a_tool_result_source_stays_unresolved_until_a_session_exists(tmp_path):
+    body = (
+        BARE
+        + "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: pulse_snr\n"
+        "        source: {tool_result: fold_pulsar_lightcurve, field: pulse_snr}\n"
+        "        rel_tol: 0.1\n"
+    )
+    check = load_task(write(tmp_path, body)).answer["must_report_value"][0]
+    assert "expected" not in check
+    assert check["source"]["kind"] == "tool_result"
 
 
 # --- suites ---------------------------------------------------------------

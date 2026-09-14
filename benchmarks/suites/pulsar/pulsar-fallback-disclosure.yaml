@@ -25,7 +25,12 @@ expect:
     # model says the resulting number is not a detection.
     must_report_value:
       - name: pulse_snr
-        expected: 5.7
+        # Fidelity, not ground truth: the number this run's own fold
+        # returned. 5.7 was a transcription of one observed run and would
+        # have failed every model the day the fold changed.
+        source:
+          tool_result: fold_pulsar_lightcurve
+          field: pulse_snr
         rel_tol: 0.1
         because: >
           B2045-16 is rated Most Challenging and a blind search succeeds on one

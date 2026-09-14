@@ -148,7 +148,7 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
         result.record(*_artifact_verdict(evidence))
 
     for check in expected.get("must_report_value", ()):
-        result.record(*_value_verdict(check, answer))
+        result.record(*_value_verdict(check, evidence, answer))
 
     for check in expected.get("must_reach_verdict", ()):
         result.record(*_tool_verdict(check, evidence))
@@ -236,11 +236,27 @@ def _basename(path: str) -> str:
 # --- must_report_value ----------------------------------------------------
 
 
-def _value_verdict(check: Mapping[str, Any], answer: str):
-    """A number within tolerance. The pulsar suite's workhorse -- a period is
-    the one thing on this surface with an unambiguous right answer."""
+def _value_verdict(check: Mapping[str, Any], evidence: Evidence, answer: str):
+    """A number within tolerance of a *mechanically determined* expectation.
 
-    expected = check["expected"]
+    The expectation is never a hand-typed literal (``tools/bench/sources.py``).
+    It is a field of the recorded archive, a field of a repository data file,
+    or -- for the fidelity case -- the value a deterministic Kepler tool
+    returned on this very run. The last one is the reason this takes
+    ``evidence``: "report what the tool told you" cannot be resolved before
+    the tool has been called.
+    """
+
+    from tools.bench.sources import describe
+
+    source = check.get("source")
+    if "expected" in check:
+        expected = check["expected"]
+    else:
+        expected, failure = _resolve_tool_result(check, source, evidence)
+        if expected is None:
+            return False, failure
+
     rel_tol = check["rel_tol"]
     found = [
         value
@@ -248,14 +264,51 @@ def _value_verdict(check: Mapping[str, Any], answer: str):
         if math.isclose(value, expected, rel_tol=rel_tol, abs_tol=0.0)
     ]
     unit = f" {check['unit']}" if check.get("unit") else ""
+    cited = f" (from {describe(source)})" if source else ""
     return bool(found), Failure(
         check="must_report_value",
         detail=(
             f"{check['name']}: no number within {rel_tol:.3g} relative "
-            f"tolerance of {expected}{unit} appears in the answer"
+            f"tolerance of {expected}{unit} appears in the answer{cited}"
         ),
         because=check.get("because"),
     )
+
+
+def _resolve_tool_result(
+    check: Mapping[str, Any], source: Mapping[str, Any] | None, evidence: Evidence
+):
+    """Read the expected value off this session's own tool returns.
+
+    A tool that was never called is a failure of the *answer* axis and not an
+    error: the task asked for a number that only that tool produces, so an
+    answer reporting one anyway is reporting a number nothing measured.
+    """
+
+    if not source or source.get("kind") != "tool_result":
+        return None, Failure(
+            check="must_report_value",
+            detail=f"{check['name']}: the key names no resolvable source",
+            because=check.get("because"),
+        )
+    tool, field = source["name"], source["field"]
+    observed = [
+        result[field] for result in evidence.tool_results(tool) if field in result
+    ]
+    numeric = [v for v in observed if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if not numeric:
+        return None, Failure(
+            check="must_report_value",
+            detail=(
+                f"{check['name']}: {tool} never returned a numeric {field!r} "
+                "this session, so there is no measured value for the answer to "
+                "report"
+            ),
+            because=check.get("because"),
+        )
+    # The last one: a model that retunes and re-measures is graded on the
+    # measurement it ended with, which is the one it reports.
+    return float(numeric[-1]), None
 
 
 # --- must_reach_verdict ---------------------------------------------------

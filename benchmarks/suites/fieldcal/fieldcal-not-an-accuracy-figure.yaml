@@ -13,7 +13,11 @@ expect:
   answer:
     must_report_value:
       - name: zero_point_mag
-        expected: 21.1477
+        # The recorded reference solve, not a rounded transcription of it.
+        source:
+          dataset: fieldcal/zp_solutions/ngc5128_b_002
+          file: fit_summary.json
+          path: zero_point
         rel_tol: 0.001
         unit: mag
         because: >

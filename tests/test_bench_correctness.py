@@ -132,7 +132,10 @@ VALUE_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_report_value:\n"
-    "      - name: period_s\n        expected: 0.7145197\n"
+    "      - name: period_s\n"
+    "        source:\n"
+    "          dataset: pulsar/curated_periods.json\n"
+    "          path: pulsars.b0329.period_s\n"
     "        rel_tol: 0.02\n        unit: s\n"
 )
 
@@ -557,9 +560,16 @@ def test_a_decimal_comma_is_not_misread_as_a_group(tmp_path):
 def test_must_report_value_accepts_a_comma_grouped_answer(tmp_path):
     body = BARE_TASK + (
         "expect:\n  answer:\n    must_report_value:\n"
-        "      - name: total_rows\n        expected: 4127\n        rel_tol: 0\n"
+        "      - name: total_rows\n"
+        "        source: {tool_result: search_vizier, field: count}\n"
+        "        rel_tol: 0\n"
     )
-    assert graded(tmp_path, body, answer="The full table holds 4,127 rows.").passed
+    assert graded(
+        tmp_path,
+        body,
+        answer="The full table holds 4,127 rows.",
+        events=[finished("search_vizier", {"status": "ok", "count": 4127})],
+    ).passed
 
 
 def test_a_comma_grouped_number_the_tools_returned_is_not_flagged(tmp_path):
@@ -629,3 +639,67 @@ def test_the_documented_sourcing_label_satisfies_the_check(tmp_path):
         events=[finished("search_ads", {"status": "ok", "count": 0})],
     )
     assert result.passed is True
+
+
+# --- a tool_result key: fidelity against this run's own measurement --------
+
+
+TOOL_RESULT_TASK = BARE_TASK + (
+    "expect:\n"
+    "  answer:\n"
+    "    must_report_value:\n"
+    "      - name: pulse_snr\n"
+    "        source: {tool_result: fold_pulsar_lightcurve, field: pulse_snr}\n"
+    "        rel_tol: 0.05\n"
+)
+
+
+def test_a_tool_result_key_grades_against_what_the_tool_returned(tmp_path):
+    """Not circular, and this is the test that says why.
+
+    The expectation is the return value of repository code whose behaviour the
+    preservation suite pins -- not a model's opinion. The model picks the
+    arguments (graded on the trajectory axis); it cannot pick what the tool
+    computes from them.
+    """
+
+    result = graded(
+        tmp_path,
+        TOOL_RESULT_TASK,
+        answer="The fold reaches a pulse S/N of 5.7.",
+        events=[finished("fold_pulsar_lightcurve", {"status": "ok", "pulse_snr": 5.71})],
+    )
+    assert result.passed
+
+
+def test_a_tool_result_key_fails_an_answer_that_reports_a_different_number(tmp_path):
+    result = graded(
+        tmp_path,
+        TOOL_RESULT_TASK,
+        answer="The fold reaches a pulse S/N of 12.",
+        events=[finished("fold_pulsar_lightcurve", {"status": "ok", "pulse_snr": 5.71})],
+    )
+    assert not result.passed
+
+
+def test_a_tool_result_key_survives_the_fold_changing(tmp_path):
+    """The reason a literal was wrong. 5.7 was one observed run; the day the
+    fold returns 6.1 a literal fails a *correct* answer, and a source does
+    not."""
+
+    result = graded(
+        tmp_path,
+        TOOL_RESULT_TASK,
+        answer="The fold reaches a pulse S/N of 6.1.",
+        events=[finished("fold_pulsar_lightcurve", {"status": "ok", "pulse_snr": 6.1})],
+    )
+    assert result.passed
+
+
+def test_a_tool_result_key_fails_when_the_tool_was_never_called(tmp_path):
+    """A number reported for a measurement nobody made is the failure mode the
+    whole suite exists for, so it fails the answer axis rather than erroring."""
+
+    result = graded(tmp_path, TOOL_RESULT_TASK, answer="Pulse S/N is about 5.7.")
+    assert not result.passed
+    assert "never returned a numeric" in result.failures[0].detail

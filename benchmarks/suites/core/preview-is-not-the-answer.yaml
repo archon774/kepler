@@ -47,7 +47,11 @@ expect:
     must_report_artifact_path: true
     must_report_value:
       - name: total_rows
-        expected: 4127
+        # The full-size artifact's own row count, read from the fixture.
+        source:
+          fixture: search_vizier
+          entry: radio-category-uncapped
+          path: response.artifact.row_count
         rel_tol: 0.0
         because: >
           The tool reports 4,127 rows behind a ten-row preview and a full-size

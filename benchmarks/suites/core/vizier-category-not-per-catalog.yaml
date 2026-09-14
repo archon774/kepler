@@ -57,7 +57,12 @@ expect:
     must_report_artifact_path: true
     must_report_value:
       - name: matched_catalogs
-        expected: 47
+        # Named, not typed. The number is whatever the recorded archive
+        # answers for the right call; edit the fixture and the key follows.
+        source:
+          fixture: search_vizier
+          entry: radio-category-uncapped
+          path: response.count
         rel_tol: 0.0
         because: >
           The preview is ten rows beside a full-size artifact. Reporting the
