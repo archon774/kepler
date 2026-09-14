@@ -579,3 +579,61 @@ def test_every_static_answer_key_resolves_to_its_cited_value(suite_id):
             assert check["expected"] == resolve_static(
                 source, fixture_root=FIXTURE_ROOT, where=task.id
             )
+
+
+# --- the answer keys are frozen -------------------------------------------
+
+
+KEY_LOCK = SUITE_ROOT.parent / "keys.lock"
+
+
+def _lock() -> dict:
+    import json
+
+    text = "\n".join(
+        line for line in KEY_LOCK.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    return json.loads(text)
+
+
+@pytest.mark.parametrize("suite_id", SUITES)
+def test_every_answer_key_matches_the_lock(suite_id):
+    """A key changes only on demonstrated invalidity, never to calibrate.
+
+    Deriving keys from the archive stops one being *written* to fit a model.
+    This stops one being *revised* to fit one: a changed verdict rule has to
+    appear in review as a diff to this file, alongside the re-grade of every
+    backend it reprices.
+    """
+
+    from tools.bench.tasks import key_lock
+
+    suite = load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT)
+    assert key_lock(suite) == _lock()[suite_id], (
+        f"{suite_id}: an answer key changed. If a transcript shows the old key "
+        "was invalid, regenerate benchmarks/keys.lock and re-grade every "
+        "recorded backend in the same commit -- comparing runs graded by "
+        "different rules produces a ranking that looks fine and means nothing."
+    )
+
+
+def test_the_lock_covers_every_suite():
+    assert set(_lock()) == set(SUITES)
+
+
+def test_the_key_digest_ignores_prose_and_tracks_verdicts():
+    """It hashes what decides a verdict, so a reworded comment does not force a
+    re-grade and a changed threshold does."""
+
+    from tools.bench.tasks import key_digest
+
+    suite = load_suite(SUITE_ROOT / "core", fixture_root=FIXTURE_ROOT)
+    task = next(t for t in suite if t.answer.get("must_report_value"))
+    before = key_digest(task)
+
+    import copy
+
+    moved = copy.deepcopy(task)
+    moved.answer["must_report_value"][0]["rel_tol"] = 0.5
+    assert key_digest(moved) != before

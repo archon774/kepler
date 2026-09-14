@@ -18,6 +18,8 @@ warning; it cannot set ``ANTHROPIC_API_KEY``, ``OPENAI_BASE_URL`` or ``PATH``).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -784,3 +786,39 @@ def _resolve_member(member: str, directory: Path, file: Path) -> Path:
     if not path.exists():
         raise TaskError(f"{file} member {member!r} does not exist at {path}")
     return path
+
+
+def key_digest(task: Task) -> str:
+    """The SHA-256 of a task's *answer key* alone.
+
+    The corpus digest (``harness.corpus_digest``) hashes whole task files, so
+    it moves when a comment or a prompt is reworded. This one hashes only what
+    decides a verdict -- the three ``expect`` blocks -- which is what must not
+    move quietly.
+
+    The freeze it backs is the second half of the de-biasing. Deriving keys
+    from the archive (``tools/bench/sources.py``) stops a key being *written*
+    to fit a model; a lock file stops one being *revised* to fit one. A key
+    changes only when a transcript demonstrates it is invalid -- a check that
+    fired on a defensible answer, or failed to fire on an indefensible one --
+    and never to calibrate a score. Every such change reprices every backend,
+    so it has to show up in review as a diff rather than as a line in a large
+    task file.
+    """
+
+    payload = json.dumps(
+        {
+            "trajectory": task.trajectory,
+            "answer": task.answer,
+            "protocol": task.protocol,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def key_lock(suite: Suite) -> dict[str, str]:
+    """Every task's answer-key digest, for ``benchmarks/keys.lock``."""
+
+    return {task.id: key_digest(task) for task in suite}

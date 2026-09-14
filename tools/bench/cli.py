@@ -98,6 +98,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="turn on the advisory judge column. Off by default; it is the "
         "least trustworthy instrument here.",
     )
+    falsify = sub.add_parser(
+        "falsify",
+        help="attack the answer keys with recorded evidence. Offline, free, "
+        "and it consults no model: it can only accuse a key of being wrong.",
+    )
+    falsify.add_argument("run_dir", type=Path, nargs="+")
+    falsify.add_argument("--suite-root", type=Path, default=DEFAULT_SUITE_ROOT)
+    falsify.add_argument("--fixture-root", type=Path, default=DEFAULT_FIXTURE_ROOT)
+
     compare = sub.add_parser(
         "compare", help="render the matrix over one or more run directories"
     )
@@ -140,11 +149,49 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run(args)
     if args.verb == "grade":
         return _grade(args)
+    if args.verb == "falsify":
+        return _falsify(args)
     if args.verb == "compare":
         return _compare(args)
     if args.verb == "record":
         return _record(args)
     raise SystemExit(f"unknown verb {args.verb!r}")
+
+
+def _falsify(args: Any) -> int:
+    """Report candidate false positives in the keys themselves.
+
+    Exit 1 when there are candidates: a key that fires on a defensible answer
+    penalises a model for being right, and that is a failing condition for the
+    corpus even though every run in it completed.
+    """
+
+    from tools.bench.falsify import falsify_run
+
+    findings: list[dict[str, Any]] = []
+    for directory in args.run_dir:
+        findings += falsify_run(
+            directory,
+            suite_root=args.suite_root,
+            fixture_root=args.fixture_root,
+        )["findings"]
+
+    if not findings:
+        print(
+            f"No candidate false positives across {len(args.run_dir)} run(s). "
+            "A key can be shown wrong, never shown right -- this is the "
+            "absence of a demonstration, not a clean bill of health."
+        )
+        return 0
+
+    print(f"{len(findings)} candidate(s) to review:\n")
+    for finding in findings:
+        print(
+            f"- [{finding['probe']}] {finding['task_id']} / "
+            f"{finding['backend']} r{finding['repeat']} ({finding['check']})"
+        )
+        print(f"    {finding['detail']}")
+    return 1
 
 
 def _run(args: Any) -> int:
