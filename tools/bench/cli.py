@@ -82,6 +82,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the token ceiling and the plan, then stop.",
     )
+
+    grade = sub.add_parser(
+        "grade",
+        help="grade a run directory offline. Free and repeatable, so a "
+        "grader fix never costs a re-spend.",
+    )
+    grade.add_argument("run_dir", type=Path)
+    grade.add_argument("--suite-root", type=Path, default=DEFAULT_SUITE_ROOT)
+    grade.add_argument("--fixture-root", type=Path, default=DEFAULT_FIXTURE_ROOT)
+    grade.add_argument(
+        "--judge",
+        default=None,
+        metavar="PROVIDER/MODEL",
+        help="turn on the advisory judge column. Off by default; it is the "
+        "least trustworthy instrument here.",
+    )
     return parser
 
 
@@ -89,6 +105,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.verb == "run":
         return _run(args)
+    if args.verb == "grade":
+        return _grade(args)
     raise SystemExit(f"unknown verb {args.verb!r}")
 
 
@@ -155,6 +173,11 @@ def _run(args: Any) -> int:
             out=out,
         )
 
+    if not args.no_grade:
+        from tools.bench.grade import grade_run
+
+        grade_run(Path(out), suite_root=args.suite_root, fixture_root=args.fixture_root)
+
     print(json.dumps(record.to_json(), indent=2, sort_keys=True))
     incomplete = [run for run in record.runs if run.incomplete]
     if incomplete:
@@ -169,6 +192,25 @@ def _run(args: Any) -> int:
             "a high miss rate is measuring its own coverage, not the model.",
             file=sys.stderr,
         )
+    return 0
+
+
+def _grade(args: Any) -> int:
+    from tools.bench.grade import grade_run
+
+    judge = None
+    if args.judge:
+        from tools.bench.judge import build_judge
+
+        judge = build_judge(args.judge)
+
+    grades = grade_run(
+        Path(args.run_dir),
+        suite_root=args.suite_root,
+        fixture_root=args.fixture_root,
+        judge=judge,
+    )
+    print(json.dumps(grades, indent=2, sort_keys=True))
     return 0
 
 

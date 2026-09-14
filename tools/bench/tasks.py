@@ -294,7 +294,7 @@ def _load_trajectory(value: Any, file: Path) -> dict[str, Any]:
     from tools.registry import TOOL_FUNCTIONS
 
     loaded: dict[str, Any] = {}
-    for key in ("must_call", "must_not_call", "order"):
+    for key in ("must_call", "order"):
         names = _string_list(trajectory.get(key), f"{file} expect.trajectory.{key}")
         unknown_tools = set(names) - set(TOOL_FUNCTIONS)
         if unknown_tools:
@@ -304,6 +304,15 @@ def _load_trajectory(value: Any, file: Path) -> dict[str, Any]:
             )
         loaded[key] = names
 
+    # must_not_call is the one hard-failure check the documented format spells
+    # as a bare list of names, which leaves a scoreboard entry with nothing to
+    # explain itself. Both forms are accepted: a bare name, or a
+    # {tool, because} mapping. The mapping is the one to reach for.
+    loaded["must_not_call"] = [
+        _load_must_not_call(item, file, index)
+        for index, item in enumerate(trajectory.get("must_not_call") or [])
+    ]
+
     rules = trajectory.get("arguments") or []
     if not isinstance(rules, Sequence) or isinstance(rules, (str, bytes)):
         raise TaskError(f"{file} expect.trajectory.arguments must be a list")
@@ -311,6 +320,26 @@ def _load_trajectory(value: Any, file: Path) -> dict[str, Any]:
         _load_argument_rule(rule, file, index) for index, rule in enumerate(rules)
     ]
     return loaded
+
+
+def _load_must_not_call(item: Any, file: Path, index: int) -> dict[str, Any]:
+    from tools.registry import TOOL_FUNCTIONS
+
+    where = f"{file} expect.trajectory.must_not_call[{index}]"
+    if isinstance(item, str):
+        record = {"tool": item, "because": None}
+    elif isinstance(item, Mapping):
+        unknown = set(item) - {"tool", "because"}
+        if unknown:
+            raise TaskError(f"{where} has unknown key(s) {sorted(unknown)}")
+        record = {"tool": item.get("tool"), "because": _require_because(item, where)}
+    else:
+        raise TaskError(
+            f"{where} must be a tool name or a {{tool, because}} mapping"
+        )
+    if record["tool"] not in TOOL_FUNCTIONS:
+        raise TaskError(f"{where} names unregistered tool {record['tool']!r}")
+    return record
 
 
 def _load_argument_rule(rule: Any, file: Path, index: int) -> dict[str, Any]:
