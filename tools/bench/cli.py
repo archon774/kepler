@@ -312,6 +312,7 @@ def _compare(args: Any) -> int:
     from tools.bench.harness import RUN_RECORD_NAME
     from tools.bench.report import (
         build_report,
+        has_broken_run,
         has_corpus_conflict,
         render_markdown,
         write_report,
@@ -334,6 +335,18 @@ def _compare(args: Any) -> int:
         pairs.append({"record": record, "grades": grades})
 
     report = build_report(pairs, composite=not args.no_score, tag=args.tag)
+
+    if has_broken_run(report) and not args.allow_mixed_corpus:
+        header = report["header"]
+        print(
+            f"kepler-bench compare: {len(header['errored'])} of "
+            f"{header['sessions']} sessions failed inside the harness "
+            f"({header['error_rate']:.0%}). That is an outage, not a result. "
+            "Re-run before comparing; --allow-mixed-corpus overrides and the "
+            "report then says so in its header.",
+            file=sys.stderr,
+        )
+        return 2
 
     if has_corpus_conflict(report) and not args.allow_mixed_corpus:
         conflicts = report["header"]["corpus_conflicts"]

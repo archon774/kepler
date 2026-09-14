@@ -544,9 +544,18 @@ def _header(runs: Sequence[Mapping[str, Any]], *, tag: str | None) -> dict[str, 
     misses = 0
     incomplete: list[str] = []
     budget_exceeded: list[str] = []
+    # Harness errors, counted apart from the other incomplete outcomes. A model
+    # running out of turns is a result about the model; an API outage is not a
+    # result at all, and recording them the same way is how a sweep of 47 failed
+    # sessions renders as a scoreboard with a quiet column nobody reads first.
+    errored: list[str] = []
+    sessions = 0
     for pair in runs:
         record = pair["record"]
         for entry in record.get("runs", ()):
+            sessions += 1
+            if entry.get("outcome") == "error" or entry.get("error"):
+                errored.append(f"{entry['task_id']}@{entry['backend']}")
             hits += entry.get("fixture_hits") or 0
             misses += len(entry.get("fixture_misses") or ())
             if entry.get("outcome") == "budget_exceeded":
@@ -582,6 +591,9 @@ def _header(runs: Sequence[Mapping[str, Any]], *, tag: str | None) -> dict[str, 
         "fixture_miss_rate": miss_rate,
         "fixture_misses": misses,
         "incomplete": incomplete,
+        "errored": errored,
+        "sessions": sessions,
+        "error_rate": len(errored) / sessions if sessions else 0.0,
         "budget_exceeded": budget_exceeded,
     }
 
@@ -620,6 +632,31 @@ def _corpus_conflicts(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "fixtures": sorted(f for f, digests in fixtures.items() if len(digests) > 1),
         "system_prompts": sorted(prompts) if len(prompts) > 1 else [],
     }
+
+
+#: Above this share of sessions failing inside the harness, a run is not a
+#: measurement of anything. Set where it is because a handful of transient API
+#: errors across a long sweep is survivable -- those sessions are excluded and
+#: the rest still measured -- while a quarter of them means the thing being
+#: reported is the network.
+MAX_ERROR_RATE = 0.20
+
+
+def has_broken_run(report: Mapping[str, Any]) -> bool:
+    """Whether so many sessions failed inside the harness that the run is not
+    a result.
+
+    The failure this exists for: a live sweep lost its API connection after two
+    sessions, errored the remaining 47, and reported ``DONE`` on all five
+    suites in under twenty seconds. Errored sessions are recorded
+    ``incomplete``, which the grader rightly excludes from the pass rate rather
+    than counting as failures -- so the run rendered as a scoreboard over the
+    two sessions that survived, with the wreckage in a column beside it. The
+    only reason it was caught is that seven seconds for nine live-API sessions
+    is impossible on its face, and that is not a check.
+    """
+
+    return report["header"].get("error_rate", 0.0) > MAX_ERROR_RATE
 
 
 def has_corpus_conflict(report: Mapping[str, Any]) -> bool:
@@ -763,6 +800,22 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             + ", ".join(f"`{item}`" for item in header["budget_exceeded"])
         )
         lines.append("")
+    if header.get("errored"):
+        rate = header.get("error_rate", 0.0)
+        lines.append(
+            f"> **{len(header['errored'])} of {header['sessions']} sessions "
+            f"failed inside the harness** ({rate:.0%}). These are not model "
+            "results -- an API outage and a model running out of turns are not "
+            "the same event, and only the second belongs in a score."
+        )
+        if rate > MAX_ERROR_RATE:
+            lines.append(">")
+            lines.append(
+                "> **This run is not a measurement.** Re-run it; do not read "
+                "the tables below."
+            )
+        lines.append("")
+
     if header["incomplete"]:
         lines.append(
             "**Incomplete** (did not answer; never scored as a low pass rate): "

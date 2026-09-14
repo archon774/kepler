@@ -914,3 +914,96 @@ def test_the_failure_profile_is_categorical():
     ]
     text = render_markdown(build_report([_pair(entries=entries)]))
     assert "`must_source_value` x3" in text
+
+
+# --- an outage is not a result --------------------------------------------
+
+
+def _errored_entry(**kwargs):
+    entry = _entry(incomplete=True, passed=False, **kwargs)
+    entry["outcome"] = "error"
+    return entry
+
+
+def test_a_run_that_mostly_failed_in_the_harness_is_not_a_measurement():
+    """The live failure this guards.
+
+    A sweep lost its API connection after two sessions, errored the remaining
+    47, and reported success on all five suites in under twenty seconds.
+    Errored sessions are recorded incomplete, which the grader rightly excludes
+    from the pass rate -- so it rendered as a scoreboard over the survivors,
+    with the wreckage in a column beside it.
+    """
+
+    from tools.bench.report import has_broken_run
+
+    entries = [_entry(task_id="t0", passed=True)]
+    entries += [_errored_entry(task_id=f"t{i}") for i in range(1, 12)]
+    record = _record()
+    record["runs"] = [
+        {
+            "task_id": e["task_id"],
+            "backend": e["backend"],
+            "outcome": e["outcome"],
+            "incomplete": e["incomplete"],
+            "error": "APIConnectionError" if e["outcome"] == "error" else None,
+        }
+        for e in entries
+    ]
+    report = build_report([_pair(record, entries=entries)])
+
+    assert report["header"]["error_rate"] > 0.8
+    assert has_broken_run(report)
+    text = render_markdown(report)
+    assert "failed inside the harness" in text
+    assert "This run is not a measurement" in text
+
+
+def test_a_few_transient_errors_do_not_void_a_long_sweep():
+    """Those sessions are excluded and the rest still measured. Voiding a
+    forty-eight session sweep over one dropped connection would throw away a
+    real measurement to avoid a small one."""
+
+    from tools.bench.report import has_broken_run
+
+    entries = [_entry(task_id=f"t{i}", passed=True) for i in range(23)]
+    entries += [_errored_entry(task_id="t23")]
+    record = _record()
+    record["runs"] = [
+        {
+            "task_id": e["task_id"],
+            "backend": e["backend"],
+            "outcome": e["outcome"],
+            "incomplete": e["incomplete"],
+            "error": "APIConnectionError" if e["outcome"] == "error" else None,
+        }
+        for e in entries
+    ]
+    report = build_report([_pair(record, entries=entries)])
+
+    assert not has_broken_run(report)
+    # ... but it is still said out loud, because it is not nothing.
+    assert "failed inside the harness" in render_markdown(report)
+
+
+def test_running_out_of_turns_is_a_model_result_not_an_outage():
+    """A model exhausting its turns is a fact about the model. An API outage
+    is a fact about the network. Recording them identically is the defect."""
+
+    from tools.bench.report import has_broken_run
+
+    entries = [_entry(task_id=f"t{i}", incomplete=True, passed=False) for i in range(12)]
+    record = _record()
+    record["runs"] = [
+        {
+            "task_id": e["task_id"],
+            "backend": e["backend"],
+            "outcome": "max_turns",
+            "incomplete": True,
+            "error": None,
+        }
+        for e in entries
+    ]
+    report = build_report([_pair(record, entries=entries)])
+    assert report["header"]["error_rate"] == 0.0
+    assert not has_broken_run(report)
