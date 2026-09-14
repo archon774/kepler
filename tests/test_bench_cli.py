@@ -136,7 +136,8 @@ def test_compare_renders_the_matrix_over_a_run_directory(tmp_path, capsys):
     assert main(["compare", str(out)]) == 0
     printed = capsys.readouterr().out
     assert "# Kepler model benchmark" in printed
-    assert "## Matrix" in printed
+    assert "## Ranking" in printed
+    assert "## Diagnostics" in printed
     assert (out / "report.md").exists()
     assert (out / "report.json").exists()
 

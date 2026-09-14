@@ -7,7 +7,20 @@ answer are read left to right -- correctness, then efficiency -- and the two
 diagnostic axes sit beside them to explain a number rather than competing with
 it for attention.
 
-**There is no blended score by default.** A composite hides which axis failed,
+**The score is three measurements and nothing else.** A model is asked a
+question about Kepler's tool surface, and only three things about its reply are
+scored: **is it correct**, **how long did it take**, and **how many tokens did
+it cost**. Everything else the harness records -- trajectory, protocol, fixture
+misses, duplicate calls -- is diagnosis for reading *why* a score came out as it
+did, and never enters the score.
+
+Correctness is a rate and already lives in [0, 1]. Time and tokens have no
+natural ceiling, so each is scored as a ratio against the best row: the fastest
+backend scores 1.0 on time, one taking twice as long scores 0.5. Both are
+measured over runs that reached a passing answer, because a fast wrong answer is
+not a fast answer.
+
+The older text below is kept because its warning still holds --
 and "model A scored 0.72" is not actionable. One cross-axis figure is reported
 because it *is* the question rather than a summary of it: **tokens to an
 answer**, conditioned on passing the answer axis. A weighted composite is
@@ -31,6 +44,7 @@ __all__ = [
     "render_markdown",
     "build_report",
     "write_report",
+    "SCORE_WEIGHTS",
     "COMPOSITE_WEIGHTS",
     "REPORT_MD_NAME",
     "REPORT_JSON_NAME",
@@ -39,9 +53,22 @@ __all__ = [
 REPORT_MD_NAME = "report.md"
 REPORT_JSON_NAME = "report.json"
 
-#: Only the two headline axes. Printed above the composite whenever one is
-#: rendered, so a reader never sees a single number without its recipe.
-COMPOSITE_WEIGHTS: Mapping[str, float] = {"correctness": 0.7, "efficiency": 0.3}
+#: The three measurements, and what each is worth. Printed above every ranking
+#: so a reader can disagree with the weights rather than guess at them.
+#:
+#: Correctness dominates on purpose: an answer delivered instantly and cheaply
+#: is worth nothing if it is wrong, so no amount of speed or thrift lifts a
+#: model past one that is right by a wide margin. Time and tokens are weighted
+#: equally -- they are two prices for the same answer, one paid in waiting and
+#: one in spend, and nothing here knows which a given caller minds more.
+SCORE_WEIGHTS: Mapping[str, float] = {
+    "correctness": 0.6,
+    "time": 0.2,
+    "tokens": 0.2,
+}
+
+#: Superseded name, kept so an older report payload still reads.
+COMPOSITE_WEIGHTS = SCORE_WEIGHTS
 
 #: A fixture miss rate above this is called out in the header in the
 #: document's own words rather than left for a reader to notice in a column.
@@ -55,7 +82,7 @@ _FIXTURE_AGE_WARNING_DAYS = 180
 def build_report(
     runs: Sequence[Mapping[str, Any]],
     *,
-    composite: bool = False,
+    composite: bool = True,
     tag: str | None = None,
 ) -> dict[str, Any]:
     """Build the report payload from one or more ``(run.json, grades.json)``
@@ -87,18 +114,15 @@ def build_report(
     for row in matrix.values():
         _finalize(row)
     if composite:
-        costs = [
-            row["tokens_per_answer"]
-            for row in matrix.values()
-            if row.get("tokens_per_answer")
-        ]
-        best = min(costs) if costs else None
+        best_tokens = _best(matrix, "tokens_per_answer")
+        best_seconds = _best(matrix, "seconds_per_answer")
         for row in matrix.values():
-            row["composite"] = _composite(row, best)
+            row["score"] = _score(row, best_seconds, best_tokens)
+            row["composite"] = row["score"]
 
     return {
         "header": header,
-        "weights": dict(COMPOSITE_WEIGHTS) if composite else None,
+        "weights": dict(SCORE_WEIGHTS) if composite else None,
         "matrix": matrix,
         "per_task": grid,
         "failures": failures,
@@ -218,32 +242,41 @@ def separated(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     return first[1] < second[0] or second[1] < first[0]
 
 
-def _composite(row: Mapping[str, Any], best_tokens: float | None) -> float | None:
-    """One weighted figure over the two headline axes, for ranking.
+def _best(matrix: Mapping[str, Mapping[str, Any]], key: str) -> float | None:
+    """The best (lowest) value of a cost column across the compared backends."""
 
-    Correctness is a rate in [0, 1] already. Efficiency is normalized against
-    the **best** row's tokens per answer, so the cheapest backend scores 1.0
-    and one costing twice as much scores 0.5 -- a ratio, because tokens have no
-    natural ceiling to divide by.
+    values = [row[key] for row in matrix.values() if row.get(key)]
+    return min(values) if values else None
 
-    Deliberately behind ``--composite`` and never the default. A single number
-    hides which axis failed, and the two it blends answer different questions;
-    it is offered for ranking, not for diagnosis. The weights print above it so
-    a reader can disagree with them.
 
-    ``None`` when either axis is missing, rather than substituting a zero: a
-    backend that answered nothing has no efficiency, and scoring it as maximally
-    inefficient would invent a measurement.
+def _score(
+    row: Mapping[str, Any],
+    best_seconds: float | None,
+    best_tokens: float | None,
+) -> float | None:
+    """The benchmark score: correctness, time and tokens, and nothing else.
+
+    Correctness is already a rate in [0, 1]. Time and tokens are normalised
+    against the best row, because neither has a natural ceiling to divide by:
+    the fastest backend scores 1.0 on time and one taking twice as long scores
+    0.5. Both costs count only the runs that reached a passing answer.
+
+    ``None`` when a backend answered nothing, rather than substituting a zero:
+    a model with no passing run has no time or token cost per answer, and
+    scoring it as infinitely slow would invent a measurement it never made.
     """
 
     correctness = row.get("pass_rate")
+    seconds = row.get("seconds_per_answer")
     tokens = row.get("tokens_per_answer")
-    if correctness is None or not tokens or not best_tokens:
+    if correctness is None or not seconds or not tokens:
         return None
-    efficiency = best_tokens / tokens
+    if not best_seconds or not best_tokens:
+        return None
     return round(
-        correctness * COMPOSITE_WEIGHTS["correctness"]
-        + efficiency * COMPOSITE_WEIGHTS["efficiency"],
+        correctness * SCORE_WEIGHTS["correctness"]
+        + (best_seconds / seconds) * SCORE_WEIGHTS["time"]
+        + (best_tokens / tokens) * SCORE_WEIGHTS["tokens"],
         4,
     )
 
@@ -282,6 +315,7 @@ def _header(runs: Sequence[Mapping[str, Any]], *, tag: str | None) -> dict[str, 
     total = hits + misses
     miss_rate = misses / total if total else 0.0
     return {
+        "corpus_conflicts": _corpus_conflicts(runs),
         "runs": [
             {
                 "run_id": pair["record"]["run_id"],
@@ -306,6 +340,47 @@ def _header(runs: Sequence[Mapping[str, Any]], *, tag: str | None) -> dict[str, 
         "incomplete": incomplete,
         "budget_exceeded": budget_exceeded,
     }
+
+
+def _corpus_conflicts(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Where merged runs were measured with different instruments.
+
+    Two runs of the same task are only poolable if the task file, the fixtures
+    behind it and the system prompt were byte-identical. Merging runs that
+    differ produces one confident-looking rate over two different experiments,
+    and nothing in the output would have said so.
+
+    Reported per artefact rather than as a single flag, because *what* differs
+    decides whether a reader can salvage anything: a changed fixture invalidates
+    the tasks that read it, a changed prompt invalidates everything.
+    """
+
+    tasks: dict[str, set[str]] = {}
+    fixtures: dict[str, set[str]] = {}
+    prompts: set[str] = set()
+    suites: set[str] = set()
+    for pair in runs:
+        record = pair["record"]
+        corpus = record.get("corpus") or {}
+        for task_id, digest in (corpus.get("tasks") or {}).items():
+            tasks.setdefault(task_id, set()).add(digest)
+        for name, digest in (corpus.get("fixtures") or {}).items():
+            fixtures.setdefault(name, set()).add(digest)
+        prompt = (record.get("config") or {}).get("system_prompt_sha256")
+        if prompt:
+            prompts.add(prompt)
+        if corpus.get("suite"):
+            suites.add(corpus["suite"])
+    return {
+        "tasks": sorted(t for t, digests in tasks.items() if len(digests) > 1),
+        "fixtures": sorted(f for f, digests in fixtures.items() if len(digests) > 1),
+        "system_prompts": sorted(prompts) if len(prompts) > 1 else [],
+    }
+
+
+def has_corpus_conflict(report: Mapping[str, Any]) -> bool:
+    conflicts = report["header"].get("corpus_conflicts") or {}
+    return any(conflicts.get(key) for key in ("tasks", "fixtures", "system_prompts"))
 
 
 def _grid_row(entry: Mapping[str, Any]) -> dict[str, Any]:
@@ -397,6 +472,29 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             lines.append(f"- judge `{run['judge']}` (advisory; never blended)")
         lines.append("")
 
+    conflicts = header.get("corpus_conflicts") or {}
+    if any(conflicts.get(key) for key in ("tasks", "fixtures", "system_prompts")):
+        lines.append("> **These runs were not measured with the same instrument.**")
+        lines.append(">")
+        lines.append(
+            "> Pooling them produces one confident-looking rate over two "
+            "different experiments. Re-run the older backends against the "
+            "current corpus instead of merging."
+        )
+        if conflicts.get("system_prompts"):
+            lines.append("> - **system prompt differs** — nothing here is poolable.")
+        if conflicts.get("tasks"):
+            lines.append(
+                "> - task files differ: "
+                + ", ".join(f"`{t}`" for t in conflicts["tasks"])
+            )
+        if conflicts.get("fixtures"):
+            lines.append(
+                "> - fixtures differ: "
+                + ", ".join(f"`{f}`" for f in conflicts["fixtures"])
+            )
+        lines.append("")
+
     if header["tag"]:
         lines.append(f"Filtered to tasks tagged `{header['tag']}`.")
         lines.append("")
@@ -426,17 +524,78 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         )
         lines.append("")
 
+    lines.extend(_ranking_table(report))
     lines.extend(_matrix_table(report))
     lines.extend(_grid_table(report))
     lines.extend(_failure_list(report))
     return "\n".join(lines) + "\n"
 
 
+def _ranking_table(report: Mapping[str, Any]) -> list[str]:
+    """The scoreboard: three measurements, one score, one order.
+
+    Ranked because that is what a scoreboard is for. The 95% interval stays in
+    the row so the precision of the correctness term is visible beside it --
+    a reader ordering two backends whose intervals overlap should be able to
+    see that from the same table.
+    """
+
+    weights = report.get("weights")
+    if not weights:
+        return []
+    rows = [
+        (backend, row)
+        for backend, row in report["matrix"].items()
+        if row.get("score") is not None
+    ]
+    unscored = sorted(set(report["matrix"]) - {backend for backend, _ in rows})
+    rows.sort(key=lambda item: item[1]["score"], reverse=True)
+
+    lines = [
+        "## Ranking",
+        "",
+        "Three measurements and nothing else: **is the answer correct**, **how "
+        "long did it take**, **how many tokens did it cost**. Time and tokens "
+        "are scored against the best row and counted only over runs that "
+        "reached a passing answer.",
+        "",
+        "Weights: " + ", ".join(f"**{k}** {v}" for k, v in weights.items()) + ".",
+        "",
+        "| # | backend | score | correct | 95% interval | seconds/answer | "
+        "tokens/answer |",
+        "| --: | --- | --: | --- | --- | --: | --: |",
+    ]
+    for rank, (backend, row) in enumerate(rows, start=1):
+        lines.append(
+            "| {rank} | `{backend}` | **{score:.3f}** | {passed}/{scored} "
+            "({rate}) | {interval} | {spa} | {tpa} |".format(
+                rank=rank,
+                backend=backend,
+                score=row["score"],
+                passed=row["passed"],
+                scored=row["runs"] - row["incomplete"],
+                rate=_pct(row["pass_rate"]),
+                interval=_interval(row.get("pass_interval")),
+                spa=_num(row.get("seconds_per_answer"), "{:,.0f}"),
+                tpa=_num(row.get("tokens_per_answer"), "{:,.0f}"),
+            )
+        )
+    lines.append("")
+    if unscored:
+        lines.append(
+            "Unscored (no passing run, so no cost per answer to measure): "
+            + ", ".join(f"`{backend}`" for backend in unscored)
+            + "."
+        )
+        lines.append("")
+    return lines
+
+
 def _matrix_table(report: Mapping[str, Any]) -> list[str]:
     lines = [
-        "## Matrix",
+        "## Diagnostics",
         "",
-        "The two headline axes first; the two diagnostic axes explain them.",
+        "Not scored. These explain *why* a score came out as it did.",
         "",
         "| backend | correctness | 95% interval | stability | seconds to an "
         "answer | tokens to an answer | turns/run | tok/s | duplicate rate | "
@@ -474,14 +633,6 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
         + " token(s) without result."
     )
     lines.append("")
-    if report.get("weights"):
-        lines.append(
-            "Composite weights (headline axes only): "
-            + ", ".join(f"{k} {v}" for k, v in report["weights"].items())
-        )
-        for backend, row in sorted(report["matrix"].items()):
-            lines.append(f"- `{backend}`: {_num(row.get('composite'), '{:.4f}')}")
-        lines.append("")
     return lines
 
 

@@ -207,23 +207,35 @@ def test_the_column_order_reads_the_two_questions_left_to_right():
     assert columns.index("protocol faults") > columns.index("trajectory failures")
 
 
-def test_there_is_no_blended_score_by_default():
-    """A composite hides which axis failed, and "model A scored 0.72" is not
-    actionable."""
+def test_the_score_is_three_measurements_and_nothing_else():
+    """Correct, how long, how many tokens. Everything else the harness records
+    is diagnosis for reading why a score came out as it did."""
+
+    from tools.bench.report import SCORE_WEIGHTS
 
     report = build_report([_pair()])
-    assert report["weights"] is None
-    assert "composite" not in render_markdown(report).lower()
+    assert set(report["weights"]) == {"correctness", "time", "tokens"}
+    assert report["weights"] == dict(SCORE_WEIGHTS)
+    for diagnostic in ("trajectory", "protocol", "stability", "duplicate"):
+        assert diagnostic not in report["weights"]
 
 
-def test_the_composite_prints_its_weights_above_it():
-    report = build_report([_pair()], composite=True)
-    text = render_markdown(report)
-    assert report["weights"] == dict(COMPOSITE_WEIGHTS)
-    assert "Composite weights (headline axes only)" in text
-    # Headline axes only: a diagnostic has no independent meaning to weight.
-    assert "trajectory" not in report["weights"]
-    assert "protocol" not in report["weights"]
+def test_the_ranking_prints_its_weights_above_it():
+    """A reader must be able to disagree with the weights rather than guess
+    them."""
+
+    text = render_markdown(build_report([_pair()]))
+    assert "## Ranking" in text
+    assert "**correctness** 0.6" in text
+    assert "**time** 0.2" in text and "**tokens** 0.2" in text
+
+
+def test_the_ranking_orders_by_score():
+    slow = _entry(backend="slow/model", task_id="t1", wall_ms=200_000)
+    fast = _entry(backend="fast/model", task_id="t1", wall_ms=10_000)
+    text = render_markdown(build_report([_pair(entries=[slow, fast])]))
+    ranking = text[text.index("## Ranking"):text.index("## Diagnostics")]
+    assert ranking.index("fast/model") < ranking.index("slow/model")
 
 
 def test_tokens_without_result_are_reported_separately_never_averaged_in():
@@ -409,10 +421,9 @@ def test_a_single_repeat_reports_no_stability_rather_than_a_perfect_one():
     assert "| -- |" in text
 
 
-def test_the_composite_ranks_on_both_headline_axes():
-    """Correctness is already a rate; efficiency is normalized against the
-    cheapest row, so the best backend scores 1.0 on it and one costing twice
-    as much scores 0.5."""
+def test_a_cost_twice_the_best_scores_half_of_its_weight():
+    """Time and tokens have no natural ceiling, so each is a ratio against the
+    best row: fastest scores 1.0, twice as slow scores 0.5."""
 
     cheap = _entry(backend="cheap/model", task_id="t1")
     dear = _entry(backend="dear/model", task_id="t1")
@@ -420,22 +431,29 @@ def test_the_composite_ranks_on_both_headline_axes():
         "input_tokens": 84000,
         "output_tokens": 1600,
     }
-    report = build_report([_pair(entries=[cheap, dear])], composite=True)
-    matrix = report["matrix"]
-    # Both passed everything, so correctness contributes 0.7 to each; the
-    # cheaper row takes the full 0.3 and the dearer one half of it.
-    assert matrix["cheap/model"]["composite"] == pytest.approx(1.0)
-    assert matrix["dear/model"]["composite"] == pytest.approx(0.85)
-    assert "Composite weights" in render_markdown(report)
+    matrix = build_report([_pair(entries=[cheap, dear])])["matrix"]
+    # Both correct and equally fast: correctness gives 0.6 and time 0.2 to
+    # each. The cheaper row takes all 0.2 of tokens, the dearer one half.
+    assert matrix["cheap/model"]["score"] == pytest.approx(1.0)
+    assert matrix["dear/model"]["score"] == pytest.approx(0.9)
 
 
-def test_the_composite_is_none_when_an_axis_is_missing():
-    """A backend that answered nothing has no efficiency, and scoring it as
-    maximally inefficient would invent a measurement."""
+def test_taking_twice_as_long_costs_half_the_time_weight():
+    quick = _entry(backend="quick/model", task_id="t1", wall_ms=50_000)
+    slow = _entry(backend="slow/model", task_id="t1", wall_ms=100_000)
+    matrix = build_report([_pair(entries=[quick, slow])])["matrix"]
+    assert matrix["quick/model"]["score"] == pytest.approx(1.0)
+    assert matrix["slow/model"]["score"] == pytest.approx(0.9)
+
+
+def test_a_backend_that_answered_nothing_is_unscored_not_zero():
+    """It has no time or token cost per answer, and scoring it as infinitely
+    slow would invent a measurement it never made."""
 
     entry = _entry(incomplete=True, passed=False)
-    report = build_report([_pair(entries=[entry])], composite=True)
-    assert report["matrix"]["anthropic/claude-opus-5"]["composite"] is None
+    report = build_report([_pair(entries=[entry])])
+    assert report["matrix"]["anthropic/claude-opus-5"]["score"] is None
+    assert "Unscored" in render_markdown(report)
 
 
 # --- what the trial count will and will not support ------------------------

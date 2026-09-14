@@ -112,6 +112,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare.add_argument("run_dirs", type=Path, nargs="+")
     compare.add_argument(
+        "--allow-mixed-corpus",
+        action="store_true",
+        help="merge run directories recorded against different task files, "
+        "fixtures or system prompts. Refused by default: pooling two "
+        "instruments reports one rate over two experiments.",
+    )
+    compare.add_argument(
         "--tag",
         default=None,
         help="filter to the tasks carrying one tag (sourcing, null-argument, "
@@ -119,11 +126,13 @@ def build_parser() -> argparse.ArgumentParser:
         "its own.",
     )
     compare.add_argument(
-        "--composite",
+        "--no-score",
         action="store_true",
-        help="also print one weighted number over the two headline axes, "
-        "with its weights. Off by default: a composite hides which axis "
-        "failed.",
+        help="omit the ranking and print the diagnostics only. The score is "
+        "three measurements -- correct, how long, how many tokens -- and "
+        "printing it is the default; this is for reading a single run where "
+        "there is nothing to rank. The diagnostics stay either way -- a score "
+        "says which model, never which measurement failed.",
     )
     compare.add_argument("--out", type=Path, default=None)
 
@@ -301,7 +310,12 @@ def _grade(args: Any) -> int:
 def _compare(args: Any) -> int:
     from tools.bench.grade import GRADES_NAME, grade_run
     from tools.bench.harness import RUN_RECORD_NAME
-    from tools.bench.report import build_report, render_markdown, write_report
+    from tools.bench.report import (
+        build_report,
+        has_corpus_conflict,
+        render_markdown,
+        write_report,
+    )
 
     pairs = []
     for run_dir in args.run_dirs:
@@ -319,7 +333,27 @@ def _compare(args: Any) -> int:
         grades = json.loads(grades_path.read_text(encoding="utf-8"))
         pairs.append({"record": record, "grades": grades})
 
-    report = build_report(pairs, composite=args.composite, tag=args.tag)
+    report = build_report(pairs, composite=not args.no_score, tag=args.tag)
+
+    if has_corpus_conflict(report) and not args.allow_mixed_corpus:
+        conflicts = report["header"]["corpus_conflicts"]
+        print(
+            "kepler-bench compare: these run directories were not measured "
+            "with the same instrument, so pooling them would report one rate "
+            "over two experiments.",
+            file=sys.stderr,
+        )
+        for kind in ("system_prompts", "tasks", "fixtures"):
+            if conflicts.get(kind):
+                print(f"  {kind}: {', '.join(conflicts[kind])}", file=sys.stderr)
+        print(
+            "Re-run the older backends against the current corpus. "
+            "--allow-mixed-corpus overrides this, and the report says so in "
+            "its header when you do.",
+            file=sys.stderr,
+        )
+        return 2
+
     out = args.out or args.run_dirs[0]
     md, _ = write_report(report, out)
     print(render_markdown(report))
