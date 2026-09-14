@@ -101,10 +101,10 @@ def _entry(
     }
 
 
-def _pair(record=None, entries=(), judge=None):
+def _pair(record=None, entries=()):
     return {
         "record": record or _record(),
-        "grades": {"grades": list(entries) or [_entry()], "judge": judge},
+        "grades": {"grades": list(entries) or [_entry()]},
     }
 
 
@@ -174,15 +174,6 @@ def test_incomplete_and_budget_exceeded_outcomes_are_surfaced_separately():
     assert "**Budget exceeded**" in text and "`t1@anthropic/claude-opus-5`" in text
     assert "**Incomplete**" in text and "max_turns" in text
     assert "never scored as a low pass rate" in text
-
-
-def test_the_judge_model_is_named_in_the_header_and_marked_advisory():
-    text = render_markdown(build_report([_pair(judge="ollama/qwen3.8:27b-mlx")]))
-    assert "judge `ollama/qwen3.8:27b-mlx`" in text
-    assert "advisory; never blended" in text
-
-
-# --- the matrix -----------------------------------------------------------
 
 
 def test_the_column_order_reads_the_two_questions_left_to_right():

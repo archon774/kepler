@@ -2,8 +2,11 @@
 
 ``docs/working/benchmark.md`` section 7. Each grader is a pure function from
 ``(task, manifest, answer_text, events)`` to a result record: no I/O beyond
-reading the run directory, and no model calls except the opt-in judge, which
-is its own module.
+reading the run directory, and no model calls at all. **Nothing in this
+package asks a model whether an answer is correct**; every verdict is a
+deterministic assertion against recorded evidence, and the one component that
+did ask a model was removed rather than kept as a second opinion over checks
+that could be fixed instead.
 
 Two of the four answer a question and two explain one:
 
@@ -265,9 +268,7 @@ def load_evidence(directory: str | Path) -> Evidence:
     )
 
 
-def grade_run_directory(
-    directory: str | Path, task: Any, *, judge: Any = None
-) -> dict[str, Any]:
+def grade_run_directory(directory: str | Path, task: Any) -> dict[str, Any]:
     """Grade one run directory on all four axes."""
 
     from tools.bench.graders import answer as answer_grader
@@ -286,8 +287,4 @@ def grade_run_directory(
         "trajectory": trajectory_grader.grade(task, evidence).to_json(),
         "protocol": protocol_grader.grade(task, evidence).to_json(),
     }
-    if judge is not None:
-        from tools.bench import judge as judge_module
-
-        graded["judge"] = judge_module.grade(task, evidence, judge).to_json()
     return graded

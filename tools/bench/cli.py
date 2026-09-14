@@ -93,13 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
     grade.add_argument("run_dir", type=Path)
     grade.add_argument("--suite-root", type=Path, default=DEFAULT_SUITE_ROOT)
     grade.add_argument("--fixture-root", type=Path, default=DEFAULT_FIXTURE_ROOT)
-    grade.add_argument(
-        "--judge",
-        default=None,
-        metavar="PROVIDER/MODEL",
-        help="turn on the advisory judge column. Off by default; it is the "
-        "least trustworthy instrument here.",
-    )
     falsify = sub.add_parser(
         "falsify",
         help="attack the answer keys with recorded evidence. Offline, free, "
@@ -112,8 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
     answers = sub.add_parser(
         "answers",
         help="print the question and the model's reply for each session. "
-        "Offline, free, and the only way to audit a check against the prose "
-        "it fired on.",
+        "Offline, free, consults no model, and the only way to audit a check "
+        "against the prose it fired on.",
     )
     answers.add_argument("run_dir", type=Path, nargs="+")
     answers.add_argument("--suite-root", type=Path, default=DEFAULT_SUITE_ROOT)
@@ -127,13 +120,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--wrong-only",
         action="store_true",
         help="only sessions the deterministic checks marked wrong.",
-    )
-    answers.add_argument(
-        "--disagreed",
-        action="store_true",
-        help="only sessions where the advisory judge and the deterministic "
-        "checks reached different verdicts. These are where one of the two "
-        "instruments is wrong, and they are the ones worth reading.",
     )
     answers.add_argument(
         "--calls",
@@ -327,17 +313,10 @@ def _run(args: Any) -> int:
 def _grade(args: Any) -> int:
     from tools.bench.grade import grade_run
 
-    judge = None
-    if args.judge:
-        from tools.bench.judge import build_judge
-
-        judge = build_judge(args.judge)
-
     grades = grade_run(
         Path(args.run_dir),
         suite_root=args.suite_root,
         fixture_root=args.fixture_root,
-        judge=judge,
     )
     print(json.dumps(grades, indent=2, sort_keys=True))
     return 0
@@ -365,17 +344,6 @@ def _answers(args: Any) -> int:
         records = [r for r in records if r["repeat"] in set(args.repeat)]
     if args.wrong_only:
         records = [r for r in records if r["correct"] is not True]
-    if args.disagreed:
-        # An ungraded or unjudged session has no disagreement to report; it is
-        # filtered out rather than shown, so an empty result means "the two
-        # instruments agreed everywhere", not "the judge never ran".
-        records = [
-            r
-            for r in records
-            if r["judge"]
-            and r["judge"].get("verdict") in ("pass", "fail")
-            and (r["judge"]["verdict"] == "pass") is not r["correct"]
-        ]
     if not records:
         print("No sessions matched.", file=sys.stderr)
         return 0

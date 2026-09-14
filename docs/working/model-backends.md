@@ -442,30 +442,30 @@ each one.
 
 | ID | Where | Test |
 | --- | --- | --- |
-| S1 | `tools/bench/judge.py` — `ask(answer_key, answer_text, backend)` and no store access | `tests/test_bench_judge.py` |
+| ~~S1~~ | **Retired.** The component it protected is gone — see below |  |
 | S2 | `tools/bench/record.py` — credential scan over the serialized entry, refusing the write | `tests/test_bench_record.py` |
 | S5 | `tools/bench/tasks.py`, `tools/bench/fixtures.py` — `yaml.safe_load` only | `tests/test_bench_tasks.py`, `tests/test_bench_fixtures.py` |
 | S6 | `tools/bench/tasks.py`, `tools/bench/fixtures.py` — bare names, rejected before resolution and re-checked with `tools.config.within` | both of the above |
 | S7 | `tools/bench/fixtures.py` — `path`/`subdir`/`ext` rejected; the shim reserves its own path | `tests/test_bench_fixtures.py` |
 
-### S1 — The judge never sees untrusted content (HIGH)
+### S1 — Retired: there is no model-grader (was HIGH)
 
-The optional LLM judge emits a pass/fail verdict. Tool results are arbitrary
-third-party text: ADS abstracts and titles, VizieR catalog descriptions, SIMBAD
-notes, NED cells. A judge that reads tool results is an oracle taking
-instructions from the data it grades — and because fixtures are committed and
-replayed, one poisoned capture corrupts the scoreboard permanently and
-invisibly.
+This requirement existed for the optional LLM judge: a model asked for a
+pass/fail verdict on another model's answer. Tool results are arbitrary
+third-party text — ADS abstracts and titles, VizieR catalog descriptions,
+SIMBAD notes, NED cells — so a judge that reads them is an oracle taking
+instructions from the data it grades, and because fixtures are committed and
+replayed, one poisoned capture would corrupt the scoreboard permanently and
+invisibly. S1 confined the judge to two strings to keep that unreachable.
 
-* The judge receives **only** the task's answer key and the final answer text.
-  It never receives tool results, the trajectory, or the system prompt.
-* Its output is parsed as a strict structured verdict. Unparseable output is an
-  **error**, never a pass.
-* The verdict is reported in its own column and is **never** blended into the
-  deterministic score.
-* Deterministic assertions are primary; the judge is advisory and opt-in.
-* Test: a fixture whose text contains an injection string must not change the
-  judge's verdict, because it must never reach it.
+**The judge was removed** (`benchmark.md` 7.5). Every verdict in the harness is
+now a deterministic assertion against recorded evidence, and nothing asks a
+model whether an answer is correct — so there is no oracle for a poisoned
+fixture to reach. The risk is eliminated rather than mitigated, which is why
+this requirement is retired rather than reassigned.
+
+`tools/bench/record.py` still flags imperative-looking strings in captured text
+(S2). That is a reviewer's checklist, not a boundary, and it stands on its own.
 
 ### S2 — Fixtures record responses only (MEDIUM)
 
@@ -669,7 +669,7 @@ flag for people who want a leaderboard.
 | --- | --- | --- |
 | Trajectory | `trajectory.py` | Manifest tool calls vs. task expectations. |
 | Efficiency and cost | `efficiency.py` | Turns, calls, duplicate rate, tokens, latency, estimated USD. |
-| Answer correctness | `answer.py` | Deterministic assertions; optional judge. |
+| Answer correctness | `answer.py` | Deterministic assertions only. |
 | Protocol robustness | `protocol.py` | `ProtocolFault` records. |
 
 ### 6.2 Task format
@@ -739,9 +739,8 @@ wall-clock only.
 
 **Answer correctness.** Deterministic first: regex assertions, numeric
 comparison with tolerance, and artifact-path presence checks against an answer
-key. The optional judge is opt-in, routed through the same model port so it can
-be a local Ollama model — free, offline, and consistent with replay. Its model
-is pinned in the run config and recorded in the report. Constrained by S1.
+key. **Nothing else** — an optional LLM judge was built here and removed
+(`benchmark.md` 7.5), and with it requirement S1.
 
 **Protocol robustness.** Counts each fault type. Includes a specific
 `null_argument_fidelity` check for tasks tagged `null-argument`: JSON null is a
@@ -755,7 +754,7 @@ registry properties.
 Temperature 0 by default; a fixed seed where the provider supports one; a
 repeats option (default 1) for variance, reporting per-axis spread rather than
 only a mean. Every knob — backend spec, temperature, seed, suite revision,
-fixture revision, price-table date, judge model — is recorded in the run
+fixture revision, price-table date — is recorded in the run
 manifest. A run that cannot state its inputs is not a benchmark.
 
 ### 6.6 CLI
@@ -1247,7 +1246,7 @@ remaining security requirements.
 | **5b** | The four graders and `grade` | Three kinds of right answer; four fidelity families; three clocks. |
 | **5c** | The matrix and `compare` | Headline axes first; no blended score by default. |
 | **5d** | The corpus | 16 tasks over five suites. **The 7.1.9 calibration gate is unmet** — no suite has been run against a real model; each ships a `calibration.md` saying so. |
-| **5e** | The judge (S1) | Two strings in, a structured verdict out; unparseable output is an error, never a pass. |
+| ~~**5e**~~ | ~~The judge (S1)~~ | Built, run once over a full sweep, and removed — see `benchmark.md` 7.5. S1 retired with it. |
 
 **Not done:** the calibration run. A suite is untrusted until it has been run
 against at least three backends of different tiers, and that needs credentials

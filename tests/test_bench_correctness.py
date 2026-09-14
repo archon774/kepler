@@ -868,3 +868,67 @@ def test_the_guard_opens_when_the_tool_was_never_called(tmp_path):
         answer="The photometry table shows 214 measurements.",
     )
     assert result.passed is False
+
+
+# --- nothing grades with a model -----------------------------------------
+
+
+def test_no_grader_can_reach_a_model_backend():
+    """The rule the judge's removal established, made enforceable.
+
+    An LLM judge lived here: opt-in, isolated to two strings, its verdict in
+    its own column and never blended into the score. It was removed because of
+    what it did to the incentive rather than because it was unsafe. Five checks
+    in this suite were firing on *correct* answers, and an advisory column
+    sitting beside them makes that survivable instead of urgent — an extra
+    diagnostic layer over a broken check leaves the check broken.
+
+    So: every verdict is a deterministic assertion against recorded evidence,
+    and the grading path may not import the model port at all. This also
+    retires S1 rather than mitigating it — a poisoned fixture has no
+    model-grader to reach, because there is none.
+    """
+
+    import ast
+    from pathlib import Path
+
+    graders = Path("tools/bench/graders")
+    paths = sorted(graders.glob("*.py")) + [
+        Path("tools/bench/grade.py"),
+        Path("tools/bench/answers.py"),
+        Path("tools/bench/falsify.py"),
+    ]
+    def dispatches(module: str) -> bool:
+        # `tools.llm.types` is the neutral vocabulary -- frozen dataclasses and
+        # the closed FAULT_TYPES tuple, with no I/O and no provider SDK, which
+        # is itself a tested property. The protocol grader reads FAULT_TYPES
+        # from it and could not call a model with it if it tried. Everything
+        # else under tools.llm can reach a network.
+        return module.startswith("tools.llm") and module != "tools.llm.types"
+
+    offending = []
+    for path in paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and dispatches(node.module or ""):
+                offending.append(f"{path}: from {node.module}")
+            elif isinstance(node, ast.Import):
+                offending += [
+                    f"{path}: import {alias.name}"
+                    for alias in node.names
+                    if dispatches(alias.name)
+                ]
+    assert offending == [], (
+        "the grading path can dispatch to a model: " + "; ".join(offending)
+    )
+
+
+def test_the_grade_verb_takes_no_model():
+    """`kepler-bench grade` is offline, free and repeatable. A flag that makes
+    it spend money on a model would quietly undo all three."""
+
+    from tools.bench.cli import build_parser
+
+    grade = build_parser()._subparsers._group_actions[0].choices["grade"]
+    flags = {option for action in grade._actions for option in action.option_strings}
+    assert flags == {"-h", "--help", "--suite-root", "--fixture-root"}

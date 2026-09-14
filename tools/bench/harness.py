@@ -148,7 +148,6 @@ class RunConfig:
     max_tokens: int | None = None
     max_turns_override: int | None = None
     enable: tuple[str, ...] = ()
-    judge: str | None = None
     system_prompt: str = SYSTEM_PROMPT
 
 

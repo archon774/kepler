@@ -4,6 +4,14 @@
 correct answer, were its tool calls and reasoning acceptable, and what did the
 answer cost in time and tokens. Nothing else enters a score.
 
+**Every verdict is a deterministic assertion against recorded evidence.**
+Nothing here asks a model whether an answer is correct. An optional LLM judge
+was built into this harness and has been removed: a second opinion sitting
+beside a broken check makes the break survivable instead of urgent, and five of
+these checks were firing on correct answers. They were fixed where they were.
+A test now forbids the grading path from importing anything that can reach a
+model.
+
 **What was run.** 16 tasks × 3 repeats × 3 backends = **144 sessions**, one
 host, sequential, temperature 0 where the provider allows it. Suite SHA-256
 `b681227692d1`, repository `4101b9f`. The full generated report is
@@ -548,9 +556,14 @@ kepler-bench answers artifacts/bench/* --wrong-only    # read the prose
 kepler-bench compare artifacts/bench/*          # the report above
 ```
 
-Every verb above is offline and free except `run`, and none of them consults a
-model to decide whether an answer is correct. `falsify` can only *accuse* a key
-of being wrong; it can never certify one as right.
+Every verb above is offline and free except `run`, and **none of them consults
+a model to decide whether an answer is correct** — `grade` takes no flag that
+could make it, and a test asserts so. `falsify` can only *accuse* a key of
+being wrong; it can never certify one as right.
+
+Removing the judge changed **no correctness verdict**: all 144 were re-graded
+without it and every one matched, which is the property to preserve when an
+instrument is taken out.
 
 `compare` refuses to merge runs recorded against different task files,
 fixtures or system prompts, and refuses to render a run where more than 20% of

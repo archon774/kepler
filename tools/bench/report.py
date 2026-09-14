@@ -583,7 +583,6 @@ def _header(runs: Sequence[Mapping[str, Any]], *, tag: str | None) -> dict[str, 
                 "temperature": pair["record"]["config"]["temperature"],
                 "seed": pair["record"]["config"]["seed"],
                 "backends": pair["record"]["backends"],
-                "judge": pair["grades"].get("judge"),
             }
             for pair in runs
         ],
@@ -688,7 +687,6 @@ def _grid_row(entry: Mapping[str, Any]) -> dict[str, Any]:
         "trajectory_failures": len(entry["trajectory"]["failures"]),
         "trajectory_deviations": len(entry["trajectory"]["deviations"]),
         "answer_failures": [f["check"] for f in entry["answer"]["failures"]],
-        "judge": (entry.get("judge") or {}).get("verdict"),
     }
 
 
@@ -751,8 +749,6 @@ def render_markdown(report: Mapping[str, Any]) -> str:
                 f"streaming {caps.get('streaming')}, unions "
                 f"{caps.get('supports_union_types')}"
             )
-        if run.get("judge"):
-            lines.append(f"- judge `{run['judge']}` (advisory; never blended)")
         lines.append("")
 
     conflicts = header.get("corpus_conflicts") or {}

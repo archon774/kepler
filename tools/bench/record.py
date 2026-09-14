@@ -75,10 +75,10 @@ _CREDENTIAL_SUFFIXES: tuple[str, ...] = (
 #: misconfiguration the scan cannot help with.
 _MIN_CREDENTIAL_LENGTH = 8
 
-#: Text that reads as an instruction aimed at whatever reads it. Not a
-#: security boundary -- the judge's isolation (S1) is that -- but a reviewer's
-#: checklist, so a poisoned catalog description is noticed while a human is
-#: still looking at the diff.
+#: Text that reads as an instruction aimed at whatever reads it. Not a security
+#: boundary -- no recorded text ever reaches a model as a grader, because
+#: nothing grades with a model -- but a reviewer's checklist, so a poisoned
+#: catalog description is noticed while a human is still looking at the diff.
 IMPERATIVE_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions", "override attempt"),
     (r"disregard\s+(all\s+)?(previous|prior|the\s+above)", "override attempt"),

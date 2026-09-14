@@ -42,7 +42,7 @@ of them or exists to explain one.
 
 | | Question | Axis | Section |
 | --- | --- | --- | --- |
-| **Q1** | Does the model change the **quality — the correctness — of the response?** | Answer correctness (+ the advisory judge) | 7.1, 7.5 |
+| **Q1** | Does the model change the **quality — the correctness — of the response?** | Answer correctness | 7.1 |
 | **Q2** | Does it change **efficiency** — timing per token, turns, tokens used? | Efficiency | 7.2 |
 
 **Q1 is the one that matters**, and it gets the most machinery: section 7.1 is
@@ -171,7 +171,7 @@ non-colliding path without writing, which is what S7's "the replay layer
 synthesizes artifact paths itself" needs.
 
 **Nothing else exists.** No `tools/bench/`, no `benchmarks/`, no
-`kepler-bench`, no `ReplayBackend`, no manifest v2, no judge.
+`kepler-bench`, no `ReplayBackend`, no manifest v2.
 That part is greenfield.
 
 ---
@@ -322,9 +322,8 @@ contract is untouched by this work.
 | `tools/bench/harness.py` | The run loop: backend × task × repeat, token budget (B5), run-directory writer. |
 | `tools/bench/graders/trajectory.py` | Must-call / must-not-call / ordering / argument predicates. |
 | `tools/bench/graders/efficiency.py` | Turns, calls, duplicate rate, tokens, and the three clocks. |
-| `tools/bench/graders/answer.py` | Deterministic assertions; the optional judge lives behind it. |
+| `tools/bench/graders/answer.py` | Deterministic assertions, and the only thing behind them is recorded evidence. |
 | `tools/bench/graders/protocol.py` | Fault counts and `null_argument_fidelity`. |
-| `tools/bench/judge.py` | The opt-in LLM judge. Isolated by construction (S1). |
 | `tools/bench/report.py` | Matrix rendering: Markdown and JSON. |
 | `tools/bench/answers.py` | The audit verb's reader: the task's prompt beside the model's reply. Offline; consults no model. |
 | `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `answers`, `compare`. |
@@ -714,7 +713,7 @@ is enforced by the loader.
 
 Each grader is a pure function from `(task, manifest, answer_text, events)` to
 a result record. No I/O beyond reading the run directory; no model calls except
-the opt-in judge, which is its own module.
+nothing else.
 
 Two of the four answer a question (7.1, 7.2); two are diagnostic (7.3, 7.4)
 and exist to explain a headline number rather than to compete with it.
@@ -1029,10 +1028,10 @@ phase 5d, not an afterthought.
 
 Broad answer quality — whether this is better research *writing* — is not
 deterministically checkable, and the keys above are narrow on purpose because a
-reproducible key must be. The judge (7.5) is the instrument for the rest, and
-it is opt-in and advisory precisely because it is the least trustworthy one
-here. **If Q1 needs to discriminate more finely, the answer is more per-task
-keys, not a better judge.** Every check above was added by reading
+reproducible key must be. **If Q1 needs to discriminate more finely, the
+answer is more per-task keys** — nothing else, and in particular not a model
+asked to grade another model's prose (7.5). Every check above was added by
+reading
 `tools/agent/prompt.py` for things it records models getting wrong; that is the
 method for adding more.
 
@@ -1162,32 +1161,38 @@ It is diagnostic for the same reason as 7.3, and it feeds Q1 directly: a
 capped result reported as exhaustive is a scope-inflation failure on 7.1. The
 protocol axis is where that failure's cause is legible.
 
-### 7.5 The optional judge (S1)
+### 7.5 No model grades a model — removed
 
-Opt-in via `--judge <spec>`, off by default, routed through the same model
-port so it can be a local Ollama model — free, offline, consistent with
-replay.
+An optional LLM judge was designed here and built: opt-in, isolated to two
+strings, its verdict reported in its own column and never blended into the
+score. **It is gone, and its security requirement (S1) went with it.**
 
-**The judge receives exactly two strings: the task's answer key and the final
-answer text.** Not tool results, not the trajectory, not the system prompt,
-not fixture content. Tool results are arbitrary third-party text — ADS
-abstracts, VizieR catalog descriptions, SIMBAD notes, NED cells — and because
-fixtures are committed and replayed, one poisoned capture would corrupt the
-scoreboard permanently and invisibly. The isolation is structural: `judge.py`
-takes `(answer_key: str, answer_text: str)` and has no access to a manifest or
-a fixture store to leak from.
+It was removed because of what running it over a full sweep showed. On 21 of
+138 comparable sessions it disagreed with the deterministic checks, and reading
+those disagreements found nothing the checks could not be fixed to handle — it
+confirmed one defect the checks already had, and on a guarded check it was
+*structurally* unable to form a view, because the guard reads the trajectory
+and the isolation that made the judge safe denies it exactly that. Asked the
+same question three times it answered both ways.
 
-Its output is parsed as a strict structured verdict; **unparseable output is
-an error, never a pass**. It is reported in its own column and never blended
-into the deterministic score. Its model spec is recorded in `run.json` and
-printed in the report header.
+The deeper problem is what an advisory column does to the incentive. Five
+checks in this suite were firing on correct answers; a second opinion sitting
+beside them makes that survivable instead of urgent. **An extra diagnostic
+layer over a broken check leaves the check broken.** Every one of the five was
+found by reading the prose (`kepler-bench answers`, section 11) and fixed where
+it was — see 7.1.7, whose last three constraints exist because of that pass.
+
+So the rule is now unconditional: **every verdict in this harness is a
+deterministic assertion against recorded evidence, and nothing asks a model
+whether an answer is correct.** That also retires a whole class of risk rather
+than mitigating it — a poisoned fixture has no model-grader to reach, because
+there is none.
 
 ### 7.6 The matrix
 
 Rows are backend specs. Columns are the **two headline axes first** —
 correctness (7.1), efficiency (7.2) — then the two diagnostic ones, trajectory
-(7.3) and protocol (7.4), then the judge column if it ran. A second table is
-the per-task grid.
+(7.3) and protocol (7.4). A second table is the per-task grid.
 
 The ordering is load-bearing: the two questions this harness exists to answer
 are read left to right, and the diagnostics sit beside them to explain a number
@@ -1417,7 +1422,7 @@ a named test, not advice.
 
 | ID | Requirement | Where | Test |
 | --- | --- | --- | --- |
-| **S1** | The judge sees only the answer key and the answer text | `judge.py` signature takes two strings and has no store access | a fixture whose text carries an injection string cannot change the verdict, because it never reaches it |
+| ~~**S1**~~ | ~~The judge sees only the answer key and the answer text~~ | **Retired with the component (7.5).** There is no model-grader, so no recorded text can reach one | the risk is removed rather than mitigated |
 | **S2** | Capture records responses only; a capture made with credentials set contains no substring of any of them | `record.py` | credential scan over the serialized fixture, refusing the write |
 | **S5** | `yaml.safe_load`, always | `tasks.py`, `fixtures.py` | a `!!python/object` tag raises |
 | **S6** | Suite and fixture paths are contained | `tasks.py` | traversal and absolute references both rejected |
@@ -1474,15 +1479,14 @@ fires is a claim about a piece of prose, and the only way to separate a real
 failure from a regex artefact is to read the prose — which is how the
 `must_source_value` false positive (7.1) was found and how `empty_answer`
 (7.1.8) was found. `--wrong-only` narrows to the sessions a check failed;
-`--disagreed` narrows to the sessions where the advisory judge and the
-deterministic checks reached different verdicts, which is where one of the two
-instruments is wrong.
+It consults no model, which is the point: it is how a human reads what was
+actually said.
 
 `run` implies `grade` unless `--no-grade`; `grade` is separately invocable so a
 grader fix never costs a re-spend. `--tag` filters `compare` to the tasks
 carrying one tag (`sourcing`, `null-argument`, `name-resolution`, …), which is
 how a single correctness family gets read on its own. `--enable <tool>` opts a blocked tool in
-(`solve_astrometry`). `--judge <spec>` turns on the advisory column. Every verb
+(`solve_astrometry`). Every verb
 `--max-tokens` is required for any live backend (5.7).
 
 ---
@@ -1493,7 +1497,7 @@ how a single correctness family gets read on its own. `--enable <tool>` opts a b
 
 Header: run id, UTC timestamps, backends with capabilities, suite id and
 corpus SHA-256s, `corpus_dirty` if set, repeats, temperature, seed, the
-judge model if any, **the fixture miss rate**, and any `budget_exceeded` or
+**the fixture miss rate**, and any `budget_exceeded` or
 `incomplete` outcomes.
 
 Then the matrix (backends × correctness, efficiency, then the two diagnostic
@@ -1522,7 +1526,6 @@ keys, no daemon, no new CI job.
 | `tests/test_bench_graders.py` | each grader against synthetic manifests, including adversarial ones: a v1 manifest, a manifest with no `usage_totals`, a `max_turns` outcome, a fabricated artifact path |
 | `tests/test_bench_correctness.py` | the three kinds of right answer: `must_reach_verdict` reads a tool's boolean and a provenance-violating trajectory still fails; the four fidelity families (a fabricated number is flagged, a derived one is not failed, a designation and a year are excluded, a background label satisfies sourcing, a fired warning with no disclosure fails); `passed` is true only when every hard check is green, and an `incomplete` outcome is neither pass nor fail |
 | `tests/test_bench_efficiency.py` | the three clocks stay separate and tool time never enters the timing-per-token rate; the four token classes are reported separately with a cache share; a non-streaming backend's rate is labelled as averaged |
-| `tests/test_bench_judge.py` | judge isolation (S1): injection text in a fixture cannot reach the verdict; unparseable output is an error |
 | `tests/test_llm_replay_backend.py` | transcript replay, `on_text`, exhaustion raises |
 | `tests/test_sessions_manifest_v2.py` | v2 payload; a v1 manifest still reads; absent usage is `None`, not `0` |
 
@@ -1587,7 +1590,7 @@ Delivered on `agent/model-benchmark` off `dev`, one commit per phase, each with
 | **5b** | `Add the four benchmark graders and the grade verb` | The three kinds of right answer, the four fidelity families, three clocks. |
 | **5c** | `Add the benchmark matrix and the compare/record verbs` | B6; headline axes first, no blended score by default. |
 | **5d** | `Add the benchmark corpus` | 16 tasks, five suites. **Calibration gate unmet**; two pulsar task premises were measured and both original guesses were wrong (§9.3). |
-| **5e** | `Add the opt-in LLM judge, isolated by construction` | S1. |
+| ~~**5e**~~ | ~~`Add the opt-in LLM judge, isolated by construction`~~ | Built, run once over a full sweep, and **removed** — see 7.5. |
 | **docs** | this commit | this document, model-backends.md §5/§6/§9/§11, `docs/working/README.md`, `docs/tool-architecture.md` §10.1, `CLAUDE.md`. |
 
 The original per-phase gate table, kept as the specification each phase was
@@ -1603,7 +1606,7 @@ built against:
 | **5b** | The four graders + the `grade` verb. Answer correctness (the four families), efficiency (three clocks, four token classes), trajectory, protocol. | Each grader green against synthetic and adversarial manifests; a v1 manifest grades without crashing; the timing-per-token rate excludes tool time and labels streaming vs. averaged; `must_source_value` flags a fabricated number and does not fail a derived one. |
 | **5c** | `report.py` + the `compare` verb. | Matrix renders; the header carries the corpus hashes, the host, the fixture miss rate, and any incomplete outcomes. |
 | **5d** | The corpus: `core` (8 tasks), `fieldcal`, `pulsar`, `optical`, `smoke`, and their fixtures. **A data PR** — fixture diffs are reviewed as adversarial input, not test data. | Every task loads; every fixture revalidates; the `core` suite runs end to end against `ReplayBackend`; **and the 7.1.9 calibration has been run against ≥3 backends of different tiers, with `calibration.md` committed** — a suite that has not discriminated anything is not a suite. |
-| **5e** | `judge.py` and the `--judge` flag. **Its own PR**, because it is the one component that hands model-adjacent text to a model. | S1: an injection string in a fixture cannot reach the verdict; unparseable output is an error, never a pass. |
+| ~~**5e**~~ | ~~`judge.py` and the `--judge` flag.~~ Removed (7.5): an advisory column over checks that could be fixed made a broken check survivable instead of urgent. |
 | **docs** | Its own PR, last. | See below. |
 
 ### Files this rollout creates
@@ -1618,7 +1621,6 @@ built against:
 | `tools/bench/graders/{__init__,answer,efficiency,trajectory,protocol}.py`, `tests/test_bench_graders.py`, `tests/test_bench_correctness.py`, `tests/test_bench_efficiency.py` | 5b |
 | `tools/bench/report.py` | 5c |
 | `benchmarks/suites/{core,pulsar,optical,smoke}/**`, `benchmarks/fixtures/**` | 5d |
-| `tools/bench/judge.py`, `tests/test_bench_judge.py` | 5e |
 
 ### Files this rollout modifies
 

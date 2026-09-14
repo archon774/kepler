@@ -6,7 +6,12 @@ backends must not cost a re-spend. ``run`` produces evidence; ``grade``
 produces verdicts; ``compare`` produces the matrix.
 
 It reads only the run directory and the corpus, so it is offline, free, and
-repeatable -- including against a run recorded before the grader was fixed.
+repeatable -- including against a run recorded before the grader was fixed,
+which is the whole point: a grader defect costs nothing to fix after the fact,
+and five of them were fixed that way over these 144 sessions.
+
+**No verdict here consults a model.** Every one is a deterministic assertion
+against recorded evidence.
 """
 
 from __future__ import annotations
@@ -27,7 +32,6 @@ def grade_run(
     *,
     suite_root: str | Path = "benchmarks/suites",
     fixture_root: str | Path = "benchmarks/fixtures",
-    judge: Any = None,
 ) -> dict[str, Any]:
     """Grade every ``(backend, task, repeat)`` in ``run_dir`` and write
     ``grades.json`` beside ``run.json``."""
@@ -58,7 +62,7 @@ def grade_run(
                 }
             )
             continue
-        result = grade_run_directory(entry["directory"], task, judge=judge)
+        result = grade_run_directory(entry["directory"], task)
         result["backend"] = entry["backend"]
         result["repeat"] = entry["repeat"]
         result["directory"] = entry["directory"]
@@ -73,7 +77,6 @@ def grade_run(
         "suite_id": record["config"]["suite_id"],
         "graded_at_corpus": record["corpus"],
         "corpus_dirty": record.get("corpus_dirty"),
-        "judge": getattr(judge, "spec", None),
         "grades": graded,
     }
     (run_dir / GRADES_NAME).write_text(

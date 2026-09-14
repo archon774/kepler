@@ -245,13 +245,3 @@ def test_answers_filters_to_nothing_without_failing(tmp_path, capsys):
     out = _replay_run(tmp_path)
     assert main(["answers", str(out), "--task", "no-such-task"]) == 0
     assert "No sessions matched." in capsys.readouterr().err
-
-
-def test_disagreed_is_empty_when_the_judge_never_ran(tmp_path, capsys):
-    """An unjudged session has no disagreement to report. Filtered out rather
-    than shown, so an empty result means the two instruments agreed -- never
-    that only one of them was present."""
-
-    out = _replay_run(tmp_path)
-    assert main(["answers", str(out), "--disagreed"]) == 0
-    assert "No sessions matched." in capsys.readouterr().err

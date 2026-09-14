@@ -9,8 +9,10 @@ found, and reading 144 answers by hand through ``find`` is how it was nearly
 missed.
 
 Offline, free, and repeatable: it reads the run directory and the corpus, and
-consults no model. The judge (``judge.py``) is the automated second reading;
-this is the unautomated one, and it is the more trustworthy of the two.
+consults no model. There is no automated second reading and deliberately so:
+an extra diagnostic layer over a broken check leaves the check broken. Five
+checks in this suite were found firing on correct answers by reading the prose,
+and each was fixed where it was.
 """
 
 from __future__ import annotations
@@ -75,7 +77,6 @@ def sessions(
                 "outcome": evidence.outcome,
                 "correct": None if grade is None else grade["answer"]["passed"],
                 "failed_checks": _failed_checks(grade),
-                "judge": _judge(grade),
                 "calls": [
                     call.get("tool_name") for call in evidence.tool_calls()
                 ],
@@ -92,14 +93,6 @@ def _failed_checks(grade: Mapping[str, Any] | None) -> list[str]:
             for failure in grade.get(axis, {}).get("failures", ())
         }
     )
-
-
-def _judge(grade: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    """The advisory column, if it ran. Never merged into ``correct``."""
-
-    if grade is None or not grade.get("judge"):
-        return None
-    return dict(grade["judge"].get("metrics") or {})
 
 
 def render(
@@ -126,13 +119,6 @@ def render(
             if record["failed_checks"]:
                 head += " (" + ", ".join(record["failed_checks"]) + ")"
             lines += [head, ""]
-            judge = record["judge"]
-            if judge:
-                lines += [
-                    f"*judge: {judge.get('verdict')} — "
-                    f"{judge.get('reason', '').strip()}*",
-                    "",
-                ]
             if verbose and record["calls"]:
                 lines += ["`" + " -> ".join(record["calls"]) + "`", ""]
             body = record["answer"].strip()
