@@ -125,8 +125,8 @@ def fig_matrix():
                      f'font-weight="600" text-anchor="middle" fill="{tone}">'
                      f'{c["p"]}/{c["n"]}</text>')
             marks = []
-            if c["traj"]: marks.append("route violation")
-            if c["dev"]: marks.append("off-script call")
+            if c["traj"]: marks.append("forbidden call or argument rule broken")
+            if c["dev"]: marks.append("declared call skipped or out of order")
             if c["inc"]: marks.append("never answered")
             if marks:
                 # Secondary encoding, not colour: a bar plus a title for hover.

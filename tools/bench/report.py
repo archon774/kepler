@@ -899,9 +899,9 @@ def _task_matrix(report: Mapping[str, Any]) -> list[str]:
         "## Per task",
         "",
         "Correct answers out of repeats. A mark means the *route* was wrong "
-        "even where the answer was not -- `T` a required or forbidden call "
-        "violated, `d` an off-script call, `P` a malformed call, `!` a run "
-        "that never answered.",
+        "even where the answer was not -- `T` a forbidden call made or an "
+        "argument rule broken, `d` a declared call skipped or taken out of "
+        "order, `P` a protocol fault, `!` a run that never answered.",
         "",
         "| task | " + " | ".join(f"`{b.split('/')[-1]}`" for b in backends) + " |",
         "| --- | " + " | ".join(":-:" for _ in backends) + " |",
@@ -947,7 +947,7 @@ def _tool_use_summary(
         "### Per model",
         "",
         "| model | always correct | never correct | inconsistent | "
-        "route violations | off-script calls | malformed calls |",
+        "forbidden routes | skipped/out-of-order calls | protocol faults |",
         "| --- | :-: | :-: | :-: | :-: | :-: | :-: |",
     ]
     for backend in backends:
