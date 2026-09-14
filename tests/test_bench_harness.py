@@ -393,7 +393,8 @@ def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
     suite_dir.mkdir()
     (suite_dir / "t.yaml").write_text(
         "id: t\nprompt: list the frames\nmax_turns: 3\n"
-        "env:\n  KEPLER_MAX_FRAMES: '5'\n",
+        "env:\n  KEPLER_MAX_FRAMES: '5'\n"
+        'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n',
         encoding="utf-8",
     )
     (suite_dir / "suite.yaml").write_text(

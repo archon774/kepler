@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from tests.conftest_bench import (
+    BARE_TASK,
     MINIMAL_TASK,
     call,
     finished,
@@ -39,7 +40,7 @@ def graded(tmp_path, task_body, *, answer, tool_calls=(), events=(), outcome="en
 # --- ground truth: a tool's own verdict against recorded truth ------------
 
 
-VERDICT_TASK = MINIMAL_TASK + (
+VERDICT_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_reach_verdict:\n"
@@ -104,8 +105,9 @@ def test_the_provenance_pairing_is_a_trajectory_rule_not_an_answer_one(tmp_path)
 
     task = write_task(
         tmp_path,
-        MINIMAL_TASK
-        + "expect:\n  trajectory:\n    must_not_call:\n"
+        BARE_TASK
+        + 'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n'
+        + "  trajectory:\n    must_not_call:\n"
         "      - tool: load_zeropoint_reference\n"
         "        because: >\n"
         "          Handing the reference its own number back is a fit to a\n"
@@ -126,7 +128,7 @@ def test_the_provenance_pairing_is_a_trajectory_rule_not_an_answer_one(tmp_path)
 # --- ground truth: a number within tolerance ------------------------------
 
 
-VALUE_TASK = MINIMAL_TASK + (
+VALUE_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_report_value:\n"
@@ -166,7 +168,7 @@ def test_a_designation_is_not_mistaken_for_a_measurement(tmp_path):
 # --- fidelity: fabrication ------------------------------------------------
 
 
-SOURCE_TASK = MINIMAL_TASK + (
+SOURCE_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_source_value:\n"
@@ -282,7 +284,7 @@ def test_an_explicit_background_label_satisfies_sourcing(tmp_path):
 # --- fidelity: scope inflation -------------------------------------------
 
 
-DISCLOSE_TASK = MINIMAL_TASK + (
+DISCLOSE_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_disclose:\n"
@@ -341,7 +343,7 @@ def test_the_check_does_not_fire_when_the_warning_did_not(tmp_path):
 # --- fidelity: mislabeling -----------------------------------------------
 
 
-LABEL_TASK = MINIMAL_TASK + (
+LABEL_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_label:\n"
@@ -375,7 +377,7 @@ def test_no_number_means_nothing_to_mislabel(tmp_path):
 # --- fidelity: omitted uncertainty ---------------------------------------
 
 
-UNCERTAINTY_TASK = MINIMAL_TASK + (
+UNCERTAINTY_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    must_state_uncertainty:\n"
@@ -434,7 +436,7 @@ def test_the_check_does_not_fire_when_the_field_was_never_returned(tmp_path):
 # --- correct negatives: the guarded assertion ----------------------------
 
 
-CONDITIONAL_TASK = MINIMAL_TASK + (
+CONDITIONAL_TASK = BARE_TASK + (
     "expect:\n"
     "  answer:\n"
     "    conditional:\n"
@@ -487,7 +489,7 @@ def test_must_match_is_a_deviation_and_must_not_match_is_a_failure(tmp_path):
     specific bad statement, while must_match requires a specific phrasing that
     another correct wording would fail."""
 
-    body = MINIMAL_TASK + (
+    body = BARE_TASK + (
         "expect:\n  answer:\n"
         '    must_match: ["definitely truncated"]\n'
         '    must_not_match: ["this is the complete library"]\n'
@@ -525,3 +527,46 @@ def test_a_near_miss_and_a_complete_miss_are_distinguishable(tmp_path):
     total = graded(tmp_path, body, answer="There was no measurement; period 2.1 s.")
     assert near.checks_passed == 1 and total.checks_passed == 0
     assert near.checks_total == total.checks_total == 2
+
+
+# --- numeric literals as models actually write them ----------------------
+
+
+def test_comma_grouped_thousands_are_read_as_one_number(tmp_path):
+    """Found by a live run. Without this, "4,127 rows" yielded 4 and 127 and
+    never 4127, so must_report_value {expected: 4127} failed a *correct*
+    answer; and "22,000" parsed as 0.0, a value that could spuriously satisfy
+    a tolerance check. Models format numbers conventionally."""
+
+    from tools.bench.graders.answer import numbers_in
+
+    assert numbers_in("The table has 4,127 rows and 47 catalogs") == [4127.0, 47.0]
+    assert numbers_in("22,000 Jy at 22 MHz") == [22000.0, 22.0]
+    assert numbers_in("1,234,567 rows") == [1234567.0]
+
+
+def test_a_decimal_comma_is_not_misread_as_a_group(tmp_path):
+    """The group requires exactly three digits after each comma, so "3,14"
+    falls to the plain form rather than becoming 314."""
+
+    from tools.bench.graders.answer import numbers_in
+
+    assert numbers_in("pi is 3,14 in some locales") == [3.0, 14.0]
+
+
+def test_must_report_value_accepts_a_comma_grouped_answer(tmp_path):
+    body = BARE_TASK + (
+        "expect:\n  answer:\n    must_report_value:\n"
+        "      - name: total_rows\n        expected: 4127\n        rel_tol: 0\n"
+    )
+    assert graded(tmp_path, body, answer="The full table holds 4,127 rows.").passed
+
+
+def test_a_comma_grouped_number_the_tools_returned_is_not_flagged(tmp_path):
+    result = graded(
+        tmp_path,
+        MINIMAL_TASK,
+        answer="VizieR matched 4,127 rows.",
+        events=[finished("search_vizier", {"status": "ok", "count": 4127})],
+    )
+    assert result.metrics["unsourced_numbers"] == []

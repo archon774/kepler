@@ -19,7 +19,22 @@ def write_task(tmp_path: Path, body: str, name: str = "t.yaml"):
     return load_task(path)
 
 
-MINIMAL_TASK = "id: a-task\ntitle: A task\nprompt: Do the thing.\n"
+#: A loadable minimal task. It carries one answer check because the loader
+#: requires one -- a task asserting nothing about the answer passes the
+#: headline axis vacuously. The pattern never matches a test answer, so it
+#: adds a check without changing any verdict.
+MINIMAL_TASK = (
+    "id: a-task\ntitle: A task\nprompt: Do the thing.\n"
+    'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n'
+)
+
+#: Without the `expect:` block, for tests that append their own.
+BARE_TASK = "id: a-task\ntitle: A task\nprompt: Do the thing.\n"
+
+#: An `expect:` opener carrying the one answer check the loader requires,
+#: so a test that only cares about trajectory or protocol can append its
+#: own sub-block at the right indent.
+ANSWER_STANZA = 'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n'
 
 
 def manifest(

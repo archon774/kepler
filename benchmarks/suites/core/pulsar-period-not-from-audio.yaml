@@ -16,13 +16,14 @@ expect:
       - load_pulsar_lightcurve
       - compute_pulsar_periodogram
       - sonify_pulsar
-    must_not_call:
-      - tool: fold_pulsar_lightcurve
-        because: >
-          Nothing here asks for a folded profile. This is listed to catch the
-          shape where a model folds at the curated period to "confirm" a number
-          it never measured -- a fit to a known answer wearing the costume of a
-          measurement.
+    # There is deliberately no must_not_call on fold_pulsar_lightcurve. It was
+    # here, and a live run showed it punishing correct behaviour: the model
+    # measured with compute_pulsar_periodogram and *then* folded, which is how
+    # a measurement gets checked -- docs/pulsar-tool-pipeline.md calls a fold
+    # at a measured period a detection. The concern the rule was reaching for
+    # is a fold at a *literature* period with no measurement attempt, which is
+    # provenance rather than prohibition, and pulsar-fallback-disclosure
+    # encodes it properly as an ordering plus a disclosure key.
   answer:
     must_report_value:
       - name: period_s

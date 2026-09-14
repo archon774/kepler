@@ -20,7 +20,18 @@ from tools.bench.tasks import TaskError, load_suite, load_task
 FIXTURE_ROOT = "benchmarks/fixtures"
 SMOKE_SUITE = "benchmarks/suites/smoke"
 
-MINIMAL = "id: a-task\ntitle: A task\nprompt: Do the thing.\n"
+#: A loadable minimal task. It carries one answer check because the loader
+#: now requires one -- a task asserting nothing about the answer passes the
+#: headline axis vacuously. The pattern is chosen never to match a test
+#: answer, so it adds a check without changing any verdict.
+MINIMAL = (
+    "id: a-task\ntitle: A task\nprompt: Do the thing.\n"
+    'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n'
+)
+
+#: The same task without the `expect:` block, for the many tests that append
+#: an `expect:` stanza of their own.
+BARE = "id: a-task\ntitle: A task\nprompt: Do the thing.\n"
 
 
 def write(tmp_path, body, name="t.yaml"):
@@ -87,20 +98,20 @@ def test_a_misspelled_check_name_is_an_error_rather_than_grading_nothing(tmp_pat
 
     path = write(
         tmp_path,
-        MINIMAL + "expect:\n  trajectory:\n    must_not_calls: [search_ned]\n",
+        BARE + "expect:\n  trajectory:\n    must_not_calls: [search_ned]\n",
     )
     with pytest.raises(TaskError, match="expect.trajectory has unknown"):
         load_task(path)
 
 
 def test_an_unknown_answer_check_is_an_error(tmp_path):
-    path = write(tmp_path, MINIMAL + "expect:\n  answer:\n    must_mention: ['x']\n")
+    path = write(tmp_path, BARE + "expect:\n  answer:\n    must_mention: ['x']\n")
     with pytest.raises(TaskError, match="expect.answer has unknown"):
         load_task(path)
 
 
 def test_an_unknown_expect_section_is_an_error(tmp_path):
-    path = write(tmp_path, MINIMAL + "expect:\n  efficiency:\n    max_turns: 3\n")
+    path = write(tmp_path, BARE + "expect:\n  efficiency:\n    max_turns: 3\n")
     with pytest.raises(TaskError, match="expect has unknown"):
         load_task(path)
 
@@ -168,7 +179,7 @@ def test_an_argument_rule_without_a_because_is_rejected(tmp_path):
     An untested convention elsewhere; here the loader enforces it."""
 
     with pytest.raises(TaskError, match="needs a non-empty `because`"):
-        load_task(write(tmp_path, MINIMAL + ARGUMENT_RULE))
+        load_task(write(tmp_path, BARE + ARGUMENT_RULE))
 
 
 HARD_CHECK_BODIES = {
@@ -199,7 +210,7 @@ HARD_CHECK_BODIES = {
 
 @pytest.mark.parametrize("kind", sorted(HARD_CHECK_BODIES))
 def test_every_hard_answer_check_requires_a_because(tmp_path, kind):
-    body = MINIMAL + f"expect:\n  answer:\n    {kind}:\n" + HARD_CHECK_BODIES[kind]
+    body = BARE + f"expect:\n  answer:\n    {kind}:\n" + HARD_CHECK_BODIES[kind]
     with pytest.raises(TaskError, match="because"):
         load_task(write(tmp_path, body, name=f"{kind}.yaml"))
 
@@ -207,7 +218,7 @@ def test_every_hard_answer_check_requires_a_because(tmp_path, kind):
 @pytest.mark.parametrize("kind", sorted(HARD_CHECK_BODIES))
 def test_every_hard_answer_check_loads_with_one(tmp_path, kind):
     body = (
-        MINIMAL
+        BARE
         + f"expect:\n  answer:\n    {kind}:\n"
         + HARD_CHECK_BODIES[kind]
         + "        because: it matters\n"
@@ -218,8 +229,9 @@ def test_every_hard_answer_check_loads_with_one(tmp_path, kind):
 
 def test_a_because_survives_as_one_line_for_the_report(tmp_path):
     body = (
-        MINIMAL
-        + ARGUMENT_RULE
+        BARE
+        + 'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n'
+        + ARGUMENT_RULE.replace("expect:\n", "", 1)
         + "        because: >\n"
         "          NED's resolver is unreliable with colloquial names; the\n"
         "          system prompt requires a formal designation first.\n"
@@ -234,7 +246,7 @@ def test_a_because_survives_as_one_line_for_the_report(tmp_path):
 
 def test_an_unregistered_tool_in_a_trajectory_check_is_rejected(tmp_path):
     path = write(
-        tmp_path, MINIMAL + "expect:\n  trajectory:\n    must_call: [search_gaia]\n"
+        tmp_path, BARE + "expect:\n  trajectory:\n    must_call: [search_gaia]\n"
     )
     with pytest.raises(TaskError, match="unregistered tool"):
         load_task(path)
@@ -242,7 +254,7 @@ def test_an_unregistered_tool_in_a_trajectory_check_is_rejected(tmp_path):
 
 def test_an_unknown_argument_predicate_is_rejected(tmp_path):
     body = (
-        MINIMAL
+        BARE
         + "expect:\n  trajectory:\n    arguments:\n      - tool: search_ned\n"
         "        where:\n          name: {startswith: NGC}\n"
         "        because: x\n"
@@ -253,7 +265,7 @@ def test_an_unknown_argument_predicate_is_rejected(tmp_path):
 
 def test_an_argument_rule_with_no_predicate_is_rejected(tmp_path):
     body = (
-        MINIMAL
+        BARE
         + "expect:\n  trajectory:\n    arguments:\n      - tool: search_ned\n"
         "        where: {}\n        because: x\n"
     )
@@ -272,7 +284,7 @@ def test_null_argument_fidelity_only_applies_to_a_null_accepting_property(tmp_pa
     the suite says so at load rather than reporting a free pass."""
 
     body = (
-        MINIMAL
+        BARE
         + "expect:\n  protocol:\n    null_argument_fidelity:\n"
         "      - tool: search_ned\n        property: name\n"
     )
@@ -282,8 +294,9 @@ def test_null_argument_fidelity_only_applies_to_a_null_accepting_property(tmp_pa
 
 def test_null_argument_fidelity_accepts_one_of_the_eight_union_properties(tmp_path):
     body = (
-        MINIMAL
-        + "expect:\n  protocol:\n    null_argument_fidelity:\n"
+        BARE
+        + 'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n'
+        "  protocol:\n    null_argument_fidelity:\n"
         "      - tool: search_vizier\n        property: max_catalogs\n"
     )
     rules = load_task(write(tmp_path, body)).protocol["null_argument_fidelity"]
@@ -308,7 +321,7 @@ def test_a_task_cannot_ask_for_record_mode(tmp_path):
 
 def test_a_conditional_needs_exactly_one_guard_and_one_assertion(tmp_path):
     body = (
-        MINIMAL
+        BARE
         + "expect:\n  answer:\n    conditional:\n"
         "      - when_not_called: [search_ads]\n"
         "        when_called: [search_ned]\n"
@@ -321,7 +334,7 @@ def test_a_conditional_needs_exactly_one_guard_and_one_assertion(tmp_path):
 
 def test_must_report_value_requires_a_number(tmp_path):
     body = (
-        MINIMAL
+        BARE
         + "expect:\n  answer:\n    must_report_value:\n"
         "      - name: period_s\n        expected: fast\n"
     )
@@ -331,7 +344,7 @@ def test_must_report_value_requires_a_number(tmp_path):
 
 def test_must_report_value_loads_with_a_tolerance_and_a_unit(tmp_path):
     body = (
-        MINIMAL
+        BARE
         + "expect:\n  answer:\n    must_report_value:\n"
         "      - name: period_s\n        expected: 0.7145197\n"
         "        rel_tol: 0.02\n        unit: s\n"
@@ -395,3 +408,28 @@ def test_a_suite_directory_resolves_to_its_suite_yaml(tmp_path):
     write(tmp_path, MINIMAL, name="one.yaml")
     write(tmp_path, "id: s\ndescription: d\ntasks: [one]\n", name="suite.yaml")
     assert load_suite(tmp_path).id == "s"
+
+
+def test_a_task_that_asserts_nothing_about_the_answer_is_rejected(tmp_path):
+    """The answer axis is the headline one and `passed` means every hard check
+    is green, so a task with no answer checks passes it vacuously whatever the
+    model says. Two core tasks shipped that way and a live run scored both as
+    passes on a 0/0 check count -- worse than a failure, because it inflates a
+    scoreboard with tasks that measure nothing."""
+
+    body = (
+        BARE
+        + "expect:\n  trajectory:\n    must_call: [search_ned]\n"
+    )
+    with pytest.raises(TaskError, match="asserts nothing about the answer"):
+        load_task(write(tmp_path, body))
+
+
+def test_a_diagnostic_only_key_cannot_stand_in_for_an_answer_check(tmp_path):
+    body = (
+        BARE
+        + "expect:\n  protocol:\n    null_argument_fidelity:\n"
+        "      - tool: search_vizier\n        property: max_catalogs\n"
+    )
+    with pytest.raises(TaskError, match="asserts nothing about the answer"):
+        load_task(write(tmp_path, body))

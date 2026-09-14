@@ -1,8 +1,13 @@
 id: null-argument-fidelity
 title: JSON null is the only way to ask for everything
 tags: [core, fidelity, null-argument, scope, vizier]
+# See preview-is-not-the-answer for why the object is named rather than
+# referred to: "this field" had no antecedent and the model rightly asked
+# which one, which is a correct answer to a question the task did not mean to
+# ask.
 prompt: >
-  Pull every VizieR radio catalogue for this field -- complete, nothing capped.
+  Pull every VizieR radio catalogue for Cassiopeia A -- complete, nothing
+  capped.
 max_turns: 8
 fixtures: [search_vizier]
 

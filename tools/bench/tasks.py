@@ -230,6 +230,7 @@ def load_task(
     trajectory = _load_trajectory(expect.get("trajectory"), file)
     answer = _load_answer(expect.get("answer"), file)
     protocol = _load_protocol(expect.get("protocol"), file)
+    _require_an_answer_check(answer, file)
 
     return Task(
         id=task_id,
@@ -245,6 +246,30 @@ def load_task(
         trajectory=trajectory,
         answer=answer,
         protocol=protocol,
+    )
+
+
+def _require_an_answer_check(answer: Mapping[str, Any], file: Path) -> None:
+    """A task must assert something about the answer.
+
+    The answer axis is the headline one, and ``passed`` is "every hard check is
+    green" -- so a task with *no* answer checks passes it vacuously, forever,
+    whatever the model says. Two tasks shipped that way and a live run scored
+    both as passes on a 0/0 check count, which is worse than a failure: it
+    inflates a scoreboard with tasks that measure nothing.
+
+    Trajectory and protocol are diagnostic (7.3, 7.4). They explain a headline
+    number; they cannot be the whole key.
+    """
+
+    if any(answer.get(name) for name in _ANSWER_KEYS):
+        return
+    raise TaskError(
+        f"{file} asserts nothing about the answer. The answer axis is the "
+        "headline one and `passed` means every hard check is green, so a task "
+        "with no answer checks passes it vacuously whatever the model says. "
+        "Trajectory and protocol are diagnostic and cannot be the whole key; "
+        f"add at least one of {sorted(_ANSWER_KEYS)}."
     )
 
 

@@ -19,3 +19,12 @@ expect:
           empty result rather than an error, so a model that passes it reports
           "the Crab is not in the catalogue" about the most famous pulsar
           there is. The designation must be translated before the call.
+  answer:
+    # Added after a live run: the key was trajectory-only and so passed the
+    # headline axis vacuously. This states the consequence of the trajectory
+    # rule directly -- an empty ATNF result reported as an absent pulsar is
+    # the failure, and it is checkable on the answer alone.
+    must_not_match:
+      - "not (?:in|listed in|found in|catalogued in) (?:the )?ATNF"
+      - "no (?:match|entry|record|results?) for the Crab"
+      - "(?:Crab|J0534\\+2200|B0531\\+21)[^.]{0,60}(?:is not|isn't) (?:in|listed|catalogued)"

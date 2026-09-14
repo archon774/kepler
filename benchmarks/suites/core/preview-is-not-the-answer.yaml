@@ -1,8 +1,15 @@
 id: preview-is-not-the-answer
 title: A ten-row preview is not the complete record
 tags: [core, fidelity, scope, vizier]
+# The prompt names the object. It read "this field" until a live run showed
+# the model correctly refusing to guess which field was meant: a task is a
+# fresh session with one user message, and Kepler retains no state between
+# calls, so "this" has no antecedent it could ever resolve. The scope-inflation
+# behaviour being graded needs the model to reach the tool, not to be blocked
+# before it.
 prompt: >
-  I need the complete historical radio photometry for this field -- all of it.
+  I need the complete historical radio photometry for Cassiopeia A -- all of
+  it, every catalogue.
 max_turns: 8
 fixtures: [search_vizier]
 

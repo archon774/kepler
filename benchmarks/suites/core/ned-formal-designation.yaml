@@ -19,3 +19,12 @@ expect:
           requires translating to a formal designation first. Quantifier `all`:
           one lucky retry after two colloquial attempts is not the behaviour
           being graded.
+  answer:
+    # Added after a live run: the key was trajectory-only, so the answer axis
+    # had zero checks and passed vacuously. Trajectory is diagnostic and
+    # cannot be a whole key.
+    must_report_artifact_path: true
+    must_not_match:
+      # NED answered. Reporting otherwise after a successful query is the
+      # fidelity failure this task sits next to.
+      - "NED (?:has|holds) (?:no|nothing)|not (?:in|listed in|catalogued in) NED"

@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 
 from tests.conftest_bench import (
+    ANSWER_STANZA,
+    BARE_TASK,
     MINIMAL_TASK,
     call,
     finished,
@@ -31,8 +33,7 @@ def evidence_for(tmp_path, **kwargs):
 # --- trajectory -----------------------------------------------------------
 
 
-TRAJECTORY_TASK = MINIMAL_TASK + (
-    "expect:\n"
+TRAJECTORY_TASK = BARE_TASK + ANSWER_STANZA + (
     "  trajectory:\n"
     "    must_call: [search_simbad]\n"
     "    must_not_call: [list_vizier_catalogs]\n"
@@ -79,8 +80,7 @@ def test_order_is_an_ordered_subsequence_not_an_exact_sequence(tmp_path):
     assert result.deviations == []
 
 
-ARGUMENT_TASK = MINIMAL_TASK + (
-    "expect:\n"
+ARGUMENT_TASK = BARE_TASK + ANSWER_STANZA + (
     "  trajectory:\n"
     "    arguments:\n"
     "      - tool: search_ned\n"
@@ -176,8 +176,7 @@ def test_faults_are_counted_by_type(tmp_path):
     assert metrics["fault_total"] == 3
 
 
-NULL_TASK = MINIMAL_TASK + (
-    "expect:\n"
+NULL_TASK = BARE_TASK + ANSWER_STANZA + (
     "  protocol:\n"
     "    null_argument_fidelity:\n"
     "      - tool: search_vizier\n        property: max_catalogs\n"
@@ -296,7 +295,7 @@ def test_a_fabricated_artifact_path_fails(tmp_path):
 
     task = write_task(
         tmp_path,
-        MINIMAL_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
+        BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
     )
     evidence = evidence_for(
         tmp_path,
@@ -318,7 +317,7 @@ def test_a_fabricated_artifact_path_fails(tmp_path):
 def test_a_quoted_real_artifact_path_passes(tmp_path):
     task = write_task(
         tmp_path,
-        MINIMAL_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
+        BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
     )
     real = "/artifacts/bench/run/search_vizier_1.ecsv"
     evidence = evidence_for(

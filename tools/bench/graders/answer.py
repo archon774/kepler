@@ -51,10 +51,28 @@ HARD_CHECKS: tuple[str, ...] = (
     "must_source_value",
 )
 
-#: A bounded numeric literal: optional sign, digits, optional decimal part,
-#: optional exponent. Bounded on purpose -- an unbounded one run over a long
-#: answer is a way to spend a second per grade.
-_NUMBER_RE = re.compile(r"[-+]?\d{1,12}(?:\.\d{1,12})?(?:[eE][-+]?\d{1,3})?")
+#: A bounded numeric literal: optional sign, digits -- **including
+#: comma-grouped thousands** -- an optional decimal part, and an optional
+#: exponent. Bounded on purpose: an unbounded one run over a long answer is a
+#: way to spend a second per grade.
+#:
+#: The grouping alternative is load-bearing and was added after a live run
+#: found the bug. Without it, "4,127 rows" yielded 4 and 127 and never 4127,
+#: so ``must_report_value {expected: 4127}`` failed a *correct* answer, and
+#: "22,000 Jy" parsed as 0.0 -- a value that could spuriously satisfy a
+#: tolerance check. Models format numbers conventionally; the grader has to
+#: read them that way. The group requires exactly three digits after each
+#: comma, so a decimal comma ("3,14") still falls to the plain form rather
+#: than being misread as 314.
+_NUMBER_RE = re.compile(
+    r"[-+]?(?:\d{1,3}(?:,\d{3})+|\d{1,12})(?:\.\d{1,12})?(?:[eE][-+]?\d{1,3})?"
+)
+
+
+def _as_float(literal: str) -> float:
+    """Parse a matched literal, discarding thousands separators."""
+
+    return float(literal.replace(",", ""))
 
 #: A number immediately preceded or followed by designation punctuation is an
 #: identifier, not a measurement: "NGC 6334", "B0329+54", "J0534+2200",
@@ -393,7 +411,7 @@ def numbers_in(text: str) -> list[float]:
     values: list[float] = []
     for match in _NUMBER_RE.finditer(masked):
         try:
-            values.append(float(match.group()))
+            values.append(_as_float(match.group()))
         except ValueError:  # pragma: no cover - the regex cannot produce this
             continue
     return values
@@ -421,7 +439,7 @@ def unsourced_numbers(answer: str, evidence: Evidence) -> set[str]:
     for match in _NUMBER_RE.finditer(masked):
         literal = match.group()
         try:
-            value = float(literal)
+            value = _as_float(literal)
         except ValueError:  # pragma: no cover
             continue
         if _is_year(value, literal):
@@ -450,7 +468,7 @@ def _collect_numbers(value: Any, into: set[float]) -> None:
     if isinstance(value, str):
         for match in _NUMBER_RE.finditer(value):
             try:
-                into.add(float(match.group()))
+                into.add(_as_float(match.group()))
             except ValueError:  # pragma: no cover
                 pass
         return
