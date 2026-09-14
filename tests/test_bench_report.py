@@ -190,7 +190,12 @@ def test_the_column_order_reads_the_two_questions_left_to_right():
     text = render_markdown(build_report([_pair()]))
     header = next(line for line in text.splitlines() if line.startswith("| backend |"))
     columns = [c.strip() for c in header.strip("|").split("|")]
-    assert columns[:3] == ["backend", "correctness", "tokens to an answer"]
+    assert columns[:4] == [
+        "backend",
+        "correctness",
+        "stability",
+        "tokens to an answer",
+    ]
     assert columns.index("trajectory failures") > columns.index("tokens to an answer")
     assert columns.index("protocol faults") > columns.index("trajectory failures")
 
@@ -329,3 +334,98 @@ def test_several_run_directories_merge_into_one_matrix():
     assert len(report["header"]["runs"]) == 2
     row = report["matrix"]["anthropic/claude-opus-5"]
     assert row["runs"] == 2 and row["passed"] == 1
+
+
+# --- stability and the ranking composite ---------------------------------
+
+
+def _repeat_entries(backend, task_outcomes):
+    """One entry per (task, repeat). `task_outcomes` maps task -> [pass|None]."""
+
+    out = []
+    for task, results in task_outcomes.items():
+        for n, passed in enumerate(results, start=1):
+            e = _entry(backend=backend, task_id=task, passed=bool(passed))
+            e["repeat"] = n
+            e["incomplete"] = passed is None
+            out.append(e)
+    return out
+
+
+def test_stability_reports_the_share_of_tasks_that_agreed_across_repeats():
+    """Section 17 question 2, answered: variance gets its own column rather
+    than being folded into the axes. A model passing a check two runs in three
+    is a different finding from one that passes it always, and a matrix showing
+    both as "2/3" loses the distinction a ranking needs."""
+
+    from tools.bench.grade import summarize
+
+    rows = summarize(
+        {
+            "grades": _repeat_entries(
+                "a/b",
+                {
+                    "steady": [True, True, True],
+                    "also-steady": [False, False, False],
+                    "flaky": [True, False, True],
+                },
+            )
+        }
+    )
+    assert rows["a/b"]["stability"] == pytest.approx(2 / 3)
+    assert rows["a/b"]["flaky_tasks"] == ["flaky"]
+
+
+def test_an_incomplete_repeat_counts_as_its_own_outcome():
+    """A task that answered twice and ran out of turns once is not stable, and
+    averaging it into a pass rate would hide that."""
+
+    from tools.bench.grade import summarize
+
+    rows = summarize(
+        {"grades": _repeat_entries("a/b", {"sometimes": [True, True, None]})}
+    )
+    assert rows["a/b"]["stability"] == 0.0
+    assert rows["a/b"]["flaky_tasks"] == ["sometimes"]
+
+
+def test_a_single_repeat_reports_no_stability_rather_than_a_perfect_one():
+    """With n=1 nothing about stability has been measured, and reporting 100%
+    would be a lie of omission -- especially for a backend whose provider
+    refuses `temperature`, where nothing else bounds run-to-run drift."""
+
+    from tools.bench.grade import summarize
+
+    rows = summarize({"grades": _repeat_entries("a/b", {"once": [True]})})
+    assert rows["a/b"]["stability"] is None
+    text = render_markdown(build_report([_pair(entries=[_entry()])]))
+    assert "| -- |" in text
+
+
+def test_the_composite_ranks_on_both_headline_axes():
+    """Correctness is already a rate; efficiency is normalized against the
+    cheapest row, so the best backend scores 1.0 on it and one costing twice
+    as much scores 0.5."""
+
+    cheap = _entry(backend="cheap/model", task_id="t1")
+    dear = _entry(backend="dear/model", task_id="t1")
+    dear["efficiency"]["metrics"]["tokens"] = {
+        "input_tokens": 84000,
+        "output_tokens": 1600,
+    }
+    report = build_report([_pair(entries=[cheap, dear])], composite=True)
+    matrix = report["matrix"]
+    # Both passed everything, so correctness contributes 0.7 to each; the
+    # cheaper row takes the full 0.3 and the dearer one half of it.
+    assert matrix["cheap/model"]["composite"] == pytest.approx(1.0)
+    assert matrix["dear/model"]["composite"] == pytest.approx(0.85)
+    assert "Composite weights" in render_markdown(report)
+
+
+def test_the_composite_is_none_when_an_axis_is_missing():
+    """A backend that answered nothing has no efficiency, and scoring it as
+    maximally inefficient would invent a measurement."""
+
+    entry = _entry(incomplete=True, passed=False)
+    report = build_report([_pair(entries=[entry])], composite=True)
+    assert report["matrix"]["anthropic/claude-opus-5"]["composite"] is None

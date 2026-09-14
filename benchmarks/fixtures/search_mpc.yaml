@@ -1,0 +1,31 @@
+tool: search_mpc
+recorded_on: 2026-09-14
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/mpc.py's return model.
+  It exists so the replayed archive is not EMPTY: a live run showed a model
+  making 38 calls across 12 tools and never answering, because every
+  undeclared tool returned nothing and it kept trying further archives. An
+  empty world punishes a model for cross-checking sources, which is
+  behaviour the real surface rewards. The SHAPE is faithful to the tool; the
+  VALUES are plausible placeholders and must not be quoted as measurements.
+  Replace with a `kepler-bench record` capture when credentials allow.
+miss_policy: synthesize
+entries:
+  - id: halley-by-designation
+    match: {designation: {matches: "^1P"}}
+    response:
+      status: ok
+      count: 1
+      columns: [designation, name, epoch]
+      preview:
+        - {designation: "1P", name: "Halley", epoch: "2061-07-28"}
+  - id: default
+    match: {}
+    response:
+      status: error
+      count: 0
+      errors:
+        - code: bad_designation
+          message: >-
+            The MPC performs no name resolution. Pass a packed or unpacked
+            designation such as "1P", not a common name.

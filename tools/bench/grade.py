@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from tools.bench.graders import grade_run_directory
 
@@ -82,6 +82,37 @@ def grade_run(
     return grades
 
 
+def _is_flaky(results: Sequence[bool | None]) -> bool:
+    """A task that did not give the same verdict every repeat.
+
+    ``None`` (incomplete) counts as its own outcome: a task that answered twice
+    and ran out of turns once is not stable, and averaging it into a pass rate
+    would hide that.
+    """
+
+    return len(set(results)) > 1
+
+
+def _stability(outcomes: Mapping[str, Sequence[bool | None]]) -> float | None:
+    """The share of tasks that gave the same verdict on every repeat.
+
+    Section 17 question 2, answered: variance gets its own column rather than
+    being folded into the axes. A model that passes a check two runs in three
+    is a different finding from one that passes it always, and a matrix showing
+    both as "2/3" loses exactly the distinction a ranking needs -- especially
+    for a backend whose provider refuses `temperature`, where nothing else
+    bounds run-to-run drift.
+
+    ``None`` when there is only one repeat: with n=1 nothing about stability
+    has been measured, and reporting 100% would be a lie of omission.
+    """
+
+    repeated = [r for r in outcomes.values() if len(r) > 1]
+    if not repeated:
+        return None
+    return sum(1 for r in repeated if not _is_flaky(r)) / len(repeated)
+
+
 def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
     """Per-backend roll-up: the two headline axes first, then the diagnostics.
 
@@ -92,9 +123,19 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
     """
 
     rows: dict[str, dict[str, Any]] = {}
+    # (backend, task) -> the pass/fail of each repeat, for the stability column.
+    per_task: dict[tuple[str, str], list[bool | None]] = {}
     for entry in grades.get("grades", ()):
         if "answer" not in entry:
             continue
+        # Stability needs a task identity to group repeats by. An entry
+        # without one contributes nothing rather than collapsing every task
+        # into a single bucket and inventing a spread.
+        task_id = entry.get("task_id")
+        if task_id is not None:
+            per_task.setdefault((entry["backend"], task_id), []).append(
+                None if entry["incomplete"] else bool(entry["answer"]["passed"])
+            )
         row = rows.setdefault(
             entry["backend"],
             {
@@ -135,7 +176,16 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
         row["fault_total"] += entry["protocol"]["metrics"].get("fault_total") or 0
         row["trajectory_failures"] += len(entry["trajectory"]["failures"])
 
-    for row in rows.values():
+    for backend, row in rows.items():
+        outcomes = {
+            task: results
+            for (b, task), results in per_task.items()
+            if b == backend
+        }
+        row["stability"] = _stability(outcomes)
+        row["flaky_tasks"] = sorted(
+            task for task, results in outcomes.items() if _is_flaky(results)
+        )
         scored = row["runs"] - row["incomplete"]
         row["pass_rate"] = row["passed"] / scored if scored else None
         row["tokens_per_answer"] = (

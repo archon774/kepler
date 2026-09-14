@@ -490,3 +490,38 @@ def test_no_answer_key_names_a_backend_or_a_model():
             text = text.replace("CLAUDE.md", "<repo-instructions>")
             hit = banned.search(text)
             assert not hit, f"{path} names a model/provider: {hit.group()!r}"
+
+
+def test_every_remote_tool_has_a_recorded_fixture():
+    """An empty archive is not a neutral one.
+
+    A live run had a model make 38 calls across 12 tools and never answer,
+    because each undeclared tool returned nothing and it kept looking for one
+    that would. That measured this suite's coverage, not the model -- and it
+    penalised the model that cross-checked its sources, which is the behaviour
+    the real surface rewards.
+
+    Complete class-R coverage is what makes miss_policy stop mattering.
+    """
+
+    from tools.bench.plane import TOOL_CLASSES
+
+    remote = {name for name, kind in TOOL_CLASSES.items() if kind == "remote"}
+    recorded = {path.stem for path in FIXTURE_ROOT.glob("*.yaml")}
+    assert not (remote - recorded), (
+        f"class-R tools with no recorded fixture: {sorted(remote - recorded)}. "
+        "A model reaching for one gets silence, and silence invites it to keep "
+        "hunting until it runs out of turns."
+    )
+
+
+def test_the_core_suite_declares_the_whole_recorded_archive():
+    """Its prompts are open-ended, so a model may reasonably reach for any
+    archive; every one it reaches should answer."""
+
+    from tools.bench.plane import TOOL_CLASSES
+
+    suite = load_suite(SUITE_ROOT / "core", fixture_root=FIXTURE_ROOT)
+    recorded = {path.stem for path in FIXTURE_ROOT.glob("*.yaml")}
+    for task in suite:
+        assert set(task.fixtures) == recorded, task.id

@@ -15,7 +15,10 @@ prompt: >
 max_turns: 20
 # No fixture: this runs the real chain over
 # data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt.
-fixtures: [search_atnf, search_simbad]
+# Every recorded fixture. A model that cross-checks an adjacent archive
+# gets a recorded answer rather than silence -- see FIXTURES_ALL in
+# tools/bench/tasks.py for the run that made the alternative concrete.
+fixtures: all
 # An off-script call must not derail the run. benchmark.md 5.3 provides for
 # exactly this: `synthesize` hands back a schema-valid empty result -- which is
 # what a real archive returns for no match -- instead of a fixture_miss error.

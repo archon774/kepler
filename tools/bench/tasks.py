@@ -193,7 +193,7 @@ def load_task(
     if not isinstance(max_turns, int) or isinstance(max_turns, bool) or max_turns < 1:
         raise TaskError(f"{file} max_turns must be an integer >= 1, got {max_turns!r}")
 
-    fixtures = _string_list(payload.get("fixtures"), f"{file} fixtures")
+    fixtures = _resolve_fixture_list(payload.get("fixtures"), file, fixture_root)
     if fixture_root is not None:
         from tools.bench.fixtures import FixtureError, resolve_fixture_path
 
@@ -271,6 +271,29 @@ def _require_an_answer_check(answer: Mapping[str, Any], file: Path) -> None:
         "Trajectory and protocol are diagnostic and cannot be the whole key; "
         f"add at least one of {sorted(_ANSWER_KEYS)}."
     )
+
+
+#: A task may write ``fixtures: all`` for "every recorded fixture". It is the
+#: right default for a task whose prompt is open-ended: a model that reaches
+#: for an adjacent archive then gets a recorded answer rather than silence.
+#: A live run made the alternative concrete -- one model made 38 calls across
+#: 12 tools and never answered, because each undeclared tool returned nothing
+#: and it kept looking for one that would.
+FIXTURES_ALL = "all"
+
+
+def _resolve_fixture_list(
+    value: Any, file: Path, fixture_root: str | Path | None
+) -> tuple[str, ...]:
+    """Resolve a task's ``fixtures:`` key, expanding the ``all`` sentinel."""
+
+    if value == FIXTURES_ALL:
+        if fixture_root is None:
+            return ()
+        return tuple(
+            sorted(path.stem for path in Path(fixture_root).glob("*.yaml"))
+        )
+    return _string_list(value, f"{file} fixtures")
 
 
 def _load_env(value: Any, file: Path) -> dict[str, str]:

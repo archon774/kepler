@@ -85,8 +85,15 @@ def build_report(
 
     for row in matrix.values():
         _finalize(row)
-        if composite:
-            row["composite"] = _composite(row)
+    if composite:
+        costs = [
+            row["tokens_per_answer"]
+            for row in matrix.values()
+            if row.get("tokens_per_answer")
+        ]
+        best = min(costs) if costs else None
+        for row in matrix.values():
+            row["composite"] = _composite(row, best)
 
     return {
         "header": header,
@@ -118,6 +125,10 @@ def _merge(into: dict[str, Any], row: Mapping[str, Any]) -> None:
     for key, value in row.items():
         if isinstance(value, (int, float)) and key in into:
             into[key] += value
+    # Not summable: they describe the set of repeats, not a quantity.
+    for key in ("stability", "flaky_tasks"):
+        if key in row:
+            into[key] = row[key]
 
 
 def _finalize(row: dict[str, Any]) -> None:
@@ -137,19 +148,34 @@ def _finalize(row: dict[str, Any]) -> None:
     )
 
 
-def _composite(row: Mapping[str, Any]) -> float | None:
-    """A weighted figure over the two headline axes only.
+def _composite(row: Mapping[str, Any], best_tokens: float | None) -> float | None:
+    """One weighted figure over the two headline axes, for ranking.
 
-    Efficiency is normalized as the inverse of tokens per answer against the
-    best row -- but that needs the whole matrix, so this returns the
-    correctness term alone when it cannot see one. Available behind a flag
-    precisely because a composite hides which axis failed.
+    Correctness is a rate in [0, 1] already. Efficiency is normalized against
+    the **best** row's tokens per answer, so the cheapest backend scores 1.0
+    and one costing twice as much scores 0.5 -- a ratio, because tokens have no
+    natural ceiling to divide by.
+
+    Deliberately behind ``--composite`` and never the default. A single number
+    hides which axis failed, and the two it blends answer different questions;
+    it is offered for ranking, not for diagnosis. The weights print above it so
+    a reader can disagree with them.
+
+    ``None`` when either axis is missing, rather than substituting a zero: a
+    backend that answered nothing has no efficiency, and scoring it as maximally
+    inefficient would invent a measurement.
     """
 
     correctness = row.get("pass_rate")
-    if correctness is None:
+    tokens = row.get("tokens_per_answer")
+    if correctness is None or not tokens or not best_tokens:
         return None
-    return round(correctness * COMPOSITE_WEIGHTS["correctness"], 4)
+    efficiency = best_tokens / tokens
+    return round(
+        correctness * COMPOSITE_WEIGHTS["correctness"]
+        + efficiency * COMPOSITE_WEIGHTS["efficiency"],
+        4,
+    )
 
 
 def _filtered(grades: Mapping[str, Any], tag: str | None) -> Mapping[str, Any]:
@@ -342,18 +368,19 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
         "",
         "The two headline axes first; the two diagnostic axes explain them.",
         "",
-        "| backend | correctness | tokens to an answer | turns/run | tok/s | "
-        "duplicate rate | trajectory failures | protocol faults |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| backend | correctness | stability | tokens to an answer | turns/run | "
+        "tok/s | duplicate rate | trajectory failures | protocol faults |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for backend, row in sorted(report["matrix"].items()):
         lines.append(
-            "| `{backend}` | {passed}/{scored} ({rate}) | {tpa} | {tpr} | "
-            "{tps} | {dup} | {traj} | {faults} |".format(
+            "| `{backend}` | {passed}/{scored} ({rate}) | {stability} | {tpa} | "
+            "{tpr} | {tps} | {dup} | {traj} | {faults} |".format(
                 backend=backend,
                 passed=row["passed"],
                 scored=row["runs"] - row["incomplete"],
                 rate=_pct(row["pass_rate"]),
+                stability=_pct(row.get("stability")),
                 tpa=_num(row["tokens_per_answer"], "{:,.0f}"),
                 tpr=_num(row["turns_per_run"], "{:.1f}"),
                 tps=_num(row["tokens_per_second"], "{:.1f}"),
