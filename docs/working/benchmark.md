@@ -326,7 +326,9 @@ contract is untouched by this work.
 | `tools/bench/graders/protocol.py` | Fault counts and `null_argument_fidelity`. |
 | `tools/bench/judge.py` | The opt-in LLM judge. Isolated by construction (S1). |
 | `tools/bench/report.py` | Matrix rendering: Markdown and JSON. |
-| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `compare`. |
+| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `compare`. |
+| `tools/bench/sources.py` | Mechanical resolution of an answer key's expected value. No key is ever a hand-typed literal. |
+| `tools/bench/falsify.py` | The adversarial pass over the keys themselves. Consults no model; can only accuse. |
 | `tools/llm/replay_backend.py` | `ReplayBackend` — replays a recorded model transcript. Test-only. |
 | `benchmarks/suites/<suite>/suite.yaml` | Suite manifest: id, description, ordered member task files. |
 | `benchmarks/suites/<suite>/<task-id>.yaml` | One task per file — so a corpus diff is reviewable per task. |
@@ -561,7 +563,11 @@ title: NED needs a formal catalog designation
 tags: [trajectory, name-resolution, core]
 prompt: >
   Get me NED's photometry for the Cat's Paw Nebula.
-max_turns: 8
+# No max_turns. The cap is *derived* from the task's own declared requirement
+# (tasks.derive_turn_cap) and a task file that sets one fails to load: the only
+# evidence for choosing a cap is a transcript, so a hand-set cap is fitted to
+# whoever produced that transcript. It is a loop-breaker, never a measurement
+# parameter -- a run that reaches it is incomplete, not failed.
 fixtures: [search_simbad, search_ned]   # relative names under the fixture root
 miss_policy: error                      # optional per-task override
 env:                                    # optional; KEPLER_* only (B7)
@@ -610,11 +616,35 @@ Section 7.1.6 ranks all of them by robustness. **Reach for the top of that
 table first** — a task leaning on `must_match` is a task that may be grading
 prose style, and 7.1.9 is the gate that catches it.
 
-**`must_report_value`** asserts a number: `{name: period_s, expected:
-0.7145197, rel_tol: 0.02, unit: s}`. The grader extracts numeric literals from
-the answer with a bounded regex and passes if at least one lies within
-tolerance. This is the pulsar suite's workhorse — a period is the one thing on
-this surface with an unambiguous right answer.
+**`must_report_value`** asserts a number, and **never a hand-typed one**. The
+check names the mechanical source its expectation comes from and the loader
+resolves it (`tools/bench/sources.py`):
+
+```yaml
+- name: period_s
+  source: {dataset: pulsar/curated_periods.json, path: pulsars.b0329.period_s}
+  rel_tol: 0.02
+  unit: s
+```
+
+Three source kinds, all model-independent: `fixture` (a field of the recorded
+archive response), `dataset` (a field of a repository data file — independent
+ground truth that predates this benchmark, resolved against the repository's
+own `data/` tree rather than `KEPLER_DATA_DIR`), and `tool_result` (the value a
+deterministic Kepler tool returned on the run being graded — the fidelity
+case). A literal `expected:` fails to load.
+
+The last kind is not circular: it reads the return value of repository code
+whose behaviour the preservation suite pins, not a model's prose. The model
+picks the arguments — that is the trajectory axis — but cannot change what the
+tool computes from them. **Weighing an answer against a tool's output is
+fidelity; weighing it against another model's output would be an opinion poll,
+and nothing here does that.**
+
+The grader extracts numeric literals from the answer with a bounded regex and
+passes if at least one lies within tolerance. This is the pulsar suite's
+workhorse — a period is the one thing on this surface with an unambiguous right
+answer.
 
 **`must_report_artifact_path`** is checked against the manifest, not against a
 regex: the answer must contain, verbatim, a path that appears in some
@@ -1355,6 +1385,9 @@ kepler-bench run core \
 
 # Grade (offline, free, repeatable after a grader fix).
 kepler-bench grade artifacts/bench/2026-09-13-core
+
+# Attack the keys with the evidence already recorded. Offline, free, no model.
+kepler-bench falsify artifacts/bench/2026-09-13-core
 
 # Render the matrix; --composite for a single weighted number.
 kepler-bench compare artifacts/bench/2026-09-13-core [more-run-dirs...]

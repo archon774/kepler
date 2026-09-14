@@ -1,7 +1,14 @@
 # `core` — calibration record
 
-**Status: CALIBRATED.** Four backends across four tiers, three repeats each —
-96 sessions. §7.1.9's gate is met. The scoreboard, the ranking and the limits
+**Status: CALIBRATED — and not able to rank these four.**
+
+At 24 trials per backend no pair is separated at 95% confidence, not even
+96% against 67%. Separating the top two would take 176 trials. The suite has
+measured four backends and ordered none of them; see
+`docs/working/benchmark-results.md`, *Resolution*.
+
+**Original note.** Four backends across four tiers, three repeats each —
+96 sessions. §7.1.9's gate is met. The scoreboard and the limits
 are in [../../../docs/working/benchmark-results.md](../../../docs/working/benchmark-results.md).
 
 | Backend | Tier | Passed (of 24) | Stability |
