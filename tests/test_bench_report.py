@@ -815,3 +815,37 @@ def test_the_clustered_interval_covers_a_population_the_naive_one_misses():
     # to nominal. Bounds are loose enough not to be flaky at this trial count.
     assert naive_hits / trials < 0.85
     assert 0.90 < clustered_hits / trials < 0.99
+
+
+def test_latency_is_scored_on_first_repeats_not_warmed_ones():
+    """Repeating a task hits the provider's prefix cache.
+
+    Six tasks in one live sweep did byte-identical work across their three
+    repeats -- same turns, same tool calls, same input tokens -- and still ran
+    a median 1.33x slower on the first. A caller asks each question once, and
+    the discount differs by provider, so averaging warmed repeats in would rank
+    backends on whose caching the harness exercised.
+    """
+
+    entries = [
+        _entry(task_id="t1", repeat=1, passed=True, wall_ms=90_000),
+        _entry(task_id="t1", repeat=2, passed=True, wall_ms=30_000),
+        _entry(task_id="t1", repeat=3, passed=True, wall_ms=30_000),
+    ]
+    row = build_report([_pair(entries=entries)])["matrix"]["anthropic/claude-opus-5"]
+    assert row["seconds_per_answer"] == pytest.approx(90.0)
+    assert row["seconds_per_answer_warm"] == pytest.approx(50.0)
+    assert row["cold_latency"] is True
+
+
+def test_latency_falls_back_when_no_first_repeat_answered():
+    """A model whose first attempt never lands has no cold measurement, and
+    saying so beats silently scoring it on warmed repeats."""
+
+    entries = [
+        _entry(task_id="t1", repeat=1, passed=False, wall_ms=90_000),
+        _entry(task_id="t1", repeat=2, passed=True, wall_ms=40_000),
+    ]
+    row = build_report([_pair(entries=entries)])["matrix"]["anthropic/claude-opus-5"]
+    assert row["cold_latency"] is False
+    assert row["seconds_per_answer"] == pytest.approx(40.0)

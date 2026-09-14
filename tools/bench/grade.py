@@ -156,6 +156,15 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
                 # tokens are -- a fast wrong answer is not a fast answer.
                 "wall_ms_to_answer": 0.0,
                 "wall_ms_without_result": 0.0,
+                # Time on *first* repeats only. Repeating a task back to back
+                # hits the provider's prefix cache, so repeats two and three
+                # are artificially fast: six tasks in one sweep did byte
+                # identical work across their repeats -- same turns, same
+                # calls, same input tokens -- and still ran a median 1.33x and
+                # up to 2.43x slower on the first. A caller asks each question
+                # once, cold, so that is the latency a score should carry.
+                "wall_ms_cold": 0.0,
+                "cold_answers": 0,
             },
         )
         row["runs"] += 1
@@ -173,6 +182,9 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
             row["passed"] += 1
             row["tokens_to_an_answer"] += spent
             row["wall_ms_to_answer"] += wall
+            if entry.get("repeat") == 1:
+                row["wall_ms_cold"] += wall
+                row["cold_answers"] += 1
         else:
             row["tokens_without_result"] += spent
             row["wall_ms_without_result"] += wall
@@ -209,9 +221,17 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
             if row["model_time_ms"]
             else None
         )
-        row["seconds_per_answer"] = (
+        row["seconds_per_answer_warm"] = (
             row["wall_ms_to_answer"] / 1000.0 / row["passed"]
             if row["passed"]
             else None
         )
+        # The scored figure. Falls back to the warm mean only when no first
+        # repeat reached an answer, which is itself worth seeing.
+        row["seconds_per_answer"] = (
+            row["wall_ms_cold"] / 1000.0 / row["cold_answers"]
+            if row["cold_answers"]
+            else row["seconds_per_answer_warm"]
+        )
+        row["cold_latency"] = bool(row["cold_answers"])
     return rows

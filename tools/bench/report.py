@@ -144,6 +144,8 @@ def _empty_row() -> dict[str, Any]:
         "output_tokens": 0,
         "wall_ms_to_answer": 0.0,
         "wall_ms_without_result": 0.0,
+        "wall_ms_cold": 0.0,
+        "cold_answers": 0,
         "task_outcomes": {},
     }
 
@@ -193,9 +195,21 @@ def _finalize(row: dict[str, Any]) -> None:
     # Time to an answer, on the runs that reached one. The question a user
     # actually asks of a model is how long they wait for a usable answer, and
     # that is comparable across every backend however it is served.
-    row["seconds_per_answer"] = (
+    #
+    # Scored on *first* repeats. A repeat of the same task reuses the
+    # provider's prefix cache and runs artificially fast -- measured at a
+    # median 1.33x on sessions doing byte-identical work -- and the size of
+    # that discount differs by provider, so averaging it in would rank
+    # backends partly on whose caching this harness happened to exercise.
+    row["seconds_per_answer_warm"] = (
         row["wall_ms_to_answer"] / 1000.0 / row["passed"] if row["passed"] else None
     )
+    row["seconds_per_answer"] = (
+        row["wall_ms_cold"] / 1000.0 / row["cold_answers"]
+        if row["cold_answers"]
+        else row["seconds_per_answer_warm"]
+    )
+    row["cold_latency"] = bool(row["cold_answers"])
     row["turns_per_run"] = row["turns"] / row["runs"] if row["runs"] else None
     row["duplicate_rate"] = (
         row["duplicate_calls"] / row["tool_calls"] if row["tool_calls"] else None
@@ -742,9 +756,17 @@ _BOARD_BLURB: Mapping[str, str] = {
         "judgement about the corpus, not a result of the arithmetic."
     ),
     "speed": (
-        "**Relative.** Wall-clock seconds to a passing answer. There is no "
-        "\"perfectly fast\", so the only comparison available is against the "
-        "other backends here -- add a slower model and these standings move."
+        "**Relative.** Wall-clock seconds to a passing answer, measured on "
+        "**first repeats only**. Repeating a task back to back reuses the "
+        "provider's prefix cache: sessions doing byte-identical work -- same "
+        "turns, same calls, same input tokens -- ran a median 1.33x and up to "
+        "2.43x slower on their first repeat than their later ones. A caller "
+        "asks each question once, cold, and the size of that discount differs "
+        "by provider, so averaging it in would rank backends partly on whose "
+        "caching this harness happened to exercise.\n\n"
+        "There is no \"perfectly fast\", so the only comparison available is "
+        "against the other backends here -- add a slower model and these "
+        "standings move."
     ),
     "cost": (
         "**Relative.** Tokens spent per passing answer, on the same footing as "
