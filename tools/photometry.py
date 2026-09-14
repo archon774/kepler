@@ -50,7 +50,9 @@ from tools.claude_photometry_haiku_tool import (
 from tools.config import artifact_directory
 from tools.fieldcal_reference import (
     CATALOG_FIXTURES,
+    _variable_sources_warning,
     compare_zeropoint_to_reference,
+    load_catalog_response,
     replay_catalog_sources,
     replay_variable_sources,
 )
@@ -306,9 +308,10 @@ def calibrate_zeropoint(
       cross-check is disabled: it would query VSX, and could drop rows that
       are in the recorded matched set.
     * ``"full_response"`` -- the end-to-end selection replay: the recorded
-      APASS response for the whole field, with the recorded VSX rows applied
-      as the variable-star filter, so the matches are chosen from all the
-      candidates exactly as a live solve chooses them.
+      APASS response for the whole field, clipped to the frame as the live
+      query path clips it, with the recorded VSX rows applied as the
+      variable-star filter, so the matches are chosen from the candidates
+      exactly as a live solve chooses them.
 
     ``catalog_sources`` is the same offline path with the rows supplied
     directly (``tools.fieldcal_reference.replay_catalog_sources`` builds
@@ -363,6 +366,19 @@ def calibrate_zeropoint(
             )
         catalog_sources = replay_catalog_sources(compare_to, fixture=catalog_fixture)
         if not catalog_sources:
+            # Present-but-unusable is a different diagnosis from absent.
+            response = load_catalog_response(compare_to) if catalog_fixture == "full_response" else None
+            if response is not None and not response.errors:
+                return ZeropointComparison(
+                    errors=[
+                        ToolError(
+                            code="catalog_fixture_empty",
+                            message=f"The recorded {response.catalog} response for "
+                            f"{compare_to!r} ({response.row_count} rows) has no row the "
+                            f"{response.catalog} mapping can use. Nothing was queried.",
+                        )
+                    ]
+                )
             return ZeropointComparison(
                 errors=[
                     ToolError(
@@ -377,11 +393,7 @@ def calibrate_zeropoint(
             variable_sources = replay_variable_sources(compare_to)
             if not variable_sources:
                 warnings.append(
-                    ToolWarning(
-                        code="variable_sources_not_recorded",
-                        message=f"No recorded VSX rows for {compare_to!r}; the "
-                        "variable-star filter is skipped rather than queried.",
-                    )
+                    _variable_sources_warning(compare_to, load_catalog_response(compare_to, "VSX"))
                 )
                 variable_sources = None
 
@@ -393,14 +405,16 @@ def calibrate_zeropoint(
                     code="file_not_found",
                     message=f"{path!r} is not a readable local FITS file.",
                 )
-            ]
+            ],
+            warnings=warnings,
         )
 
     try:
         data, header = load_fits_image(Path(file_meta.path))
     except (OSError, ValueError) as exc:
         return ZeropointComparison(
-            errors=[ToolError(code="fits_read_error", message=str(exc))]
+            errors=[ToolError(code="fits_read_error", message=str(exc))],
+            warnings=warnings,
         )
 
     from algorithms.fieldcal.field_cal import perform_field_calibration
@@ -442,6 +456,14 @@ def calibrate_zeropoint(
         wcs = build_wcs_from_header(header)
         if wcs is None:
             raise ValueError("Missing WCS needed for calibration")
+        if catalog_fixture == "full_response":
+            # The recorded response is the whole cone; the live query path
+            # clips a response to the detector before the solve sees a row.
+            from algorithms.query.geometry import clip_sources_to_wcs
+
+            catalog_sources = clip_sources_to_wcs(catalog_sources, [wcs])
+            if variable_sources is not None:
+                variable_sources = clip_sources_to_wcs(variable_sources, [wcs])
         resolved_sources, variable_sources, selected_catalogs = _resolve_calibration_inputs(
             header,
             wcs,
@@ -462,17 +484,20 @@ def calibrate_zeropoint(
         )
     except Exception as exc:  # noqa: BLE001 -- no match, no convergence, network down
         return ZeropointComparison(
-            errors=[ToolError(code="field_calibration_failed", message=str(exc))]
+            errors=[ToolError(code="field_calibration_failed", message=str(exc))],
+            warnings=warnings,
         )
 
     if outcome is None:
         return ZeropointComparison(
-            errors=[ToolError(code="no_solution", message="field calibration returned no solution")]
+            errors=[ToolError(code="no_solution", message="field calibration returned no solution")],
+            warnings=warnings,
         )
     zero_point, _result = outcome
     if zero_point is None:
         return ZeropointComparison(
-            errors=[ToolError(code="no_solution", message="field calibration did not converge")]
+            errors=[ToolError(code="no_solution", message="field calibration did not converge")],
+            warnings=warnings,
         )
     zero_point = float(zero_point)
 

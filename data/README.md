@@ -177,9 +177,11 @@ public catalogue content of this field.
 | `vsx_response.json` | VSX (VizieR `B/vsx/vsx`, 2026-08-09 version), the variables the run filtered against | same cone | 12 |
 
 A **cone**, not the box the live path queries: the 10′ cone contains the
-11.2′ × 10.9′ footprint box with margin, so a replay can reproduce the box,
-the clipping and the matching from one recording whichever WCS defines the
-footprint. Numeric `null` is a VizieR masked cell; float32 columns are stored
+11.2′ × 10.9′ footprint box with margin, so one recording serves whichever
+WCS defines the footprint. The replays then run the live path's own
+clipping stage (`algorithms.query.geometry.clip_sources_to_wcs`) before the
+solve sees a row — on this frame that keeps 45 of the 132 APASS rows and 5
+of the 12 VSX rows, and the selection is identical to the unclipped one. Numeric `null` is a VizieR masked cell; float32 columns are stored
 as the exact float64 of each float32 so a reload is bit-identical, which is
 what makes the replayed reference magnitudes bit-exact against
 `fit_data.csv`'s `local_ref_mag`. `recno` was requested but not returned,

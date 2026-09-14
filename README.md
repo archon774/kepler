@@ -129,8 +129,9 @@ Python functions in `tools/`:
   `compare_to` checks the answer against the recorded Skynet solve.
   `tools.fieldcal_reference.replay_field_calibration("ngc5128_b_002")` is the
   bit-exact form of the second path: the recorded detections through the
-  whole selection, reproducing the 35-of-132 selection and
-  `21.147659857998637` exactly. Only `ngc5128_galaxy_b_001.fits` can be
+  whole selection — 132 rows in the cone, 45 on the frame after the live
+  path's clipping, the recorded 35 chosen — and `21.147659857998637`
+  exactly. Only `ngc5128_galaxy_b_001.fits` can be
   driven that way end to end; the three NGC 5286 solves have no bundled
   frame and no recorded response. Neither this nor `tools.photometry`
   calibrates

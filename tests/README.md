@@ -40,7 +40,7 @@ Three consequences shape everything here:
 | `test_fieldcal_afterglow_parity.py` | Cross-implementation parity vs the Afterglow web service |
 | `test_fieldcal_ref_mag.py` | Reference-magnitude resolution order, colour transforms, the `eval` guardrail |
 | `test_fieldcal_pipeline.py` | Explicit calibration inputs, source matching, end-to-end calibration on a real frame |
-| `test_fieldcal_reference.py` | The recorded ground truth as tool results (`tools/fieldcal_reference.py`), the offline replays, and the end-to-end **selection** replay: NGC 5128 B's 35 calibration stars re-chosen from the recorded 132-row APASS response (minus the recorded VSX variables) with bit-exact reference magnitudes and solution, under a `socket.connect` guard |
+| `test_fieldcal_reference.py` | The recorded ground truth as tool results (`tools/fieldcal_reference.py`), the offline replays, and the end-to-end **selection** replay: NGC 5128 B's 35 calibration stars re-chosen from the recorded 132-row APASS cone (45 candidates once clipped to the frame, minus the recorded VSX variables) with bit-exact reference magnitudes and solution, under a `socket.connect` guard |
 | `test_catalogs_registries.py` | Declarations, the two-registry divergence, no-network guarantee |
 | `test_query_selection.py` | Filter-aware catalog selection and its agreement with ref-mag resolution |
 | `test_query_geometry.py` | WCS footprints, sky-box clipping, deduplication |

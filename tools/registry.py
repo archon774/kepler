@@ -1411,14 +1411,16 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "replay_field_calibration",
         "description": "Re-run a recorded field calibration end to end, catalog "
         "selection included, with no network: the recorded detections and the "
-        "recorded full APASS response (plus the VSX variables the run filtered "
-        "out) go through perform_field_calibration, so the calibration stars "
-        "are CHOSEN here -- 35 of 132 candidates for NGC 5128 B -- and the "
-        "result reports candidate/matched/not-selected counts, each match with "
-        "its reference magnitude, the ABSOLUTE zero point, and whether the "
-        "selection and the solve reproduce what fit_summary.json recorded "
-        "(they do, bit for bit). Only ngc5128_b_002 has the recorded response "
-        "and a bundled frame; other fields return the errors that stop them.",
+        "recorded full APASS response -- clipped to the frame as the live query "
+        "path clips it, with the VSX variables the run filtered out -- go "
+        "through perform_field_calibration, so the calibration stars are CHOSEN "
+        "here (for NGC 5128 B: 35 of the 45 candidates on the frame, from a "
+        "132-row cone) and the result reports cone/candidate/matched/"
+        "not-selected counts, each match with its reference magnitude, the "
+        "ABSOLUTE zero point, and whether the selection and the solve reproduce "
+        "what fit_summary.json recorded (they do, bit for bit). Only "
+        "ngc5128_b_002 has the recorded response and a bundled frame; other "
+        "fields return the errors that stop them.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1550,7 +1552,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "-- the small bit-exact regression case; every row is known "
                     "to match, so catalog selection is not exercised. "
                     "'full_response': the end-to-end selection replay -- the "
-                    "recorded APASS response for the whole field, 132 rows, "
+                    "recorded APASS response for the whole field (a 132-row "
+                    "cone), clipped to the frame as the live path clips it and "
                     "with the recorded VSX variables filtered out, so the "
                     "matches are chosen as a live solve chooses them. Neither "
                     "opens a socket.",

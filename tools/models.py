@@ -285,11 +285,14 @@ class FieldCalMatch(KeplerToolModel):
     """One detection the selection replay matched to a catalog candidate.
 
     ``detected_id`` is the recorded (Afterglow) source id; ``catalog_index``
-    is the 0-based position of the matched candidate in
-    ``replay_catalog_sources(field, fixture="full_response")``, and
-    ``catalog_id`` the bookkeeping id ``perform_field_calibration`` assigned
-    it. ``mag``/``mag_error`` are the recorded instrumental values the solve
-    consumed; ``ref_mag``/``ref_mag_error`` the resolved reference magnitude.
+    is the 0-based position of the matched candidate in the recorded response
+    as ``replay_catalog_sources(field, fixture="full_response")`` returns it
+    (the whole cone, before clipping), and ``catalog_id`` the id the
+    candidate carried into ``perform_field_calibration`` -- the bookkeeping
+    ``fieldcal_source_<n>`` it assigns when, as here, the response carries
+    none. ``mag``/``mag_error`` are the recorded instrumental values the
+    solve consumed; ``ref_mag``/``ref_mag_error`` the resolved reference
+    magnitude.
     """
 
     detected_id: str | None = None
@@ -313,8 +316,11 @@ class FieldCalReplay(KeplerToolModel):
     start from the rows already known to match -- the matches are chosen
     here: ``num_matched`` of ``num_catalog_candidates`` candidates against
     ``num_detected_sources`` detections, after the recorded VSX rows
-    (``num_variable_sources``) have been filtered out. ``matches`` is in
-    detection order, the order the solve consumed them.
+    (``num_variable_sources``) have been filtered out. The candidates are
+    what the solve was handed: the recorded response (``num_catalog_rows``
+    in the cone; ``num_variable_rows`` for VSX) clipped to the frame first,
+    exactly as the live query path clips before the solve sees a row.
+    ``matches`` is in detection order, the order the solve consumed them.
 
     ``recorded_num_matched`` / ``recorded_num_not_selected`` are the
     counts ``fit_summary.json`` recorded, and ``selection_matches_recorded``
@@ -327,7 +333,9 @@ class FieldCalReplay(KeplerToolModel):
     frame_path: str | None = None
     catalog: str | None = None
     fixture: str = "full_response"
+    num_catalog_rows: int = 0
     num_catalog_candidates: int = 0
+    num_variable_rows: int = 0
     num_variable_sources: int = 0
     num_detected_sources: int = 0
     num_matched: int = 0

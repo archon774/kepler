@@ -142,6 +142,13 @@ def test_an_unknown_fixture_name_is_a_caller_error():
 RECORDED_NUM_MATCHED = 35
 RECORDED_NUM_NOT_SELECTED = 263
 
+#: The recorded 10-arcmin cone holds 132 APASS rows and 12 VSX rows; the live
+#: path clips a response to the detector before the solve sees it, and on
+#: this frame that keeps 45 and 5. The selection is identical either way --
+#: the replay clips because the live path does, not because it has to.
+CONE_APASS_ROWS, FRAME_APASS_ROWS = 132, 45
+CONE_VSX_ROWS, FRAME_VSX_ROWS = 12, 5
+
 #: The extracted VizieR mapping (``algorithms/query/vizier.py``) stores each
 #: band's uncertainty as the ``np.float32`` astroquery handed it, and pydantic
 #: warns every time such a source is ``model_dump()``-ed -- which
@@ -245,12 +252,14 @@ def test_the_selection_replay_reproduces_the_recorded_run():
     assert replay.fixture == "full_response"
     assert Path(replay.frame_path).name == "ngc5128_galaxy_b_001.fits"
 
-    # Catalog candidate count, selected/rejected counts.
-    assert replay.num_catalog_candidates == 132
-    assert replay.num_variable_sources == 12
+    # Catalog candidate count, selected/rejected counts. The candidates are
+    # what the solve was handed -- the cone clipped to the detector, as the
+    # live path clips -- and the cone's own size is reported beside them.
+    assert (replay.num_catalog_rows, replay.num_catalog_candidates) == (CONE_APASS_ROWS, FRAME_APASS_ROWS)
+    assert (replay.num_variable_rows, replay.num_variable_sources) == (CONE_VSX_ROWS, FRAME_VSX_ROWS)
     assert replay.num_detected_sources == 298
     assert replay.num_matched == RECORDED_NUM_MATCHED
-    assert replay.num_catalog_not_selected == 132 - RECORDED_NUM_MATCHED
+    assert replay.num_catalog_not_selected == FRAME_APASS_ROWS - RECORDED_NUM_MATCHED
     assert replay.num_detections_not_selected == RECORDED_NUM_NOT_SELECTED
     assert replay.recorded_num_matched == RECORDED_NUM_MATCHED
     assert replay.recorded_num_not_selected == RECORDED_NUM_NOT_SELECTED
@@ -277,22 +286,29 @@ def test_the_selection_replay_reproduces_the_recorded_run():
 
 
 @float32_mag_errors
-def test_the_selection_replay_needs_the_recorded_vsx_rows(monkeypatch):
+def test_the_selection_replay_needs_the_recorded_vsx_rows(tmp_path):
     """PINNED: without the VSX filter the replay matches 36 sources, not 35.
 
     Gaia DR3 6088704247666049024 sits 0.91 arcsec from the APASS row that would
     otherwise match SRC467 (a star Afterglow detected twice: SRC335 is the same
-    star, 0.05 arcsec away).
-    The recorded run ran with variable_check_tol=5 and dropped that row before
-    matching. This is why the VSX response is part of the fixture.
+    star, 0.05 arcsec away). The recorded run ran with variable_check_tol=5 and
+    dropped that row before matching. This is why the VSX response is part of
+    the fixture.
     """
-    import tools.fieldcal_reference as module
+    import shutil
 
-    monkeypatch.setattr(module, "replay_variable_sources", lambda *a, **k: [])
-    replay = replay_field_calibration("ngc5128_b_002")
+    field_dir = tmp_path / "zp_solutions" / "ngc5128_b_002"
+    shutil.copytree(
+        Path(__file__).resolve().parent.parent / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002",
+        field_dir,
+    )
+    (field_dir / "vsx_response.json").unlink()
+
+    replay = replay_field_calibration("ngc5128_b_002", tmp_path)
     assert replay.errors == []
-    assert replay.num_variable_sources == 0
-    assert "variable_sources_not_recorded" in [w.code for w in replay.warnings]
+    assert (replay.num_variable_rows, replay.num_variable_sources) == (0, 0)
+    assert [w.code for w in replay.warnings] == ["variable_sources_not_recorded"]
+    assert "No recorded VSX response" in replay.warnings[0].message
     assert replay.num_matched == 36
     assert replay.selection_matches_recorded is False
     assert "SRC467" in [m.detected_id for m in replay.matches]
@@ -354,6 +370,21 @@ def test_a_malformed_response_fixture_is_reported_not_raised(tmp_path):
     assert [e.code for e in replay.errors] == ["fixture_missing"]
     assert "not readable" in replay.errors[0].message
 
+    # numpy raises OverflowError for an out-of-range integer cell and
+    # numpy.ma.MaskError for a nested-list cell -- neither is a TypeError or
+    # a ValueError, and both must land in the same place.
+    (field_dir / "vsx_response.json").write_text(
+        '{"columns": [{"name": "V", "dtype": "uint8"}], "rows": [[300]]}'
+    )
+    assert replay_variable_sources("ngc5128_b_002", tmp_path) == []
+    (field_dir / "vsx_response.json").write_text(
+        '{"columns": [{"name": "V", "dtype": "float64"}], "rows": [[[1.0, 2.0]]]}'
+    )
+    assert replay_variable_sources("ngc5128_b_002", tmp_path) == []
+    assert [e.code for e in load_catalog_response("ngc5128_b_002", "VSX", tmp_path).errors] == [
+        "fixture_missing"
+    ]
+
     # Rows that parse but a provenance block that is the wrong shape: the
     # rows are still usable, and the provenance loader must not raise either.
     (field_dir / "apass_response.json").write_text(
@@ -367,6 +398,88 @@ def test_a_malformed_response_fixture_is_reported_not_raised(tmp_path):
     assert response.query == {} and response.provenance == {}
     assert response.vizier_table == "336"
     assert len(replay_catalog_sources("ngc5128_b_002", tmp_path, fixture="full_response")) == 1
+
+
+def test_a_recorded_response_with_no_usable_rows_is_reported_as_empty(tmp_path):
+    """A file that is present and parses, whose rows the plugin mapping all
+    drops, is a different diagnosis from a file that is not there."""
+    import json
+    import shutil
+
+    field_dir = tmp_path / "zp_solutions" / "ngc5128_b_002"
+    shutil.copytree(
+        Path(__file__).resolve().parent.parent / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002",
+        field_dir,
+    )
+    payload = json.loads((field_dir / "apass_response.json").read_text())
+    for row in payload["rows"]:
+        row[2:] = [None] * (len(row) - 2)  # no magnitudes at all
+    (field_dir / "apass_response.json").write_text(json.dumps(payload))
+
+    assert load_catalog_response("ngc5128_b_002", directory=tmp_path).row_count == CONE_APASS_ROWS
+    assert replay_catalog_sources("ngc5128_b_002", tmp_path, fixture="full_response") == []
+    replay = replay_field_calibration("ngc5128_b_002", tmp_path)
+    assert [e.code for e in replay.errors] == ["fixture_empty"]
+    assert "132" in replay.errors[0].message
+
+
+def test_the_replay_reads_the_response_for_the_recorded_catalog(tmp_path):
+    """One name drives the file, the plugin mapping and the settings."""
+    import json
+    import shutil
+
+    field_dir = tmp_path / "zp_solutions" / "ngc5128_b_002"
+    shutil.copytree(
+        Path(__file__).resolve().parent.parent / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002",
+        field_dir,
+    )
+    summary = json.loads((field_dir / "fit_summary.json").read_text())
+    summary["catalog_queried"] = ["PanSTARRS"]
+    (field_dir / "fit_summary.json").write_text(json.dumps(summary))
+
+    assert replay_catalog_sources("ngc5128_b_002", tmp_path, fixture="full_response") == []
+    assert len(replay_catalog_sources("ngc5128_b_002", tmp_path, fixture="full_response", catalog="APASS")) == CONE_APASS_ROWS
+    replay = replay_field_calibration("ngc5128_b_002", tmp_path)
+    assert [e.code for e in replay.errors] == ["fixture_missing"]
+    assert "panstarrs_response.json" in replay.errors[0].message
+
+
+def test_matches_are_attributed_to_the_earliest_duplicate_detection():
+    """fit_data.csv carries exact-duplicate detection rows (SRC317/SRC319),
+    and a kd-tree query on identical points returns the lowest index, so a
+    match at a duplicated position belongs to the earlier row. Matches come
+    in detection order, which is what makes the attribution unambiguous."""
+    from algorithms.fieldcal.schemas import PhotometryData
+    from tools.fieldcal_reference import _detection_indices
+
+    detections = [
+        PhotometryData(id="A", x=1.0, y=1.0),
+        PhotometryData(id="B", x=2.0, y=2.0),
+        PhotometryData(id="C", x=2.0, y=2.0),  # exact duplicate of B
+        PhotometryData(id="D", x=3.0, y=3.0),
+    ]
+    assert _detection_indices([(1.0, 1.0), (2.0, 2.0), (3.0, 3.0)], detections) == [0, 1, 3]
+    # Two matches at the duplicated position take the two rows in order.
+    assert _detection_indices([(2.0, 2.0), (2.0, 2.0)], detections) == [1, 2]
+    # A position that is not a detection, and an out-of-order match, still resolve.
+    assert _detection_indices([(9.0, 9.0), (3.0, 3.0), (1.0, 1.0)], detections) == [None, 3, 0]
+
+
+def test_the_response_table_keeps_full_strings_and_exact_float32(tmp_path):
+    """The recorded dtype fixes the kind (unicode, float32), not a width: a
+    string longer than the recorded column width must not be truncated."""
+    from tools.fieldcal_reference import _response_table
+
+    table = _response_table(
+        {
+            "columns": [{"name": "Name", "dtype": "<U2"}, {"name": "Bmag", "dtype": "float32"}],
+            "rows": [["a much longer name", 16.590999603271484], ["", None]],
+        }
+    )
+    assert str(table["Name"][0]) == "a much longer name"
+    assert table["Bmag"].dtype.name == "float32"
+    assert float(table["Bmag"][0]) == 16.590999603271484
+    assert bool(table["Bmag"].mask[1]) and not bool(table["Name"].mask[1])
 
 
 def test_the_selection_replay_reports_an_unknown_field():
@@ -469,6 +582,7 @@ def test_calibrate_zeropoint_reports_a_fixture_that_was_never_recorded():
     assert "ngc5286_b_000" in comparison.errors[0].message
 
 
+@pytest.mark.slow
 @float32_mag_errors
 def test_the_full_response_fixture_applies_the_recorded_vsx_filter_from_pixels(monkeypatch):
     """From pixels, 'full_response' must hand the recorded VSX rows to the
@@ -499,9 +613,33 @@ def test_the_full_response_fixture_applies_the_recorded_vsx_filter_from_pixels(m
 
     calibrate_zeropoint(frame.path, catalog_fixture="full_response", compare_to="ngc5128_b_002")
     variables, tol, candidates = seen.pop("APASS")
-    assert len(variables) == 12 and tol == 5 and candidates == 132
+    # Clipped to the detector first, as the live query path clips.
+    assert len(variables) == FRAME_VSX_ROWS and tol == 5 and candidates == FRAME_APASS_ROWS
 
 
+def test_calibrate_zeropoint_keeps_its_warnings_on_an_error_return(tmp_path, monkeypatch):
+    """A skipped variable filter is part of the diagnosis when the solve then
+    fails; the warning must ride on the error result, not vanish."""
+    import shutil
+
+    from tools.photometry import calibrate_zeropoint
+
+    field_dir = tmp_path / "zp_solutions" / "ngc5128_b_002"
+    shutil.copytree(
+        Path(__file__).resolve().parent.parent / "data" / "fieldcal" / "zp_solutions" / "ngc5128_b_002",
+        field_dir,
+    )
+    (field_dir / "vsx_response.json").unlink()
+    monkeypatch.setenv("KEPLER_FIELDCAL_DATA_DIR", str(tmp_path))
+
+    comparison = calibrate_zeropoint(
+        tmp_path / "no_such_frame.fits", catalog_fixture="full_response", compare_to="ngc5128_b_002"
+    )
+    assert [e.code for e in comparison.errors] == ["file_not_found"]
+    assert [w.code for w in comparison.warnings] == ["variable_sources_not_recorded"]
+
+
+@pytest.mark.slow
 @float32_mag_errors
 def test_calibrate_zeropoint_does_not_reach_the_network_when_a_fixture_is_named(monkeypatch):
     """Both fixtures short-circuit every query -- APASS and, for the full
@@ -543,6 +681,7 @@ def test_the_offline_paths_are_reachable_from_the_agent_registry():
     assert TOOL_FUNCTIONS["replay_field_calibration"](field="ngc5128_b_002").num_matched == 35
 
 
+@pytest.mark.slow
 def test_calibrate_zeropoint_does_not_reach_the_network_when_rows_are_supplied(monkeypatch):
     """A supplied catalog must short-circuit query_catalogs entirely."""
     def explode(*args, **kwargs):
