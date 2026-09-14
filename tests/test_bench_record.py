@@ -19,7 +19,11 @@ from tools.bench.record import (
 )
 from tools.models import ArtifactRef, ToolResult
 
-SECRET = "sk-live-abcdefghijklmnop0123456789"
+#: The repository's sanctioned synthetic credential -- .gitleaks.toml
+#: allowlists this exact string as a known non-secret. A provider-shaped
+#: fake ("sk-live-...", "sk-ant-...") would trip the secret scan on a file
+#: whose entire subject is credential handling, which is a poor trade.
+SECRET = "SECRET-KEY-abc123def456"
 
 
 def _ned(**kwargs):
@@ -62,7 +66,7 @@ def test_a_clean_capture_with_credentials_in_the_environment_is_written():
         {"name": "NGC 6334", "table": "photometry"},
         entry_id="ngc6334-photometry",
         func=_ned,
-        environ={"ADS_DEV_KEY": SECRET, "ANTHROPIC_API_KEY": "sk-ant-" + "y" * 30},
+        environ={"ADS_DEV_KEY": SECRET, "ANTHROPIC_API_KEY": "SECRET-KEY-abc123def456-second"},
     )
     assert captured.entry["response"]["count"] == 214
     assert SECRET not in captured.to_yaml()
