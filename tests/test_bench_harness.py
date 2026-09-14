@@ -25,9 +25,12 @@ from tools.bench.tasks import load_suite
 from tools.llm.replay_backend import ReplayBackend
 from tools.llm.types import ModelResponse, ToolCallBlock, Usage
 
-FIXTURE_ROOT = Path("benchmarks/fixtures")
-SMOKE_SUITE = Path("benchmarks/suites/smoke")
-SMOKE_TRANSCRIPT = Path("benchmarks/transcripts/smoke.json")
+#: Absolute, so a test that chdirs (to exercise a relative --out) still finds
+#: the corpus.
+_REPO = Path(__file__).resolve().parent.parent
+FIXTURE_ROOT = _REPO / "benchmarks/fixtures"
+SMOKE_SUITE = _REPO / "benchmarks/suites/smoke"
+SMOKE_TRANSCRIPT = _REPO / "benchmarks/transcripts/smoke.json"
 
 
 @pytest.fixture()
@@ -418,3 +421,52 @@ def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
     )
     assert seen == ["5"]
     assert os.environ.get("KEPLER_MAX_FRAMES") == before
+
+
+# --- path handling --------------------------------------------------------
+
+
+def test_a_relative_out_path_works(artifact_root, smoke, monkeypatch, tmp_path):
+    """The CLI's own default is `--out artifacts/bench/<run-id>`, a relative
+    path. Every directory downstream is joined or compared against the
+    absolute artifact root, so a relative one means something different to
+    each of them -- this crashed the first live calibration run on its first
+    task."""
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "ARTIFACT_DIR", tmp_path / "artifacts")
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", tmp_path / "artifacts")
+
+    record = run_suite(
+        smoke,
+        backends=_replay(),
+        config=_config("artifacts/bench/relative"),
+        fixture_root=FIXTURE_ROOT,
+        out="artifacts/bench/relative",
+    )
+    run = record.runs[0]
+    assert run.outcome == "end_turn"
+    # The session's artifacts landed inside the run directory, which is what
+    # keeps a reported artifact path resolvable when grading runs later.
+    assert run.directory.is_absolute()
+    manifest = json.loads((run.directory / "session_manifest.json").read_text())
+    assert Path(manifest["artifact_directory"]) == run.directory
+
+
+def test_a_run_directory_outside_the_artifact_root_still_grades(
+    artifact_root, smoke, tmp_path
+):
+    """The session keeps its default scope and the manifest is copied in, so
+    grading still reads one directory."""
+
+    out = tmp_path / "elsewhere"
+    record = run_suite(
+        smoke,
+        backends=_replay(),
+        config=_config(out),
+        fixture_root=FIXTURE_ROOT,
+        out=out,
+    )
+    run = record.runs[0]
+    assert run.outcome == "end_turn"
+    assert (run.directory / "session_manifest.json").exists()

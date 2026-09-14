@@ -42,6 +42,7 @@ from tools.agent.prompt import SYSTEM_PROMPT
 from tools.bench.fixtures import FixtureStore
 from tools.bench.plane import DEFAULT_BLOCKED, build_tool_plane
 from tools.bench.tasks import Suite, Task
+from tools.config import safe_resolve
 from tools.sessions import AgentSession, backend_record
 
 __all__ = [
@@ -318,7 +319,12 @@ def run_suite(
     """
 
     fixture_root = Path(fixture_root)
-    out_dir = Path(out) if out is not None else Path(config.out)
+    # Resolved once, here, so every directory downstream is absolute. The run
+    # record, the session's artifact scope and the grader all join or compare
+    # these paths, and a relative one -- which is what the CLI's own default
+    # `--out artifacts/bench/<run-id>` produces -- means something different
+    # to each of them.
+    out_dir = safe_resolve(Path(out) if out is not None else Path(config.out))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     record = RunRecord(
@@ -440,9 +446,7 @@ def _run_one(
         enabled=frozenset(task.enable) | frozenset(config.enable),
     )
 
-    subdir = Path(directory).relative_to(artifacts.ARTIFACT_DIR) if _under_artifacts(
-        directory
-    ) else None
+    subdir = _artifact_subdir(directory)
     session = AgentSession(
         user_message=task.prompt,
         model=spec.split("/", 1)[-1],
@@ -517,10 +521,32 @@ def _run_one(
     )
 
 
-def _under_artifacts(directory: Path) -> bool:
+def _artifact_subdir(directory: Path) -> Path | None:
+    """The run directory expressed relative to the artifact root, or ``None``.
+
+    ``None`` means the run directory is outside the artifact root, and the
+    session keeps its default ``sessions/<id>`` scope; the harness then copies
+    the manifest into the run directory so grading still reads one place.
+
+    Both sides are resolved before comparing. ``within()`` resolves internally,
+    so comparing an unresolved path against it answered "yes, it is inside" and
+    then failed to express it as a relative path -- which is precisely what a
+    relative ``--out`` did.
+    """
+
     from tools.config import within
 
-    return within(directory, artifacts.ARTIFACT_DIR)
+    resolved = safe_resolve(Path(directory))
+    root = safe_resolve(artifacts.ARTIFACT_DIR)
+    if not within(resolved, root):
+        return None
+    try:
+        return resolved.relative_to(root)
+    except ValueError:
+        # within() said yes and relative_to() disagreed: a symlink the two
+        # resolved differently. Fall back to the default scope rather than
+        # guessing at a path under the artifact root.
+        return None
 
 
 def _budgeted(
