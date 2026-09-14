@@ -108,15 +108,23 @@ def test_no_task_declares_a_fixture_for_a_tool_that_runs_live(suite_id):
 
 
 @pytest.mark.parametrize("suite_id", SUITES)
-def test_every_suite_records_that_it_is_uncalibrated(suite_id):
-    """7.1.9 is a gate on this phase, and it is unmet. A suite that has not
-    discriminated anything is not a suite, and saying so in the file is the
-    difference between an honest deliverable and a silent one."""
+def test_every_suite_states_its_calibration_status_explicitly(suite_id):
+    """7.1.9 is a gate, and a suite that has not discriminated anything is not
+    a suite. What this asserts is that the file *says where it stands* -- the
+    difference between an honest deliverable and a silent one -- and that it
+    names every member task, so a task added later cannot inherit a
+    calibration it was never part of.
+
+    The status string is matched loosely on purpose: a suite moves from NOT
+    CALIBRATED to PARTIALLY CALIBRATED to CALIBRATED as backends run it, and a
+    test pinned to one wording would have to be edited to record progress,
+    which is how a gate becomes a formality.
+    """
 
     calibration = SUITE_ROOT / suite_id / "calibration.md"
     assert calibration.exists(), suite_id
     text = calibration.read_text(encoding="utf-8")
-    assert "NOT CALIBRATED" in text
+    assert "CALIBRATED" in text, f"{suite_id} does not state a calibration status"
     suite = load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT)
     for task in suite:
         assert task.id in text, f"{suite_id}/{task.id} is absent from calibration.md"

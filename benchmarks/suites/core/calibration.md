@@ -1,54 +1,48 @@
 # `core` — calibration record
 
-**Status: NOT CALIBRATED.** This suite has not been run against any real model.
+**Status: PARTIALLY CALIBRATED.** Two backends of two tiers have run this
+suite on the de-biased corpus; §7.1.9 asks for three of different tiers. The
+recorded scoreboard is [../../../docs/working/benchmark-results.md](../../../docs/working/benchmark-results.md).
 
-`docs/working/benchmark.md` §7.1.9 makes calibration a gate on phase 5d: a
-suite is **untrusted until it has been run against at least three backends of
-different tiers** and each task's outcome reviewed, because a task passed by
-every model and a task passed by none both discriminate nothing — and the
-second is usually a broken key rather than a universal failure.
+| Backend | Tier | Result |
+| --- | --- | --- |
+| `ollama/qwen3.8:27b-mlx` | local 27B | 8 / 8 |
+| `anthropic/claude-sonnet-5` | frontier | 6 / 7, 1 incomplete |
 
-That run has not happened. It needs credentials (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY` or `GEMINI_API_KEY`) or a local Ollama daemon with the
-reference model pulled, and the machine this corpus was authored on had
-neither. **No claim is made here about what any task discriminates.**
+**Two tasks discriminated; six did not.** Six passed by both is what §7.1.9
+calls "too loose or too easy" — pending a third backend, because tightening on
+two data points is how a suite gets fitted to the models it has seen.
 
-## What *has* been established
+### The calibration found bias in this suite, twice
 
-Weaker than calibration, and stated as such:
+Both times the corpus, not a model, was at fault:
 
-| Property | Where |
-| --- | --- |
-| Every task loads and every check is validated against the live registry | `tests/test_bench_corpus.py` |
-| Every fixture revalidates through its tool's own return model (B3) | `tests/test_bench_corpus.py` |
-| All eight tasks run end to end, offline, with no socket | `test_the_core_suite_runs_end_to_end_offline_against_replay` |
-| Every check is *reachable* — a transcript written to pass does pass | `test_a_transcript_written_to_pass_does_pass_every_hard_check` |
-| Each key *catches the failure it names* — a transcript doing the documented wrong thing fails, on the check that names it | the negative tests in `tests/test_bench_corpus.py` |
+1. **Keys tuned to one model.** Three rounds of fixes were made against the
+   local model before any other backend ran. Two were model-specific and were
+   removed: a sourcing vocabulary grown from that model's prose (21 entries, 14
+   of them absent from `SYSTEM_PROMPT`), and an evidence-free `max_turns: 8`
+   that failed a more exploratory model for exploring. Tests now enforce both —
+   every sourcing label must be a phrase the system prompt uses, no turn cap
+   may be tight enough to decide an outcome, and no task file may name a model
+   or provider.
+2. **A fixture world too sparse for an open-ended prompt.**
+   `vizier-category-not-per-catalog` is still unresolved. One model answered it
+   in 13 calls; the other made 38, hit the turn cap, and never answered — 31 of
+   its 38 calls returned an empty synthesized result and it kept trying further
+   archives. Neither `miss_policy: error` nor `synthesize` fixes a world that
+   is simply empty; it needs recorded responses for the tools a model actually
+   reaches.
 
-The last row is the closest thing here to evidence that a key works. It is not
-calibration: it shows the key separates a deliberately wrong answer from a
-deliberately right one, not that it separates real models from each other.
+### Superseded runs
 
-## The fixtures are hand-authored
+Kept because they are what found the defects, and excluded from the scoreboard
+because they were graded against a corpus adjusted to one of the models:
 
-None of `benchmarks/fixtures/*.yaml` is a capture. Each states so in its
-`provenance`, and a test asserts it. They are faithful to the tools' **return
-models** and to the documented behaviour of the services (NED's resolver
-rejects colloquial names; ATNF performs no name resolution and returns an
-empty result rather than an error). Their **counts are placeholders** —
-`search_vizier`'s 47 catalogs and 4,127 rows, `search_ned`'s 214 photometry
-rows — and the `get_paper_abstract` text is a paraphrase carrying the two
-facts the task turns on, not the published abstract.
-
-Two consequences follow, and both should be fixed by a `kepler-bench record`
-capture before this suite is believed:
-
-1. A key that asserts one of those counts (`preview-is-not-the-answer`'s 4127,
-   `vizier-category-not-per-catalog`'s 47) is asserting a number this
-   repository invented. It grades the right *behaviour* — reporting the total
-   rather than the preview — against the wrong *number*.
-2. A model with real knowledge of these archives could be penalised for
-   contradicting a fixture that is wrong.
+| Run | Result | Found |
+| --- | --- | --- |
+| local r1 | 6/8 | Two prompts with no antecedent; two tasks passing on `0/0` checks; a `must_not_call` punishing correct behaviour; `"4,127"` parsed as `4` and `127` |
+| local r2 | 6/8 | Two false positives in the keys added after r1 |
+| frontier (biased corpus) | 5/7 + 1 ⏳ | The fixture-coverage defect; a fabrication attributed to `top_peaks` |
 
 ## The calibration run, when someone does it
 
