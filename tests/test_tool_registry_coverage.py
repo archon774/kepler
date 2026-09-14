@@ -26,6 +26,10 @@ NOT_TOOL_MODULES = {
     # The headless agent loop (run_session, events, the moved SYSTEM_PROMPT).
     # Infrastructure the runner shim and the console consume, not a tool.
     "tools.agent",
+    # The model benchmark harness. It *reads* the registry and substitutes
+    # run_session's tool_functions mapping; it owns no tool and adds nothing
+    # to the tool surface. pkgutil.iter_modules yields it as a package.
+    "tools.bench",
 }
 
 
