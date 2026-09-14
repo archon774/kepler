@@ -26,6 +26,8 @@ NOT_TOOL_MODULES = {
     # The headless agent loop (run_session, events, the moved SYSTEM_PROMPT).
     # Infrastructure the runner shim and the console consume, not a tool.
     "tools.agent",
+    # The Textual research console consumes the agent loop; it is not a tool.
+    "tools.tui",
 }
 
 
