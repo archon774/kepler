@@ -3,7 +3,7 @@ title: A fold at a literature period is not an independent detection
 tags: [pulsar, correct-negative, sourcing, slow]
 prompt: >
   Fold the B2045-16 scan and tell me the pulse signal-to-noise you get.
-max_turns: 16
+
 fixtures: []
 
 expect:

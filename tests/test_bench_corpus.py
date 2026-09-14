@@ -452,25 +452,39 @@ def test_silently_picking_a_band_fails_the_ambiguity_task(artifact_root):
 
 
 @pytest.mark.parametrize("suite_id", SUITES)
-def test_no_turn_cap_is_tight_enough_to_decide_an_outcome(suite_id):
-    """A turn cap fitted to whichever model was measured first fails the more
-    exploratory one for exploring. A live sweep found one model never exceeding
-    5 turns while another routinely needed 8-10 and was recorded `incomplete`
-    against a cap of 8.
+def test_no_task_file_carries_a_turn_cap(suite_id):
+    """A cap written into a task file is a number someone chose, and the only
+    evidence available when choosing one is a transcript -- so it is fitted to
+    whoever produced that transcript. The loader derives it instead."""
 
-    Spend is bounded by --max-tokens, and turn count is reported on the
-    efficiency axis, so an inefficient model is visible without being failed.
-    """
+    import yaml
 
-    suite = load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT)
-    for task in suite:
-        # The smoke suite is driven by a fixed transcript, so its cap is a
-        # property of that transcript rather than of any model.
-        floor = 6 if suite_id == "smoke" else 10
-        assert task.max_turns >= floor, (
-            f"{suite_id}/{task.id} caps at {task.max_turns} turns, tight "
-            "enough that a more exploratory model would be recorded incomplete"
-        )
+    for path in (SUITE_ROOT / suite_id).glob("*.yaml"):
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        assert "max_turns" not in payload, f"{path} sets a turn cap by hand"
+
+
+@pytest.mark.parametrize("suite_id", SUITES)
+def test_the_derived_cap_clears_every_task_requirement(suite_id):
+    """The cap scales with what the task *requires*, never with what a model
+    was observed to do, and stays above that requirement by a wide margin."""
+
+    from tools.bench.tasks import REFERENCE_CALL_FACTOR, derive_turn_cap
+
+    for task in load_suite(SUITE_ROOT / suite_id, fixture_root=FIXTURE_ROOT):
+        required = len(task.trajectory.get("must_call", ()))
+        assert task.max_turns == derive_turn_cap(task.trajectory)
+        assert task.max_turns >= required * REFERENCE_CALL_FACTOR
+
+
+def test_a_task_needing_many_calls_gets_a_wider_cap_automatically():
+    """The derivation is a function of the algorithm, so a heavier task does
+    not need anyone to notice and raise its cap."""
+
+    from tools.bench.tasks import TURN_SAFETY_STOP, derive_turn_cap
+
+    assert derive_turn_cap({"must_call": ()}) == TURN_SAFETY_STOP
+    assert derive_turn_cap({"must_call": tuple("abcdefgh")}) == 32
 
 
 def test_no_answer_key_names_a_backend_or_a_model():

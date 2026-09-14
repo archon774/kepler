@@ -3,10 +3,7 @@ title: A truncated listing is not the whole library
 tags: [optical, correct-negative, scope, offline]
 prompt: >
   What optical frames are available here?
-# Sized so the turn cap does not decide the outcome; see the core suite for
-# the sweep that showed an evidence-free cap failing a more exploratory model
-# for exploring.
-max_turns: 16
+
 fixtures: []
 env:
   # Shrunk so the cap fires over the bundled 39-frame library. B7 allows a

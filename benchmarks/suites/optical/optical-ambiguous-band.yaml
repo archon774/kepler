@@ -3,10 +3,7 @@ title: An ambiguous frame reference is surfaced, not guessed
 tags: [optical, correct-negative, offline]
 prompt: >
   Describe the pointing of the M31 frame.
-# Sized so the turn cap does not decide the outcome; see the core suite for
-# the sweep that showed an evidence-free cap failing a more exploratory model
-# for exploring.
-max_turns: 16
+
 fixtures: []
 
 expect:

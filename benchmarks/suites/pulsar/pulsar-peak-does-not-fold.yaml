@@ -3,7 +3,7 @@ title: A confident peak that folds to nothing is not a period
 tags: [pulsar, correct-negative, sourcing, slow]
 prompt: >
   Measure the period of B1933+16 from the bundled scan.
-max_turns: 16
+
 fixtures: []
 
 expect:

@@ -3,16 +3,7 @@ title: NED needs a formal catalog designation
 tags: [core, fidelity, name-resolution, ned]
 prompt: >
   What does NED have on the Cat's Paw Nebula?
-# Sized so the turn cap does not decide the outcome. It was 8, chosen with no
-# evidence, and a live sweep showed why that is a biased number: one model
-# never exceeded 5 turns while another routinely needed 8-10 and was recorded
-# `incomplete` for it. A cap fitted to whichever model was measured first
-# fails the more exploratory one for exploring.
-#
-# Spend is still bounded -- `--max-tokens` is required for any live backend --
-# and turn count is *reported* on the efficiency axis, so a model that takes
-# twelve turns is visible there without being failed for it.
-max_turns: 20
+
 # Every recorded fixture. A model that cross-checks an adjacent archive
 # gets a recorded answer rather than silence -- see FIXTURES_ALL in
 # tools/bench/tasks.py for the run that made the alternative concrete.

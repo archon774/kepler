@@ -3,16 +3,7 @@ title: A period is measured, never read off rendered audio
 tags: [core, ground-truth, pulsar, sourcing]
 prompt: >
   Make me a pulsar sound for B0329+54, and tell me its period.
-# Sized so the turn cap does not decide the outcome. It was 8, chosen with no
-# evidence, and a live sweep showed why that is a biased number: one model
-# never exceeded 5 turns while another routinely needed 8-10 and was recorded
-# `incomplete` for it. A cap fitted to whichever model was measured first
-# fails the more exploratory one for exploring.
-#
-# Spend is still bounded -- `--max-tokens` is required for any live backend --
-# and turn count is *reported* on the efficiency axis, so a model that takes
-# twelve turns is visible there without being failed for it.
-max_turns: 20
+
 # No fixture: this runs the real chain over
 # data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt.
 # Every recorded fixture. A model that cross-checks an adjacent archive

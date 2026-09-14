@@ -359,7 +359,7 @@ def test_the_dry_run_ceiling_is_an_upper_bound_printed_before_the_first_call(
         out=out,
     )
     # tasks x repeats x max_turns x the per-turn output ceiling.
-    assert record.dry_run_ceiling == 6 * 2 * 1 * 4096
+    assert record.dry_run_ceiling == 20 * 2 * 1 * 4096
 
 
 # --- failures are contained ----------------------------------------------
@@ -392,7 +392,7 @@ def test_a_tasks_env_override_is_applied_and_restored(artifact_root, tmp_path):
     suite_dir = tmp_path / "suite"
     suite_dir.mkdir()
     (suite_dir / "t.yaml").write_text(
-        "id: t\nprompt: list the frames\nmax_turns: 3\n"
+        "id: t\nprompt: list the frames\n"
         "env:\n  KEPLER_MAX_FRAMES: '5'\n"
         'expect:\n  answer:\n    must_not_match: ["I refuse to answer"]\n',
         encoding="utf-8",

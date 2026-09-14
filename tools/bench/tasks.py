@@ -189,10 +189,6 @@ def load_task(
     if not isinstance(prompt, str) or not prompt.strip():
         raise TaskError(f"{file} needs a non-empty prompt")
 
-    max_turns = payload.get("max_turns", 12)
-    if not isinstance(max_turns, int) or isinstance(max_turns, bool) or max_turns < 1:
-        raise TaskError(f"{file} max_turns must be an integer >= 1, got {max_turns!r}")
-
     fixtures = _resolve_fixture_list(payload.get("fixtures"), file, fixture_root)
     if fixture_root is not None:
         from tools.bench.fixtures import FixtureError, resolve_fixture_path
@@ -228,6 +224,14 @@ def load_task(
         raise TaskError(f"{file} expect has unknown key(s) {sorted(unknown)}")
 
     trajectory = _load_trajectory(expect.get("trajectory"), file)
+    # Derived from the task, never typed into it. See derive_turn_cap.
+    if "max_turns" in payload:
+        raise TaskError(
+            f"{file} sets max_turns. The cap is derived from the task's own "
+            "declared requirement (derive_turn_cap) so that it cannot be "
+            "fitted to whichever model was measured first."
+        )
+    max_turns = derive_turn_cap(trajectory)
     answer = _load_answer(expect.get("answer"), file, fixture_root=fixture_root)
     protocol = _load_protocol(expect.get("protocol"), file)
     _require_an_answer_check(answer, file)
@@ -327,6 +331,40 @@ def _check_enable(enable: Sequence[str], file: Path) -> None:
             f"{file} enable names {sorted(unknown)}, which are not blocked by "
             f"default; the blocked set is {sorted(DEFAULT_BLOCKED)}"
         )
+
+
+#: One required call may need a resolution step before it, one retry after a
+#: recoverable error, the call itself, and a turn to say what it found.
+REFERENCE_CALL_FACTOR = 4
+
+#: The loop-breaker, and *only* the loop-breaker.
+#:
+#: A turn cap is not a measurement parameter. Its whole job is to stop a
+#: pathological loop, and a run that reaches it is recorded incomplete --
+#: excluded from the pass rate rather than failed (INCOMPLETE_OUTCOMES). The
+#: number is uniform and sits above every task's derived floor so that it
+#: cannot decide an outcome for anyone.
+#:
+#: It replaced per-task caps of 20/16/12/6. Those were defensible individually
+#: and indefensible together: an earlier cap of 8 was chosen with no evidence,
+#: and a live sweep showed one model never exceeding 5 turns while another
+#: routinely needed 8-10 and was recorded incomplete for it. Any number read
+#: off a transcript is a number fitted to whoever produced the transcript.
+TURN_SAFETY_STOP = 20
+
+
+def derive_turn_cap(trajectory: Mapping[str, Any]) -> int:
+    """The turn cap a task's own declared requirement implies.
+
+    Mechanical, and deliberately generous: it scales with how many calls the
+    task *requires* (``must_call``, which the trajectory axis already grades)
+    and never with how many calls a model was observed to make. A task needing
+    eight tool calls gets a cap of 32 without anyone deciding that; a task
+    needing one gets the safety stop.
+    """
+
+    required = len(trajectory.get("must_call", ()))
+    return max(TURN_SAFETY_STOP, required * REFERENCE_CALL_FACTOR)
 
 
 def _load_trajectory(value: Any, file: Path) -> dict[str, Any]:

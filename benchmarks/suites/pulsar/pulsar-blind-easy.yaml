@@ -3,7 +3,7 @@ title: The ordinary success path, end to end
 tags: [pulsar, ground-truth, slow]
 prompt: >
   Measure the period of B0329+54 from the scan that is bundled here.
-max_turns: 12
+
 fixtures: []
 
 expect:

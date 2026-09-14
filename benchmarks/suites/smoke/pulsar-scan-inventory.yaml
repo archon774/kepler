@@ -3,7 +3,7 @@ title: What pulsar scans are bundled here?
 tags: [smoke, local]
 prompt: >
   What pulsar scans are bundled here, and what is known about B0329+54?
-max_turns: 6
+
 # No fixtures: every tool this task touches is class L and runs live. Header
 # reads only -- no periodogram, no fold, no synthesis -- so the whole task is
 # well under a second.

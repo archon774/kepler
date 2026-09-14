@@ -4,10 +4,7 @@ tags: [fieldcal, ground-truth, offline]
 prompt: >
   Calibrate the zero point for the NGC 5128 B frame offline against the
   recorded solve, and tell me whether it agrees.
-# Sized so the turn cap does not decide the outcome; see the core suite for
-# the sweep that showed an evidence-free cap failing a more exploratory model
-# for exploring.
-max_turns: 16
+
 # No fixtures: calibrate_zeropoint runs live on the offline path, which is
 # pinned by catalog_fixture + compare_to together.
 fixtures: []

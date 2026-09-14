@@ -71,7 +71,8 @@ def test_a_minimal_task_loads(tmp_path):
     task = load_task(write(tmp_path, MINIMAL))
     assert task.id == "a-task"
     assert task.prompt == "Do the thing."
-    assert task.max_turns == 12
+    # Derived from the task's own requirement, not defaulted to a guess.
+    assert task.max_turns == 20
 
 
 def test_an_empty_prompt_is_rejected(tmp_path):
@@ -79,9 +80,12 @@ def test_an_empty_prompt_is_rejected(tmp_path):
         load_task(write(tmp_path, "id: a-task\nprompt: '   '\n"))
 
 
-def test_max_turns_must_be_a_positive_integer(tmp_path):
-    with pytest.raises(TaskError, match="max_turns"):
-        load_task(write(tmp_path, MINIMAL + "max_turns: 0\n"))
+def test_a_task_may_not_set_its_own_turn_cap(tmp_path):
+    """The only evidence for choosing a cap is a transcript, so a hand-set cap
+    is fitted to whoever produced that transcript."""
+
+    with pytest.raises(TaskError, match="derived from the task"):
+        load_task(write(tmp_path, MINIMAL + "max_turns: 8\n"))
 
 
 # --- unknown keys ---------------------------------------------------------
