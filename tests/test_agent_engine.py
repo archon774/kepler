@@ -398,3 +398,92 @@ def test_the_engine_imports_no_ui_toolkit():
             elif isinstance(node, ast.ImportFrom) and node.module:
                 names.add(node.module.split(".")[0])
         assert names.isdisjoint({"textual", "rich"}), f"{module.name} imports a UI toolkit"
+
+
+# --- list-returning tools -------------------------------------------------
+
+
+def test_a_tool_returning_a_plain_list_is_recorded_rather_than_crashing_the_loop():
+    """Three registered tools -- list_photometric_catalogs, list_artifacts and
+    list_zeropoint_references -- return ``list[Model]``, not a model. A list
+    has no ``model_dump()``, so dispatching any of them raised AttributeError
+    mid-turn and ended the session with outcome "error": a model asking what
+    catalogs exist got a dead session and no way to tell why."""
+
+    from tools.models import CatalogSummary
+
+    schemas = [
+        {
+            "name": "list_catalogs",
+            "description": "List catalogs.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    functions = {
+        "list_catalogs": lambda: [
+            CatalogSummary(name="APASS", bands=["B", "V"]),
+            CatalogSummary(name="PanSTARRS", bands=["g", "r"]),
+        ]
+    }
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(
+                    ToolCallBlock(call_id="c1", name="list_catalogs", arguments={}),
+                ),
+            ),
+            ModelResponse(stop_reason="end_turn", text="Two catalogs."),
+        ]
+    )
+    emitted = list(
+        run_session(
+            "what catalogs are there",
+            backend=backend,
+            system="sys",
+            max_turns=4,
+            tool_schemas=schemas,
+            tool_functions=functions,
+        )
+    )
+    assert emitted[-1].outcome == "end_turn"
+    finished = [e for e in emitted if isinstance(e, events.ToolCallFinished)]
+    # The same {status, count, ...} shape the rest of the surface uses, so the
+    # recorded call carries a status and a count like every other one.
+    assert finished[0].result["status"] == "ok"
+    assert finished[0].result["count"] == 2
+    assert finished[0].result["results"][0]["name"] == "APASS"
+
+
+def test_a_tool_returning_something_that_is_neither_says_so():
+    """A registry defect, named as one -- rather than reaching json.dumps and
+    being handed to the model as a stringified repr."""
+
+    schemas = [
+        {
+            "name": "bad_tool",
+            "description": "Returns junk.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(
+                    ToolCallBlock(call_id="c1", name="bad_tool", arguments={}),
+                ),
+            )
+        ]
+    )
+    with pytest.raises(TypeError, match="must return a Kepler model"):
+        list(
+            run_session(
+                "go",
+                backend=backend,
+                system="sys",
+                max_turns=2,
+                tool_schemas=schemas,
+                tool_functions={"bad_tool": lambda: "not a model"},
+            )
+        )
