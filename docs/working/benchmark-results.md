@@ -17,7 +17,7 @@ excluded rather than scored. Fixture miss rate 5.6%.
 
 ## Per task
 
-![Correct answers per task per model](figures/per-task-matrix.svg)
+![Correct answers per task per model](figures/per-task-matrix.png)
 
 The bar under a cell marks a wrong *route*: a required call missing, a
 forbidden call made, or an off-script call. **A cell can be `3/3` and still
@@ -75,7 +75,7 @@ difference between models.
 
 ## Failure modes
 
-![Which checks each model failed](figures/failure-modes.svg)
+![Which checks each model failed](figures/failure-modes.png)
 
 Three distinct shapes, and this is what the per-model row cannot show:
 
@@ -94,9 +94,9 @@ above, shared exactly.
 
 ## Time and tokens
 
-![Seconds to a correct answer](figures/speed.svg)
+![Seconds to a correct answer](figures/speed.png)
 
-![Tokens to a correct answer](figures/cost.svg)
+![Tokens to a correct answer](figures/cost.png)
 
 **The local 9B is faster to an answer than the hosted frontier model** (36s
 against 40s) and 2.5× cheaper in tokens. `qwen3.8:27b-mlx` is 3.2–3.6× slower than
@@ -188,4 +188,12 @@ output (`tools/bench/sources.py`). Turn caps derive from each task's declared
 requirement rather than from any transcript (`tasks.derive_turn_cap`).
 
 The figures regenerate from `benchmark-report.json`, which is committed because
-the run directories are not.
+the run directories are not:
+
+```bash
+uv run python docs/working/figures/make.py
+```
+
+Each figure is committed twice — the SVG is the source and diffs as text, the
+PNG is what renders wherever a reader opens this. The PNG is rasterised from
+the SVG at 2x, so the two cannot drift.

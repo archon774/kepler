@@ -31,6 +31,37 @@ GRID = "#dededa"
 
 def esc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
+
+#: Raster width. Twice the natural viewBox so the PNG stays sharp on a
+#: high-density display; the SVG beside it remains the source of truth.
+PNG_SCALE = 2
+
+
+def write(stem: str, markup: str) -> None:
+    """Write the SVG and a PNG rendered from it.
+
+    Both are committed: the SVG is the source and diffs as text, the PNG is
+    what renders everywhere a reader might open the document.
+    """
+
+    import re
+    import subprocess
+
+    svg_path = OUT / f"{stem}.svg"
+    svg_path.write_text(markup, encoding="utf-8")
+    width = int(re.search(r'width="(\d+)"', markup).group(1))
+    png_path = OUT / f"{stem}.png"
+    try:
+        subprocess.run(
+            ["rsvg-convert", "-w", str(width * PNG_SCALE),
+             str(svg_path), "-o", str(png_path)],
+            check=True, capture_output=True,
+        )
+        print(f"wrote {svg_path.name} and {png_path.name}")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        # The SVG is written either way; only the raster needs the tool.
+        print(f"wrote {svg_path.name} (no PNG: rsvg-convert unavailable: {exc})")
+
 def svg(w, h, body, title, desc):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" '
             f'width="{w}" height="{h}" role="img" aria-labelledby="t d" '
@@ -110,8 +141,7 @@ def fig_matrix():
                "Matrix of 16 tasks by 3 models; each cell is correct answers out of "
                "3 repeats, with a bar marking a wrong tool-calling route.")
 
-(OUT/"per-task-matrix.svg").write_text(fig_matrix(), encoding="utf-8")
-print("wrote per-task-matrix.svg")
+write("per-task-matrix", fig_matrix())
 
 # ---------------------------------------------------------------- figure 2
 # Form: grouped bars. The data is a count per (check, model) and the job is
@@ -165,8 +195,7 @@ def fig_failures():
     return svg(w, h, "".join(p), "Failure modes by model",
                "Grouped bars: how many sessions each model failed each answer check.")
 
-(OUT/"failure-modes.svg").write_text(fig_failures(), encoding="utf-8")
-print("wrote failure-modes.svg")
+write("failure-modes", fig_failures())
 
 # ------------------------------------------------------------ figures 3 & 4
 # Form: bars. One measure, one axis. Speed and cost are two prices for the same
@@ -204,9 +233,7 @@ def fig_cost(key, title, subtitle, fmt, note, filename):
     for k, line in enumerate(note_lines):
         p.append(f'<text x="20" y="{base + k*15}" font-size="11" '
                  f'fill="{MUTED}">{esc(line)}</text>')
-    (OUT/filename).write_text(
-        svg(w, h, "".join(p), title, subtitle + " " + note), encoding="utf-8")
-    print("wrote", filename)
+    write(filename, svg(w, h, "".join(p), title, subtitle + " " + note))
 
 fig_cost("seconds_per_answer", "Seconds to a correct answer",
          "First attempt at each task. Lower is better.",
@@ -214,11 +241,11 @@ fig_cost("seconds_per_answer", "Seconds to a correct answer",
          "A repeat of the same task reuses the provider's prefix cache, so only "
          "first attempts are counted. Hosted API against a local daemon: this "
          "measures where a model runs as much as the model.",
-         "speed.svg")
+         "speed")
 
 fig_cost("tokens_per_answer", "Tokens to a correct answer",
          "Input plus output, on sessions that reached a passing answer. Lower is better.",
          lambda v: f"{v:,.0f}",
          "Tokens spent on sessions that never reached an answer are excluded here "
          "and reported separately.",
-         "cost.svg")
+         "cost")
