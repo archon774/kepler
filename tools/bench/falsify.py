@@ -189,16 +189,40 @@ def _off_subject(task: Any, answer: str, failure: Mapping[str, Any], context):
 
 
 def _sourced_after_all(answer: str, evidence: Any, failure: Mapping[str, Any], context):
-    from tools.bench.graders.answer import unsourced_numbers
+    """The accusation is "a tool did return this number", so ask the tools.
 
-    unsourced = unsourced_numbers(answer, evidence)
+    This asked the *grader* instead -- it took the literals the grader no
+    longer flags and reported them as present in the event stream. Those are
+    different questions: a number leaves the flagged set when it is sourced,
+    but also when it is a year, when it carries a background label, and when
+    the answer disclaims or negates it. Answering the second question with the
+    first turned every such exclusion into an accusation that the tools had
+    returned a number they never returned.
+    """
+
+    from tools.bench.graders.answer import (
+        _as_float,
+        _is_sourced,
+        _numbers_in_results,
+    )
+
     flagged = {
         token
         for token in re.findall(r"'([^']*)'", failure.get("detail") or "")
         if _NUMERIC_TOKEN.fullmatch(token)
     }
-    recovered = sorted(flagged - set(unsourced))
-    if flagged and recovered:
+    if not flagged:
+        return
+    seen = _numbers_in_results(evidence)
+    recovered = []
+    for token in sorted(flagged):
+        try:
+            value = _as_float(token)
+        except ValueError:  # pragma: no cover - the token matched _NUMERIC_TOKEN
+            continue
+        if _is_sourced(value, seen):
+            recovered.append(token)
+    if recovered:
         yield {
             **context,
             "probe": "sourced_after_all",

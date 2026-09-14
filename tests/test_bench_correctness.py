@@ -743,3 +743,128 @@ def test_an_empty_answer_is_distinct_from_an_incomplete_run(tmp_path):
     ran_out = graded(tmp_path, body, answer="", outcome="max_turns")
     assert [f.check for f in stopped.failures] == ["empty_answer"]
     assert [f.check for f in ran_out.failures] == ["incomplete"]
+
+
+# --- must_source_value: a mention is not an assertion ---------------------
+
+
+SOURCING_TASK = BARE_TASK + (
+    "expect:\n  answer:\n"
+    "    must_source_value:\n"
+    '      - pattern: "%\\\\s*/\\\\s*yr"\n'
+    "        because: the rate must come from a tool result.\n"
+)
+
+
+def test_a_disclaimed_number_is_a_mention_not_a_claim(tmp_path):
+    """The check's oldest false positive, and it fired on the behaviour the
+    system prompt asks for: told not to repeat a circulated figure, a model
+    quoted it in order to reject it and was marked down for fabricating it."""
+
+    answer = (
+        'A commonly-cited "0.3-0.7 %/yr depending on frequency" is *not* what '
+        "this paper says."
+    )
+    result = graded(tmp_path, SOURCING_TASK, answer=answer)
+    assert result.passed is True
+    assert result.metrics["unsourced_numbers"] == []
+
+
+def test_quoting_alone_does_not_excuse_an_unsourced_number(tmp_path):
+    """Two signals are required. Quoting alone would be an evasion: write the
+    fabricated number in quotes and it stops counting."""
+
+    answer = 'The decline is "0.55 %/yr" over the interval.'
+    result = graded(tmp_path, SOURCING_TASK, answer=answer)
+    assert result.passed is False
+    assert result.failures[0].check == "must_source_value"
+
+
+def test_a_negated_number_is_not_being_asserted(tmp_path):
+    """"None matched the known 0.016665 s artifact" reports that a value did
+    not occur; reading it as a measurement inverts the sentence."""
+
+    answer = "None of the peaks matched the known 0.55 %/yr rate."
+    result = graded(tmp_path, SOURCING_TASK, answer=answer)
+    assert result.passed is True
+
+
+def test_a_contrastive_pivot_closes_the_negation(tmp_path):
+    """Scope, not mere presence. In "not X but Y" the Y is asserted, and a
+    sentence-level negation test would wave it through."""
+
+    answer = "The rate is not 0.31 %/yr but 0.55 %/yr."
+    result = graded(tmp_path, SOURCING_TASK, answer=answer)
+    assert result.passed is False
+    # The disclaimed value drops out; the asserted one does not.
+    assert result.failures[0].detail.count("0.55") == 1
+    assert "0.31" not in result.failures[0].detail
+
+
+def test_the_promotion_pattern_is_matched_at_the_flagged_occurrence(tmp_path):
+    """It was matched against ``answer.find(literal)`` -- the first *substring*
+    hit anywhere in the answer. For a bare "6" that lands inside some unrelated
+    "0.1429", and a live run promoted the 6 of "0.1192 ~ P/6" that way."""
+
+    body = BARE_TASK + (
+        "expect:\n  answer:\n"
+        "    must_source_value:\n"
+        '      - pattern: "\\\\d\\\\.\\\\d{3,}\\\\s*(?:s\\\\b|sec)"\n'
+        "        because: a period comes from the periodogram.\n"
+    )
+    answer = "The harmonics are 0.1192 s ~ P/6 and the fold is clean."
+    result = graded(tmp_path, body, answer=answer)
+    offending = result.failures[0].detail
+    assert "0.1192" in offending
+    assert "'6'" not in offending
+
+
+# --- conditional: a guard on an outcome, not on a proxy call --------------
+
+
+RESULT_GUARD_TASK = BARE_TASK + (
+    "expect:\n  answer:\n"
+    "    conditional:\n"
+    "      - when_no_result:\n"
+    "          tool: search_ned\n"
+    "          where:\n"
+    "            status: {equals: ok}\n"
+    '        answer_must_not_match: "photometry (?:table|measurements) shows"\n'
+    "        because: a photometry table cannot be reported when none was returned.\n"
+)
+
+
+def test_the_guard_stays_shut_when_the_tool_did_return_a_result(tmp_path):
+    """The point of the form. ``no-identical-retry`` guarded "a table cannot be
+    reported when no call returned one" on *search_simbad not being called*,
+    contradicting its own trajectory rule, which accepts the formal designation
+    from the model's own knowledge. Reading the result instead means a model
+    that resolved the name itself and got a table is no longer accused."""
+
+    result = graded(
+        tmp_path,
+        RESULT_GUARD_TASK,
+        answer="The photometry table shows 214 measurements.",
+        events=[finished("search_ned", {"status": "ok", "count": 214})],
+    )
+    assert result.passed is True
+
+
+def test_the_guard_opens_when_every_call_failed(tmp_path):
+    result = graded(
+        tmp_path,
+        RESULT_GUARD_TASK,
+        answer="The photometry table shows 214 measurements.",
+        events=[finished("search_ned", {"status": "error", "count": 0})],
+    )
+    assert result.passed is False
+    assert result.failures[0].check == "conditional"
+
+
+def test_the_guard_opens_when_the_tool_was_never_called(tmp_path):
+    result = graded(
+        tmp_path,
+        RESULT_GUARD_TASK,
+        answer="The photometry table shows 214 measurements.",
+    )
+    assert result.passed is False

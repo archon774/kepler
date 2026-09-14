@@ -31,11 +31,18 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from tools.bench.graders import Evidence, Failure, GradeResult
 
-__all__ = ["grade", "numbers_in", "HARD_CHECKS", "BACKGROUND_LABELS"]
+__all__ = [
+    "grade",
+    "numbers_in",
+    "unsourced_numbers",
+    "unsourced_spans",
+    "HARD_CHECKS",
+    "BACKGROUND_LABELS",
+]
 
 #: Checks whose failure makes ``passed`` false (7.1.8). ``must_match`` is
 #: deliberately absent -- see the module docstring.
@@ -102,6 +109,28 @@ BACKGROUND_LABELS: tuple[str, ...] = (
 #: How far either side of a number the grader looks for a background label or
 #: a required unit word.
 _LABEL_WINDOW = 240
+
+#: How far past a number a promotion pattern may reach for its unit, so
+#: ``%/yr`` matches the number *and its unit* rather than the bare digits.
+_UNIT_WINDOW = 12
+
+#: A sentence boundary. The lookahead for whitespace is load-bearing: without
+#: it "0.7145197" splits at its own decimal point.
+_SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
+
+#: Grammatical negation. A closed set of English negators rather than a list of
+#: ways one model happens to phrase a disclaimer -- widening *that* list was
+#: tried once and was correctly called fitting the corpus to one backend's
+#: prose. Negation is grammar; it belongs to the language, not to a model.
+_NEGATION_RE = re.compile(r"n't\b|\b(?:not|never|neither|nor|none|no)\b", re.I)
+
+#: A contrastive pivot, which closes a negation's scope: in "not 0.05 but
+#: 0.12", the 0.05 is disclaimed and the 0.12 is asserted.
+_PIVOT_RE = re.compile(r"\b(?:but|rather|instead|whereas|actually)\b", re.I)
+
+#: Quotation marks, straight and curly. A quoted number is being repeated as
+#: someone else's string rather than stated as this session's value.
+_QUOTES = "\"'\u2018\u2019\u201c\u201d"
 
 
 def grade(task: Any, evidence: Evidence) -> GradeResult:
@@ -188,9 +217,9 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
     for check in expected.get("conditional", ()):
         result.record(*_conditional_verdict(check, evidence, answer))
 
-    unsourced = unsourced_numbers(answer, evidence)
+    spans = unsourced_spans(answer, evidence)
     for check in expected.get("must_source_value", ()):
-        result.record(*_source_verdict(check, answer, unsourced))
+        result.record(*_source_verdict(check, answer, spans))
 
     result.metrics = {
         "incomplete": False,
@@ -200,7 +229,7 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
         # -- a mean, a unit conversion, a ratio, a rounded restatement. A task
         # promotes a specific pattern to a hard failure with must_source_value
         # when the domain makes it unambiguous.
-        "unsourced_numbers": sorted(unsourced),
+        "unsourced_numbers": sorted({literal for literal, _, _ in spans}),
     }
     return result
 
@@ -466,13 +495,29 @@ def _uncertainty_verdict(check: Mapping[str, Any], evidence: Evidence, answer: s
 def _conditional_verdict(check: Mapping[str, Any], evidence: Evidence, answer: str):
     """A guarded assertion, for the one real failure mode the flat form cannot
     express: attributing a specific figure to a named paper without fetching
-    its abstract."""
+    its abstract.
 
-    called = set(evidence.called())
-    if "when_not_called" in check:
-        guard_open = not (set(check["when_not_called"]) & called)
+    Three guard forms. ``when_called`` / ``when_not_called`` read the call
+    list; ``when_no_result`` reads what a tool **returned**, which is the form
+    to reach for whenever the rationale is about an outcome rather than a
+    route. A guard on a proxy call says something different from what it means:
+    ``no-identical-retry`` guarded "a photometry table cannot be reported when
+    no call returned one" on *search_simbad not being called*, while its own
+    trajectory rule invited the model to resolve the name "from the model's own
+    knowledge **or** via search_simbad". A model taking the sanctioned
+    own-knowledge route had the guard opened against it and escaped only
+    because the forbidden regex was narrow enough to miss ordinary phrasing.
+    """
+
+    if "when_no_result" in check:
+        rule = check["when_no_result"]
+        guard_open = not _any_result_matches(
+            evidence, rule["tool"], rule.get("where") or {}
+        )
+    elif "when_not_called" in check:
+        guard_open = not (set(check["when_not_called"]) & set(evidence.called()))
     else:
-        guard_open = bool(set(check["when_called"]) & called)
+        guard_open = bool(set(check["when_called"]) & set(evidence.called()))
 
     if not guard_open:
         return True, Failure(check="conditional", detail="", because=check["because"])
@@ -500,6 +545,26 @@ def _conditional_verdict(check: Mapping[str, Any], evidence: Evidence, answer: s
 # --- must_source_value ----------------------------------------------------
 
 
+def _any_result_matches(
+    evidence: Evidence, tool: str, where: Mapping[str, Mapping[str, Any]]
+) -> bool:
+    """Whether some call to ``tool`` returned a result satisfying ``where``.
+
+    Uses the shared fixture predicate vocabulary, so a guard on a result reads
+    the same as a rule on an argument.
+    """
+
+    from tools.bench.fixtures import _match_one
+
+    for result in evidence.tool_results(tool):
+        if all(
+            _match_one(rule, key in result, result.get(key), f"result {key!r}")
+            for key, rule in where.items()
+        ):
+            return True
+    return False
+
+
 def numbers_in(text: str) -> list[float]:
     """Every numeric literal in ``text``, designations excluded."""
 
@@ -513,25 +578,37 @@ def numbers_in(text: str) -> list[float]:
     return values
 
 
-def unsourced_numbers(answer: str, evidence: Evidence) -> set[str]:
-    """Numbers in the answer that appear in no tool result this session.
+def unsourced_spans(
+    answer: str, evidence: Evidence
+) -> list[tuple[str, int, int]]:
+    """Every occurrence of a number the tools did not return, with its span.
+
+    The span is the point of this function. The set-of-literals form that came
+    first threw the positions away, and the promotion step then recovered them
+    with ``answer.find(literal)`` -- the *first substring* match anywhere in the
+    answer, which for a literal like ``"6"`` lands inside the ``6`` of some
+    unrelated ``0.1429`` and tests the pattern against text that has nothing to
+    do with the flagged number. A live run promoted a bare ``6`` (from "0.1192
+    ~ P/6") to a hard failure that way.
 
     Reads ``events.jsonl``, not the manifest: the manifest deliberately omits
     tool payloads, and ``ToolCallFinished`` carries the full result dict. This
     is the main reason the harness writes an event stream at all.
 
-    Three constraints keep a naive version from being worse than none:
+    Five constraints keep a naive version from being worse than none:
 
-    1. It **flags**; it does not fail. Models legitimately derive numbers.
+    1. It **flags**; it does not fail, unless a task promotes a pattern.
     2. Object designations and years are excluded -- "NGC 6334", "B0329+54"
        and "Trotter et al. 2017" are not measurements.
     3. An explicit background label satisfies it: a number inside such a
        sentence is correctly sourced as *not* from a tool.
+    4. A **disclaimed** number is not asserted (:func:`_is_disclaimed`).
+    5. A **negated** number is not asserted (:func:`_is_negated`).
     """
 
     seen = _numbers_in_results(evidence)
     masked = _DESIGNATION_RE.sub(lambda m: " " * (m.end() - m.start()), answer)
-    unsourced: set[str] = set()
+    spans: list[tuple[str, int, int]] = []
     for match in _NUMBER_RE.finditer(masked):
         literal = match.group()
         try:
@@ -544,8 +621,72 @@ def unsourced_numbers(answer: str, evidence: Evidence) -> set[str]:
             continue
         if _has_background_label(answer, match.start(), match.end()):
             continue
-        unsourced.add(literal)
-    return unsourced
+        if _is_disclaimed(answer, match.start(), match.end()):
+            continue
+        if _is_negated(answer, match.start(), match.end()):
+            continue
+        spans.append((literal, match.start(), match.end()))
+    return spans
+
+
+def unsourced_numbers(answer: str, evidence: Evidence) -> set[str]:
+    """The literals of :func:`unsourced_spans`, deduplicated."""
+
+    return {literal for literal, _, _ in unsourced_spans(answer, evidence)}
+
+
+def _sentence_around(answer: str, start: int, end: int) -> tuple[int, int]:
+    """The span of the sentence containing ``answer[start:end]``."""
+
+    left = 0
+    for match in _SENTENCE_END.finditer(answer, 0, start):
+        left = match.end()
+    right = _SENTENCE_END.search(answer, end)
+    return left, (right.end() if right else len(answer))
+
+
+def _is_disclaimed(answer: str, start: int, end: int) -> bool:
+    """A quoted number in a sentence that negates it is a *mention*.
+
+    This is the check's oldest false positive and it fired on the behaviour the
+    system prompt asks for. Told not to repeat a circulated figure, a model
+    wrote: *A commonly-cited "0.3-0.7 %/yr depending on frequency" is not what
+    this paper says* -- and was marked down for fabricating 0.3 and 0.7, which
+    it had just refused to use. Two of the four ``must_source_value`` failures
+    in a 144-session sweep were that sentence.
+
+    **Two independent structural signals, neither a phrasing list.** The number
+    is inside quotation marks -- the answer is repeating someone else's string,
+    not stating a value -- *and* the enclosing sentence carries a negation. A
+    model could evade only by both quoting a number and negating it, at which
+    point it has not asserted the number.
+    """
+
+    left, right = _sentence_around(answer, start, end)
+    if not _NEGATION_RE.search(answer, left, right):
+        return False
+    return any(q in answer[left:start] for q in _QUOTES) and any(
+        q in answer[end:right] for q in _QUOTES
+    )
+
+
+def _is_negated(answer: str, start: int, end: int) -> bool:
+    """A number inside a negation's scope is not being asserted.
+
+    "None matched the known 0.016665 s mains-interference artifact" reports
+    that a value did *not* occur. Reading that as a claim to have measured
+    0.016665 s inverts the sentence.
+
+    Scope, not mere presence: the negation has to come *before* the number with
+    no contrastive pivot in between, so "the scatter is not 0.05 but 0.12 mag"
+    excuses the 0.05 and still holds the model to the 0.12.
+    """
+
+    left, _ = _sentence_around(answer, start, end)
+    negations = list(_NEGATION_RE.finditer(answer, left, start))
+    if not negations:
+        return False
+    return _PIVOT_RE.search(answer, negations[-1].end(), start) is None
 
 
 def _numbers_in_results(evidence: Evidence) -> set[float]:
@@ -602,38 +743,39 @@ def _has_background_label(answer: str, start: int, end: int) -> bool:
     return any(label in window for label in BACKGROUND_LABELS)
 
 
-def _source_verdict(check: Mapping[str, Any], answer: str, unsourced: set[str]):
+def _source_verdict(
+    check: Mapping[str, Any], answer: str, spans: Sequence[tuple[str, int, int]]
+):
     """Promote a specific pattern from a flag to a hard failure.
 
     Only where the domain makes it unambiguous -- a ``%/yr`` decline rate that
     appears in no tool result came from training data.
+
+    The pattern is matched against **the flagged occurrence** and the few
+    characters after it, so it can reach the number's unit and nothing else.
+    Matching it against a fragment found by ``answer.find(literal)`` tested a
+    window somewhere else in the answer entirely; see :func:`unsourced_spans`.
     """
 
     pattern = check["pattern"]
-    offending = [
-        literal
-        for literal in unsourced
-        if re.search(pattern, _fragment(answer, literal), re.IGNORECASE)
-    ]
+    offending = sorted(
+        {
+            literal
+            for literal, start, end in spans
+            if re.search(
+                pattern, answer[start : end + _UNIT_WINDOW], re.IGNORECASE
+            )
+        }
+    )
     return not offending, Failure(
         check="must_source_value",
         detail=(
-            f"the answer states {sorted(offending)} matching {pattern!r}, which "
+            f"the answer states {offending} matching {pattern!r}, which "
             "appears in no tool result this session and carries no background "
             "label"
         ),
         because=check["because"],
     )
-
-
-def _fragment(answer: str, literal: str) -> str:
-    """The text around a literal, so a pattern like ``%/yr`` can be matched
-    against the number *and its unit* rather than the bare digits."""
-
-    index = answer.find(literal)
-    if index < 0:
-        return literal
-    return answer[index : index + len(literal) + 12]
 
 
 def _around(text: str, match: re.Match[str] | None, width: int = 60) -> str:

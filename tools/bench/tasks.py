@@ -601,7 +601,8 @@ _HARD_CHECK_KEYS: Mapping[str, frozenset[str]] = {
     ),
     "must_source_value": frozenset({"pattern", "because"}),
     "conditional": frozenset(
-        {"when_not_called", "when_called", "answer_must_not_match", "answer_must_match", "because"}
+        {"when_not_called", "when_called", "when_no_result",
+         "answer_must_not_match", "answer_must_match", "because"}
     ),
 }
 
@@ -649,11 +650,51 @@ def _load_hard_check(
             raise TaskError(f"{where} names unregistered tool {item['tool']!r}")
 
     if kind == "conditional":
-        guards = [key for key in ("when_not_called", "when_called") if key in item]
+        guards = [
+            key
+            for key in ("when_not_called", "when_called", "when_no_result")
+            if key in item
+        ]
         if len(guards) != 1:
             raise TaskError(
-                f"{where} needs exactly one of when_not_called / when_called"
+                f"{where} needs exactly one of when_not_called / when_called / "
+                "when_no_result"
             )
+        if "when_no_result" in item:
+            rule = _require_mapping(
+                item["when_no_result"], f"{where}.when_no_result"
+            )
+            unknown = set(rule) - {"tool", "where"}
+            if unknown:
+                raise TaskError(
+                    f"{where}.when_no_result has unknown key(s) {sorted(unknown)}"
+                )
+            if "tool" not in rule:
+                raise TaskError(f"{where}.when_no_result is missing ['tool']")
+
+            from tools.registry import TOOL_FUNCTIONS
+
+            if rule["tool"] not in TOOL_FUNCTIONS:
+                raise TaskError(
+                    f"{where}.when_no_result names unregistered tool "
+                    f"{rule['tool']!r}"
+                )
+            # Validate the predicates now rather than at grade time: a typo in
+            # a `where` clause would otherwise be a guard that silently never
+            # matches, which reads as a check that never fires.
+            from tools.bench.fixtures import PREDICATES
+
+            for key, predicate in (rule.get("where") or {}).items():
+                predicate = _require_mapping(
+                    predicate, f"{where}.when_no_result.where.{key}"
+                )
+                bad = set(predicate) - set(PREDICATES)
+                if bad:
+                    raise TaskError(
+                        f"{where}.when_no_result.where.{key} uses unknown "
+                        f"predicate(s) {sorted(bad)}; the vocabulary is "
+                        f"{list(PREDICATES)}"
+                    )
         asserts = [
             key for key in ("answer_must_not_match", "answer_must_match") if key in item
         ]
