@@ -119,6 +119,9 @@ def _empty_row() -> dict[str, Any]:
         "trajectory_failures": 0,
         "model_time_ms": 0.0,
         "output_tokens": 0,
+        "wall_ms_to_answer": 0.0,
+        "wall_ms_without_result": 0.0,
+        "task_outcomes": {},
     }
 
 
@@ -126,13 +129,24 @@ def _merge(into: dict[str, Any], row: Mapping[str, Any]) -> None:
     for key, value in row.items():
         if isinstance(value, (int, float)) and key in into:
             into[key] += value
-    # Not summable: they describe the set of repeats, not a quantity.
-    for key in ("stability", "flaky_tasks"):
-        if key in row:
-            into[key] = row[key]
+    # Stability is not summable and not overwritable either. A report merging
+    # five suites has to recompute it over every task in all of them; taking
+    # the last suite's figure -- which is what an overwrite did -- reported one
+    # suite's variance as the backend's.
+    for task, results in (row.get("task_outcomes") or {}).items():
+        into["task_outcomes"].setdefault(task, []).extend(results)
 
 
 def _finalize(row: dict[str, Any]) -> None:
+    from tools.bench.grade import _is_flaky, _stability
+
+    outcomes = row.get("task_outcomes") or {}
+    row["stability"] = _stability(outcomes)
+    row["flaky_tasks"] = sorted(
+        task for task, results in outcomes.items() if _is_flaky(results)
+    )
+    row["tasks"] = len(outcomes)
+
     scored = row["runs"] - row["incomplete"]
     row["pass_rate"] = row["passed"] / scored if scored else None
     row["tokens_per_answer"] = (
@@ -148,6 +162,12 @@ def _finalize(row: dict[str, Any]) -> None:
     # A list, not a tuple: the JSON and Markdown reports are written from the
     # same object and a test holds them to the same content.
     row["pass_interval"] = list(interval) if interval else None
+    # Time to an answer, on the runs that reached one. The question a user
+    # actually asks of a model is how long they wait for a usable answer, and
+    # that is comparable across every backend however it is served.
+    row["seconds_per_answer"] = (
+        row["wall_ms_to_answer"] / 1000.0 / row["passed"] if row["passed"] else None
+    )
     row["turns_per_run"] = row["turns"] / row["runs"] if row["runs"] else None
     row["duplicate_rate"] = (
         row["duplicate_calls"] / row["tool_calls"] if row["tool_calls"] else None
@@ -418,15 +438,15 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
         "",
         "The two headline axes first; the two diagnostic axes explain them.",
         "",
-        "| backend | correctness | 95% interval | stability | tokens to an "
-        "answer | turns/run | tok/s | duplicate rate | trajectory failures | "
-        "protocol faults |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| backend | correctness | 95% interval | stability | seconds to an "
+        "answer | tokens to an answer | turns/run | tok/s | duplicate rate | "
+        "trajectory failures | protocol faults |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for backend, row in sorted(report["matrix"].items()):
         lines.append(
             "| `{backend}` | {passed}/{scored} ({rate}) | {interval} | "
-            "{stability} | {tpa} | "
+            "{stability} | {spa} | {tpa} | "
             "{tpr} | {tps} | {dup} | {traj} | {faults} |".format(
                 backend=backend,
                 passed=row["passed"],
@@ -434,6 +454,7 @@ def _matrix_table(report: Mapping[str, Any]) -> list[str]:
                 rate=_pct(row["pass_rate"]),
                 interval=_interval(row.get("pass_interval")),
                 stability=_pct(row.get("stability")),
+                spa=_num(row.get("seconds_per_answer"), "{:,.0f}"),
                 tpa=_num(row["tokens_per_answer"], "{:,.0f}"),
                 tpr=_num(row["turns_per_run"], "{:.1f}"),
                 tps=_num(row["tokens_per_second"], "{:.1f}"),

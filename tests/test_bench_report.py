@@ -61,11 +61,13 @@ def _entry(
     incomplete=False,
     failures=(),
     tags=("core",),
+    repeat=1,
+    wall_ms=70000.0,
 ):
     return {
         "backend": backend,
         "task_id": task_id,
-        "repeat": 1,
+        "repeat": repeat,
         "outcome": "max_turns" if incomplete else "end_turn",
         "incomplete": incomplete,
         "tags": list(tags),
@@ -85,7 +87,7 @@ def _entry(
                 "duplicate_calls": 1,
                 "model_time_ms": 8000.0,
                 "tool_time_ms": 61000.0,
-                "wall_ms": 70000.0,
+                "wall_ms": wall_ms,
                 "tokens_per_second_kind": "streaming",
                 "tokens": {
                     "input_tokens": 42000,
@@ -190,13 +192,15 @@ def test_the_column_order_reads_the_two_questions_left_to_right():
     text = render_markdown(build_report([_pair()]))
     header = next(line for line in text.splitlines() if line.startswith("| backend |"))
     columns = [c.strip() for c in header.strip("|").split("|")]
-    assert columns[:5] == [
+    assert columns[:6] == [
         "backend",
         "correctness",
         # Immediately beside the rate it qualifies, so a reader subtracting two
         # rates sees what the subtraction is worth before doing it.
         "95% interval",
         "stability",
+        # The two costs of an answer, in the order a user meets them.
+        "seconds to an answer",
         "tokens to an answer",
     ]
     assert columns.index("trajectory failures") > columns.index("tokens to an answer")
@@ -483,3 +487,40 @@ def test_the_report_names_the_pairs_it_could_not_separate():
     assert "95% interval" in text
     assert "Not separated by this suite" in text
     assert "`anthropic/claude-opus-5` vs `ollama/local`" in text
+
+
+def test_stability_is_recomputed_across_merged_suites():
+    """A report merging several suites must recompute stability over every
+    task in all of them. Overwriting per suite reported whichever suite merged
+    last as the backend's variance."""
+
+    steady = _pair(entries=[_entry(task_id="a", passed=True, repeat=r) for r in (1, 2)])
+    flaky = _pair(
+        _record(run_id="2026-09-14-pulsar"),
+        entries=[
+            _entry(task_id="b", passed=True, repeat=1),
+            _entry(task_id="b", passed=False, repeat=2),
+        ],
+    )
+    row = build_report([steady, flaky])["matrix"]["anthropic/claude-opus-5"]
+    assert row["tasks"] == 2
+    assert row["flaky_tasks"] == ["b"]
+    assert row["stability"] == 0.5
+
+
+def test_time_to_an_answer_counts_only_runs_that_answered():
+    """A fast wrong answer is not a fast answer -- the same rule tokens follow."""
+
+    report = build_report(
+        [
+            _pair(
+                entries=[
+                    _entry(task_id="a", passed=True, wall_ms=10_000),
+                    _entry(task_id="b", passed=False, wall_ms=90_000),
+                ]
+            )
+        ]
+    )
+    row = report["matrix"]["anthropic/claude-opus-5"]
+    assert row["seconds_per_answer"] == 10.0
+    assert "seconds to an answer" in render_markdown(report)

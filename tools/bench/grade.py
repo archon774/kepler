@@ -151,6 +151,11 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
                 "trajectory_failures": 0,
                 "model_time_ms": 0.0,
                 "output_tokens": 0,
+                # Time to an answer: what a user waits for. Accumulated only
+                # over runs that reached a passing answer, for the same reason
+                # tokens are -- a fast wrong answer is not a fast answer.
+                "wall_ms_to_answer": 0.0,
+                "wall_ms_without_result": 0.0,
             },
         )
         row["runs"] += 1
@@ -158,15 +163,19 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
         tokens = metrics.get("tokens") or {}
         spent = (tokens.get("input_tokens") or 0) + (tokens.get("output_tokens") or 0)
 
+        wall = metrics.get("wall_ms") or 0.0
         if entry["incomplete"]:
             row["incomplete"] += 1
             row["tokens_without_result"] += spent
+            row["wall_ms_without_result"] += wall
             continue
         if entry["answer"]["passed"]:
             row["passed"] += 1
             row["tokens_to_an_answer"] += spent
+            row["wall_ms_to_answer"] += wall
         else:
             row["tokens_without_result"] += spent
+            row["wall_ms_without_result"] += wall
 
         row["turns"] += metrics.get("turns") or 0
         row["tool_calls"] += metrics.get("tool_calls") or 0
@@ -182,6 +191,10 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
             for (b, task), results in per_task.items()
             if b == backend
         }
+        # Carried on the row so a report merging several suites can recompute
+        # stability over all of them. Overwriting it per suite would report
+        # whichever suite happened to be merged last.
+        row["task_outcomes"] = {task: list(r) for task, r in outcomes.items()}
         row["stability"] = _stability(outcomes)
         row["flaky_tasks"] = sorted(
             task for task, results in outcomes.items() if _is_flaky(results)
@@ -194,6 +207,11 @@ def summarize(grades: Mapping[str, Any]) -> dict[str, Any]:
         row["tokens_per_second"] = (
             row["output_tokens"] / (row["model_time_ms"] / 1000.0)
             if row["model_time_ms"]
+            else None
+        )
+        row["seconds_per_answer"] = (
+            row["wall_ms_to_answer"] / 1000.0 / row["passed"]
+            if row["passed"]
             else None
         )
     return rows
