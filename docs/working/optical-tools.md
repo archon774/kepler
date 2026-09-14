@@ -1,12 +1,13 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`, as are closure phases P1–P6. The remaining closure phases are planned
-below; they are independently deliverable unless a phase states an asset
-prerequisite.
+`dev`, as are closure phases P1–P6; P7 is complete on PR #64. The two
+remaining closure phases, P8 and P9, are planned below and each waits on an
+asset the repository does not carry.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation), 2026-09-09 (completion audit and approved closure rollout),
-2026-09-11 (P4 completion), 2026-09-12 (P5 and P6 completion)
+2026-09-11 (P4 completion), 2026-09-12 (P5 and P6 completion), 2026-09-13
+(P7 completion, audit and review)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
 prerequisite — broken-links Phase 4 — merged as PR #47. P8 and P9 have
 separate maintainer- or operator-supplied asset gates.
@@ -69,8 +70,8 @@ merged.
 
 ### Status summary
 
-Status is **as of 2026-09-13 on `dev`**, after PRs #43, #44, #45, #47, #52,
-#59, #60, #62, #63 and the P7 branch.
+Status is **as of 2026-09-13**, after PRs #43, #44, #45, #47, #52, #59, #60,
+#62 and #63 on `dev`, plus #64 (P7) once it merges.
 
 | # | Broken link | Status | Severity |
 |---|---|---|---|
