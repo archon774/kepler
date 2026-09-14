@@ -186,27 +186,51 @@ def grade(task: Any, evidence: Evidence) -> GradeResult:
 
 
 def _artifact_verdict(evidence: Evidence):
-    """The answer must quote, verbatim, a path the manifest records.
+    """The answer must identify an artifact the manifest records.
 
     Checked against the manifest rather than against a regex: a model that
     invents a plausible-looking path fails, which ``/artifacts/.*\\.ecsv``
-    would not catch.
+    would not catch. That anti-fabrication purpose is the whole of the check.
+
+    **The full path or its basename both count.** A live run had a model write
+    ``/home/claude/Kepler/artifacts/.../preview-is-not-the-answer_search_vizier.ecsv``
+    -- eliding the middle for readability while quoting the exact filename --
+    and a verbatim-only match failed it on three tasks. That is a display
+    convention, not a fabrication: the basename is synthesized by the harness
+    from the task id and the tool name, so it is unguessable in advance and
+    verifiable after the fact, which is precisely what the check needs to
+    establish. A full path contains its own basename, so a model that quotes
+    the whole thing is unaffected and the rule stays symmetric between
+    providers.
+
+    What still fails: naming no artifact at all, or naming one this session
+    did not write.
     """
 
     paths = evidence.artifact_paths()
-    quoted = sorted(path for path in paths if path in evidence.answer)
     if not paths:
         return False, Failure(
             check="must_report_artifact_path",
             detail="no tool in this session wrote an artifact to quote",
         )
-    return bool(quoted), Failure(
+    answer = evidence.answer
+    cited = sorted(
+        path
+        for path in paths
+        if path in answer or _basename(path) in answer
+    )
+    return bool(cited), Failure(
         check="must_report_artifact_path",
         detail=(
-            "the answer quotes no path this session actually wrote; recorded "
-            f"paths were {sorted(paths)}"
+            "the answer identifies no artifact this session actually wrote "
+            "(neither a full path nor a recorded filename); recorded paths "
+            f"were {sorted(paths)}"
         ),
     )
+
+
+def _basename(path: str) -> str:
+    return path.rsplit("/", 1)[-1]
 
 
 # --- must_report_value ----------------------------------------------------

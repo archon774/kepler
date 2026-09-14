@@ -311,7 +311,7 @@ def test_a_fabricated_artifact_path_fails(tmp_path):
     )
     result = answer_grader.grade(task, evidence)
     assert result.passed is False
-    assert "quotes no path this session actually wrote" in result.failures[0].detail
+    assert "identifies no artifact this session actually wrote" in result.failures[0].detail
 
 
 def test_a_quoted_real_artifact_path_passes(tmp_path):
@@ -338,3 +338,68 @@ def test_a_run_with_no_manifest_at_all_grades_as_an_error(tmp_path):
     assert evidence.outcome == "error"
     assert evidence.incomplete is True
     assert answer_grader.grade(task, evidence).passed is False
+
+
+def test_an_elided_path_with_the_right_filename_passes(tmp_path):
+    """A live run had a model write the path with the middle elided for
+    readability while quoting the exact filename. That is a display
+    convention, not a fabrication: the basename is synthesized from the task
+    id and the tool name, so it is unguessable in advance and verifiable
+    after. The check exists to catch invented paths, and this is not one."""
+
+    task = write_task(
+        tmp_path,
+        BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
+    )
+    real = "/home/claude/Kepler/artifacts/bench/run/r1/preview_search_vizier.ecsv"
+    evidence = evidence_for(
+        tmp_path,
+        answer="The full table is at /home/claude/Kepler/artifacts/.../preview_search_vizier.ecsv.",
+        manifest_body=manifest(
+            tool_calls=[call("search_vizier", artifacts=[{"path": real}])]
+        ),
+    )
+    assert answer_grader.grade(task, evidence).passed is True
+
+
+def test_a_full_path_still_passes_so_the_rule_stays_symmetric(tmp_path):
+    """A model that quotes the whole path is unaffected by the basename rule,
+    which is what keeps it fair between providers that format differently."""
+
+    task = write_task(
+        tmp_path,
+        BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
+    )
+    real = "/home/claude/Kepler/artifacts/bench/run/r1/preview_search_vizier.ecsv"
+    evidence = evidence_for(
+        tmp_path,
+        answer=f"Written to {real} (4,127 rows).",
+        manifest_body=manifest(
+            tool_calls=[call("search_vizier", artifacts=[{"path": real}])]
+        ),
+    )
+    assert answer_grader.grade(task, evidence).passed is True
+
+
+def test_an_invented_filename_still_fails(tmp_path):
+    """The anti-fabrication purpose has to survive the loosening."""
+
+    task = write_task(
+        tmp_path,
+        BARE_TASK + "expect:\n  answer:\n    must_report_artifact_path: true\n",
+    )
+    evidence = evidence_for(
+        tmp_path,
+        answer="The full table is at /artifacts/casa_radio_photometry.ecsv.",
+        manifest_body=manifest(
+            tool_calls=[
+                call(
+                    "search_vizier",
+                    artifacts=[{"path": "/artifacts/bench/run/r1/t_search_vizier.ecsv"}],
+                )
+            ]
+        ),
+    )
+    result = answer_grader.grade(task, evidence)
+    assert result.passed is False
+    assert "identifies no artifact" in result.failures[0].detail
