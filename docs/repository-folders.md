@@ -30,9 +30,11 @@ Important files and subfolders:
   remote query, and artifact summary models.
 - `config.py`: small environment-backed settings helpers for the tool layer.
 - `artifacts.py`: local artifact description and listing helpers.
-- `astrometry.py`, `calibration.py`, `catalogs.py`, `pulsar.py`,
-  `photometry.py`, `workspace.py`: local plain Python user-facing tool
-  wrappers.
+- `astrometry.py`, `calibration.py`, `catalogs.py`, `fieldcal_reference.py`,
+  `optical.py`, `pulsar.py`, `photometry.py`, `variable_star.py`,
+  `workspace.py`: local plain Python user-facing tool wrappers
+  (`fieldcal_reference.py` is the recorded zero-point ground truth and its
+  offline replays, `optical.py` the bundled-frame registry).
 - `simbad.py`, `ned.py`, `vizier.py`, `atnf.py`, `ads.py`, `mast.py`,
   `mpc.py`, `casda.py`, `resolve.py`: split remote database/archive tools.
 - `hr_diagram.py`: FITS-to-HR-diagram pipeline orchestration, backed by

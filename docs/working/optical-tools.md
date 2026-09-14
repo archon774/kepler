@@ -177,7 +177,9 @@ validates photometry → matching → reference-magnitude resolution → solve, 
 cannot reproduce `fit_summary.json`'s `num_not_selected_by_field_cal: 263`,
 because the rows that failed to match were never written down. This is stated in
 the tool's docstring and in the test; a partial replay must not be mistaken for a
-full one.
+full one. **P7 closed this** by recording the field's APASS *and* VSX responses
+and adding the end-to-end selection replay — the VSX rows turned out to be part
+of the recorded selection (the P7 record has the star).
 
 Note also that the existing end-to-end field-calibration test **synthesizes**
 catalog sources at detected positions with a known offset. That is a good test of
