@@ -29,6 +29,23 @@ RAMP = ["#e9e9e6", "#9ec5f4", "#5598e7", "#256abf"]
 INK, INK2, MUTED, SURFACE = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb"
 GRID = "#dededa"
 
+#: The outcome ramp, for "what happened to this session" (figure 1).
+#:
+#: Deliberately **greys, not a second set of hues**. Every hue in this document
+#: means one model and nothing else -- colour follows the entity -- so a stacked
+#: bar whose non-correct segments were coloured would ask the reader to hold two
+#: colour languages at once. Correct is drawn in the model's own hue and the
+#: rest desaturates away from it, which makes "how much of this bar is coloured"
+#: readable as "how often it works" with no legend lookup at all.
+#:
+#: Monotonic in OKLab lightness -- 0.534, 0.659, 0.779, 0.891 against a 0.991
+#: surface -- so the ramp survives greyscale and every form of colour blindness
+#: by construction. Every segment is direct-labelled regardless.
+OUTCOME = {"wrong answer":     "#6e6d69",
+           "said nothing":     "#93928d",
+           "ran out of turns": "#b8b7b2",
+           "harness error":    "#dcdbd6"}
+
 def esc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
 
@@ -90,6 +107,112 @@ for row in REPORT["per_task"]:
 
 tasks = sorted({t for t, _ in cells})
 backends = [b for b in SERIES if any((t, b) in cells for t in tasks)]
+
+
+# ---------------------------------------------------------------- figure 1
+# Form: one stacked bar per model, parts of a whole. The first question anyone
+# asks is "how often does this actually work", and answering it from a 16x3
+# matrix means counting cells. A bar answers it without arithmetic.
+#
+# The denominator is the trap this figure has to disarm rather than hide. The
+# correctness board is 37 of *43* for sonnet, not 37 of 48: a session that hit
+# an API error or ran out of turns did not answer badly, it did not answer, and
+# neither is scored as a low pass rate. So the bar is drawn over all 48
+# attempts -- that is what was spent -- the two unscored segments are detached
+# with a dashed outline under their own bracket, and the headline percentage
+# states its own denominator rather than leaving the reader to divide by 48.
+def fig_outcomes():
+    order = ["wrong answer", "said nothing", "ran out of turns", "harness error"]
+    # Outside the correctness denominator, and drawn dashed to say so.
+    UNSCORED = ("ran out of turns", "harness error")
+    counts = {b: collections.Counter() for b in backends}
+    for row in REPORT["per_task"]:
+        if row["passed"]:
+            key = "correct"
+        elif "empty_answer" in row["answer_failures"]:
+            key = "said nothing"
+        elif row["outcome"] == "error":
+            key = "harness error"
+        elif row["incomplete"]:
+            key = "ran out of turns"
+        else:
+            key = "wrong answer"
+        counts[row["backend"]][key] += 1
+
+    left, y0, rowh, barh, gap = 152, 112, 68, 34, 2
+    plot_w = 560
+    w, h = left + plot_w + 132, y0 + len(backends)*rowh + 70
+    total = 48
+    p = [f'<text x="20" y="32" font-size="16" font-weight="700" fill="{INK}">'
+         f'How often does each model reach a correct answer?</text>',
+         f'<text x="20" y="53" font-size="12.5" fill="{INK2}">'
+         f'All 48 attempts per model: 16 tasks asked 3 times each.</text>']
+
+    # Legend. Correct is shown in grey outline here because it takes the
+    # model's own colour in the plot; the swatch would otherwise claim one
+    # model's hue for a category shared by all three.
+    lx = 20
+    p.append(f'<rect x="{lx}" y="{y0-32}" width="11" height="11" rx="2.5" '
+             f'fill="none" stroke="{INK2}" stroke-width="1.5"/>')
+    p.append(f'<text x="{lx+17}" y="{y0-22}" font-size="11.5" fill="{INK2}">'
+             f'correct (model\u2019s colour)</text>')
+    lx += 152
+    for label in order:
+        dash = (' stroke="#b0afaa" stroke-dasharray="2 2"'
+                if label in UNSCORED else '')
+        p.append(f'<rect x="{lx}" y="{y0-32}" width="11" height="11" rx="2.5" '
+                 f'fill="{OUTCOME[label]}"{dash}/>')
+        p.append(f'<text x="{lx+17}" y="{y0-22}" font-size="11.5" fill="{INK2}">'
+                 f'{esc(label)}</text>')
+        lx += 22 + 6.6*len(label)
+
+    for i, b in enumerate(backends):
+        y = y0 + i*rowh
+        p.append(f'<text x="{left-14}" y="{y+barh/2+5:.0f}" font-size="12.5" '
+                 f'font-weight="600" text-anchor="end" fill="{INK}">'
+                 f'{esc(SHORT[b])}</text>')
+        x = left
+        for label in ["correct"] + order:
+            v = counts[b][label]
+            if not v:
+                continue
+            seg = v/total*plot_w - gap
+            fill = SERIES[b] if label == "correct" else OUTCOME[label]
+            extra = (' stroke="#b0afaa" stroke-dasharray="3 3" stroke-width="1"'
+                     if label in UNSCORED else '')
+            p.append(f'<rect x="{x:.1f}" y="{y}" width="{seg:.1f}" height="{barh}" '
+                     f'rx="4" fill="{fill}"{extra}><title>{esc(SHORT[b])}: {v} of '
+                     f'{total} sessions \u2014 {esc(label)}</title></rect>')
+            # Direct label inside the segment where it fits, under it where it
+            # does not. A count on every segment is what makes the grey ramp
+            # legible without reading the legend.
+            tone = "#ffffff" if label == "correct" else (INK2 if label in UNSCORED else INK)
+            if seg > 26:
+                p.append(f'<text x="{x+seg/2:.1f}" y="{y+barh/2+5:.0f}" font-size="12" '
+                         f'font-weight="600" text-anchor="middle" fill="{tone}">{v}</text>')
+            else:
+                p.append(f'<text x="{x+seg/2:.1f}" y="{y+barh+13:.0f}" font-size="11" '
+                         f'text-anchor="middle" fill="{INK2}">{v}</text>')
+            x += seg + gap
+        scored = total - sum(counts[b][k] for k in UNSCORED)
+        pct = counts[b]["correct"]/scored*100
+        p.append(f'<text x="{left+plot_w+14}" y="{y+barh/2:.0f}" font-size="17" '
+                 f'font-weight="700" fill="{INK}">{pct:.0f}%</text>')
+        p.append(f'<text x="{left+plot_w+14}" y="{y+barh/2+15:.0f}" font-size="10.5" '
+                 f'fill="{MUTED}">of {scored} scored</text>')
+
+    base = y0 + len(backends)*rowh + 14
+    p.append(f'<text x="20" y="{base}" font-size="11" fill="{MUTED}">'
+             f'Correct means it answered and failed no hard check. The dashed '
+             f'segments never produced an answer at all and are</text>')
+    p.append(f'<text x="20" y="{base+15}" font-size="11" fill="{MUTED}">'
+             f'left out of the percentage \u2014 an outage and an exhausted turn cap '
+             f'are not wrong answers \u2014 so the denominators differ.</text>')
+    return svg(w, h, "".join(p), "How often each model reaches a correct answer",
+               "One stacked bar per model over 48 attempts, split into correct, "
+               "wrong answer, said nothing, ran out of turns, and harness error.")
+
+write("outcomes", fig_outcomes())
 
 # ---------------------------------------------------------------- figure 1
 # Form: a matrix. The data is one bounded count per (task, model) cell and the
@@ -206,55 +329,206 @@ def fig_failures():
 
 write("failure-modes", fig_failures())
 
-# ------------------------------------------------------------ figures 3 & 4
-# Form: bars. One measure, one axis. Speed and cost are two prices for the same
-# answer and get a chart each -- putting them on shared axes would be the
-# dual-axis mistake, and normalising them into one score would hide that only
-# correctness has a baseline.
-def fig_cost(key, title, subtitle, fmt, note, filename):
-    rows = [(b, REPORT["matrix"][b][key]) for b in backends
-            if REPORT["matrix"].get(b, {}).get(key)]
-    rows.sort(key=lambda r: r[1])
-    top = max(v for _, v in rows)
-    left, y0, rowh, barh = 190, 84, 46, 26
-    plot_w = 400
-    import textwrap
-    note_lines = textwrap.wrap(note, 96)
-    w = left + plot_w + 130
-    h = y0 + len(rows)*rowh + 26 + 15*len(note_lines)
-    p = [f'<text x="20" y="30" font-size="15" font-weight="700" fill="{INK}">'
-         f'{esc(title)}</text>',
-         f'<text x="20" y="50" font-size="12" fill="{INK2}">{esc(subtitle)}</text>']
-    for i, (b, v) in enumerate(rows):
+# ---------------------------------------------------------------- figure 3
+# Form: small multiples -- three panels, one measure each, models in the same
+# order in every panel. This is the shape of the result, so it is the shape of
+# the figure: three boards that are never blended, because only correctness has
+# a baseline. A second and a token do not, so those two are rankings among these
+# backends and nothing more.
+#
+# Three panels rather than one chart with three bars per model, because the
+# measures share no scale. Putting a percentage, a duration and a token count on
+# one axis is the dual-axis mistake wearing a disguise; normalising them into a
+# composite would hide that two of the three have no zero to be measured from.
+#
+# The point the figure exists to make is the rank flip. Model order is fixed
+# down every panel and each bar carries its standing, so "first here, last
+# there" is visible without reading a number.
+#: ``full`` is the axis maximum, or ``None`` to scale the panel to its own
+#: largest bar. Correctness pins it to 1.0 **because it is the one measure with
+#: a baseline**: 86% drawn as a full-width bar would read as a perfect score,
+#: and the whole reason the three boards are kept apart is that this one means
+#: something on its own. Speed and cost have no ceiling to draw, so they scale
+#: to the field -- which is exactly what "a standing among these backends" is.
+BOARDS = [
+    ("Correctness", "share of scored sessions", "higher is better",
+     lambda m: m["pass_rate"], lambda v: f"{v*100:.0f}%", True, 1.0),
+    ("Speed", "seconds to an answer", "lower is better",
+     lambda m: m["seconds_per_answer"], lambda v: f"{v:,.0f}s", False, None),
+    ("Cost", "tokens to an answer", "lower is better",
+     lambda m: m["tokens_per_answer"], lambda v: f"{v/1000:,.0f}k", False, None),
+]
+
+
+def fig_boards():
+    left, y0, panel_w, panel_gap = 150, 128, 236, 34
+    rowh, barh = 58, 28
+    w = left + len(BOARDS)*panel_w + (len(BOARDS)-1)*panel_gap + 24
+    h = y0 + len(backends)*rowh + 92
+    p = [f'<text x="20" y="32" font-size="16" font-weight="700" fill="{INK}">'
+         f'Three measurements, three boards \u2014 and no overall winner</text>',
+         f'<text x="20" y="53" font-size="12.5" fill="{INK2}">'
+         f'Each model is first on one board and last on another. The '
+         f'disagreement is the result, not a tie to break.</text>']
+
+    for i, b in enumerate(backends):
         y = y0 + i*rowh
-        p.append(f'<text x="{left-12}" y="{y+barh-8}" font-size="12" '
-                 f'text-anchor="end" fill="{INK}">{esc(SHORT[b])}</text>')
-        bw = v/top*plot_w
-        p.append(f'<rect x="{left}" y="{y}" width="{bw:.1f}" height="{barh}" rx="4" '
-                 f'fill="{SERIES[b]}"><title>{esc(SHORT[b])}: {fmt(v)}</title></rect>')
-        p.append(f'<text x="{left+bw+9:.1f}" y="{y+barh-8}" font-size="12" '
-                 f'font-weight="600" fill="{INK}">{esc(fmt(v))}</text>')
-        if i:
-            ratio = v / rows[0][1]
-            p.append(f'<text x="{left+bw+9:.1f}" y="{y+barh+7}" font-size="10.5" '
-                     f'fill="{MUTED}">{ratio:.1f}x the best</text>')
-    base = y0 + len(rows)*rowh + 20
-    for k, line in enumerate(note_lines):
-        p.append(f'<text x="20" y="{base + k*15}" font-size="11" '
-                 f'fill="{MUTED}">{esc(line)}</text>')
-    write(filename, svg(w, h, "".join(p), title, subtitle + " " + note))
+        p.append(f'<text x="{left-16}" y="{y+barh/2+5:.0f}" font-size="12.5" '
+                 f'font-weight="600" text-anchor="end" fill="{INK}">'
+                 f'{esc(SHORT[b])}</text>')
 
-fig_cost("seconds_per_answer", "Seconds to a correct answer",
-         "First attempt at each task. Lower is better.",
-         lambda v: f"{v:,.0f}s",
-         "A repeat of the same task reuses the provider's prefix cache, so only "
-         "first attempts are counted. Hosted API against a local daemon: this "
-         "measures where a model runs as much as the model.",
-         "speed")
+    for j, (name, measure, sense, get, fmt, higher, full) in enumerate(BOARDS):
+        px = left + j*(panel_w + panel_gap)
+        values = {b: get(REPORT["matrix"][b]) for b in backends}
+        top = full or max(values.values())
+        ranking = sorted(backends, key=lambda b: -values[b] if higher else values[b])
 
-fig_cost("tokens_per_answer", "Tokens to a correct answer",
-         "Input plus output, on sessions that reached a passing answer. Lower is better.",
-         lambda v: f"{v:,.0f}",
-         "Tokens spent on sessions that never reached an answer are excluded here "
-         "and reported separately.",
-         "cost")
+        p.append(f'<text x="{px}" y="{y0-46}" font-size="13" font-weight="700" '
+                 f'fill="{INK}">{esc(name)}</text>')
+        p.append(f'<text x="{px}" y="{y0-30}" font-size="11" fill="{INK2}">'
+                 f'{esc(measure)}</text>')
+        # A longer bar is better in one panel and worse in two, which is the
+        # honest drawing -- length is the value -- and also the one thing a
+        # reader can get backwards at a glance. So the sense carries an arrow
+        # and sits in ink, not in the muted note tone.
+        arrow = "\u25b2" if higher else "\u25bc"
+        p.append(f'<text x="{px}" y="{y0-16}" font-size="11" font-weight="600" '
+                 f'fill="{INK2}">{arrow} {esc(sense)}</text>')
+        if full:
+            # The ceiling, drawn as an axis rule: without it a panel scaled to
+            # its own maximum says the leader is perfect.
+            fx = px + panel_w - 96
+            p.append(f'<line x1="{fx}" y1="{y0-6}" x2="{fx}" '
+                     f'y2="{y0+(len(backends)-1)*rowh+barh+4}" stroke="{GRID}" '
+                     f'stroke-width="1" stroke-dasharray="3 3"/>')
+            p.append(f'<text x="{fx}" y="{y0+(len(backends)-1)*rowh+barh+18}" '
+                     f'font-size="10" text-anchor="middle" fill="{MUTED}">100%</text>')
+        p.append(f'<line x1="{px}" y1="{y0-8}" x2="{px+panel_w-20}" y2="{y0-8}" '
+                 f'stroke="{GRID}" stroke-width="1"/>')
+
+        for i, b in enumerate(backends):
+            y = y0 + i*rowh
+            v = values[b]
+            bw = max(3.0, v/top*(panel_w-96))
+            place = ranking.index(b) + 1
+            p.append(f'<rect x="{px}" y="{y}" width="{bw:.1f}" height="{barh}" '
+                     f'rx="4" fill="{SERIES[b]}"><title>{esc(SHORT[b])} \u2014 '
+                     f'{esc(name)}: {esc(fmt(v))}, {place} of {len(backends)}'
+                     f'</title></rect>')
+            p.append(f'<text x="{px+bw+9:.1f}" y="{y+barh/2+5:.0f}" font-size="12.5" '
+                     f'font-weight="700" fill="{INK}">{esc(fmt(v))}</text>')
+            # The standing, as a word rather than a colour: this is what the
+            # figure is for, and it has to survive greyscale.
+            chip = {1: "best", 2: "2nd", 3: "3rd"}[place]
+            weight = "700" if place == 1 else "400"
+            p.append(f'<text x="{px+bw+9:.1f}" y="{y+barh/2+19:.0f}" font-size="10.5" '
+                     f'font-weight="{weight}" fill="{INK2 if place == 1 else MUTED}">'
+                     f'{chip}</text>')
+
+    base = y0 + len(backends)*rowh + 26
+    for k, line in enumerate([
+        "Only correctness has a baseline: 100% means every question answered, whoever else was measured. "
+        "There is no",
+        "perfectly fast and no free token, so speed and cost are standings among these three backends and "
+        "move if a fourth",
+        "is added. Speed counts first attempts only \u2014 a repeat reuses the provider\u2019s prefix cache. Both "
+        "count only sessions",
+        "that reached a correct answer; tokens spent without one are reported separately.",
+    ]):
+        p.append(f'<text x="20" y="{base + k*15}" font-size="11" fill="{MUTED}">'
+                 f'{line}</text>')
+    return svg(w, h, "".join(p), "Three boards: correctness, speed and cost",
+               "Small multiples. Each model is ranked first on one measure and "
+               "last on another, so no single ordering of the three exists.")
+
+
+write("three-boards", fig_boards())
+
+
+# ---------------------------------------------------------------- figure 4
+# Form: a sorted bar, one per task. Not a model comparison at all -- it is the
+# shape of the *corpus*, and it is here so a reader does not read 86% as a
+# property of a model when it is partly a property of what was asked.
+#
+# No colour judgement: every bar is one hue and the reading ("nobody is
+# separated by these four", "this one defeats everybody") is carried by text.
+# Encoding that verdict in a hue would bake an opinion about the corpus into
+# the palette, where it could not be argued with.
+def fig_difficulty():
+    total = collections.Counter()
+    runs = collections.Counter()
+    for row in REPORT["per_task"]:
+        runs[row["task_id"]] += 1
+        if row["passed"]:
+            total[row["task_id"]] += 1
+    order = sorted(runs, key=lambda t: (-total[t], t))
+    n = max(runs.values())
+
+    left, y0, rowh, barh = 292, 96, 26, 17
+    plot_w = 300
+    w, h = left + plot_w + 210, y0 + len(order)*rowh + 74
+    p = [f'<text x="20" y="32" font-size="16" font-weight="700" fill="{INK}">'
+         f'What the 16 tasks actually separate</text>',
+         f'<text x="20" y="53" font-size="12.5" fill="{INK2}">'
+         f'Correct sessions per task, all three models pooled \u2014 out of 9 '
+         f'(3 models \u00d7 3 repeats).</text>']
+    for k in range(0, n+1, 3):
+        x = left + k/n*plot_w
+        p.append(f'<line x1="{x:.1f}" y1="{y0-10}" x2="{x:.1f}" '
+                 f'y2="{y0+len(order)*rowh-6}" stroke="{GRID}" stroke-width="1"/>')
+        p.append(f'<text x="{x:.1f}" y="{y0-16}" font-size="10.5" '
+                 f'text-anchor="middle" fill="{MUTED}">{k}</text>')
+
+    for i, t in enumerate(order):
+        y = y0 + i*rowh
+        p.append(f'<text x="{left-12}" y="{y+barh-4}" font-size="11.5" '
+                 f'text-anchor="end" fill="{INK}">{esc(t)}</text>')
+        bw = total[t]/n*plot_w
+        if bw:
+            p.append(f'<rect x="{left}" y="{y}" width="{bw:.1f}" height="{barh}" '
+                     f'rx="4" fill="{RAMP[3]}"><title>{esc(t)}: {total[t]} of '
+                     f'{runs[t]} sessions correct</title></rect>')
+            p.append(f'<text x="{left+bw+8:.1f}" y="{y+barh-4}" font-size="11" '
+                     f'fill="{INK2}">{total[t]}</text>')
+        else:
+            p.append(f'<text x="{left+4}" y="{y+barh-4}" font-size="11" '
+                     f'font-weight="700" fill="{INK}">0</text>')
+
+    # Brackets, drawn where the groups actually fall rather than at fixed rows.
+    def bracket(first, last, label, detail):
+        x = left + plot_w + 26
+        y1, y2 = y0 + first*rowh - 2, y0 + last*rowh + barh + 2
+        p.append(f'<path d="M{x} {y1} h7 V{y2} h-7" fill="none" stroke="{GRID}" '
+                 f'stroke-width="1.5"/>')
+        mid = (y1 + y2)/2
+        p.append(f'<text x="{x+13}" y="{mid-1}" font-size="11.5" '
+                 f'font-weight="600" fill="{INK}">{esc(label)}</text>')
+        p.append(f'<text x="{x+13}" y="{mid+13}" font-size="10.5" fill="{MUTED}">'
+                 f'{esc(detail)}</text>')
+
+    perfect = [t for t in order if total[t] == runs[t]]
+    zero = [t for t in order if total[t] == 0]
+    if perfect:
+        bracket(0, len(perfect)-1, f"{len(perfect)} separate nobody",
+                "every model, every repeat")
+    if zero:
+        bracket(len(order)-len(zero), len(order)-1,
+                f"{len(zero)} defeats everybody", "no model, any repeat")
+    middle = len(order) - len(perfect) - len(zero)
+    if middle:
+        bracket(len(perfect), len(order)-len(zero)-1,
+                f"{middle} do the separating", "this is the measurement")
+
+    base = y0 + len(order)*rowh + 30
+    p.append(f'<text x="20" y="{base}" font-size="11" fill="{MUTED}">'
+             f'These are hand-picked probes of documented failure modes, not a '
+             f'sample of everyday tool calls, so a rate over them is</text>')
+    p.append(f'<text x="20" y="{base+15}" font-size="11" fill="{MUTED}">'
+             f'not a rate over those. The four at the top still measure real '
+             f'behaviours \u2014 they just do not tell these three models apart.</text>')
+    return svg(w, h, "".join(p), "What the 16 tasks separate",
+               "Tasks sorted by how many of the 9 pooled sessions were correct: "
+               "four are passed by every model, one by none, eleven discriminate.")
+
+
+write("task-difficulty", fig_difficulty())

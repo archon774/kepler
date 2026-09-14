@@ -21,6 +21,32 @@ are model results, not harness failures, and they are counted wrong. See
 
 ---
 
+## At a glance
+
+![How often each model reaches a correct answer](figures/outcomes.png)
+
+`claude-sonnet-5` reaches a correct answer on 86% of its scored sessions and
+`qwen3.8:27b-mlx` on 77%. `qwen3.5:9b` manages 53%, and **the way it fails is
+not being wrong — it is saying nothing**: on 15 of its 48 attempts it called
+the tools competently and then ended its turn without writing an answer at all.
+Look at the grey in its bar; almost none of it is a wrong answer.
+
+The denominators differ on purpose. A session that hit an API error or ran out
+of turns never produced an answer to be right or wrong about, so it is drawn
+(dashed) but left out of the percentage.
+
+![Three boards: correctness, speed and cost](figures/three-boards.png)
+
+**Each model is first on one board and last on another**, so there is no order
+over the three that survives all three measurements. That is the result. Only
+correctness has a baseline — 100% means every question answered, and it means
+that whoever else was measured — so it is the only one drawn against a fixed
+axis. There is no perfectly fast and no free token, so speed and cost are
+standings among these three backends and would move if a fourth were added.
+They are never blended into one number.
+
+---
+
 ## Per task
 
 ![Correct answers per task per model](figures/per-task-matrix.png)
@@ -54,6 +80,28 @@ those 38 marks comes from `fieldcal-offline-solve` and `pulsar-scan-inventory`
 (plus a single sonnet session on `pulsar-fallback-disclosure`), and a skipped
 call usually breaks the declared order too, so one skip scores twice. Read the
 column as *these three models skip the same two calls*, not as a rate.
+
+---
+
+## What the corpus separates
+
+![What the 16 tasks actually separate](figures/task-difficulty.png)
+
+**Eleven of the sixteen tasks do the separating.** Four are passed by every
+model on every repeat and one is failed by every model on every repeat, which
+between them account for a third of the corpus and none of the discrimination.
+
+That is the figure to hold in mind before reading any percentage above. These
+are hand-picked probes of documented failure modes, not a sample of everyday
+tool calls, so a rate over them is not a rate over those — and shifting the mix
+of easy and hard probes would move every number on the correctness board
+without any model changing.
+
+The four at the top are not dead weight: `ned-formal-designation` is where the
+fabricated attributions live (below), and a task can measure a real behaviour
+while telling these particular three models apart not at all. Retiring them
+because *these* backends pass them would fit the corpus to these backends and
+leave no trace, so they stay.
 
 ---
 
@@ -200,14 +248,13 @@ above, shared exactly.
 
 ## Time and tokens
 
-![Seconds to a correct answer](figures/speed.png)
-
-![Tokens to a correct answer](figures/cost.png)
+The numbers are on the [three boards](#at-a-glance) above; what they need is
+the fine print.
 
 **The local 9B is marginally faster to an answer than the hosted frontier
 model** (38s against 40s) and 2.4× cheaper in tokens — but it reaches a correct
-answer on 53% of sessions against sonnet's 86%, so the two boards are measuring
-very different things and only the correctness one has a baseline.
+answer on 53% of sessions against sonnet's 86%. Cheap answers are only cheap if
+they are answers, which is why the boards are never blended.
 `qwen3.8:27b-mlx` is 3.4× slower than either, which is what it costs to be the
 backend with the fewest tasks it cannot do.
 
@@ -216,13 +263,14 @@ prefix cache: six tasks did byte-identical work across their repeats — same
 turns, same calls, same input tokens — and still ran a median 1.33× and up to
 2.43× slower on the first. A caller asks each question once.
 
-Tokens spent without reaching an answer are excluded above and reported
-separately: `qwen3.8` 1.6M, `qwen3.5` 2.8M, `sonnet` 3.0M. Most of `qwen3.5`'s
-went on sessions that called tools competently and then said nothing.
+Tokens spent without reaching an answer are excluded from the board and
+reported separately: `qwen3.8` 1.6M, `qwen3.5` 2.8M, `sonnet` 3.0M. Most of
+`qwen3.5`'s went on sessions that called tools competently and then said
+nothing.
 
-Speed and cost are **relative** measures. Only correctness has a baseline —
-there is no "perfectly fast" — so these are rankings among these three
-backends and move if a fourth is added. They are never blended into one score.
+One more caveat the board cannot carry: **one of these backends is a hosted API
+and two are a local daemon on this host.** The speed board measures where a
+model runs at least as much as it measures the model.
 
 ---
 
@@ -435,3 +483,8 @@ uv run python docs/working/figures/make.py
 The SVG is piped straight to `rsvg-convert` and never written out, so there is
 no intermediate on disk to drift from the PNG beside it. Rendered at 2x for a
 high-density display.
+
+Every hue in these figures means one model and nothing else. The outcome ramp
+is therefore greys rather than a second set of hues — monotonic in OKLab
+lightness, so it survives greyscale and colour blindness — and every segment,
+bar and standing is direct-labelled, so no reading depends on colour alone.
