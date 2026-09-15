@@ -226,7 +226,12 @@ def solve(
 
 
     if obs_xy_match.size == 0:
-        return _miss("no_sources", start=start, n_extracted=n_sources)
+        return _miss(
+            "no_sources",
+            start=start,
+            n_extracted=n_sources,
+            n_catalog=int(len(cat_xy)),
+        )
 
 
     rng = np.random.default_rng(0)

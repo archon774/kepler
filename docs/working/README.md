@@ -53,7 +53,7 @@ and deleting both working documents should wait for a second dialect.
 ## Start here
 
 **[optical-tools.md](optical-tools.md), the approved closure rollout (phases
-P8–P9 remaining, both asset-gated).**
+P7–P8 remaining).**
 
 The stateless optical boundary and its TUI prerequisite have merged. P1 landed
 as PR #57, P2/P3 together as PR #59, P4 as PR #60, P5 as PR #62, P6 as PR #63
@@ -67,12 +67,11 @@ constraints.
 
 1. **The model port can proceed now**, independently. Its phases -1 to 3 build
    `tools/llm/` and the headless engine in `tools/agent/`.
-2. **Optical P8–P9 close the last two evidence gaps.** P1 (pulsar periods),
+2. **Optical P7–P8 close the remaining broken links.** P1 (pulsar periods),
    P2/P3 (archive loop and documentation reconciliation), P4 (variable-star
-   port), P5 (HR-diagram local grid), P6 (WCS controls) and P7 (APASS
-   selection replay) have landed. P8 (B-frame evidence) and P9 (ATLAS
-   validation) are independent of each other and each starts when its asset
-   is supplied.
+   port), P5 (local-grid HR diagram), P6 (WCS controls), and P9 (ATLAS
+   validation) have landed. P7 (APASS replay) and P8 (B-frame evidence) remain
+   independent at the code level.
 3. **The TUI stateless prerequisite is satisfied.** TUI phase A remains owned
    by the model document; TUI phase C may proceed once its model prerequisites
    are complete.

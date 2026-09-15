@@ -18,6 +18,8 @@ wide-field index set. So ``solve_wcs`` is exercised only behind the
 from __future__ import annotations
 
 import math
+import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -571,6 +573,71 @@ def test_unparseable_keywords_return_none():
 # ---------------------------------------------------------------------------
 # The solve itself — opt-in
 # ---------------------------------------------------------------------------
+
+
+def _atlas_operator_settings_or_skip():
+    """Validate and load the operator-owned ATLAS configuration for P9."""
+    from algorithms.wcs.config import SolverSettings
+    from tools.wcs import _atlas_catalog_problem
+
+    catalog_root = os.environ.get("ATLAS_CATALOG_ROOT")
+    catalog = (os.environ.get("ATLAS_CATALOG") or "ucac5").strip().lower()
+    if not catalog_root:
+        pytest.skip(
+            "set ATLAS_CATALOG_ROOT to a UCAC4/UCAC5 tree and "
+            "ATLAS_CATALOG to ucac4 or ucac5"
+        )
+
+    root = Path(catalog_root)
+    settings = SolverSettings(atlas_catalog_root=root, atlas_catalog=catalog)
+    problem = _atlas_catalog_problem(settings)
+    if problem is not None:
+        pytest.skip(
+            f"ATLAS preflight failed: {problem}. Set ATLAS_CATALOG_ROOT to the "
+            "documented UCAC4/UCAC5 layout."
+        )
+    return settings
+
+
+@pytest.mark.solver_data
+def test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window(
+    frame_header_copy, tmp_path
+):
+    """P9: exercise the real ATLAS lookup without claiming a blind solve.
+
+    A zero-source M15 image makes the public solver's ATLAS fallback return its
+    normalized ``no_sources`` diagnostic after catalog lookup. That keeps this
+    operator-only check bounded while proving that the configured UCAC tree,
+    M15 pointing, and explicit 0.58--0.59 arcsec/pixel window all reach ATLAS.
+    """
+    from algorithms.wcs.config import WcsSearchBounds
+    from algorithms.wcs.wcs import solve_wcs
+
+    atlas_settings = _atlas_operator_settings_or_skip()
+    header = frame_header_copy("m15_open")
+    attempts: list[str] = []
+    result = solve_wcs(
+        header,
+        np.zeros((1027, 1056), dtype=np.float32),
+        tmp_path,
+        solver_settings=atlas_settings,
+        search_bounds=WcsSearchBounds(
+            radius_deg=1.0,
+            min_scale_arcsec=0.58,
+            max_scale_arcsec=0.59,
+        ),
+        solver_attempts=attempts,
+    )
+
+    assert attempts == ["atlas"]
+    assert result.wcs is None
+    assert result.metadata.search_atlas_min_scale_arcsec == 0.58
+    assert result.metadata.search_atlas_max_scale_arcsec == 0.59
+    assert result.metadata.atlas_source_count == 0
+    assert result.metadata.atlas_catalog_count > 0
+    assert result.metadata.atlas_failure_reason == "no_sources"
+    assert result.metadata.atlas_accepted is False
+
 
 @pytest.mark.solver_data
 def test_blind_solve_recovers_the_known_plate_solution(frame_image, anet_available, tmp_path):

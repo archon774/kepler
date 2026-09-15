@@ -320,7 +320,7 @@ is still needed elsewhere, so treat it as required.
 |---|---|
 | `solve-field` binary (astrometry.net) | the anet backend. Resolved via explicit config → `SKYLIB_ASTROMETRYNET_SOLVE_FIELD` / `SKYLIB_ANET_SOLVE_FIELD` → `PATH`. Absent ⇒ `is_available()` is `False` and the solve falls through to ATLAS. |
 | astrometry.net index files | `ANET_INDEX_PATH`, or `SKYLIB_ASTROMETRYNET_INDEX_PATH` / `SKYLIB_ANET_INDEX_ROOT`. Recognized layouts: `index-*.fits`, `<prefix>-index-*.fits` (UCAC5), suffixless `index-NNN` (TYCHO2). |
-| UCAC4 or UCAC5 catalog on local disk | the ATLAS backend. `ATLAS_CATALOG_ROOT` (or `SKYLIB_UCAC5_ROOT`). UCAC5 accepts either the `u5z` zone directory or its parent; `build_atlas_config` normalizes a path ending in `u5z` to its parent. |
+| UCAC4 or UCAC5 catalog on local disk | the ATLAS backend. Set `ATLAS_CATALOG_ROOT` and `ATLAS_CATALOG` (`ucac4` or `ucac5`; default `ucac5`). UCAC5 accepts either the `u5z` zone directory or its parent; `build_atlas_config` normalizes a path ending in `u5z` to its parent. UCAC4 expects `Z000.UC4` through `Z179.UC4` at its root. This is an operator-owned, multi-gigabyte dependency: the supplied UCAC5 tree is 5.3 GB, while a complete native UCAC4 tree is approximately 8.5 GB; neither is vendored. |
 | `ngc2000.dat` | bundled at `skylib/astrometry/anet/ngc2000.dat`; drives globular-cluster core masking in `solve_field_glob`. Loaded by path relative to `engine.py`, so it must stay beside it. |
 
 Both backends degrade to "unavailable" rather than failing, so the package
@@ -406,8 +406,17 @@ data installed.
   ~14 s: CRVAL (322.481, 12.195), 0.594 arcsec/px against the header's
   `SECPIX` 0.586, parity accepted; the unbounded default reached the same
   solution in ~285 s. `solve_field_glob` then re-solved with the cluster core
-  masked, at its own field-sized radius around that solution. The ATLAS
-  backend remains unexercised (P9).
+  masked, at its own field-sized radius around that solution.
+- *Addendum, 2026-09-13 (P9):* ATLAS now has an opt-in, no-network validation
+  route in
+  `tests/test_wcs_solution.py::test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window`.
+  With `ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5` and
+  `ATLAS_CATALOG=ucac5`, it builds the real reader, queries the M15 footprint
+  and records the real blind-attempt diagnostics for the explicit
+  0.58--0.59 arcsec/px window. Its deliberately empty image returns the
+  expected `no_sources` outcome after a non-empty lookup, so the check validates
+  dependency loading and search configuration without claiming blind-triangle
+  convergence; the tool retains astrometry.net as the blind solving route.
 
 ## Photometry
 
