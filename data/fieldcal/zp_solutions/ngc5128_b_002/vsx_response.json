@@ -1,0 +1,135 @@
+{
+ "fixture": "vizier_response",
+ "format_version": 1,
+ "field": "ngc5128_b_002",
+ "frame": "ngc5128_galaxy_b_001.fits",
+ "catalog": "VSX",
+ "vizier_catalog": "B/vsx",
+ "vizier_table": "B/vsx/vsx",
+ "vizier_table_description": "Variable Star indeX, Version 2026-08-09 (\\originalcolumnnames)",
+ "provenance": {
+  "server": "vizier.cds.unistra.fr",
+  "retrieved_utc": "2026-09-13T07:10:19+00:00",
+  "retrieved_with": "astroquery 0.4.11 / astropy 8.0.1 / numpy 2.4.6 -- Vizier.query_region built by algorithms.query.vizier.VizierCatalog._vizier(), i.e. the same column request the live tool path sends",
+  "requested_columns": [
+   "RAJ2000",
+   "DEJ2000",
+   "OID",
+   "Name",
+   "V",
+   "Type",
+   "max",
+   "n_max",
+   "f_min",
+   "min",
+   "Period"
+  ],
+  "row_limit": 5000,
+  "rows_returned": 12,
+  "truncated": false,
+  "catalog_release": "AAVSO International Variable Star Index (VSX), VizieR B/vsx/vsx, version 2026-08-09",
+  "reference": "Watson, C., Henden, A. A., Price, A. 2006, Society for Astronomical Sciences Annual Symposium 25, 47 (2006SASS...25...47W); VizieR On-line Data Catalog B/vsx",
+  "licence": "Public catalogue data redistributed by CDS/VizieR; acknowledge VSX (AAVSO) and VizieR as for the APASS response. VSX is a living catalogue -- this is the 2026-08-09 VizieR version, and a later retrieval may list more variables in the field.",
+  "sort_requested": null,
+  "row_order": "As returned (RA ascending).",
+  "why_recorded": "perform_field_calibration drops every catalog row within variable_check_tol (5 arcsec, the recorded run's default) of a VSX variable BEFORE matching. Gaia DR3 6088704247666049024 (row 3, a YSO) sits 0.91 arcsec from the APASS row that would otherwise match detection SRC467, and the recorded run matched 35 sources, not 36. Without these rows the replay cannot reproduce the recorded selection.",
+  "null_values": "A JSON null is a VizieR masked (numeric) cell. String cells are never null: VizieR returns a blank string field as an empty string, not a masked one, and the VSX plugin's table_to_sources hashes n_max, so a masked string there would raise. RAJ2000/DEJ2000 are float32 in this table."
+ },
+ "query": {
+  "shape": "cone",
+  "ra_hours": 13.42413224816283,
+  "dec_degs": -43.018409934383605,
+  "ra_deg": 201.36198372244243,
+  "radius_arcmin": 10.0,
+  "frame": "fk5",
+  "cache": false,
+  "centre": "boxes_from_wcs(build_wcs_from_header(<ngc5128_galaxy_b_001.fits header>)) -- the centre of the WCS footprint box the live tool path queries",
+  "footprint_box_arcmin": {
+   "width": 11.180511186032618,
+   "height": 10.897609163253241
+  },
+  "why_a_cone": "The live path (algorithms.query.runner.query_catalogs, WCS mode) issues a box query over the footprint above and clips to the detector. A 10-arcmin cone (half-diagonal of the box is 7.8 arcmin) is a strict superset of that box, so a replay can reproduce the box, the clipping and the matching from this one response without depending on which WCS -- the frame's header or upstream's TAN fit -- defines the footprint."
+ },
+ "columns": [
+  {
+   "name": "RAJ2000",
+   "dtype": "float32",
+   "unit": "deg",
+   "description": "[0.0/360.0] Right ascension (J2000)"
+  },
+  {
+   "name": "DEJ2000",
+   "dtype": "float32",
+   "unit": "deg",
+   "description": "[-89.93/89.91] Declination (J2000)"
+  },
+  {
+   "name": "OID",
+   "dtype": "int32",
+   "unit": null,
+   "description": "Internal identifier, can be used to link out to the VSX database (1)"
+  },
+  {
+   "name": "Name",
+   "dtype": "<U28",
+   "unit": null,
+   "description": "Variable star identifier"
+  },
+  {
+   "name": "V",
+   "dtype": "uint8",
+   "unit": null,
+   "description": "Variability flag (2) (VarFlag)"
+  },
+  {
+   "name": "Type",
+   "dtype": "<U15",
+   "unit": null,
+   "description": "? Variability type, ariability type, as in GCVS catalog Variability type (see details of VSX type list)"
+  },
+  {
+   "name": "max",
+   "dtype": "float64",
+   "unit": "mag",
+   "description": "[-6.0/25.2]? Magnitude at maximum, or amplitude (MagMax)"
+  },
+  {
+   "name": "n_max",
+   "dtype": "<U2",
+   "unit": null,
+   "description": "? Passband on max magnitude (4) (MaxPassband)"
+  },
+  {
+   "name": "f_min",
+   "dtype": "<U1",
+   "unit": null,
+   "description": "? Flag to indicate an amplitude (MinIsAmplitude)"
+  },
+  {
+   "name": "min",
+   "dtype": "float64",
+   "unit": "mag",
+   "description": "[-0.02/28.0]? Magnitude at minimum, or amplitude (MagMin)"
+  },
+  {
+   "name": "Period",
+   "dtype": "float64",
+   "unit": "d",
+   "description": "[0.0/27400.0]? Period of the variable in days"
+  }
+ ],
+ "rows": [
+  [201.25433349609375,-43.11206817626953,5115193,"Gaia DR3 6088698131632586496",0,"RS",14.87,"G","",14.93,null],
+  [201.26145935058594,-42.903568267822266,560785,"ASASSN-V J132502.75-425412.9",0,"SR",13.99,"V","",14.2,62.2],
+  [201.26646423339844,-42.9298210144043,8467452,"Gaia DR3 6088717647964175616",0,"S",16.27,"G","",16.67,null],
+  [201.28109741210938,-43.06925964355469,5115605,"Gaia DR3 6088704247666049024",0,"YSO",13.09,"G","",13.15,null],
+  [201.33099365234375,-43.11994171142578,5116358,"Gaia DR3 6088700777332435328",0,"DSCT|GDOR|SXPHE",13.0,"G","",13.04,null],
+  [201.35049438476562,-43.01607894897461,469736,"SN 2016adj",0,"SN IIb",15.2,"V","",28.0,null],
+  [201.3610382080078,-42.99686813354492,8858398,"Gaia DR3 6088704900493815808",0,"RRAB",19.44,"G","",19.76,0.89124],
+  [201.40213012695312,-43.03171920776367,234527,"SN 1986G",0,"SN Ia",12.5,"","",null,null],
+  [201.44375610351562,-43.160701751708984,5118038,"Gaia DR3 6088653051655814144",0,"RS",14.32,"G","",14.39,null],
+  [201.48056030273438,-43.129390716552734,5118637,"Gaia DR3 6088654563484324864",0,"ROT",13.43,"G","",13.45,null],
+  [201.5314178466797,-43.1192512512207,5119415,"Gaia DR3 6088654632204190464",0,"DSCT|GDOR|SXPHE",13.79,"G","",13.81,null],
+  [201.56124877929688,-42.98910903930664,179099,"GUVV-2 J132614.7-425920.8",0,"RRC",15.93,"CV","Y",0.37,0.437747]
+ ]
+}

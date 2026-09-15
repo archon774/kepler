@@ -25,6 +25,7 @@ from tools.fieldcal_reference import (
     compare_zeropoint_to_reference,
     list_zeropoint_references,
     load_zeropoint_reference,
+    replay_field_calibration,
 )
 from tools.hr_diagram import (
     crossmatch_gaia,
@@ -1407,6 +1408,32 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "replay_field_calibration",
+        "description": "Re-run a recorded field calibration end to end, catalog "
+        "selection included, with no network: the recorded detections and the "
+        "recorded full APASS response -- clipped to the frame as the live query "
+        "path clips it, with the VSX variables the run filtered out -- go "
+        "through perform_field_calibration, so the calibration stars are CHOSEN "
+        "here (for NGC 5128 B: 35 of the 45 candidates on the frame, from a "
+        "132-row cone) and the result reports cone/candidate/matched/"
+        "not-selected counts, each match with its reference magnitude, the "
+        "ABSOLUTE zero point, and whether the selection and the solve reproduce "
+        "what fit_summary.json recorded (they do, bit for bit). Only "
+        "ngc5128_b_002 has the recorded response and a bundled frame; other "
+        "fields return the errors that stop them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "description": "Recorded-solve name, e.g. 'ngc5128_b_002'. "
+                    "Call list_zeropoint_references to see them.",
+                }
+            },
+            "required": ["field"],
+        },
+    },
+    {
         "name": "compare_zeropoint_to_reference",
         "description": "Place a computed zero point against a recorded solve: "
         "report its offset from Skynet's and (for NGC 5128 B) Afterglow's "
@@ -1491,10 +1518,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "match, reference-magnitude resolution, calc_solution -- and place the "
         "result against the recorded ground truth. The zero point is ABSOLUTE "
         "(Afterglow's API reports 20.0 plus a correction instead). Without "
-        "`catalog_sources` this queries a reference catalog over the network, "
-        "like run_photometry_on_target(use_field_cal=true). Today only "
-        "ngc5128_galaxy_b_001.fits can be driven end to end offline, via "
-        "catalog_sources from the recorded solve.",
+        "`catalog_fixture` this queries a reference catalog over the network, "
+        "like run_photometry_on_target(use_field_cal=true); with it, the "
+        "recorded catalog rows for `compare_to` are used and no socket is "
+        "opened. Today only ngc5128_galaxy_b_001.fits (compare_to "
+        "'ngc5128_b_002') can be driven end to end offline.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1514,6 +1542,21 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "description": "A recorded-solve name (see "
                     "list_zeropoint_references) to compare the result against, "
                     "e.g. 'ngc5128_b_002'.",
+                },
+                "catalog_fixture": {
+                    "type": "string",
+                    "enum": ["selected_rows", "full_response"],
+                    "description": "Solve offline from the catalog rows recorded "
+                    "for the solve named by compare_to (required with this). "
+                    "'selected_rows': the 35 APASS rows Skynet actually matched "
+                    "-- the small bit-exact regression case; every row is known "
+                    "to match, so catalog selection is not exercised. "
+                    "'full_response': the end-to-end selection replay -- the "
+                    "recorded APASS response for the whole field (a 132-row "
+                    "cone), clipped to the frame as the live path clips it and "
+                    "with the recorded VSX variables filtered out, so the "
+                    "matches are chosen as a live solve chooses them. Neither "
+                    "opens a socket.",
                 },
             },
             "required": ["path"],
@@ -1574,6 +1617,7 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "describe_artifact": describe_artifact,
     "list_zeropoint_references": list_zeropoint_references,
     "load_zeropoint_reference": load_zeropoint_reference,
+    "replay_field_calibration": replay_field_calibration,
     "compare_zeropoint_to_reference": compare_zeropoint_to_reference,
     "calibrate_zeropoint": calibrate_zeropoint,
 }

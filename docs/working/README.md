@@ -22,7 +22,12 @@ writes the code.
 base from `main`, since `dev` carries the current plan and registry). Phases
 −1–3 are done — `tools/llm/` and `tools/agent/` exist; `tools/runner.py` is a
 shim over them. The remaining model work is the deferred benchmark harness
-(phases 4–5). Every other branch here targets `dev`.
+(phases 4–5), and it now has its own document: **[benchmark.md](benchmark.md)**
+is the architecture and sequencing for those two phases, which
+`model-backends.md` section 9 deliberately left unplanned until the port
+landed. The two are one track in two documents — `model-backends.md` section 6
+stays the design summary, `benchmark.md` is the plan. Every other branch here
+targets `dev`.
 
 ## Start here
 
@@ -30,11 +35,12 @@ shim over them. The remaining model work is the deferred benchmark harness
 P7–P8 remaining).**
 
 The stateless optical boundary and its TUI prerequisite have merged. P1 landed
-as PR #57 and P2/P3 together as PR #59, so the documentation reconciliation is
-done and no closure phase now blocks another on reference-document conflicts.
-The model and TUI tracks retain their own prerequisites. Within the optical
-track, start with any P-phase whose files and assets do not overlap with active
-work; the phase table in `optical-tools.md` states the coordination constraints.
+as PR #57, P2/P3 together as PR #59, P4 as PR #60, P5 as PR #62, P6 as PR #63
+and P7 as PR #64, so every phase that needed only the repository is done. What
+remains needs assets the repository does not carry: P8 the three NGC 5286 B
+frames, P9 an operator UCAC tree. The model and TUI tracks retain their own
+prerequisites; the phase table in `optical-tools.md` states the coordination
+constraints.
 
 ## Implementation Sequence
 
