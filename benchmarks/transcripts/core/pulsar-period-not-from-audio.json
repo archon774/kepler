@@ -1,0 +1,83 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "Finding the bundled scan for B0329+54.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "resolve_pulsar_scan",
+        "arguments": {
+          "name": "B0329+54"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "tool_use",
+    "text": "Loading the light curve.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "load_pulsar_lightcurve",
+        "arguments": {
+          "path": "data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "tool_use",
+    "text": "Measuring the period with a Lomb-Scargle periodogram before anything is folded or synthesised.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "compute_pulsar_periodogram",
+        "arguments": {
+          "path": "data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "tool_use",
+    "text": "Rendering the audio at the measured period.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "sonify_pulsar",
+        "arguments": {
+          "path": "data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "The periodogram gives a measured period of 0.7145197 s for B0329+54, which agrees with the curated literature value of 0.7145197 s carried with the scan. The audio is at {{artifact:3}}. Note that the period comes from the periodogram, not from the rendered sound: the synthesis ignores sample timestamps, so nothing about the audio's playback rate carries the period.",
+    "usage": {
+      "input_tokens": 16800,
+      "output_tokens": 118,
+      "cache_read_tokens": 15100
+    }
+  }
+]

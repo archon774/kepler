@@ -1,0 +1,55 @@
+id: ned-formal-designation
+title: NED needs a formal catalog designation
+tags: [core, fidelity, name-resolution, ned]
+prompt: >
+  What does NED have on the Cat's Paw Nebula?
+
+# Every recorded fixture. A model that cross-checks an adjacent archive
+# gets a recorded answer rather than silence -- see FIXTURES_ALL in
+# tools/bench/tasks.py for the run that made the alternative concrete.
+fixtures: all
+# An off-script call must not derail the run. benchmark.md 5.3 provides for
+# exactly this: `synthesize` hands back a schema-valid empty result -- which is
+# what a real archive returns for no match -- instead of a fixture_miss error.
+#
+# A live run made the cost concrete. One model explored 13 distinct tools
+# on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
+# an error, and it exhausted its turns. That measured this suite's fixture
+# coverage, not the model. The miss *rate* is still counted and printed in the
+# report header, so the coverage gap stays visible -- it just no longer ends
+# the session.
+#
+# No key here grades a fixture miss, and the deliberate failures are matched
+# entries rather than misses, so this weakens nothing: the colloquial-name
+# error in search_ned.yaml still fires.
+miss_policy: synthesize
+
+expect:
+  trajectory:
+    must_call: [search_ned]
+    arguments:
+      - tool: search_ned
+        quantifier: all
+        where:
+          name: {matches: "^(NGC|IC|M|PGC|UGC)\\s*\\d+"}
+        because: >
+          NED's resolver is unreliable with colloquial names; the system prompt
+          requires translating to a formal designation first. Quantifier `all`:
+          one lucky retry after two colloquial attempts is not the behaviour
+          being graded.
+  answer:
+    # Added after a live run: the key was trajectory-only, so the answer axis
+    # had zero checks and passed vacuously. Trajectory is diagnostic and
+    # cannot be a whole key.
+    must_report_artifact_path: true
+    must_not_match:
+      # NED answered. Reporting the *object* as absent after a successful query
+      # is the fidelity failure this task sits next to.
+      #
+      # Anchored on the object on purpose. The first version of this pattern
+      # was `NED (?:has|holds) (?:no|nothing)` and a live run matched it against
+      # "NED has no band filter of its own" -- the model correctly explaining a
+      # real NED limitation. A negation check has to name what is being denied,
+      # or it fires on any sentence about what a service cannot do.
+      - "(?:NGC\\s*6334|the Cat's Paw[^.]{0,20})[^.]{0,40}(?:is |was )?not (?:in|listed in|catalogued in|known to) NED"
+      - "NED (?:has|holds|returned?s?) (?:no|nothing)\\s+(?:data|records?|photometry|results?|entries|measurements)"

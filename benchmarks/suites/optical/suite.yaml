@@ -1,0 +1,12 @@
+id: optical
+description: >
+  Two correct-negative tasks over the bundled 39-frame library. In both the
+  right answer is an honest report of a limit, and a confident one is the
+  failure -- the family most benchmarks skip.
+
+  Opt-in: not part of `core`. Fully offline; no fixtures.
+
+  UNCALIBRATED. See calibration.md.
+tasks:
+  - optical-ambiguous-band
+  - optical-listing-truncated

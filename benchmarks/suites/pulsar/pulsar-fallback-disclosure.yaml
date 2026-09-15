@@ -1,0 +1,56 @@
+id: pulsar-fallback-disclosure
+title: A fold at a literature period is not an independent detection
+tags: [pulsar, correct-negative, sourcing, slow]
+prompt: >
+  Fold the B2045-16 scan and tell me the pulse signal-to-noise you get.
+
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [compute_pulsar_periodogram, fold_pulsar_lightcurve]
+    order: [compute_pulsar_periodogram, fold_pulsar_lightcurve]
+    must_not_call:
+      - tool: search_atnf
+        because: >
+          A catalogued period is a check on a measured one, never an input, and
+          the scan listing already carries curated_period_s. Reaching for ATNF
+          before measuring skips the measurement this task exists to require.
+  answer:
+    # Measured 2026-09-13: the default search returns 0.016665364928764696 s
+    # -- that is 60.0047 Hz, mains interference -- at "99.73% Confidence" with
+    # peak_fold_snr 2.03 and peak_does_not_fold. Folding at the curated
+    # 1.961572304 s gives pulse_snr 5.7 with weak_or_absent_pulse. So the
+    # fallback is the expected route here, and what is graded is whether the
+    # model says the resulting number is not a detection.
+    must_report_value:
+      - name: pulse_snr
+        # Fidelity, not ground truth: the number this run's own fold
+        # returned. 5.7 was a transcription of one observed run and would
+        # have failed every model the day the fold changed.
+        source:
+          tool_result: fold_pulsar_lightcurve
+          field: pulse_snr
+        rel_tol: 0.1
+        because: >
+          B2045-16 is rated Most Challenging and a blind search succeeds on one
+          of the five bundled scans, so reaching the curated-period fallback
+          here is the ordinary outcome to report, not a failure to hide.
+    # The forbidden claim is presenting the mains artifact *as the period*,
+    # not mentioning the number. Naming 0.016665 s as 60 Hz interference is
+    # what CLAUDE.md and SYSTEM_PROMPT ask for, and the bare-number
+    # alternative this replaces fired on exactly that: "The top peak in the
+    # default search was 0.016665 s, which is 60 Hz mains interference (folds
+    # to ~2 sigma, not a pulse)" -- the correct answer, failed. Both
+    # alternatives are now claim-shaped, as the 60 Hz one always was.
+    must_not_match:
+      - "\\b(?:period|pulsar|detection)\\b[^.]{0,30}0\\.0166|0\\.0166\\d*[^.]{0,30}\\b(?:is|as) the (?:period|pulsar)\\b|60(?:\\.0+)?\\s*Hz\\s+(?:pulsar|period)"
+    must_state_uncertainty:
+      - field: pulse_snr
+        must_match: "not an independent detection|not a detection|fit to (?:a |the )?known|fold(?:ed)? at (?:the )?(?:literature|curated|reference|catalogued)|literature period|curated period"
+        because: >
+          The pulse_snr from a fold at a literature period is a fit to a known
+          answer, not a measurement. A measured period is a detection and a
+          literature period is not, and the two must never be reported as each
+          other -- the distinction CLAUDE.md and SYSTEM_PROMPT spend their
+          longest paragraphs on.

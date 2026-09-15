@@ -1,0 +1,29 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "The Cat's Paw Nebula is NGC 6334. NED needs the formal designation, so that is what I am querying with.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_ned",
+        "arguments": {
+          "name": "NGC 6334"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "NED has 31 records for NGC 6334 (the Cat's Paw Nebula), an HII region at RA 260.1958, Dec -35.7833. The full table is at {{artifact:0}}.",
+    "usage": {
+      "input_tokens": 13000,
+      "output_tokens": 64,
+      "cache_read_tokens": 11900
+    }
+  }
+]

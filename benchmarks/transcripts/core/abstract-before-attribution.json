@@ -1,0 +1,47 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "I should not quote a decline rate from memory. Finding the paper first.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_ads",
+        "arguments": {
+          "query": "Cassiopeia A secular decline"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "tool_use",
+    "text": "Trotter et al. 2017 looks like the source. Fetching the abstract rather than attributing a figure to it unread.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "get_paper_abstract",
+        "arguments": {
+          "bibcode": "2017MNRAS.469.1299T"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "The figure comes from Trotter et al. 2017 (2017MNRAS.469.1299T). Its abstract gives a secular decline of 0.670 +/- 0.019 per cent per year at 1.4 GHz, averaged over six decades. The paper is explicit that the decline is not constant -- it varies with epoch and with frequency -- so the number only means anything quoted with that averaging interval and that observing frequency.",
+    "usage": {
+      "input_tokens": 15600,
+      "output_tokens": 132,
+      "cache_read_tokens": 14100
+    }
+  }
+]

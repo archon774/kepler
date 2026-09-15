@@ -1,0 +1,34 @@
+tool: search_ads
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. The bibcode 2017MNRAS.469.1299T is real and is
+  the paper behind the confirmed-live fabrication incident the
+  abstract-before-attribution task grades; the title and author list are as
+  published. The result counts are placeholders. ADS-backed capture needs
+  ADS_DEV_KEY; replace with a `kepler-bench record` capture when one is
+  available.
+miss_policy: error
+entries:
+  - id: cassiopeia-a-decline
+    match:
+      query: {contains: "cas"}
+    response:
+      status: ok
+      count: 3
+      columns: [bibcode, title, first_author, year]
+      preview:
+        - bibcode: "2017MNRAS.469.1299T"
+          title: "The secular decline of Cassiopeia A at 1.4 GHz"
+          first_author: "Trotter, A. S."
+          year: 2017
+        - bibcode: "1977A&AS...28..211B"
+          title: "The flux density of Cassiopeia A at metre wavelengths"
+          first_author: "Baars, J. W. M."
+          year: 1977
+      artifact: {format: ecsv, row_count: 3, columns: [bibcode, title, first_author, year]}
+
+  - id: default
+    match: {}
+    response:
+      status: not_found
+      count: 0

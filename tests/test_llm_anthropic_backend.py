@@ -286,3 +286,132 @@ def test_an_error_tool_result_sets_is_error_true(monkeypatch):
     ab.AnthropicBackend().complete(messages=history, tools=[], system="s", max_tokens=5)
     entry = recorder.requests[0]["messages"][0]["content"][0]
     assert entry["is_error"] is True
+
+
+# --- a model that refuses `temperature` -----------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _forget_temperature_refusals():
+    """The refusal set is module-level so one 400 teaches every later backend
+    in the process. That is right in production and cross-test pollution in a
+    suite, so each test starts from a clean slate."""
+
+    from tools.llm import anthropic_backend as module
+
+    module._TEMPERATURE_REJECTED.clear()
+    yield
+    module._TEMPERATURE_REJECTED.clear()
+
+
+class _RefusingMessages(FakeAnthropicMessages):
+    """Raises the provider's temperature refusal until the parameter is gone."""
+
+    def __init__(self, streams, *, error):
+        super().__init__(streams)
+        self._error = error
+
+    def stream(self, **kwargs):
+        self.requests.append(kwargs)
+        if "temperature" in kwargs:
+            raise self._error
+        return next(self._streams)
+
+
+def _bad_request(message):
+    import anthropic
+    import httpx
+
+    return anthropic.BadRequestError(
+        message,
+        response=httpx.Response(
+            400, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        ),
+        body=None,
+    )
+
+
+def test_a_model_that_deprecates_temperature_is_retried_without_it(monkeypatch):
+    """claude-sonnet-5 answers `temperature` with a 400. Failing a whole
+    benchmark task over a request field the caller never chose would be the
+    port's fault, not the model's."""
+
+    final = as_namespace(load_response_fixture("anthropic_tool_use.json"))
+    messages = _RefusingMessages(
+        [FakeAnthropicStream(final, ["hello"])],
+        error=_bad_request("`temperature` is deprecated for this model."),
+    )
+    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic_module(messages))
+
+    backend = ab.AnthropicBackend(model="claude-sonnet-5", api_key="k")
+    response = backend.complete(
+        messages=(), tools=[], system="s", max_tokens=32, temperature=0.0
+    )
+    assert response.stop_reason in ("end_turn", "tool_use")
+    # First attempt carried it, the retry did not.
+    assert "temperature" in messages.requests[0]
+    assert "temperature" not in messages.requests[1]
+
+
+def test_the_refusal_is_remembered_so_the_next_call_does_not_pay_for_it(monkeypatch):
+    final = as_namespace(load_response_fixture("anthropic_tool_use.json"))
+    messages = _RefusingMessages(
+        [FakeAnthropicStream(final, ["a"]), FakeAnthropicStream(final, ["b"])],
+        error=_bad_request("`temperature` is deprecated for this model."),
+    )
+    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic_module(messages))
+
+    backend = ab.AnthropicBackend(model="claude-sonnet-5", api_key="k")
+    backend.complete(messages=(), tools=[], system="s", max_tokens=32)
+    backend.complete(messages=(), tools=[], system="s", max_tokens=32)
+    # Three requests, not four: the second call never sent temperature.
+    assert len(messages.requests) == 3
+    assert "temperature" not in messages.requests[2]
+
+
+def test_temperature_supported_is_reported_and_reaches_the_manifest(monkeypatch):
+    """A benchmark claims determinism from temperature 0. Where the provider
+    refuses the parameter that claim does not hold, and a run record that
+    stayed silent would overstate its own reproducibility."""
+
+    from tools.sessions import backend_record
+
+    final = as_namespace(load_response_fixture("anthropic_tool_use.json"))
+    messages = _RefusingMessages(
+        [FakeAnthropicStream(final, ["hello"])],
+        error=_bad_request("`temperature` is deprecated for this model."),
+    )
+    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic_module(messages))
+
+    backend = ab.AnthropicBackend(model="claude-sonnet-5", api_key="k")
+    assert backend.temperature_supported is True  # nothing observed yet
+    backend.complete(messages=(), tools=[], system="s", max_tokens=32)
+    assert backend.temperature_supported is False
+    assert backend_record(backend)["temperature_supported"] is False
+
+
+def test_a_different_bad_request_is_not_swallowed(monkeypatch):
+    """Only the temperature refusal is retried. Anything else is a real error
+    and must surface, not be masked by a silent second attempt."""
+
+    final = as_namespace(load_response_fixture("anthropic_tool_use.json"))
+    messages = _RefusingMessages(
+        [FakeAnthropicStream(final, ["hello"])],
+        error=_bad_request("max_tokens must be a positive integer"),
+    )
+    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic_module(messages))
+
+    import anthropic
+
+    backend = ab.AnthropicBackend(model="claude-sonnet-5", api_key="k")
+    with pytest.raises(anthropic.BadRequestError):
+        backend.complete(messages=(), tools=[], system="s", max_tokens=32)
+
+
+def test_a_backend_that_does_not_report_temperature_support_omits_the_key():
+    """Never assumed true: the key is absent rather than optimistic."""
+
+    from tests.llm_fakes import StubBackend
+    from tools.sessions import backend_record
+
+    assert "temperature_supported" not in backend_record(StubBackend([]))

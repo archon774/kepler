@@ -1,0 +1,87 @@
+tool: search_vizier
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/vizier.py's return model.
+  The structure is what the core suite grades -- a category query answers, a
+  per-catalog probe does not; a preview of ten rows sits beside a full-size
+  artifact; the cap fires unless max_catalogs is JSON null -- and that
+  structure is faithful to the tool. The counts (47 matched catalogs, 4127
+  rows) and the flux values in content/vizier_casa_radio.ecsv are plausible
+  placeholders, NOT measurements. Do not quote them as Cas A photometry.
+  Replace with a `kepler-bench record` capture before trusting a number.
+miss_policy: error
+entries:
+  # The right call: a category query with the cap explicitly lifted.
+  - id: radio-category-uncapped
+    match:
+      category: {equals: radio}
+      max_catalogs: {is_null: true}
+    response:
+      status: ok
+      count: 47
+      columns: [catalog, frequency_ghz, flux_jy, flux_error_jy, reference]
+      preview:
+        - {catalog: "VIII/65", frequency_ghz: 0.022, flux_jy: 22000.0}
+        - {catalog: "VIII/38", frequency_ghz: 0.081, flux_jy: 8900.0}
+        - {catalog: "J/A+A/598/A104", frequency_ghz: 1.4, flux_jy: 1420.0}
+      warnings:
+        - >-
+          preview_truncated: the preview is the first 10 of 4127 rows. The
+          complete table is in the artifact.
+      artifact:
+        format: ecsv
+        row_count: 4127
+        columns: [catalog, frequency_ghz, flux_jy, flux_error_jy, reference]
+        content_ref: vizier_casa_radio.ecsv
+
+  # A category query with the cap left at its default, or set to a number.
+  - id: radio-category-capped
+    match:
+      category: {equals: radio}
+    response:
+      status: partial
+      count: 20
+      columns: [catalog, frequency_ghz, flux_jy, flux_error_jy, reference]
+      preview:
+        - {catalog: "VIII/65", frequency_ghz: 0.022, flux_jy: 22000.0}
+        - {catalog: "VIII/38", frequency_ghz: 0.081, flux_jy: 8900.0}
+      warnings:
+        - >-
+          catalog_cap_applied: 47 catalogs matched and 20 were written out.
+          Pass max_catalogs=null for no cap.
+        - >-
+          preview_truncated: the preview is the first 10 of 1908 written rows.
+      artifact:
+        format: ecsv
+        row_count: 1908
+        columns: [catalog, frequency_ghz, flux_jy, flux_error_jy, reference]
+        content_ref: vizier_casa_radio.ecsv
+
+  # A per-catalog probe. It answers -- that is what makes the failure a
+  # failure rather than an error -- but only about the one catalog asked for,
+  # so a model that probes catalogs one at a time reports a total that is its
+  # own subset's rather than the field's.
+  - id: one-catalog-at-a-time
+    match:
+      catalog: {present: true}
+    response:
+      status: ok
+      count: 1
+      columns: [catalog, frequency_ghz, flux_jy, flux_error_jy, reference]
+      preview:
+        - {catalog: "VIII/65", frequency_ghz: 0.022, flux_jy: 22000.0}
+      artifact: {format: ecsv, row_count: 46, columns: [catalog, frequency_ghz, flux_jy]}
+
+  - id: default
+    match: {}
+    response:
+      status: partial
+      count: 20
+      columns: [catalog, frequency_ghz, flux_jy]
+      preview:
+        - {catalog: "VIII/65", frequency_ghz: 0.022, flux_jy: 22000.0}
+      warnings:
+        - >-
+          catalog_cap_applied: this search was not restricted to a waveband and
+          20 of the matched catalogs were written out.
+      artifact: {format: ecsv, row_count: 612, columns: [catalog, frequency_ghz, flux_jy]}

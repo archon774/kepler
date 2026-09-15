@@ -1,0 +1,36 @@
+tool: build_literature_review
+recorded_on: 2026-09-14
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/ads.py's return model.
+  It exists so the replayed archive is not EMPTY: a live run showed a model
+  making 38 calls across 12 tools and never answering, because every
+  undeclared tool returned nothing and it kept trying further archives. An
+  empty world punishes a model for cross-checking sources, which is
+  behaviour the real surface rewards. The SHAPE is faithful to the tool; the
+  VALUES are plausible placeholders and must not be quoted as measurements.
+  Replace with a `kepler-bench record` capture when credentials allow.
+miss_policy: synthesize
+entries:
+  - id: cassiopeia-a
+    match: {query: {contains: "cas"}}
+    response:
+      status: ok
+      count: 3
+      columns: [bibcode, title, first_author, year, abstract]
+      preview:
+        - bibcode: "2017MNRAS.469.1299T"
+          title: "The secular decline of Cassiopeia A at 1.4 GHz"
+          first_author: "Trotter, A. S."
+          year: 2017
+          abstract: >-
+            Averaged over six decades we measure a secular decline of
+            0.670 +/- 0.019 per cent per year at 1.4 GHz. The decline is
+            explicitly not constant: the rate varies with epoch and with
+            frequency.
+      artifact:
+        format: ecsv
+        row_count: 3
+        columns: [bibcode, title, first_author, year, abstract]
+  - id: default
+    match: {}
+    response: {status: not_found, count: 0}

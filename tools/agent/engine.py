@@ -35,7 +35,7 @@ from tools.llm.base import ModelBackend
 from tools.llm.schema import for_dialect
 from tools.llm.types import Message, ModelResponse, TextBlock, ToolResultBlock
 from tools.llm.validation import index_schemas, validate_tool_call
-from tools.sessions import AgentSession, make_cache_key
+from tools.sessions import AgentSession, backend_record, make_cache_key
 
 __all__ = ["run_session"]
 
@@ -72,6 +72,7 @@ def run_session(
             max_turns=max_turns,
             system=system,
         )
+    session.backend = backend_record(backend)
 
     messages: list[Message] = [
         Message(role="user", blocks=(TextBlock(text=user_message),))
@@ -124,9 +125,12 @@ def run_session(
 
                 session.record_turn(
                     turn=turn_number,
-                    stop_reason=response.raw_stop_reason or response.stop_reason,
+                    stop_reason=response.stop_reason,
+                    raw_stop_reason=response.raw_stop_reason,
                     assistant_text=response.text,
                     tool_call_sequences=[],
+                    usage=response.usage,
+                    latency_ms=response.latency_ms,
                 )
                 yield events.TurnFinished(
                     turn=turn_number,
@@ -235,7 +239,9 @@ def _run_tool_turn(
             if cache_hit:
                 result = call_cache[cache_key]
             else:
-                result = functions[call.name](**arguments).model_dump()
+                result = _normalize_result(
+                    call.name, functions[call.name](**arguments)
+                )
                 call_cache[cache_key] = result
             duration_ms = (time.monotonic() - started) * 1000.0
 
@@ -272,9 +278,12 @@ def _run_tool_turn(
 
     session.record_turn(
         turn=turn_number,
-        stop_reason=response.raw_stop_reason or response.stop_reason,
+        stop_reason=response.stop_reason,
+        raw_stop_reason=response.raw_stop_reason,
         assistant_text=response.text,
         tool_call_sequences=sequences,
+        usage=response.usage,
+        latency_ms=response.latency_ms,
     )
     session.save(current_turn=turn_number)
     yield events.TurnFinished(
@@ -284,6 +293,38 @@ def _run_tool_turn(
         latency_ms=response.latency_ms,
     )
     messages.append(Message(role="user", blocks=tuple(result_blocks)))
+
+
+def _normalize_result(name: str, value: Any) -> dict[str, Any]:
+    """Serialize one tool's return value into the result dict the loop records.
+
+    Almost every registered tool returns a single Kepler model. Three return a
+    plain ``list`` of them -- ``list_photometric_catalogs``, ``list_artifacts``
+    and ``list_zeropoint_references`` -- and a list has no ``model_dump()``, so
+    dispatching any of the three raised ``AttributeError`` mid-turn and ended
+    the session with outcome ``error``. A model asking what catalogs exist got
+    a dead session and no way to tell why.
+
+    A list is wrapped into the ``{status, count, results}`` shape the rest of
+    the surface already uses, so the recorded call carries a status and a count
+    like every other one and the model sees a result rather than a crash.
+    Anything else is a registry defect and says so, rather than reaching
+    ``json.dumps`` and being handed to the model as a stringified repr.
+    """
+
+    dump = getattr(value, "model_dump", None)
+    if callable(dump):
+        return dump()
+    if isinstance(value, (list, tuple)):
+        items = [
+            item.model_dump() if callable(getattr(item, "model_dump", None)) else item
+            for item in value
+        ]
+        return {"status": "ok", "count": len(items), "results": items}
+    raise TypeError(
+        f"tool {name!r} returned {type(value).__name__}; a registered tool must "
+        "return a Kepler model or a list of them"
+    )
 
 
 def _resolve_registry(

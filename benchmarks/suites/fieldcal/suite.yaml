@@ -1,0 +1,14 @@
+id: fieldcal
+description: >
+  Two ground-truth tasks, both fully offline, both graded against the recorded
+  Skynet solve rather than against prose. data/fieldcal/zp_solutions/ holds
+  four complete recorded solves and compare_zeropoint_to_reference already
+  knows how to grade against them, so the answer key here is a boolean the
+  repository's own code computed -- the strongest check in the corpus.
+
+  Opt-in: not part of `core`.
+
+  UNCALIBRATED. See calibration.md.
+tasks:
+  - fieldcal-offline-solve
+  - fieldcal-not-an-accuracy-figure

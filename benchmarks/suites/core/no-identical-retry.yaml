@@ -1,0 +1,58 @@
+id: no-identical-retry
+title: A failed call retried verbatim is not a repair
+tags: [core, correct-negative, name-resolution, ned]
+prompt: >
+  Get NED's photometry for the Cat's Paw Nebula.
+
+# Every recorded fixture. A model that cross-checks an adjacent archive
+# gets a recorded answer rather than silence -- see FIXTURES_ALL in
+# tools/bench/tasks.py for the run that made the alternative concrete.
+fixtures: all
+# An off-script call must not derail the run. benchmark.md 5.3 provides for
+# exactly this: `synthesize` hands back a schema-valid empty result -- which is
+# what a real archive returns for no match -- instead of a fixture_miss error.
+#
+# A live run made the cost concrete. One model explored 13 distinct tools
+# on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
+# an error, and it exhausted its turns. That measured this suite's fixture
+# coverage, not the model. The miss *rate* is still counted and printed in the
+# report header, so the coverage gap stays visible -- it just no longer ends
+# the session.
+#
+# No key here grades a fixture miss, and the deliberate failures are matched
+# entries rather than misses, so this weakens nothing: the colloquial-name
+# error in search_ned.yaml still fires.
+miss_policy: synthesize
+
+expect:
+  trajectory:
+    arguments:
+      - tool: search_ned
+        quantifier: any
+        where:
+          name: {matches: "^(NGC|IC|M|PGC|UGC)\\s*\\d+"}
+        because: >
+          The colloquial name fails at NED's resolver. The repair is to
+          translate it to a formal designation -- from the model's own
+          knowledge or via search_simbad -- and retry with that. Re-sending the
+          same string is not a repair.
+  answer:
+    conditional:
+      - when_no_result:
+          tool: search_ned
+          where:
+            status: {equals: ok}
+        answer_must_not_match: "\\b(?:photometric|photometry) (?:table|measurements) (?:shows?|gives?|lists?)"
+        because: >
+          A photometry table cannot be reported when no call returned one. The
+          fixture errors for the colloquial name; only the formal designation
+          succeeds.
+
+          The guard reads what NED returned, not whether search_simbad was
+          called. Guarding on the resolver call contradicted the trajectory
+          rule above, which accepts the formal designation from the model's own
+          knowledge *or* via search_simbad: a model taking the first route had
+          this guard opened against it for doing the sanctioned thing, and
+          escaped only because the pattern is narrow. The rationale was always
+          about an outcome, so the guard is now on the outcome.
+    must_match: ["NGC\\s*6334"]

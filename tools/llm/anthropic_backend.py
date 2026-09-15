@@ -57,6 +57,18 @@ _STOP_REASONS: dict[str, StopReason] = {
 }
 
 
+#: Models observed to reject ``temperature``. Learned at runtime rather than
+#: hard-coded: newer Anthropic models deprecate the parameter, and a literal
+#: model list in this repository would be stale the week after it was written
+#: -- the failure mode CLAUDE.md already carries scars from. Module-level so
+#: one 400 teaches every later backend instance in the process.
+_TEMPERATURE_REJECTED: set[str] = set()
+
+#: The provider's own wording when it refuses the parameter.
+_TEMPERATURE_REFUSALS = ("temperature` is deprecated", "temperature is deprecated",
+                         "temperature` is not supported", "temperature is not supported")
+
+
 class AnthropicBackend:
     """Adapter over ``anthropic.Anthropic`` with native streaming."""
 
@@ -87,25 +99,54 @@ class AnthropicBackend:
 
         client = anthropic.Anthropic(api_key=self._api_key)
         rendered = _render_messages(messages)
+        request: dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "tools": tools,
+            "messages": rendered,
+        }
+        if self._model not in _TEMPERATURE_REJECTED:
+            request["temperature"] = temperature
 
         start = time.monotonic()
-        with client.messages.stream(
-            model=self._model,
-            max_tokens=max_tokens,
-            system=system,
-            tools=tools,
-            messages=rendered,
-            temperature=temperature,
-        ) as stream:
+        try:
+            final, streamed = self._stream(client, request, on_text)
+        except anthropic.BadRequestError as exc:
+            if not _is_temperature_refusal(exc) or "temperature" not in request:
+                raise
+            # The model refuses the parameter. Drop it, remember, and retry --
+            # rather than failing a whole benchmark task over a request field
+            # the caller did not choose.
+            _TEMPERATURE_REJECTED.add(self._model)
+            request.pop("temperature")
+            final, streamed = self._stream(client, request, on_text)
+        latency_ms = (time.monotonic() - start) * 1000.0
+
+        return _to_model_response(final, "".join(streamed), latency_ms)
+
+    @property
+    def temperature_supported(self) -> bool:
+        """Whether this model accepted ``temperature`` on its last call.
+
+        A benchmark claims determinism from temperature 0 (benchmark.md 5.6).
+        When the provider refuses the parameter that claim does not hold, and
+        a run record that did not say so would overstate its own
+        reproducibility.
+        """
+
+        return self._model not in _TEMPERATURE_REJECTED
+
+    def _stream(
+        self, client: Any, request: dict[str, Any], on_text: OnText | None
+    ) -> tuple[Any, list[str]]:
+        with client.messages.stream(**request) as stream:
             streamed: list[str] = []
             for chunk in stream.text_stream:
                 streamed.append(chunk)
                 if on_text is not None:
                     on_text(chunk)
-            final = stream.get_final_message()
-        latency_ms = (time.monotonic() - start) * 1000.0
-
-        return _to_model_response(final, "".join(streamed), latency_ms)
+            return stream.get_final_message(), streamed
 
 
 # --- rendering -------------------------------------------------------------
@@ -248,3 +289,10 @@ def _read_usage(final: Any) -> Usage | None:
         cache_write_tokens=field("cache_creation_input_tokens"),
         reasoning_tokens=None,
     )
+
+
+def _is_temperature_refusal(exc: Exception) -> bool:
+    """Whether a 400 is the provider refusing ``temperature``."""
+
+    message = str(exc)
+    return any(phrase in message for phrase in _TEMPERATURE_REFUSALS)

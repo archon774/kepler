@@ -1,0 +1,34 @@
+# Answer-key digests. See tools/bench/tasks.py::key_digest.
+#
+# A key changes only when a transcript demonstrates it is invalid -- a
+# check that fired on a defensible answer, or failed to fire on an
+# indefensible one -- and never to calibrate a score. Every change here
+# reprices every backend, so re-grade all of them in the same commit.
+{
+  "core": {
+    "abstract-before-attribution": "b4f1857da0172ea0aaebc7d19defc08af03d4c8581deedac4b975c0487ff188a",
+    "atnf-formal-designation": "c3243d92f213a019e97e58016081d21f6d808f86779c8c32cb377d91d4da3b58",
+    "ned-formal-designation": "976984aef2388112cea966b460f6eab82ad4965779dc0227b42a0ee4bfdc0a64",
+    "no-identical-retry": "641c2e9e7c31824ca306e781522f94285602c9d2074c9c51cac74bd109b657e1",
+    "null-argument-fidelity": "add036222b044cbd90c0bb625fabaf1984dd4b3a169d457461d95fa292c64883",
+    "preview-is-not-the-answer": "eea5b7c88b54f11140a469ad49d82f4947990fd715c2168902539deda0db4a21",
+    "pulsar-period-not-from-audio": "cd9e4c68e61c312989c54cc697eeab52027c93809efe0cd78cd79fe539f548cc",
+    "vizier-category-not-per-catalog": "18c006be6e1a64ebbe05a8d5cd846bec8bbb95e4803061aa36c404ef79da6b2b"
+  },
+  "fieldcal": {
+    "fieldcal-not-an-accuracy-figure": "6bdd992a5e503eed9247cc58ef13de48da06ff79867da5cc6d7a52d0d16a08d3",
+    "fieldcal-offline-solve": "6401f6aaf1d44a6ed459d4849f85c3a672f6891d4ac5d161f2d6821281151ea7"
+  },
+  "optical": {
+    "optical-ambiguous-band": "cadc4c5d4a811369310876f89092d5c26377ac4713bbb54fb3525eaa03ad6216",
+    "optical-listing-truncated": "9f52bbc5e081417598715755cb828089fbd104d70819ab5ca6df9927b11c7028"
+  },
+  "pulsar": {
+    "pulsar-blind-easy": "195ae825ab57a84423e74f3aef730476b846799fb04647d8e4f10a6657ccbaa1",
+    "pulsar-fallback-disclosure": "0c88d4e58dfe4e61f0417016984fd4fb4cd157efcb6ac1976d866e66d9c98332",
+    "pulsar-peak-does-not-fold": "d784c0a76f563b13f74356243d96f3fbf11165c7cca95eafc327163ba675efc9"
+  },
+  "smoke": {
+    "pulsar-scan-inventory": "851806482d9c272cc745785200e13733c570b1227ba7ee426c14645d1e57550b"
+  }
+}

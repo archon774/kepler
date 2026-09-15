@@ -1,0 +1,45 @@
+tool: search_simbad
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/simbad.py's return model.
+  SIMBAD is the name-resolution escape hatch the core suite's resolution tasks
+  allow the model to reach for; these entries answer the three names those
+  tasks turn on and nothing else. Replace with a `kepler-bench record` capture
+  before trusting any field beyond the identifier.
+miss_policy: error
+entries:
+  - id: cats-paw
+    match:
+      name: {contains: "cat"}
+    response:
+      status: ok
+      count: 1
+      columns: [main_id, ra, dec, otype]
+      preview:
+        - {main_id: "NGC 6334", ra: 260.1958, dec: -35.7833, otype: "HII"}
+
+  - id: crab
+    match:
+      name: {contains: "crab"}
+    response:
+      status: ok
+      count: 1
+      columns: [main_id, ra, dec, otype]
+      preview:
+        - {main_id: "M 1", ra: 83.6331, dec: 22.0145, otype: "SNR"}
+
+  - id: cassiopeia-a
+    match:
+      name: {contains: "cas"}
+    response:
+      status: ok
+      count: 1
+      columns: [main_id, ra, dec, otype]
+      preview:
+        - {main_id: "SNR G111.7-02.1", ra: 350.8500, dec: 58.8150, otype: "SNR"}
+
+  - id: default
+    match: {}
+    response:
+      status: not_found
+      count: 0

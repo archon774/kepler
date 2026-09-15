@@ -465,3 +465,56 @@ its output are unchanged.
   `tools/llm/validation.py`), so adapters never import `tools/registry.py`.
 - Zero new third-party dependencies: the `anthropic` SDK is reused; the OpenAI,
   Ollama, and Gemini adapters are raw `httpx`.
+
+### 10.1 The Benchmark Harness
+
+`tools/bench/` answers two questions about swapping one model for another on
+this tool surface: **which model is actually better, and at what** (answer
+correctness), and **at what cost in work** (efficiency). Everything else it
+reports exists to explain one of those. The full architecture is
+`docs/working/benchmark.md`.
+
+**It adds nothing to the tool surface.** It owns no tool, registers nothing,
+and is listed in `tests/test_tool_registry_coverage.py::NOT_TOOL_MODULES`
+beside `tools.llm` and `tools.agent`. It *reads* `tools/registry.py`'s schemas
+and substitutes `run_session()`'s `tool_functions=` mapping; the engine needs
+no change to provide that seam. The dependency runs one way:
+`tools.bench` → `tools.agent` → `tools.llm` → `tools.registry`. Nothing under
+`algorithms/` or `tools/llm/` imports it.
+
+**The tool surface is three surfaces, and the harness treats each
+differently** (`tools/bench/plane.py::TOOL_CLASSES`):
+
+| Class | Count | Treatment |
+| --- | --- | --- |
+| **L** — local, deterministic | 26 | **Run live.** They read the bundled fixture tree and compute. Replaying `compute_pulsar_periodogram` would let the task author, not the data, decide whether a model's mistake is visible. |
+| **R** — remote | 22 | **Always replayed** from a recorded fixture. Never executed in a run. |
+| **M** — local code behind a network-capable argument | 7 | **Decided per call** from the call's own arguments. A task must pin the offline path (`use_field_cal=false`; `catalog_fixture` *and* `compare_to` together) or the tool is replayed. |
+
+The classification is **per tool, never per module**: `get_literature_cluster_params`
+returns Cantat-Gaudin & Anders (2020) parameters and looks local, but
+`algorithms/hrdiagram_py/literature.py` fetches them through `search_vizier`.
+`tools.hr_diagram` alone spans all three classes.
+
+**The plane is closed.** A registered tool with no classification raises rather
+than defaulting, and a test asserts `set(TOOL_CLASSES) == set(TOOL_FUNCTIONS)`.
+Every default would be wrong: defaulting to live opens a socket mid-run,
+defaulting to replay measures a fixture miss instead of the tool. **A new
+registry tool must be classified in the same commit that adds it.**
+
+**Four verbs over a directory on disk** (`kepler-bench`, a console script
+beside `kepler-astro-query`): `run` produces evidence, `grade` produces
+verdicts, `compare` produces the matrix, and `record` captures a fixture for
+human review. Grading is separate from running because the first version of any
+grader is wrong and re-grading must not cost a re-spend. `--max-tokens` is
+required for any live backend, with no default.
+
+**Inputs are tracked under `benchmarks/`; output goes under `artifacts/`,**
+which `.gitignore` already covers. Naming the input directory `data/` would put
+it in the fixture tree; putting output in it would make every run a dirty
+working tree.
+
+Nothing added here opens a socket under a plain `uv run pytest`, and that is a
+test rather than a convention: the smoke suite runs end to end with both sides
+replayed, under a socket guard, in milliseconds. There is **no CI benchmark
+job** — CI stays offline, deterministic, and keyless.

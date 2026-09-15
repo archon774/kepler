@@ -1,0 +1,49 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "Trying NED with the name as given.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_ned",
+        "arguments": {
+          "name": "Cat's Paw Nebula",
+          "table": "photometry"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "tool_use",
+    "text": "NED's resolver returned nothing for that string -- it indexes catalog designations, and a colloquial name is not one. Re-sending the same string would fail identically, so I am translating it first. The Cat's Paw Nebula is NGC 6334.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_ned",
+        "arguments": {
+          "name": "NGC 6334",
+          "table": "photometry"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "The colloquial name failed at NED's resolver, as expected. Retrying with the formal designation NGC 6334 succeeded: NED holds 214 photometry rows for it, written in full to {{artifact:1}}.",
+    "usage": {
+      "input_tokens": 14100,
+      "output_tokens": 78,
+      "cache_read_tokens": 12800
+    }
+  }
+]

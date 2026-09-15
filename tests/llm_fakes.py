@@ -128,14 +128,28 @@ class StubBackend:
 def fake_anthropic_module(messages: FakeAnthropicMessages) -> SimpleNamespace:
     """A stand-in ``anthropic`` module: ``anthropic.Anthropic(api_key=...)``
     hands back a client whose ``.messages`` is ``messages`` and records the key
-    it was constructed with on ``messages.api_key``."""
+    it was constructed with on ``messages.api_key``.
+
+    The SDK's **real exception classes** are carried through. The adapter
+    catches ``anthropic.BadRequestError`` to retry a model that refuses
+    ``temperature``, and a fake module without the class makes that handler
+    unreachable -- the stand-in has to be faithful enough for the code's own
+    error handling to run against it.
+    """
+
+    import anthropic as real
 
     class _Client:
         def __init__(self, api_key: str) -> None:
             messages.api_key = api_key
             self.messages = messages
 
-    return SimpleNamespace(Anthropic=_Client)
+    return SimpleNamespace(
+        Anthropic=_Client,
+        BadRequestError=real.BadRequestError,
+        APIStatusError=real.APIStatusError,
+        APIError=real.APIError,
+    )
 
 
 class CapturingTransport:

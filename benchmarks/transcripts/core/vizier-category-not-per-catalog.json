@@ -1,0 +1,31 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "Cassiopeia A in the radio is a category query, not a catalog-at-a-time probe. Asking VizieR for the radio category with no cap.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_vizier",
+        "arguments": {
+          "target": "Cassiopeia A",
+          "category": "radio",
+          "max_catalogs": null
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "47 VizieR catalogs matched for Cassiopeia A in the radio, covering 4127 rows in total. The preview above is the first ten of those rows, not the result; the complete table is written to {{artifact:0}}. No cap was applied -- I passed max_catalogs as JSON null, which is what asks for all of them.",
+    "usage": {
+      "input_tokens": 13200,
+      "output_tokens": 96,
+      "cache_read_tokens": 12100
+    }
+  }
+]

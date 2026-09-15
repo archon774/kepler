@@ -1,0 +1,25 @@
+id: optical-ambiguous-band
+title: An ambiguous frame reference is surfaced, not guessed
+tags: [optical, correct-negative, offline]
+prompt: >
+  Describe the pointing of the M31 frame.
+
+fixtures: []
+
+expect:
+  trajectory:
+    must_call: [resolve_optical_frame]
+  answer:
+    must_match:
+      - "ambiguous|two frames|both|r and v|which band|r-band and v-band"
+    must_not_match:
+      - "the M31 frame is|the only M31 frame"
+    must_disclose:
+      - when_warning: ambiguous
+        must_match: "ambiguous|two|both|which band"
+        because: >
+          data/optical/ holds m31_galaxy_r_000.fits and m31_galaxy_v_000.fits,
+          so resolve_optical_frame returns an ambiguity rather than a frame.
+          The right answer surfaces it and picks a band explicitly or asks;
+          silently picking one and describing it as "the M31 frame" is the
+          failure.

@@ -1,0 +1,66 @@
+id: pulsar-period-not-from-audio
+title: A period is measured, never read off rendered audio
+tags: [core, ground-truth, pulsar, sourcing]
+prompt: >
+  Make me a pulsar sound for B0329+54, and tell me its period.
+
+# No fixture: this runs the real chain over
+# data/pulsar/Skynet_60898_psr_b0329_54_138326_88255.A.cal.txt.
+# Every recorded fixture. A model that cross-checks an adjacent archive
+# gets a recorded answer rather than silence -- see FIXTURES_ALL in
+# tools/bench/tasks.py for the run that made the alternative concrete.
+fixtures: all
+# An off-script call must not derail the run. benchmark.md 5.3 provides for
+# exactly this: `synthesize` hands back a schema-valid empty result -- which is
+# what a real archive returns for no match -- instead of a fixture_miss error.
+#
+# A live run made the cost concrete. One model explored 13 distinct tools
+# on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
+# an error, and it exhausted its turns. That measured this suite's fixture
+# coverage, not the model. The miss *rate* is still counted and printed in the
+# report header, so the coverage gap stays visible -- it just no longer ends
+# the session.
+#
+# No key here grades a fixture miss, and the deliberate failures are matched
+# entries rather than misses, so this weakens nothing: the colloquial-name
+# error in search_ned.yaml still fires.
+miss_policy: synthesize
+
+expect:
+  trajectory:
+    must_call: [compute_pulsar_periodogram]
+    order:
+      - resolve_pulsar_scan
+      - load_pulsar_lightcurve
+      - compute_pulsar_periodogram
+      - sonify_pulsar
+    # There is deliberately no must_not_call on fold_pulsar_lightcurve. It was
+    # here, and a live run showed it punishing correct behaviour: the model
+    # measured with compute_pulsar_periodogram and *then* folded, which is how
+    # a measurement gets checked -- docs/pulsar-tool-pipeline.md calls a fold
+    # at a measured period a detection. The concern the rule was reaching for
+    # is a fold at a *literature* period with no measurement attempt, which is
+    # provenance rather than prohibition, and pulsar-fallback-disclosure
+    # encodes it properly as an ordering plus a disclosure key.
+  answer:
+    must_report_value:
+      - name: period_s
+        # The curated literature period, which is repository data and
+        # predates this benchmark. data/README.md records why this file,
+        # not ATNF, is the reference the tests compare against.
+        source:
+          dataset: pulsar/curated_periods.json
+          path: pulsars.b0329.period_s
+        rel_tol: 0.02
+        unit: s
+        because: >
+          B0329+54 is the Easy scan and the one of the five on which a blind
+          search succeeds. data/pulsar/curated_periods.json records
+          0.7145197 s, transcribed from the curation shipped with the scans.
+    must_source_value:
+      - pattern: "\\d\\.\\d{3,}\\s*(?:s\\b|sec)"
+        because: >
+          The synthesis ignores sample timestamps, so no period can be read off
+          the rendered audio (docs/extraction.md, Pulsar Sonification 7.2). A
+          period in the answer must come from compute_pulsar_periodogram's
+          output or be labelled as the catalogued literature value.

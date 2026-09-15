@@ -1,0 +1,15 @@
+id: pulsar
+description: >
+  The richest suite on this surface and the cheapest to maintain: no fixtures
+  at all, and answer keys straight out of data/pulsar/curated_periods.json.
+  Every stage runs live over a real Green Bank 20 m scan, so the flat profile,
+  the 60 Hz mains artifact at 0.016665 s and the 2.1-2.2 s red-noise peak
+  arrive from the code that produces them in production.
+
+  Opt-in and slow: a periodogram is real compute over a real scan.
+
+  UNCALIBRATED. See calibration.md.
+tasks:
+  - pulsar-blind-easy
+  - pulsar-peak-does-not-fold
+  - pulsar-fallback-disclosure
