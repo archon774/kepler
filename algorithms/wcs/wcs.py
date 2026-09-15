@@ -822,6 +822,10 @@ def solve_wcs(
                 solver_attempts.append("atlas")
             solution = atlas_backend.solve(request, atlas_config)
             elapsed = time.time() - t0
+            atlas_metadata = solution.metadata or {}
+            search_metadata["atlas_source_count"] = solution.source_count
+            search_metadata["atlas_catalog_count"] = atlas_metadata.get("n_catalog")
+            search_metadata["atlas_failure_reason"] = solution.failure_reason
 
             if solution and solution.wcs is not None:
                 accepted, reason = _accept_solution(
@@ -833,6 +837,7 @@ def solve_wcs(
                     height=height,
                     max_sep_deg=max_sep_deg,
                 )
+                search_metadata["atlas_accepted"] = accepted
                 if accepted:
                     logger.info(
                         "solve_wcs: Atlas accepted in %.2fs — file_id=%s", elapsed, file_id
@@ -852,6 +857,7 @@ def solve_wcs(
                     )
                     solution = None
             else:
+                search_metadata["atlas_accepted"] = False
                 logger.info(
                     "solve_wcs: Atlas no solution in %.2fs — file_id=%s", elapsed, file_id
                 )

@@ -15,8 +15,7 @@ writes the code.
 | Track | Document | Status | Branch base | Prerequisites | Unblocks |
 | --- | --- | --- | --- | --- | --- |
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
-| Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P7 complete; P8–P9 remain | `dev` | P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | The two asset-gated evidence gaps (NGC 5286 B from pixels, the ATLAS backend); the TUI stateless prerequisite is met |
-| Benchmark | [benchmark.md](benchmark.md) | Design and rollout; not started | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
+| Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6), P1–P6, and P9 complete; P7–P8 remain | `dev` | P7 needs a recorded full APASS response; P8 needs three recovered NGC 5286 B frames through Git LFS | Remaining local-data and end-to-end field-calibration gaps; the TUI stateless prerequisite is met |
 | TUI | [tui-harness.md](tui-harness.md) | Approved; implementation pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
 
 **The model track was implemented on `dev`** (the maintainer redirected the
@@ -33,7 +32,7 @@ targets `dev`.
 ## Start here
 
 **[optical-tools.md](optical-tools.md), the approved closure rollout (phases
-P8–P9 remaining, both asset-gated).**
+P7–P8 remaining).**
 
 The stateless optical boundary and its TUI prerequisite have merged. P1 landed
 as PR #57, P2/P3 together as PR #59, P4 as PR #60, P5 as PR #62, P6 as PR #63
@@ -47,12 +46,11 @@ constraints.
 
 1. **The model port can proceed now**, independently. Its phases -1 to 3 build
    `tools/llm/` and the headless engine in `tools/agent/`.
-2. **Optical P8–P9 close the last two evidence gaps.** P1 (pulsar periods),
+2. **Optical P7–P8 close the remaining broken links.** P1 (pulsar periods),
    P2/P3 (archive loop and documentation reconciliation), P4 (variable-star
-   port), P5 (HR-diagram local grid), P6 (WCS controls) and P7 (APASS
-   selection replay) have landed. P8 (B-frame evidence) and P9 (ATLAS
-   validation) are independent of each other and each starts when its asset
-   is supplied.
+   port), P5 (local-grid HR diagram), P6 (WCS controls), and P9 (ATLAS
+   validation) have landed. P7 (APASS replay) and P8 (B-frame evidence) remain
+   independent at the code level.
 3. **The TUI stateless prerequisite is satisfied.** TUI phase A remains owned
    by the model document; TUI phase C may proceed once its model prerequisites
    are complete.
