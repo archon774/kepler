@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.message import Message as TextualMessage
 from textual.screen import ModalScreen
-from textual.widgets import Button, Header, Input, Static
+from textual.widgets import Button, Input, Static
 
 from tools.agent.approval import Decision
 from tools.agent.engine import run_session
@@ -26,6 +26,7 @@ from tools.agent.policy import SessionPolicy, policy_approver
 from tools.tui.commands import help_text, parse_input, resolve
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.widgets.artifacts import ArtifactBrowser
+from tools.tui.widgets.header import KeplerHeader
 from tools.tui.widgets.transcript import Transcript
 
 if TYPE_CHECKING:
@@ -117,7 +118,7 @@ class KeplerApp(App[None]):
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
 
-        yield Header(name="Kepler")
+        yield KeplerHeader(self.sub_title, id="banner")
         yield Transcript(id="transcript")
         yield Input(placeholder="Ask Kepler…", id="prompt")
         yield Static(self._status_text(), id="status")

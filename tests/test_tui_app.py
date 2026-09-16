@@ -13,6 +13,7 @@ from tools.llm.base import BackendUnavailableError
 from tools.tui import __main__ as tui_main
 from tools.tui.app import KeplerApp
 from tools.tui.render.capability import GraphicsTier
+from tools.tui.widgets.header import WORDMARK, KeplerHeader
 from tools.tui.widgets.transcript import Transcript
 
 
@@ -150,3 +151,16 @@ def test_main_shows_a_configuration_error_for_an_unavailable_backend(
     tui_main.main()
 
     assert "OPENAI_API_KEY" in capsys.readouterr().err
+
+
+def test_the_header_names_kepler_and_the_backend_from_launch():
+    async def scenario() -> None:
+        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            header = app.query_one("#banner", KeplerHeader)
+
+            assert str(header.border_title) == WORDMARK
+            assert "anthropic/claude-sonnet-5" in header.banner_text()
+
+    _run(scenario())
