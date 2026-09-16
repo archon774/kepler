@@ -50,4 +50,19 @@ paths = [
   # GEMINI_API_KEY: added in Phase 3 with its first uses.
   '''tests/test_llm_gemini_backend\.py''',
   '''tools/llm/gemini_backend\.py''',
+  # The benchmark harness's capture-time credential scan (S2) and its tests
+  # name every variable above, because the scan's whole job is to keep their
+  # *values* out of a recorded fixture. Added in benchmark phase 4d with its
+  # first uses. Exact files, as every entry here is.
+  '''tools/bench/record\.py''',
+  '''tests/test_bench_record\.py''',
+  # These four name a variable only to say what a task may NOT set (B7), what
+  # a capture still needs, or what the calibration run would need. Same rule:
+  # exact files, never a directory wildcard over benchmarks/ or docs/.
+  '''tools/bench/tasks\.py''',
+  '''tests/test_bench_tasks\.py''',
+  '''benchmarks/fixtures/search_ads\.yaml''',
+  '''benchmarks/fixtures/get_paper_abstract\.yaml''',
+  '''benchmarks/suites/core/calibration\.md''',
+  '''docs/working/benchmark\.md''',
 ]

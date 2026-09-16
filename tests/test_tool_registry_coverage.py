@@ -28,6 +28,10 @@ NOT_TOOL_MODULES = {
     "tools.agent",
     # The Textual research console consumes the agent loop; it is not a tool.
     "tools.tui",
+    # The model benchmark harness. It *reads* the registry and substitutes
+    # run_session's tool_functions mapping; it owns no tool and adds nothing
+    # to the tool surface. pkgutil.iter_modules yields it as a package.
+    "tools.bench",
 }
 
 

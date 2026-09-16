@@ -1,0 +1,29 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "The ATNF catalogue performs no name resolution, so 'Crab' would match nothing. The Crab pulsar is J0534+2200 (B0531+21); querying with the designation.",
+    "usage": {
+      "input_tokens": 12000,
+      "output_tokens": 40,
+      "cache_read_tokens": 11000
+    },
+    "tool_calls": [
+      {
+        "call_id": "c1",
+        "name": "search_atnf",
+        "arguments": {
+          "name": "J0534+2200"
+        }
+      }
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "ATNF has J0534+2200 (B0531+21), the Crab pulsar: P0 = 0.0333924 s, DM = 56.77 pc/cm3, S1400 = 14.0 mJy. I queried by designation rather than by name because ATNF does no name resolution -- 'Crab' returns an empty result rather than an error, which would have read as the pulsar not being catalogued.",
+    "usage": {
+      "input_tokens": 13400,
+      "output_tokens": 102,
+      "cache_read_tokens": 12200
+    }
+  }
+]

@@ -1,0 +1,20 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: catalog, datatype: string}
+# - {name: frequency_ghz, datatype: float64}
+# - {name: flux_jy, datatype: float64}
+# - {name: flux_error_jy, datatype: float64}
+# - {name: reference, datatype: string}
+# meta: {comments: [Recorded radio photometry of Cassiopeia A. Ten of 4127 rows.]}
+catalog frequency_ghz flux_jy flux_error_jy reference
+VIII/65 0.0220 22000.0 2200.0 1977A&AS...28..211B
+VIII/65 0.0381 15600.0 900.0 1969MNRAS.143..129K
+VIII/38 0.0810 8900.0 400.0 1973AJ.....78.1030D
+VIII/38 0.1780 5200.0 260.0 1980A&AS...39..379B
+VIII/1 0.4080 3100.0 150.0 1969ApJ...157....1S
+VIII/1 0.7500 2050.0 100.0 1977A&AS...28..211B
+J/A+A/598/A104 1.4000 1420.0 45.0 1998AJ....115.1693C
+J/A+A/598/A104 4.8500 610.0 25.0 1991ApJS...75....1B
+VIII/100 8.3500 388.0 18.0 1997ApJ...482..245L
+VIII/100 32.000 121.0 9.0 2011ApJS..192...19W

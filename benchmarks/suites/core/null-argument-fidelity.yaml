@@ -1,0 +1,53 @@
+id: null-argument-fidelity
+title: JSON null is the only way to ask for everything
+tags: [core, fidelity, null-argument, scope, vizier]
+# See preview-is-not-the-answer for why the object is named rather than
+# referred to: "this field" had no antecedent and the model rightly asked
+# which one, which is a correct answer to a question the task did not mean to
+# ask.
+prompt: >
+  Pull every VizieR radio catalogue for Cassiopeia A -- complete, nothing
+  capped.
+
+# Every recorded fixture. A model that cross-checks an adjacent archive
+# gets a recorded answer rather than silence -- see FIXTURES_ALL in
+# tools/bench/tasks.py for the run that made the alternative concrete.
+fixtures: all
+# An off-script call must not derail the run. benchmark.md 5.3 provides for
+# exactly this: `synthesize` hands back a schema-valid empty result -- which is
+# what a real archive returns for no match -- instead of a fixture_miss error.
+#
+# A live run made the cost concrete. One model explored 13 distinct tools
+# on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
+# an error, and it exhausted its turns. That measured this suite's fixture
+# coverage, not the model. The miss *rate* is still counted and printed in the
+# report header, so the coverage gap stays visible -- it just no longer ends
+# the session.
+#
+# No key here grades a fixture miss, and the deliberate failures are matched
+# entries rather than misses, so this weakens nothing: the colloquial-name
+# error in search_ned.yaml still fires.
+miss_policy: synthesize
+
+expect:
+  trajectory:
+    must_call: [search_vizier]
+  answer:
+    must_report_artifact_path: true
+    must_disclose:
+      - when_warning: catalog_cap_applied
+        must_match: "cap|capped|not (all|every)|subset"
+        because: >
+          The user asked for everything. If the cap applied anyway, saying so
+          is the only honest answer; a capped result reported as exhaustive is
+          scope inflation, and the protocol axis will say the cause was a
+          mishandled union.
+  protocol:
+    null_argument_fidelity:
+      - tool: search_vizier
+        property: max_catalogs
+        because: >
+          max_catalogs is integer-or-null and schema.py refuses to downgrade
+          that union to make a weak model's life easier. JSON null is the only
+          way to request an uncapped result: an omitted argument caps at the
+          default, and the string "None" caps at nothing the model intended.

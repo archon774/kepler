@@ -1,0 +1,25 @@
+tool: get_citing_papers
+recorded_on: 2026-09-14
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/ads.py's return model.
+  It exists so the replayed archive is not EMPTY: a live run showed a model
+  making 38 calls across 12 tools and never answering, because every
+  undeclared tool returned nothing and it kept trying further archives. An
+  empty world punishes a model for cross-checking sources, which is
+  behaviour the real surface rewards. The SHAPE is faithful to the tool; the
+  VALUES are plausible placeholders and must not be quoted as measurements.
+  Replace with a `kepler-bench record` capture when credentials allow.
+miss_policy: synthesize
+entries:
+  - id: trotter
+    match: {bibcode: {equals: "2017MNRAS.469.1299T"}}
+    response:
+      status: ok
+      count: 4
+      columns: [bibcode, title, year]
+      preview:
+        - {bibcode: "2019ApJ...878..151S", title: "Radio monitoring of young supernova remnants", year: 2019}
+      artifact: {format: ecsv, row_count: 4, columns: [bibcode, title, year]}
+  - id: default
+    match: {}
+    response: {status: not_found, count: 0}

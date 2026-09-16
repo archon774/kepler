@@ -1,0 +1,60 @@
+id: preview-is-not-the-answer
+title: A ten-row preview is not the complete record
+tags: [core, fidelity, scope, vizier]
+# The prompt names the object. It read "this field" until a live run showed
+# the model correctly refusing to guess which field was meant: a task is a
+# fresh session with one user message, and Kepler retains no state between
+# calls, so "this" has no antecedent it could ever resolve. The scope-inflation
+# behaviour being graded needs the model to reach the tool, not to be blocked
+# before it.
+prompt: >
+  I need the complete historical radio photometry for Cassiopeia A -- all of
+  it, every catalogue.
+
+# Every recorded fixture. A model that cross-checks an adjacent archive
+# gets a recorded answer rather than silence -- see FIXTURES_ALL in
+# tools/bench/tasks.py for the run that made the alternative concrete.
+fixtures: all
+# An off-script call must not derail the run. benchmark.md 5.3 provides for
+# exactly this: `synthesize` hands back a schema-valid empty result -- which is
+# what a real archive returns for no match -- instead of a fixture_miss error.
+#
+# A live run made the cost concrete. One model explored 13 distinct tools
+# on one task; 15 of its 22 calls hit undeclared fixtures, every one came back
+# an error, and it exhausted its turns. That measured this suite's fixture
+# coverage, not the model. The miss *rate* is still counted and printed in the
+# report header, so the coverage gap stays visible -- it just no longer ends
+# the session.
+#
+# No key here grades a fixture miss, and the deliberate failures are matched
+# entries rather than misses, so this weakens nothing: the colloquial-name
+# error in search_ned.yaml still fires.
+miss_policy: synthesize
+
+expect:
+  trajectory:
+    must_call: [search_vizier]
+  answer:
+    must_report_artifact_path: true
+    must_report_value:
+      - name: total_rows
+        # The full-size artifact's own row count, read from the fixture.
+        source:
+          fixture: search_vizier
+          entry: radio-category-uncapped
+          path: response.artifact.row_count
+        rel_tol: 0.0
+        because: >
+          The tool reports 4,127 rows behind a ten-row preview and a full-size
+          artifact. "All of it" is the artifact and the total; answering with
+          the preview's ten rows, or with "here are the measurements", presents
+          a bounded result as complete.
+    must_not_match:
+      - "(?:these|the following)\\s+(?:ten|10)\\s+(?:rows|measurements)\\s+are\\s+(?:all|the complete)"
+    must_disclose:
+      - when_warning: preview_truncated
+        must_match: "preview|first ten|full (table|file|artifact)|complete (table|file)"
+        because: >
+          The preview exists so the model does not have to serialize 4,127 rows
+          into context. Presenting it as the data is the documented scope
+          inflation the warning already names.

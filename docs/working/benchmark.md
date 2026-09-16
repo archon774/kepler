@@ -1,10 +1,25 @@
 # Benchmarking Models on the Kepler Tool Surface
 
-**Status:** Design and rollout, not started. This is the detailed sequencing
-[model-backends.md](model-backends.md) deferred: its section 9 says phases 4–5
-"get their own detailed sequencing, written once the port lands and the fault
-taxonomy is real rather than predicted." The port landed on 2026-09-09; the
-taxonomy is real. This is that document.
+**Status:** **Built and calibrated (2026-09-14).** Every phase of the
+section 14 rollout has landed on `agent/model-benchmark`, one commit per phase,
+with the full suite green. **§7.1.9's gate is met for every suite but `smoke`**,
+which is exempt by construction: three backends of different tiers ran all
+sixteen tasks with three repeats each — 144 sessions. Each suite's
+`calibration.md` records what its run found, and a test asserts every suite
+states a status and names each of its tasks.
+
+What the calibration found is not a clean bill: `fieldcal-offline-solve` is
+failed by all three backends, both `optical` tasks are passed by all three and
+so discriminate nothing, and five checks were firing on correct answers and had
+to be fixed before the numbers meant anything — found by reading the prose with
+§11's `answers` verb, not by a second grader. See §14 for the per-phase record
+and `benchmark-results.md`, *Reading the answers*, for the sweep.
+
+This is the detailed sequencing [model-backends.md](model-backends.md)
+deferred: its section 9 says phases 4–5 "get their own detailed sequencing,
+written once the port lands and the fault taxonomy is real rather than
+predicted." The port landed on 2026-09-09; the taxonomy is real. This is that
+document.
 **Date:** 2026-09-13
 **Prerequisites:** [model-backends.md](model-backends.md) phases −1–3 —
 **met**: `tools/llm/` and `tools/agent/` exist, `tools/runner.py` is a shim,
@@ -33,7 +48,7 @@ of them or exists to explain one.
 
 | | Question | Axis | Section |
 | --- | --- | --- | --- |
-| **Q1** | Does the model change the **quality — the correctness — of the response?** | Answer correctness (+ the advisory judge) | 7.1, 7.5 |
+| **Q1** | Does the model change the **quality — the correctness — of the response?** | Answer correctness | 7.1 |
 | **Q2** | Does it change **efficiency** — timing per token, turns, tokens used? | Efficiency | 7.2 |
 
 **Q1 is the one that matters**, and it gets the most machinery: section 7.1 is
@@ -162,7 +177,7 @@ non-colliding path without writing, which is what S7's "the replay layer
 synthesizes artifact paths itself" needs.
 
 **Nothing else exists.** No `tools/bench/`, no `benchmarks/`, no
-`kepler-bench`, no `ReplayBackend`, no manifest v2, no judge.
+`kepler-bench`, no `ReplayBackend`, no manifest v2.
 That part is greenfield.
 
 ---
@@ -313,11 +328,13 @@ contract is untouched by this work.
 | `tools/bench/harness.py` | The run loop: backend × task × repeat, token budget (B5), run-directory writer. |
 | `tools/bench/graders/trajectory.py` | Must-call / must-not-call / ordering / argument predicates. |
 | `tools/bench/graders/efficiency.py` | Turns, calls, duplicate rate, tokens, and the three clocks. |
-| `tools/bench/graders/answer.py` | Deterministic assertions; the optional judge lives behind it. |
+| `tools/bench/graders/answer.py` | Deterministic assertions, and the only thing behind them is recorded evidence. |
 | `tools/bench/graders/protocol.py` | Fault counts and `null_argument_fidelity`. |
-| `tools/bench/judge.py` | The opt-in LLM judge. Isolated by construction (S1). |
 | `tools/bench/report.py` | Matrix rendering: Markdown and JSON. |
-| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `compare`. |
+| `tools/bench/answers.py` | The audit verb's reader: the task's prompt beside the model's reply. Offline; consults no model. |
+| `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `answers`, `compare`. |
+| `tools/bench/sources.py` | Mechanical resolution of an answer key's expected value. No key is ever a hand-typed literal. |
+| `tools/bench/falsify.py` | The adversarial pass over the keys themselves. Consults no model; can only accuse. |
 | `tools/llm/replay_backend.py` | `ReplayBackend` — replays a recorded model transcript. Test-only. |
 | `benchmarks/suites/<suite>/suite.yaml` | Suite manifest: id, description, ordered member task files. |
 | `benchmarks/suites/<suite>/<task-id>.yaml` | One task per file — so a corpus diff is reviewable per task. |
@@ -552,7 +569,11 @@ title: NED needs a formal catalog designation
 tags: [trajectory, name-resolution, core]
 prompt: >
   Get me NED's photometry for the Cat's Paw Nebula.
-max_turns: 8
+# No max_turns. The cap is *derived* from the task's own declared requirement
+# (tasks.derive_turn_cap) and a task file that sets one fails to load: the only
+# evidence for choosing a cap is a transcript, so a hand-set cap is fitted to
+# whoever produced that transcript. It is a loop-breaker, never a measurement
+# parameter -- a run that reaches it is incomplete, not failed.
 fixtures: [search_simbad, search_ned]   # relative names under the fixture root
 miss_policy: error                      # optional per-task override
 env:                                    # optional; KEPLER_* only (B7)
@@ -601,11 +622,35 @@ Section 7.1.6 ranks all of them by robustness. **Reach for the top of that
 table first** — a task leaning on `must_match` is a task that may be grading
 prose style, and 7.1.9 is the gate that catches it.
 
-**`must_report_value`** asserts a number: `{name: period_s, expected:
-0.7145197, rel_tol: 0.02, unit: s}`. The grader extracts numeric literals from
-the answer with a bounded regex and passes if at least one lies within
-tolerance. This is the pulsar suite's workhorse — a period is the one thing on
-this surface with an unambiguous right answer.
+**`must_report_value`** asserts a number, and **never a hand-typed one**. The
+check names the mechanical source its expectation comes from and the loader
+resolves it (`tools/bench/sources.py`):
+
+```yaml
+- name: period_s
+  source: {dataset: pulsar/curated_periods.json, path: pulsars.b0329.period_s}
+  rel_tol: 0.02
+  unit: s
+```
+
+Three source kinds, all model-independent: `fixture` (a field of the recorded
+archive response), `dataset` (a field of a repository data file — independent
+ground truth that predates this benchmark, resolved against the repository's
+own `data/` tree rather than `KEPLER_DATA_DIR`), and `tool_result` (the value a
+deterministic Kepler tool returned on the run being graded — the fidelity
+case). A literal `expected:` fails to load.
+
+The last kind is not circular: it reads the return value of repository code
+whose behaviour the preservation suite pins, not a model's prose. The model
+picks the arguments — that is the trajectory axis — but cannot change what the
+tool computes from them. **Weighing an answer against a tool's output is
+fidelity; weighing it against another model's output would be an opinion poll,
+and nothing here does that.**
+
+The grader extracts numeric literals from the answer with a bounded regex and
+passes if at least one lies within tolerance. This is the pulsar suite's
+workhorse — a period is the one thing on this surface with an unambiguous right
+answer.
 
 **`must_report_artifact_path`** is checked against the manifest, not against a
 regex: the answer must contain, verbatim, a path that appears in some
@@ -624,6 +669,27 @@ conditional:
       Quoting a decline rate with no abstract-returning call means the figure
       came from training data. Confirmed live; see SYSTEM_PROMPT, SOURCING.
 ```
+
+A third guard form, **`when_no_result`**, reads what a tool *returned* rather
+than what was called, using the shared fixture predicate vocabulary:
+
+```yaml
+conditional:
+  - when_no_result:
+      tool: search_ned
+      where:
+        status: {equals: ok}
+    answer_must_not_match: "\\b(?:photometric|photometry) (?:table|measurements) (?:shows?|gives?|lists?)"
+```
+
+**Reach for it whenever the rationale is about an outcome.** `no-identical-retry`
+guarded "a photometry table cannot be reported when no call returned one" on
+*`search_simbad` not being called*, while its own trajectory rule accepts the
+formal designation "from the model's own knowledge **or** via `search_simbad`".
+A model taking the first, sanctioned route had the guard opened against it for
+doing the right thing, and escaped only because the forbidden pattern is narrow
+enough to miss ordinary phrasing. A guard on a proxy call says something
+different from what it means.
 
 **`because` is required on every hard-failure check.** It is printed verbatim
 in the report next to the failure, so a scoreboard entry explains itself
@@ -653,7 +719,7 @@ is enforced by the loader.
 
 Each grader is a pure function from `(task, manifest, answer_text, events)` to
 a result record. No I/O beyond reading the run directory; no model calls except
-the opt-in judge, which is its own module.
+nothing else.
 
 Two of the four answer a question (7.1, 7.2); two are diagnostic (7.3, 7.4)
 and exist to explain a headline number rather than to compete with it.
@@ -871,7 +937,10 @@ full result dict, so the event stream is the only place the numbers a model saw
 are recoverable. This is the main reason the harness writes `events.jsonl` at
 all, beyond bookkeeping.
 
-Three constraints, because a naive version would be worse than none:
+Five constraints, because a naive version would be worse than none — and the
+last two were added after **every one of this check's four failures in a
+144-session sweep turned out to be a false positive**, three of them on
+behaviour `SYSTEM_PROMPT` explicitly asks for:
 
 1. **It flags by default; it does not fail.** Models legitimately derive
    numbers — a mean, a unit conversion, a ratio, a rounded restatement. The
@@ -885,22 +954,64 @@ Three constraints, because a naive version would be worse than none:
    against the source this session" or similar; a number inside such a sentence
    is correctly sourced as *not* from a tool. The grader looks for the label
    within a bounded window around the number.
+4. **A disclaimed number is a mention, not a claim.** Told not to repeat a
+   circulated figure, a model wrote *A commonly-cited "0.3–0.7 %/yr depending
+   on frequency" is **not** what this paper says* — and was marked down for
+   fabricating the number it had just refused to use. A number is excused when
+   it is **quoted** *and* its sentence carries a **negation**: two independent
+   structural signals. Quoting alone would be an evasion; a model would have to
+   both quote a number and negate it, at which point it has not asserted it.
+5. **A negated number is not asserted.** *"None matched the known 0.016665 s
+   mains-interference artifact"* reports that a value did not occur. Scope, not
+   mere presence: the negation must precede the number with no contrastive
+   pivot in between, so *"not 0.05 but 0.12 mag"* still holds the model to the
+   0.12.
+
+**Both are grammatical criteria, not phrasing lists**, and that distinction is
+the whole point. Widening `BACKGROUND_LABELS` to admit the disclaimer was tried
+first and was correctly called fitting the corpus to one backend's prose.
+Negation belongs to the language, not to a model.
+
+**The promotion step reads the flagged occurrence.** It located the number with
+`answer.find(literal)` — the first *substring* hit anywhere in the answer, which
+for a bare `6` lands inside some unrelated `0.1429`. A live session had the `6`
+of *"0.1192 ≈ P/6"* promoted to a hard failure on a pattern it does not match.
+A promotion pattern is now matched against the occurrence plus a short unit
+window, which is all it needs to reach `%/yr` or `s`.
+
+**And a promotion pattern should be no broader than its own `because`.**
+`\d\.\d{3,}`, written to catch a fabricated *period*, matched any number with
+three decimals and fired on *"agrees to within ~0.007%"* — a relative difference
+derived from two numbers the model had already sourced. It now reaches for the
+unit.
 
 #### 7.1.8 What makes a task pass
 
 Two numbers, because one would lose information:
 
 - **`passed`** — boolean, true when **every hard check is green**. Hard checks
-  are `must_reach_verdict`, `must_report_value`, `must_report_artifact_path`,
-  `must_not_match`, `conditional`, `must_disclose`, `must_label`,
-  `must_state_uncertainty`, and any promoted `must_source_value`. This is what
-  "tokens to an answer" (7.2) conditions on, and what the matrix counts.
+  are `empty_answer`, `must_reach_verdict`, `must_report_value`,
+  `must_report_artifact_path`, `must_not_match`, `conditional`,
+  `must_disclose`, `must_label`, `must_state_uncertainty`, and any promoted
+  `must_source_value`. This is what "tokens to an answer" (7.2) conditions on,
+  and what the matrix counts.
 - **`checks_passed / checks_total`** — fractional, so a near-miss and a
   complete miss are distinguishable in the per-task grid.
 
 A session whose `outcome` is `max_turns` or `budget_exceeded` is `incomplete`,
 reported in its own column and never scored as a low pass rate — a model that
 ran out of turns did not answer badly, it did not answer.
+
+**`empty_answer` is a different thing and is a hard failure.** A model that
+ends `end_turn` having written nothing has not run out of anything; it has
+declined to answer, and no outcome marks it. Without this check an empty
+string satisfies every negative check vacuously, so a task whose key is
+entirely `must_not_match` — "do not say the object is missing from the
+catalogue" — scores a silent session as **correct**. That is not hypothetical:
+a live sweep recorded `qwen3.5:9b` as 3/3 on `atnf-formal-designation` on
+exactly this, in all three repeats. It was found by reading the answers
+(`kepler-bench answers`, section 11), which is the argument for that verb
+existing.
 
 #### 7.1.9 Calibrating the corpus before trusting it
 
@@ -923,10 +1034,10 @@ phase 5d, not an afterthought.
 
 Broad answer quality — whether this is better research *writing* — is not
 deterministically checkable, and the keys above are narrow on purpose because a
-reproducible key must be. The judge (7.5) is the instrument for the rest, and
-it is opt-in and advisory precisely because it is the least trustworthy one
-here. **If Q1 needs to discriminate more finely, the answer is more per-task
-keys, not a better judge.** Every check above was added by reading
+reproducible key must be. **If Q1 needs to discriminate more finely, the
+answer is more per-task keys** — nothing else, and in particular not a model
+asked to grade another model's prose (7.5). Every check above was added by
+reading
 `tools/agent/prompt.py` for things it records models getting wrong; that is the
 method for adding more.
 
@@ -1056,32 +1167,38 @@ It is diagnostic for the same reason as 7.3, and it feeds Q1 directly: a
 capped result reported as exhaustive is a scope-inflation failure on 7.1. The
 protocol axis is where that failure's cause is legible.
 
-### 7.5 The optional judge (S1)
+### 7.5 No model grades a model — removed
 
-Opt-in via `--judge <spec>`, off by default, routed through the same model
-port so it can be a local Ollama model — free, offline, consistent with
-replay.
+An optional LLM judge was designed here and built: opt-in, isolated to two
+strings, its verdict reported in its own column and never blended into the
+score. **It is gone, and its security requirement (S1) went with it.**
 
-**The judge receives exactly two strings: the task's answer key and the final
-answer text.** Not tool results, not the trajectory, not the system prompt,
-not fixture content. Tool results are arbitrary third-party text — ADS
-abstracts, VizieR catalog descriptions, SIMBAD notes, NED cells — and because
-fixtures are committed and replayed, one poisoned capture would corrupt the
-scoreboard permanently and invisibly. The isolation is structural: `judge.py`
-takes `(answer_key: str, answer_text: str)` and has no access to a manifest or
-a fixture store to leak from.
+It was removed because of what running it over a full sweep showed. On 21 of
+138 comparable sessions it disagreed with the deterministic checks, and reading
+those disagreements found nothing the checks could not be fixed to handle — it
+confirmed one defect the checks already had, and on a guarded check it was
+*structurally* unable to form a view, because the guard reads the trajectory
+and the isolation that made the judge safe denies it exactly that. Asked the
+same question three times it answered both ways.
 
-Its output is parsed as a strict structured verdict; **unparseable output is
-an error, never a pass**. It is reported in its own column and never blended
-into the deterministic score. Its model spec is recorded in `run.json` and
-printed in the report header.
+The deeper problem is what an advisory column does to the incentive. Five
+checks in this suite were firing on correct answers; a second opinion sitting
+beside them makes that survivable instead of urgent. **An extra diagnostic
+layer over a broken check leaves the check broken.** Every one of the five was
+found by reading the prose (`kepler-bench answers`, section 11) and fixed where
+it was — see 7.1.7, whose last three constraints exist because of that pass.
+
+So the rule is now unconditional: **every verdict in this harness is a
+deterministic assertion against recorded evidence, and nothing asks a model
+whether an answer is correct.** That also retires a whole class of risk rather
+than mitigating it — a poisoned fixture has no model-grader to reach, because
+there is none.
 
 ### 7.6 The matrix
 
 Rows are backend specs. Columns are the **two headline axes first** —
 correctness (7.1), efficiency (7.2) — then the two diagnostic ones, trajectory
-(7.3) and protocol (7.4), then the judge column if it ran. A second table is
-the per-task grid.
+(7.3) and protocol (7.4). A second table is the per-task grid.
 
 The ordering is load-bearing: the two questions this harness exists to answer
 are read left to right, and the diagnostics sit beside them to explain a number
@@ -1311,7 +1428,7 @@ a named test, not advice.
 
 | ID | Requirement | Where | Test |
 | --- | --- | --- | --- |
-| **S1** | The judge sees only the answer key and the answer text | `judge.py` signature takes two strings and has no store access | a fixture whose text carries an injection string cannot change the verdict, because it never reaches it |
+| ~~**S1**~~ | ~~The judge sees only the answer key and the answer text~~ | **Retired with the component (7.5).** There is no model-grader, so no recorded text can reach one | the risk is removed rather than mitigated |
 | **S2** | Capture records responses only; a capture made with credentials set contains no substring of any of them | `record.py` | credential scan over the serialized fixture, refusing the write |
 | **S5** | `yaml.safe_load`, always | `tasks.py`, `fixtures.py` | a `!!python/object` tag raises |
 | **S6** | Suite and fixture paths are contained | `tasks.py` | traversal and absolute references both rejected |
@@ -1347,19 +1464,35 @@ kepler-bench run core \
 # Grade (offline, free, repeatable after a grader fix).
 kepler-bench grade artifacts/bench/2026-09-13-core
 
+# Attack the keys with the evidence already recorded. Offline, free, no model.
+kepler-bench falsify artifacts/bench/2026-09-13-core
+
 # Render the matrix; --composite for a single weighted number.
 kepler-bench compare artifacts/bench/2026-09-13-core [more-run-dirs...]
+
+# Read what the models actually said. Offline, free, no model.
+kepler-bench answers artifacts/bench/2026-09-13-core --wrong-only
+kepler-bench answers artifacts/bench/2026-09-13-core --disagreed
 
 
 # Capture a fixture entry for review. Live, one tool, human-reviewed after.
 kepler-bench record core/ned-formal-designation --tool search_ned
 ```
 
+`answers` is the audit verb: every other verb reduces a session to a verdict,
+and this one prints the task's prompt beside the model's reply. A check that
+fires is a claim about a piece of prose, and the only way to separate a real
+failure from a regex artefact is to read the prose — which is how the
+`must_source_value` false positive (7.1) was found and how `empty_answer`
+(7.1.8) was found. `--wrong-only` narrows to the sessions a check failed;
+It consults no model, which is the point: it is how a human reads what was
+actually said.
+
 `run` implies `grade` unless `--no-grade`; `grade` is separately invocable so a
 grader fix never costs a re-spend. `--tag` filters `compare` to the tasks
 carrying one tag (`sourcing`, `null-argument`, `name-resolution`, …), which is
 how a single correctness family gets read on its own. `--enable <tool>` opts a blocked tool in
-(`solve_astrometry`). `--judge <spec>` turns on the advisory column. Every verb
+(`solve_astrometry`). Every verb
 `--max-tokens` is required for any live backend (5.7).
 
 ---
@@ -1370,7 +1503,7 @@ how a single correctness family gets read on its own. `--enable <tool>` opts a b
 
 Header: run id, UTC timestamps, backends with capabilities, suite id and
 corpus SHA-256s, `corpus_dirty` if set, repeats, temperature, seed, the
-judge model if any, **the fixture miss rate**, and any `budget_exceeded` or
+**the fixture miss rate**, and any `budget_exceeded` or
 `incomplete` outcomes.
 
 Then the matrix (backends × correctness, efficiency, then the two diagnostic
@@ -1399,7 +1532,6 @@ keys, no daemon, no new CI job.
 | `tests/test_bench_graders.py` | each grader against synthetic manifests, including adversarial ones: a v1 manifest, a manifest with no `usage_totals`, a `max_turns` outcome, a fabricated artifact path |
 | `tests/test_bench_correctness.py` | the three kinds of right answer: `must_reach_verdict` reads a tool's boolean and a provenance-violating trajectory still fails; the four fidelity families (a fabricated number is flagged, a derived one is not failed, a designation and a year are excluded, a background label satisfies sourcing, a fired warning with no disclosure fails); `passed` is true only when every hard check is green, and an `incomplete` outcome is neither pass nor fail |
 | `tests/test_bench_efficiency.py` | the three clocks stay separate and tool time never enters the timing-per-token rate; the four token classes are reported separately with a cache share; a non-streaming backend's rate is labelled as averaged |
-| `tests/test_bench_judge.py` | judge isolation (S1): injection text in a fixture cannot reach the verdict; unparseable output is an error |
 | `tests/test_llm_replay_backend.py` | transcript replay, `on_text`, exhaustion raises |
 | `tests/test_sessions_manifest_v2.py` | v2 payload; a v1 manifest still reads; absent usage is `None`, not `0` |
 
@@ -1448,7 +1580,27 @@ python3 -m compileall tools algorithms tests
 git diff --check
 ```
 
-### Phases
+### Phases — all landed 2026-09-13
+
+Delivered on `agent/model-benchmark` off `dev`, one commit per phase, each with
+`uv run pytest` green, `compileall` clean and `git diff --check` clean.
+
+| Phase | Commit | Outcome |
+| --- | --- | --- |
+| **4a** | `Extend the session manifest to schema version 2` | v2 payload + the four-line engine wiring. `tests/test_runner_session.py` passed **unedited**. First task discharged: all four adapters do populate `latency_ms` and `usage` (Ollama through `OpenAIBackend.complete`); Gemini and Ollama gained the missing assertions. |
+| — | `Record a list-returning tool's result instead of crashing the loop` | **Not a benchmark phase.** A pre-existing defect the harness surfaced: `list_photometric_catalogs`, `list_artifacts` and `list_zeropoint_references` return `list[Model]`, and `.model_dump()` on a list raised mid-dispatch. Separate commit, at the maintainer's direction. |
+| **4b** | `Add ReplayBackend and the recorded-transcript format` | `tools/llm/replay_backend.py`, `benchmarks/transcripts/smoke.json`. |
+| **4c** | `Add the benchmark tool plane and fixture store` | `plane.py` (B1 closed), `fixtures.py` (B3, S5, S6, S7). Open question 1 answered: the class-M predicate is asserted against the tool's own registry schema. |
+| **4d** | `Add benchmark record mode with the credential scan` | S2, plus imperative-string flagging for review. |
+| **5a** | `Add the benchmark task loader, run loop, and kepler-bench run` | S5, S6, B2, B4, B5, B7. |
+| **5b** | `Add the four benchmark graders and the grade verb` | The three kinds of right answer, the four fidelity families, three clocks. |
+| **5c** | `Add the benchmark matrix and the compare/record verbs` | B6; headline axes first, no blended score by default. |
+| **5d** | `Add the benchmark corpus` | 16 tasks, five suites. Two pulsar task premises were measured and both original guesses were wrong (§9.3). **Calibration gate met 2026-09-14** for every suite but `smoke`; see each `calibration.md`. |
+| ~~**5e**~~ | ~~`Add the opt-in LLM judge, isolated by construction`~~ | Built, run once over a full sweep, and **removed** — see 7.5. |
+| **docs** | this commit | this document, model-backends.md §5/§6/§9/§11, `docs/working/README.md`, `docs/tool-architecture.md` §10.1, `CLAUDE.md`. |
+
+The original per-phase gate table, kept as the specification each phase was
+built against:
 
 | Phase | Content | Gate |
 | --- | --- | --- |
@@ -1460,7 +1612,7 @@ git diff --check
 | **5b** | The four graders + the `grade` verb. Answer correctness (the four families), efficiency (three clocks, four token classes), trajectory, protocol. | Each grader green against synthetic and adversarial manifests; a v1 manifest grades without crashing; the timing-per-token rate excludes tool time and labels streaming vs. averaged; `must_source_value` flags a fabricated number and does not fail a derived one. |
 | **5c** | `report.py` + the `compare` verb. | Matrix renders; the header carries the corpus hashes, the host, the fixture miss rate, and any incomplete outcomes. |
 | **5d** | The corpus: `core` (8 tasks), `fieldcal`, `pulsar`, `optical`, `smoke`, and their fixtures. **A data PR** — fixture diffs are reviewed as adversarial input, not test data. | Every task loads; every fixture revalidates; the `core` suite runs end to end against `ReplayBackend`; **and the 7.1.9 calibration has been run against ≥3 backends of different tiers, with `calibration.md` committed** — a suite that has not discriminated anything is not a suite. |
-| **5e** | `judge.py` and the `--judge` flag. **Its own PR**, because it is the one component that hands model-adjacent text to a model. | S1: an injection string in a fixture cannot reach the verdict; unparseable output is an error, never a pass. |
+| ~~**5e**~~ | ~~`judge.py` and the `--judge` flag.~~ Removed (7.5): an advisory column over checks that could be fixed made a broken check survivable instead of urgent. |
 | **docs** | Its own PR, last. | See below. |
 
 ### Files this rollout creates
@@ -1475,7 +1627,6 @@ git diff --check
 | `tools/bench/graders/{__init__,answer,efficiency,trajectory,protocol}.py`, `tests/test_bench_graders.py`, `tests/test_bench_correctness.py`, `tests/test_bench_efficiency.py` | 5b |
 | `tools/bench/report.py` | 5c |
 | `benchmarks/suites/{core,pulsar,optical,smoke}/**`, `benchmarks/fixtures/**` | 5d |
-| `tools/bench/judge.py`, `tests/test_bench_judge.py` | 5e |
 
 ### Files this rollout modifies
 
@@ -1493,27 +1644,29 @@ adapters; `tools/runner.py`; anything under `algorithms/`.
 
 ### Documentation phase
 
-- [ ] Update this document's status per phase with PR numbers, and mark S1,
+- [x] Update this document's status per phase with PR numbers, and mark S1,
       S2, S5, S6, S7 implemented in **both** this document and
       model-backends.md section 5 — that document's status block currently
       says they are "not yet built," and leaving it saying so is exactly the
       stale-documentation failure `CLAUDE.md` already carries scars from.
-- [ ] model-backends.md: mark phases 4–5 done in the section 9 status table,
+- [x] model-backends.md: mark phases 4–5 done in the section 9 status table,
       record that open question 3 (the price table) is **closed as not built** —
       no cost axis, no price table — and point section 6 at this document.
-- [ ] `docs/working/README.md`: add the row, and state that the benchmark is
+- [x] `docs/working/README.md`: add the row, and state that the benchmark is
       the Model track's second half rather than a new track.
-- [ ] `docs/tool-architecture.md`: a subsection describing `tools/bench/` —
+- [x] `docs/tool-architecture.md`: a subsection describing `tools/bench/` —
       the three tool classes, that the harness reads manifests and substitutes
       `tool_functions`, and that it adds nothing to the tool surface.
-- [ ] `CLAUDE.md`: extend *Python domain boundaries* with `tools/bench/` — it
+- [x] `CLAUDE.md`: extend *Python domain boundaries* with `tools/bench/` — it
       reads the registry and the manifest and owns no tool; nothing under
       `algorithms/` or `tools/llm/` imports it; the plane is closed and a new
       registry tool must be classified in the same commit that adds it.
-- [ ] **Verify every claim against the code before writing it.**
+- [x] **Verify every claim against the code before writing it.**
 - [ ] When the track lands, fold the durable outcome into a top-level
       `docs/` reference and delete both working documents, per
-      `docs/working/README.md`'s lifecycle rule.
+      `docs/working/README.md`'s lifecycle rule. **Blocked on the §7.1.9
+      calibration run** — a harness whose answer keys have never met a real
+      model is not a landed track.
 
 ---
 

@@ -86,6 +86,7 @@ dependencies = [
 
 [project.scripts]
 kepler-astro-query = "tools.runner:main"
+kepler-bench = "tools.bench.cli:main"
 
 [tool.setuptools]
 include-package-data = true

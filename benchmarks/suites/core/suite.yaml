@@ -1,0 +1,23 @@
+id: core
+description: >
+  Eight tasks, one per confirmed-live failure mode tools/agent/prompt.py already
+  documents. Every model is asked these verbatim, with the same system prompt
+  and the same fixtures; the only thing that varies besides the model is the
+  schema dialect its provider speaks, which is part of what is being tested
+  rather than a confound to eliminate.
+
+  The set is sealed at eight (model-backends.md open question 4) and grows from
+  evidence, not toward a target count.
+
+  UNCALIBRATED. See calibration.md: this suite has not yet been run against
+  three backends of different tiers, so no task here is known to discriminate
+  anything.
+tasks:
+  - vizier-category-not-per-catalog
+  - no-identical-retry
+  - ned-formal-designation
+  - atnf-formal-designation
+  - pulsar-period-not-from-audio
+  - preview-is-not-the-answer
+  - abstract-before-attribution
+  - null-argument-fidelity

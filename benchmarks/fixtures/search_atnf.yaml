@@ -1,0 +1,35 @@
+tool: search_atnf
+recorded_on: 2026-09-13
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/atnf.py's return model and
+  the ATNF catalogue's documented behaviour: it performs ZERO name resolution,
+  so a common name returns an empty result rather than an error. That empty
+  result is the whole point of the task this fixture serves, and it is the one
+  thing here that is certainly faithful. The parameter values for J0534+2200
+  are the widely published ones; replace with a capture before quoting them.
+miss_policy: error
+entries:
+  - id: crab-by-designation
+    match:
+      name: {one_of: ["J0534+2200", "B0531+21"]}
+    response:
+      status: ok
+      count: 1
+      columns: [JNAME, BNAME, P0, DM, S1400]
+      preview:
+        - {JNAME: "J0534+2200", BNAME: "B0531+21", P0: 0.0333924, DM: 56.77, S1400: 14.0}
+
+  # Not an error: ATNF matches nothing and says so. A model that passes "Crab"
+  # therefore reports that the most famous pulsar there is is not catalogued.
+  - id: a-common-name-matches-nothing
+    match: {}
+    response:
+      status: not_found
+      count: 0
+      # ToolResult declares `warnings: list[str]` upstream, so a class-R
+      # warning carries its identifier in the text rather than in a `code`
+      # field. must_disclose matches either.
+      warnings:
+        - >-
+          no_match: no pulsar matched that name. The ATNF catalogue is indexed
+          by formal designation only and performs no name resolution.

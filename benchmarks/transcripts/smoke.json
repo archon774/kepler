@@ -1,0 +1,30 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "text": "Let me see which pulsar scans are bundled here.",
+    "tool_calls": [
+      {"call_id": "smoke_1", "name": "list_pulsar_scans", "arguments": {}}
+    ],
+    "usage": {"input_tokens": 12400, "output_tokens": 28, "cache_read_tokens": 11800},
+    "raw_stop_reason": "tool_use"
+  },
+  {
+    "stop_reason": "tool_use",
+    "text": "B0329+54 is listed. Resolving its scan.",
+    "tool_calls": [
+      {
+        "call_id": "smoke_2",
+        "name": "resolve_pulsar_scan",
+        "arguments": {"name": "B0329+54"}
+      }
+    ],
+    "usage": {"input_tokens": 13100, "output_tokens": 31, "cache_read_tokens": 11800},
+    "raw_stop_reason": "tool_use"
+  },
+  {
+    "stop_reason": "end_turn",
+    "text": "Five pulsar scans are bundled. B0329+54 resolves to a single scan, and its listing carries a curated literature period of 0.7145197 s -- a reference to check a measurement against, not a measured period. Nothing here measured one: no periodogram was run.",
+    "usage": {"input_tokens": 13900, "output_tokens": 96, "cache_read_tokens": 11800},
+    "raw_stop_reason": "end_turn"
+  }
+]

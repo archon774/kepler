@@ -22,7 +22,9 @@ class WcsSolveMetadata:
     ignores the radius (its blind path always searches locally around the
     hint) and, unless the window was explicit, narrows it around the header's
     pixel-scale estimate — ``search_atlas_*`` is the window ATLAS was actually
-    given, set only when that backend was attempted.
+    given, set only when that backend was attempted. ``atlas_*`` diagnostics
+    record that backend's observed source/catalog counts, normalized miss
+    reason, and whether its candidate was accepted by the WCS acceptance gate.
     """
 
     science_hdu_index: int | None = None
@@ -56,6 +58,10 @@ class WcsSolveMetadata:
     search_center_dec_deg: float | None = None
     search_atlas_min_scale_arcsec: float | None = None
     search_atlas_max_scale_arcsec: float | None = None
+    atlas_source_count: int | None = None
+    atlas_catalog_count: int | None = None
+    atlas_failure_reason: str | None = None
+    atlas_accepted: bool | None = None
 
 
 @dataclass(frozen=True)

@@ -179,6 +179,7 @@ identical function any other caller would import and run.
 | --- | --- | --- |
 | `tools/` | Python tools | Plain Python wrappers for local frame discovery (`tools/optical.py`), WCS description and plate solving (`tools/astrometry.py`, `tools/wcs.py`), catalog metadata, reference-band resolution, zero-point solving and the recorded-solve references (`tools/fieldcal_reference.py`), local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
 | `tools/runner.py`, `tools/agent/`, `tools/llm/`, `tools/registry.py`, `tools/sessions.py` | Python agent | The `kepler-astro-query` tool-use loop: a console shim (`runner.py`) over the headless engine (`tools/agent/`), the provider-neutral model port (`tools/llm/`: Anthropic, OpenAI-compatible, Ollama, Gemini), the tool-schema registry, and the per-run session manifest recorder. See [The Agent](#the-agent). |
+| `tools/bench/`, `benchmarks/` | Python agent | The model benchmark harness (`kepler-bench`) and its corpus. Answers which model is better on this tool surface and at what cost in work: it reads the registry and the session manifest, replays the 22 remote tools from recorded fixtures, runs the 26 local ones live, and grades on four axes. It owns no tool. Offline and deterministic -- the smoke suite runs inside a plain `uv run pytest` with no key and no socket. See `docs/tool-architecture.md` 10.1. |
 | `tools/claude_photometry_haiku_tool.py` | Python agent | Automated FITS photometry pipeline with an optional Claude-generated results summary. See [The Agent](#the-agent). |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
@@ -411,9 +412,54 @@ The WCS solver reads backend settings from environment variables:
 - `ATLAS_CATALOG`: catalog name, defaulting to `ucac5`.
 - `ATLAS_TIMEOUT_S`: ATLAS matcher timeout in seconds.
 
-The astrometry.net backend also needs a `solve-field` binary on `PATH` or via
-the supported `SKYLIB_*` environment overrides documented in
-`docs/extraction.md`, WCS.
+ATLAS and astrometry.net serve different observing workflows. The normal solver
+order is astrometry.net first, then ATLAS as its fallback. For a quick local
+solve of a frame with trustworthy pointing and pixel-scale keywords, configure
+only ATLAS (leave `ANET_INDEX_PATH` unset): ATLAS uses the header hints to
+narrow its local UCAC triangle search. For a blind solve, configure
+astrometry.net instead: it needs `solve-field` on `PATH` (or a supported
+`SKYLIB_*` override) and indexes in `ANET_INDEX_PATH`.
+
+### ATLAS catalog dependency
+
+The UCAC catalog is an operator-owned dependency, like the local HR-diagram
+isochrone grid: do not download, copy, or commit it under Kepler. Set both
+variables for the installed catalog. The supplied UCAC5 tree on this host is:
+
+```bash
+export ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5
+export ATLAS_CATALOG=ucac5
+```
+
+Supported layouts are:
+
+```text
+# UCAC5: ATLAS_CATALOG_ROOT may be either directory
+<root>/u5z/u5index.asc
+<root>/u5z/z001 ... z900
+
+# UCAC4: ATLAS_CATALOG_ROOT is the directory holding zone files
+<root>/Z000.UC4 ... Z179.UC4
+```
+
+The supplied complete UCAC5 tree uses 5.3 GB; reserve at least 6 GB for a
+local UCAC5 installation. A complete native UCAC4 tree is approximately 8.5
+GB; reserve at least 10 GB. Verify the configured reader can instantiate and
+query the catalog without network access before running a solve:
+
+```bash
+uv run python -c "from pathlib import Path; from algorithms.skylib_lite.astrometry.atlas.catalog import get_catalog_spec; import os; root = Path(os.environ['ATLAS_CATALOG_ROOT']); catalog = os.environ.get('ATLAS_CATALOG', 'ucac5'); index = get_catalog_spec(catalog).index_factory(root); result = index.query_box(0.0, 0.25, -0.1, 0.1); print(f'{catalog}: {len(result.ra_deg)} stars in preflight box')"
+```
+
+For the operator-only ATLAS validation route, run:
+
+```bash
+ATLAS_CATALOG_ROOT=/srv/agents/catalogs/ATLAS/UCAC5 ATLAS_CATALOG=ucac5 \
+  uv run pytest tests/test_wcs_solution.py::test_atlas_looks_up_operator_catalog_with_an_explicit_scale_window -v
+```
+
+For local blind astrometry.net validation on this host, use indexes under
+`/srv/agents/catalogs/astrometry` rather than the ATLAS catalog tree.
 If neither backend is configured, the package can still import, but end-to-end
 plate solving will not produce a solution.
 

@@ -1,0 +1,27 @@
+tool: identify_radio_sources
+recorded_on: 2026-09-14
+provenance: >
+  HAND-AUTHORED, not captured. Written against tools/radio_sources.py's
+  return model. It exists so the replayed archive is not EMPTY: a live run
+  showed a model making 38 calls across 12 tools and never answering,
+  because every undeclared tool returned nothing and it kept trying further
+  archives. An empty world punishes a model for cross-checking sources,
+  which is behaviour the real surface rewards. The SHAPE is faithful to the
+  tool; the VALUES are plausible placeholders and must not be quoted as
+  measurements. Replace with a `kepler-bench record` capture when
+  credentials allow.
+miss_policy: synthesize
+entries:
+  - id: default
+    match: {}
+    response:
+      status: ok
+      count: 4
+      columns: [source_id, ra_deg, dec_deg, flux_jy, catalog]
+      preview:
+        - {source_id: "J2323+5848", ra_deg: 350.85, dec_deg: 58.815, flux_jy: 1420.0, catalog: "VIII/65"}
+      warnings:
+        - >-
+          2 detected sources matched no catalogue entry and were skipped; the
+          count above is catalogued sources only.
+      artifact: {format: ecsv, row_count: 4, columns: [source_id, ra_deg, dec_deg, flux_jy, catalog]}
