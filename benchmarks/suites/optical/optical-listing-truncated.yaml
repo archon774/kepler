@@ -6,7 +6,7 @@ prompt: >
 
 fixtures: []
 env:
-  # Shrunk so the cap fires over the bundled 39-frame library. B7 allows a
+  # Shrunk so the cap fires over the bundled 42-frame library. B7 allows a
   # task to shape Kepler's own configuration and nothing else.
   KEPLER_MAX_FRAMES: "5"
 
@@ -16,7 +16,7 @@ expect:
   answer:
     must_disclose:
       - when_warning: listing_truncated
-        must_match: "truncat|not the (complete|whole|full)|more frames|partial|only the first|39"
+        must_match: "truncat|not the (complete|whole|full)|more frames|partial|only the first|42"
         because: >
           The listing carries a listing_truncated warning naming the total. A
           truncated listing presented as the whole library is the documented

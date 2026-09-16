@@ -25,6 +25,24 @@ after the fact. The four answer keys that changed are re-digested in
 `benchmarks/keys.lock` in the same commit, which is the guard that stops a key
 being quietly revised to move a score.
 
+**One key has moved since this sweep, and it is recorded here rather than
+folded in silently.** P8 (2026-09-16) added three frames, making the bundled
+library 42 rather than 39, and `optical-listing-truncated`'s disclosure
+alternation had offered the bare total `39` as evidence a model had disclosed
+the cap — an alternative that would now pass an answer asserting a count that
+is wrong. It is `42` in `benchmarks/keys.lock` as of that commit.
+
+**The sessions below were graded under the old key and were not re-run or
+re-graded.** That is sound here only because no recorded verdict rested on the
+alternative that changed, which was checked rather than assumed: of the nine
+recorded `optical-listing-truncated` sessions, one (`anthropic r3`) is an
+excluded harness error — empty answer, `outcome: error`, one of the three
+connection failures noted above — and each of the other eight matched
+`truncat` or `only the first` in its own answer text, independently of whether
+the number appeared. So every scored verdict stands under both keys. A key
+change that could flip a verdict would still owe a full re-grade; this one
+cannot, and the check is reproducible from the answers in `artifacts/bench/`.
+
 **Health of the sweep.** 3 of 144 sessions (2%) failed inside the harness — all
 three transient connection errors on the hosted backend. Those sessions are
 excluded rather than scored. Fixture miss rate 5.6%.
