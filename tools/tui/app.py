@@ -23,6 +23,15 @@ from tools.agent.events import (
     TurnStarted,
 )
 from tools.agent.policy import SessionPolicy, policy_approver
+from tools.llm.base import BackendUnavailableError
+from tools.tui.backends import (
+    UnknownBackendError,
+    describe_choices,
+    open_backend,
+    resolve_spec,
+    spec_of,
+    unavailable_message,
+)
 from tools.tui.commands import help_text, parse_input, resolve
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.widgets.artifacts import ArtifactBrowser
@@ -32,7 +41,11 @@ from tools.tui.widgets.transcript import Transcript
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
 
-__all__ = ["ApprovalModal", "KeplerApp"]
+__all__ = ["ApprovalModal", "KeplerApp", "ENGINE_WORKER_GROUP"]
+
+#: The Textual worker group the engine turn runs in. Named so a command can
+#: ask whether a turn is in flight without keeping a second copy of that fact.
+ENGINE_WORKER_GROUP = "engine"
 
 
 class ApprovalModal(ModalScreen[Decision]):
@@ -107,7 +120,7 @@ class KeplerApp(App[None]):
         super().__init__()
         self.backend = backend
         self.max_turns = max_turns
-        self.sub_title = str(getattr(backend, "spec", ""))
+        self.sub_title = spec_of(backend)
         self.engine_starts = 0
         self.current_turn = 0
         self.artifact_count = 0
@@ -166,7 +179,7 @@ class KeplerApp(App[None]):
             handler = getattr(self, command.handler, self._command_not_available)
             handler(parsed.args)
 
-    @work(thread=True, exclusive=True)
+    @work(thread=True, exclusive=True, group=ENGINE_WORKER_GROUP)
     def run_prompt(self, text: str) -> None:
         """Run the synchronous engine in a Textual thread worker."""
 
@@ -179,10 +192,71 @@ class KeplerApp(App[None]):
         ):
             self.post_message(self.EngineEvent(event))
 
+    def engine_running(self) -> bool:
+        """Whether a turn is in flight.
+
+        Asked of Textual's own worker registry rather than tracked in a flag.
+        A flag would have to be set from inside the worker -- after the input
+        is already accepting the next line -- so the one moment it exists to
+        cover is the moment it would still be ``False``.
+        """
+
+        return any(
+            worker.group == ENGINE_WORKER_GROUP and worker.is_running
+            for worker in self.workers
+        )
+
     def show_help(self, args: tuple[str, ...]) -> None:
         """Render generated command help in the transcript."""
 
         self._append_transcript(help_text())
+
+    def switch_backend(self, args: tuple[str, ...]) -> None:
+        """List the model backends, or switch the session to one of them.
+
+        With no arguments this only describes; a switch needs a name. The
+        running backend is replaced **only after** the new one is built and
+        probed, so a missing key or a stopped Ollama daemon leaves the session
+        exactly as it was rather than on a backend that cannot answer.
+        """
+
+        if not args:
+            self._append_transcript(describe_choices(spec_of(self.backend)))
+            return
+
+        if self.engine_running():
+            # run_session() was handed self.backend by value when the turn
+            # started; swapping it now would change the header while the old
+            # backend finished the turn behind it.
+            self._append_transcript(
+                "A turn is still running. Wait for it to finish, then switch."
+            )
+            return
+
+        try:
+            spec = resolve_spec(*args)
+        except UnknownBackendError as exc:
+            self._append_transcript(str(exc))
+            return
+
+        try:
+            backend = open_backend(spec)
+        except BackendUnavailableError as exc:
+            self._append_transcript(
+                unavailable_message(
+                    spec, exc, spec_of(self.backend) or "the current backend"
+                )
+            )
+            return
+        except ValueError as exc:
+            # An unrecognized provider in an explicit provider/model spec.
+            self._append_transcript(f"Cannot use {spec}: {exc}")
+            return
+
+        self.backend = backend
+        self.sub_title = spec_of(backend)
+        self.query_one("#banner", KeplerHeader).set_backend(self.sub_title)
+        self._append_transcript(f"Backend switched to {self.sub_title}.")
 
     def show_artifacts(self, args: tuple[str, ...]) -> None:
         """Open the current artifact browser without involving the model."""

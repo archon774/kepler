@@ -48,6 +48,12 @@ COMMANDS: tuple[Command, ...] = (
     Command("sessions", "Browse saved sessions.", "show_sessions", aliases=("s",)),
     Command("resume", "Resume a saved session.", "resume", aliases=("r",)),
     Command("status", "Show backend and session status.", "show_status"),
+    Command(
+        "backend",
+        "Show the model backends, or switch to one (anthropic, ollama).",
+        "switch_backend",
+        aliases=("b",),
+    ),
     Command("tools", "Browse registered tool schemas.", "show_tools", aliases=("t",)),
     Command("approve", "View or change approval policy.", "configure_approval"),
     Command("prompt", "Show the active system prompt.", "show_prompt", aliases=("p",)),

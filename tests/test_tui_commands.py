@@ -43,6 +43,7 @@ def test_help_text_is_generated_from_every_command():
         "sessions",
         "resume",
         "status",
+        "backend",
         "tools",
         "approve",
         "prompt",

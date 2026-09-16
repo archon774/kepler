@@ -65,4 +65,14 @@ paths = [
   '''benchmarks/fixtures/get_paper_abstract\.yaml''',
   '''benchmarks/suites/core/calibration\.md''',
   '''docs/working/benchmark\.md''',
+  # The console's backend selection: the .env reader that puts the key into the
+  # environment, the choice table that names the variable each provider reads,
+  # and their tests. Added with the TUI's /backend command. Exact files, as
+  # every entry here is.
+  '''tools/config\.py''',
+  '''tools/tui/backends\.py''',
+  '''tools/tui/__main__\.py''',
+  '''tests/test_tui_backends\.py''',
+  '''tests/test_tui_app\.py''',
+  '''docs/working/tui-harness\.md''',
 ]

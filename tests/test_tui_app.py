@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import threading
 from types import SimpleNamespace
 
 from textual.widgets import Static
@@ -128,12 +129,11 @@ def test_f3_opens_the_artifact_browser_without_starting_the_engine():
 def test_main_builds_the_requested_backend_and_runs_the_app(monkeypatch):
     backend = object()
     created: list[KeplerApp] = []
-    monkeypatch.setattr(tui_main, "build_backend", lambda spec: backend)
+    monkeypatch.setattr(tui_main, "open_backend", lambda spec: backend)
     monkeypatch.setattr(tui_main.KeplerApp, "run", lambda self: created.append(self))
     monkeypatch.setattr(sys, "argv", ["kepler", "--backend", "stub/model"])
 
-    tui_main.main()
-
+    assert tui_main.main() == 0
     assert len(created) == 1
     assert created[0].backend is backend
 
@@ -143,14 +143,19 @@ def test_main_shows_a_configuration_error_for_an_unavailable_backend(
 ):
     monkeypatch.setattr(
         tui_main,
-        "build_backend",
+        "open_backend",
         lambda spec: (_ for _ in ()).throw(BackendUnavailableError("OPENAI_API_KEY")),
     )
     monkeypatch.setattr(sys, "argv", ["kepler", "--backend", "openai/gpt-4.1"])
 
-    tui_main.main()
-
+    assert tui_main.main() == 2
     assert "OPENAI_API_KEY" in capsys.readouterr().err
+
+
+def _transcript_text(app) -> str:
+    return "\n".join(
+        str(entry.render()) for entry in app.query_one("#transcript", Transcript).query(Static)
+    )
 
 
 def test_the_header_names_kepler_and_the_backend_from_launch():
@@ -164,3 +169,135 @@ def test_the_header_names_kepler_and_the_backend_from_launch():
             assert "anthropic/claude-sonnet-5" in header.banner_text()
 
     _run(scenario())
+
+
+def test_backend_command_without_arguments_lists_without_switching():
+    async def scenario() -> None:
+        backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
+        app = KeplerApp(backend=backend)
+        async with app.run_test() as pilot:
+            await pilot.press("/", "b", "enter")
+            await pilot.pause()
+
+            rendered = _transcript_text(app)
+            assert "/backend anthropic" in rendered
+            assert "/backend ollama" in rendered
+            assert app.backend is backend
+            assert app.engine_starts == 0
+
+    _run(scenario())
+
+
+def test_backend_command_switches_the_session_and_retitles_the_header(monkeypatch):
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        replacement = SimpleNamespace(spec="ollama/qwen3:8b")
+        monkeypatch.setattr(app_module, "open_backend", lambda spec: replacement)
+
+        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        async with app.run_test() as pilot:
+            for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
+                await pilot.press(key)
+            await pilot.pause()
+
+            assert app.backend is replacement
+            assert app.sub_title == "ollama/qwen3:8b"
+            header = app.query_one("#banner", KeplerHeader)
+            assert "ollama/qwen3:8b" in header.banner_text()
+            assert "Backend switched to ollama/qwen3:8b." in _transcript_text(app)
+
+    _run(scenario())
+
+
+def test_a_refused_backend_leaves_the_session_on_the_one_that_answers(monkeypatch):
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        def refuse(spec: str):
+            raise BackendUnavailableError("OLLAMA_BASE_URL")
+
+        monkeypatch.setattr(app_module, "open_backend", refuse)
+
+        backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
+        app = KeplerApp(backend=backend)
+        async with app.run_test() as pilot:
+            for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
+                await pilot.press(key)
+            await pilot.pause()
+
+            rendered = _transcript_text(app)
+            assert "ollama serve" in rendered
+            assert "Still on anthropic/claude-sonnet-5" in rendered
+            assert app.backend is backend
+            assert app.sub_title == "anthropic/claude-sonnet-5"
+
+    _run(scenario())
+
+
+def test_an_unknown_backend_name_is_refused_without_building_anything(monkeypatch):
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        def explode(spec: str):  # pragma: no cover - must never run
+            raise AssertionError("resolution should have refused first")
+
+        monkeypatch.setattr(app_module, "open_backend", explode)
+
+        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        async with app.run_test() as pilot:
+            for key in ("/", "b", "space", "h", "a", "l", "enter"):
+                await pilot.press(key)
+            await pilot.pause()
+
+            assert "unknown backend 'hal'" in _transcript_text(app)
+
+    _run(scenario())
+
+
+def test_a_switch_is_refused_while_a_turn_is_still_running(monkeypatch):
+    """The guard is asked of a real worker in the engine's group, not a flag."""
+
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        def explode(spec: str):  # pragma: no cover - must never run
+            raise AssertionError("a running turn must not be switched under")
+
+        monkeypatch.setattr(app_module, "open_backend", explode)
+
+        release = threading.Event()
+        backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
+        app = KeplerApp(backend=backend)
+        async with app.run_test() as pilot:
+            app.run_worker(
+                release.wait,
+                thread=True,
+                group=app_module.ENGINE_WORKER_GROUP,
+            )
+            while not app.engine_running():
+                await pilot.pause()
+
+            for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
+                await pilot.press(key)
+            await pilot.pause()
+
+            assert "A turn is still running" in _transcript_text(app)
+            assert app.backend is backend
+
+            release.set()
+            while app.engine_running():
+                await pilot.pause()
+
+    _run(scenario())
+
+
+def test_launch_spec_prefers_the_flag_then_the_environment_then_the_default(
+    monkeypatch,
+):
+    monkeypatch.setenv("KEPLER_MODEL_BACKEND", "gemini/gemini-2.5-pro")
+    assert tui_main.launch_spec("ollama") == "ollama/qwen3:8b"
+    assert tui_main.launch_spec(None) == "gemini/gemini-2.5-pro"
+
+    monkeypatch.delenv("KEPLER_MODEL_BACKEND")
+    assert tui_main.launch_spec(None) == "anthropic/claude-sonnet-5"
