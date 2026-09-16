@@ -1,6 +1,7 @@
 # Kepler TUI Agentic Harness
 
-**Status:** Design approved; Phase C complete. Phases B and D–G remain.
+**Status:** Design approved; phases B–E complete, plus the backend
+switching that section 15 had deferred. Phases F and G remain.
 **Date:** 2026-09-07
 **Prerequisites:** [model-backends.md](model-backends.md) phases -1 to 3, and the
 merged stateless optical rollout from [optical-tools.md](optical-tools.md).
@@ -94,7 +95,8 @@ documentation only. Every backend this document assumes is unwritten.
 | Engine concurrency | Synchronous, run in a Textual thread worker. |
 | Artifact display | Tiered: native terminal graphics, half-block floor, path always. |
 | Old entry points | Both removed. Capability preserved and re-homed. |
-| Backend switching | Launch-time in v1; live switching deferred. |
+| Backend switching | Launch-time **and live**, through `/backend`. The
+deferral in section 15 was lifted — see 8.1. |
 
 ### 2.1 The zero-dependency rule is scoped, not broken
 
@@ -146,9 +148,11 @@ pin because it reuses the already-pinned `pillow`.
 | `tools/agent/policy.py` | `Decision`, `RiskTag`, `TOOL_RISK`, `Approver`, `auto_approve`, `risk_tags`, `needs_confirmation`, `SessionPolicy`, `policy_approver`. No UI. |
 | `tools/agent/prompt.py` | `SYSTEM_PROMPT`, moved intact from `tools/runner.py`. |
 | `tools/tui/__init__.py` | Package marker. Exports nothing heavy. |
-| `tools/tui/__main__.py` | Console-script entry: argument parsing, backend construction, application launch. |
+| `tools/tui/__main__.py` | Console-script entry: argument parsing, `launch_spec`, backend construction, application launch. |
 | `tools/tui/app.py` | `KeplerApp`: layout, keybindings, the engine thread worker, the approval modal, `resume_session`. |
 | `tools/tui/commands.py` | `Command`, `COMMANDS`, `Parsed`, `parse_input`, `resolve`, `help_text`. No Textual imports beyond types. |
+| `tools/tui/backends.py` | `BackendChoice`, `CHOICES`, `resolve_spec`, `open_backend`, `describe_choices`, `unavailable_message`. The UI-facing half of backend selection. No Textual. |
+| `tools/tui/widgets/header.py` | `KeplerHeader` — the titled frame, and the live backend spec inside it. |
 | `tools/tui/widgets/transcript.py` | `Transcript`, with a single `handle_event` entry point; assistant text and tool nodes. |
 | `tools/tui/widgets/tool_node.py` | `ToolNode` — one collapsible tool call, with `start()`, `finish()`, and `deny()`. |
 | `tools/tui/widgets/artifacts.py` | Artifact browser modal screen. |
@@ -285,6 +289,22 @@ assistant text and tool-call nodes, an input line prompting for a question or a
 slash command, and a status bar showing turn count against the ceiling, token
 usage, artifact count, and the artifact- and session-browser keybindings.
 
+The titled frame is `KeplerHeader`, docked at the top from the moment the
+application mounts: the wordmark as its border title, the tagline and the live
+`provider/model` spec on its one inner row. It replaces Textual's stock
+`Header`, which carried the same two strings in a single unbranded bar.
+
+Three rows, and a Textual border rather than drawn box characters, so the frame
+follows the terminal width and the active theme. **The wordmark is
+letter-spaced rather than drawn in block capitals**: block capitals need five
+rows to stay legible, and in a console that is one scrolling conversation every
+row the header keeps is a row of transcript nobody can see.
+
+**The backend spec belongs in the header, not only in the status bar.** It is
+the one piece of session identity a person must not misread — a transcript
+looks identical whether Anthropic or a local Ollama model produced it — and
+since 8.1 it can change mid-session, so it is re-rendered on every switch.
+
 ### 7.1 Tool call rendering
 
 Each call is a collapsible transcript node. The live state is the point.
@@ -327,6 +347,7 @@ maps a name or alias to its `Command`.
 | `/sessions` | Session history browser modal. |
 | `/resume <id>` | Resume a session, seeding history from its manifest. |
 | `/status` | Backend, model, turn, token usage, session id, artifact directory, detected graphics tier. |
+| `/backend [name\|spec] [model]` | List the offered backends, or switch to one. See 8.1. |
 | `/tools [filter]` | Browse the registered tools and their schemas. |
 | `/approve [tool] [ask\|always\|never]` | View or change the approval policy. |
 | `/prompt` | View the active system prompt. |
@@ -336,7 +357,82 @@ maps a name or alias to its `Command`.
 `/status` reports token usage and cost when the manifest carries them and omits
 those rows otherwise, so it degrades cleanly before the port's manifest v2 lands.
 
-**Deferred:** a `/backend` command for live switching (section 15).
+### 8.1 `/backend` — selecting the model
+
+Section 15 deferred this and section 2 said "launch-time in v1". Both are
+superseded: the backend is selectable from inside the session.
+
+`tools/tui/backends.py` holds the short list a person picks from —
+`anthropic` (default model `claude-sonnet-5`, reads `ANTHROPIC_API_KEY`) and
+`ollama` (default `qwen3:8b`, reads `OLLAMA_BASE_URL`, no key). `/backend` with
+no arguments describes both and marks the running one. `/backend anthropic`
+expands to that provider's default model; `/backend ollama llama3.1:8b` and
+`/backend ollama/llama3.1:8b` both name a model explicitly.
+
+It owns **none** of the construction rules. Credential and endpoint binding
+stays in `tools/llm/factory.py` (S3): this module hands it a spec and
+interprets the failure. A full `provider/model` spec is therefore passed
+through untouched, so the two providers the factory recognizes but this console
+does not list — `openai`, `gemini` — remain reachable by spec.
+
+Four properties make the command safe to offer mid-session:
+
+* **Probe before swap.** Anthropic fails fast, at construction, when its key is
+  missing. Ollama does not: a backend pointed at a daemon that is not running
+  builds perfectly and then raises a connection error several seconds into the
+  first question, after the transcript already shows a turn starting. Section
+  11 requires "never a connection traceback", so `open_backend` calls the
+  port's `is_available()` probe and the session's backend is replaced only
+  after it answers.
+* **A failed switch changes nothing.** The message names what to do *and*
+  which backend is still answering, so it never reads as a session that has
+  lost its model. One wording, `unavailable_message`, shared with the
+  launcher.
+* **Never mid-turn.** `run_session()` was handed the backend by value when the
+  turn started; swapping it while that turn runs would retitle the header for
+  a turn the old backend is still finishing. The guard asks Textual's worker
+  registry (group `engine`) rather than a flag, because a flag set inside the
+  worker is still `False` during the one moment it exists to cover.
+* **The header follows.** `KeplerHeader.set_backend` runs on every switch.
+
+### 8.2 Where the Anthropic key comes from
+
+`tools/config.py` gained `load_dotenv()`: a dependency-free reader that merges
+`KEY=value` lines from the repository's untracked `.env` into `os.environ`
+before the factory reads it. `tools/llm/` is unchanged and still reads only the
+environment — this puts the file's contents *into* that environment, rather
+than teaching the port a second source.
+
+**The real environment always wins.** A variable already set is left alone, so
+`ANTHROPIC_API_KEY=… python -m tools.tui` still overrides the file and a test's
+`monkeypatch.setenv` is not silently undone. A missing or unreadable file is
+not an error.
+
+Nothing is interpolated: `$HOME` in a value stays four characters, because a
+credential is not a shell word. A line carrying no `=` is read through a table
+of self-identifying provider prefixes — today just `sk-ant-` →
+`ANTHROPIC_API_KEY` — because a hand-written `.env` often holds the key and
+nothing else. An OpenAI `sk-` is deliberately *not* in that table: several
+services mint keys with it, so the prefix names no one provider.
+
+`open_backend` re-reads the file, so a key added while the console is open
+takes effect on the next `/backend` without a restart.
+
+### 8.3 Launch-time selection
+
+`launch_spec()` resolves in one order and no other: the `--backend` flag, then
+`KEPLER_MODEL_BACKEND`, then the first offered choice. The flag accepts a bare
+name (`--backend ollama`); the environment variable does not, because it is the
+model port's own contract and `tools/runner.py` and the benchmark harness read
+it identically.
+
+An unset variable now opens the console on Anthropic rather than refusing. That
+is a consequence of 8.1: the backend is no longer a decision a person is stuck
+with for the session, so an unset variable should not be a usage error printed
+at someone who has not seen the interface yet. A console that genuinely cannot
+be configured exits **2** — it is launched from shells and scripts, and
+reporting success after printing "cannot use" to stderr is how a wrapper ends
+up believing a session ran.
 
 ---
 
@@ -448,6 +544,14 @@ no daemon, no terminal.
   The interface is genuinely CI-testable.
 * **Rendering.** The capability probe against faked environments; the half-block
   renderer against a committed 4×4 PNG with byte-stable expected output.
+* **Backend selection.** `tests/test_tui_backends.py` covers the `.env` reader
+  (quoting, `export`, comments, the bare-key line, and that the environment
+  always wins), spec resolution, and both probe outcomes — `open_backend` takes
+  its builder as a keyword argument precisely so no adapter is constructed and
+  no socket is opened. `tests/test_tui_app.py` covers the switch through the
+  pilot: the header retitles, a refused backend leaves the session on the one
+  that answers, and a switch attempted while a worker runs in the `engine`
+  group is refused without building anything.
 * **Migration.** After the rename, the existing photometry tests pass against the
   renamed module unchanged in substance.
 
@@ -465,10 +569,11 @@ changes stay separated per `CLAUDE.md`.
 | Phase | Content | Done when |
 | --- | --- | --- |
 | **A** | `tools/agent/`: events, engine, `SYSTEM_PROMPT` moved. `runner.py` becomes a shim. **Owned by [model-backends.md](model-backends.md) Phase 0c — not a PR of this rollout.** | `tests/test_runner_session.py` passes **unedited**. |
-| **B** | Approval policy and approver wiring. | A denied call never dispatches. |
+| **B** | Approval policy and approver wiring. | **Complete** — a denied call never dispatches. |
 | **C** | `photometry_pipeline.py` rename, consumer imports, docs. | **Complete** — `72d0bd7`; suite green. |
-| **D** | Textual dependency (eight pins, regenerated lockfile) and the TUI: application shell, slash-command registry, transcript, streaming, tool tree, status bar. | A real session runs end to end. |
-| **E** | Artifact rendering: probe, tiers, and the artifact browser. | Half-block path green in CI. |
+| **D** | Textual dependency (eight pins, regenerated lockfile) and the TUI: application shell, slash-command registry, transcript, streaming, tool tree, status bar. | **Complete** — a real session runs end to end. |
+| **E** | Artifact rendering: probe, tiers, and the artifact browser. | **Complete** — half-block path green in CI. |
+| **E.1** | The titled header, and `/backend` selection over `.env`-backed Anthropic or a local Ollama daemon. Lifts the section 15 deferral. | **Complete** — a switch never lands on a backend that cannot answer, and a refused one leaves the session untouched. |
 | **F** | Session browser and resume. | A resumed session continues a prior trace. |
 | **G** | Retire entry points: delete the shim, edit the workflow, update the console scripts, sweep the documentation. | Nothing references the removed entry points. |
 
@@ -727,11 +832,14 @@ Its own PR, per the separation rule. Re-run the grep before editing.
 
 ## 15. Non-Goals and Deferred Work
 
-* **Live backend switching.** The backend is chosen at launch from
-  `KEPLER_MODEL_BACKEND`, a flag, or the configuration screen. A `/backend`
-  command and the capability-difference warnings — notably that Gemini's OpenAPI
-  subset cannot express the integer-or-null union `search_vizier.max_catalogs`
-  needs — are follow-on work.
+* ~~**Live backend switching.**~~ **Shipped in E.1** — see 8.1. What remains
+  deferred is the narrower piece: **capability-difference warnings** when a
+  switch changes what the session can express. Gemini's OpenAPI subset cannot
+  represent the integer-or-null union `search_vizier.max_catalogs` needs, and
+  Ollama's adapter declares `streaming=False` where Anthropic's does not, so the
+  transcript stops filling in mid-turn after a switch to it. Neither is
+  announced today; both are visible in `Capabilities` and could be diffed
+  across a switch.
 * **The pulsar stage-order guardrail.** Surfacing the light curve → periodogram →
   period → fold → sonify dependency with `peak_confidence` and `pulse_snr` inline
   is deferred. The stage order remains documented in `CLAUDE.md`
