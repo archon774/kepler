@@ -3,7 +3,7 @@
 BL-3: the only frame resolver lived inside a CLI script, raised
 FileNotFoundError instead of returning a ToolError, and reported no header
 metadata -- so a caller could not ask "which frames are in B?" without opening
-all 39 files.
+all 39 files (42 today).
 """
 
 from __future__ import annotations
@@ -19,30 +19,62 @@ ROOT = Path(__file__).resolve().parents[1]
 OPTICAL = ROOT / "data" / "optical"
 
 
-def test_lists_every_bundled_frame():
+def test_lists_every_bundled_frame(lfs_frames):
     listing = list_optical_frames()
-    assert listing.count == 39
+    assert listing.count == 42
     assert Path(listing.search_root) == OPTICAL
     assert listing.errors == []
 
 
-def test_listing_reports_the_filter_spread_recorded_in_the_readme():
-    """data/README.md: V (25), R (7), B (2), Halpha (2), OIII (1), Lum (1), Open (1)."""
+def test_listing_reports_the_filter_spread_recorded_in_the_readme(lfs_frames):
+    """data/README.md: V (25), R (7), B (5), Halpha (2), OIII (1), Lum (1), Open (1)."""
     listing = list_optical_frames()
     counts: dict[str, int] = {}
     for frame in listing.frames:
         counts[frame.image_filter] = counts.get(frame.image_filter, 0) + 1
     assert counts == {
-        "V": 25, "R": 7, "B": 2, "Halpha": 2, "OIII": 1, "Lum": 1, "Open": 1,
+        "V": 25, "R": 7, "B": 5, "Halpha": 2, "OIII": 1, "Lum": 1, "Open": 1,
     }
 
 
-def test_filter_narrowing():
+def test_filter_narrowing(lfs_frames):
     listing = list_optical_frames(image_filter="B")
-    assert listing.count == 2
+    assert listing.count == 5
     assert {Path(f.path).stem for f in listing.frames} == {
         "ngc5128_galaxy_b_000", "ngc5128_galaxy_b_001",
+        "ngc5286_globular_b_000", "ngc5286_globular_b_001",
+        "ngc5286_globular_b_002",
     }
+
+
+def test_an_unfetched_lfs_frame_is_named_not_parsed(tmp_path, monkeypatch):
+    """A pointer stub wears the frame's name, so it has to be recognised.
+
+    Handing one to the FITS reader gives a parse error per frame and a null
+    band in the filter tally; what the caller needs is one line saying the
+    objects are not checked out, and a listing that is otherwise correct.
+    """
+    optical = tmp_path / "optical"
+    optical.mkdir()
+    real = OPTICAL / "ngc1846_cluster_r_000.fits"
+    if not real.is_file():
+        pytest.skip("fixture tree not checked out")
+    (optical / real.name).write_bytes(real.read_bytes())
+    (optical / "ngc5286_globular_b_000.fits").write_text(
+        "version https://git-lfs.github.com/spec/v1\n"
+        "oid sha256:" + "0" * 64 + "\nsize 30965760\n"
+    )
+
+    listing = list_optical_frames(optical)
+
+    assert listing.count == 1
+    assert listing.errors == []
+    warning = next(w for w in listing.warnings if w.code == "frames_not_checked_out")
+    assert "ngc5286_globular_b_000.fits" in warning.message
+    assert "git lfs pull" in warning.message
+
+    resolved = resolve_optical_frame(str(optical / "ngc5286_globular_b_000.fits"))
+    assert [e.code for e in resolved.errors] == ["frame_not_checked_out"]
 
 
 def test_category_comes_from_the_filename_convention():
@@ -88,11 +120,11 @@ def test_a_frame_with_a_wcs_carries_a_centre_and_a_pixel_scale():
     assert frame.pixel_scale_arcsec == pytest.approx(1.2, abs=1.0)
 
 
-def test_an_unknown_name_returns_the_candidates_not_an_exception():
+def test_an_unknown_name_returns_the_candidates_not_an_exception(lfs_frames):
     result = resolve_optical_frame("messier 87")
     assert isinstance(result, OpticalFrameList)
     assert [e.code for e in result.errors] == ["not_found"]
-    assert result.count == 39
+    assert result.count == 42
 
 
 def test_a_missing_directory_returns_an_error_naming_the_env_override():
@@ -160,7 +192,7 @@ def test_search_roots_reports_only_the_optical_root_when_nothing_is_downloaded()
     assert [Path(r) for r in listing.search_roots] == [OPTICAL]
 
 
-def test_a_downloaded_frame_is_listed_alongside_the_bundled_ones(download_root):
+def test_a_downloaded_frame_is_listed_alongside_the_bundled_ones(download_root, lfs_frames):
     _write_frame(
         download_root / "mastDownload" / "HST" / "idxq01010" / "idxq01010_drz.fits",
         object_name="NGC 1234",
@@ -168,7 +200,7 @@ def test_a_downloaded_frame_is_listed_alongside_the_bundled_ones(download_root):
     )
     listing = list_optical_frames()
 
-    assert listing.count == 40
+    assert listing.count == 43
     assert [Path(r) for r in listing.search_roots] == [OPTICAL, download_root]
     # search_root still names the primary root, unchanged.
     assert Path(listing.search_root) == OPTICAL
@@ -214,13 +246,13 @@ def test_only_the_download_root_is_searched_recursively(download_root, tmp_path,
     assert names == {"found.fits"}
 
 
-def test_an_explicit_directory_argument_still_means_exactly_that_directory(download_root):
+def test_an_explicit_directory_argument_still_means_exactly_that_directory(download_root, lfs_frames):
     _write_frame(
         download_root / "idxq01010_drz.fits", object_name="NGC 1234", image_filter="F606W"
     )
     listing = list_optical_frames(OPTICAL)
 
-    assert listing.count == 39
+    assert listing.count == 42
     assert [Path(r) for r in listing.search_roots] == [OPTICAL]
     assert "idxq01010_drz.fits" not in {Path(f.path).name for f in listing.frames}
 
@@ -354,7 +386,7 @@ def test_an_absent_download_root_is_skipped_without_a_warning(download_root):
     assert [Path(r) for r in listing.search_roots] == [OPTICAL]
 
 
-def test_an_empty_directory_string_falls_back_to_the_default_roots():
+def test_an_empty_directory_string_falls_back_to_the_default_roots(lfs_frames):
     """Path("") is Path("."), so `is not None` would search the CWD instead.
 
     An optional string parameter arriving as "" rather than omitted is an
@@ -362,7 +394,7 @@ def test_an_empty_directory_string_falls_back_to_the_default_roots():
     listing rather than the bundled frames.
     """
     listing = list_optical_frames("")
-    assert listing.count == 39
+    assert listing.count == 42
     assert Path(listing.search_root) == OPTICAL
 
 
@@ -464,7 +496,7 @@ def test_the_shipped_defaults_put_the_download_root_inside_the_data_dir(monkeypa
     assert pristine.FITS_DOWNLOAD_DIR.is_relative_to(pristine.DATA_DIR)
 
 
-def test_a_listing_is_capped_and_says_how_many_it_left_out(monkeypatch):
+def test_a_listing_is_capped_and_says_how_many_it_left_out(monkeypatch, lfs_frames):
     from tools import config
 
     monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 5)
@@ -472,14 +504,14 @@ def test_a_listing_is_capped_and_says_how_many_it_left_out(monkeypatch):
 
     assert listing.count == 5
     assert [w.code for w in listing.warnings] == ["listing_truncated"]
-    assert "39 frames found" in listing.warnings[0].message
+    assert "42 frames found" in listing.warnings[0].message
     assert "KEPLER_MAX_FRAMES" in listing.warnings[0].message
 
 
-def test_an_uncapped_listing_carries_no_truncation_warning():
+def test_an_uncapped_listing_carries_no_truncation_warning(lfs_frames):
     listing = list_optical_frames()
 
-    assert listing.count == 39
+    assert listing.count == 42
     assert listing.warnings == []
 
 
@@ -584,7 +616,7 @@ def test_the_cap_is_per_root_so_a_large_primary_cannot_starve_the_download_root(
     assert isinstance(resolve_optical_frame("NGC 1234"), OpticalFrame)
 
 
-def test_bundled_targets_are_an_uncapped_inventory(monkeypatch):
+def test_bundled_targets_are_an_uncapped_inventory(monkeypatch, lfs_frames):
     """Code review: list_bundled_targets went through list_optical_frames,
     so a cap below the library size silently truncated an index that calls
     itself the complete fixed set. It is an inventory of filenames now --
@@ -595,10 +627,10 @@ def test_bundled_targets_are_an_uncapped_inventory(monkeypatch):
     monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 3)
     targets = list_bundled_targets()
 
-    assert sum(len(stems) for stems in targets.values()) == 39
+    assert sum(len(stems) for stems in targets.values()) == 42
 
 
-def test_a_non_empty_legacy_download_root_is_reported(download_root, monkeypatch):
+def test_a_non_empty_legacy_download_root_is_reported(download_root, monkeypatch, lfs_frames):
     """The default moved from <cwd>/fits_downloads to data/fits_downloads.
     Earlier downloads left at the repository root would otherwise resolve as
     not_found with nothing saying the root moved."""
@@ -617,7 +649,7 @@ def test_a_non_empty_legacy_download_root_is_reported(download_root, monkeypatch
     listing = list_optical_frames()
 
     assert listing.errors == []
-    assert listing.count == 39
+    assert listing.count == 42
     assert [w.code for w in listing.warnings] == ["legacy_download_root_present"]
     assert "old.fits" not in {Path(f.path).name for f in listing.frames}
     assert str(fake_repo / "fits_downloads") in listing.warnings[0].message

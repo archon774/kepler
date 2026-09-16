@@ -21,7 +21,7 @@ than scored. No session of either task failed a check.
 
 **Every model passes — so the check is too loose or the task too easy, and the
 remedy is the one this file named before the run.** See *Watch for* below: the
-frame count is a number, so `must_report_value {expected: 39}` is strictly
+frame count is a number, so `must_report_value {expected: 42}` is strictly
 stronger than the disclosure alternation and is available now. Changing it is
 a corpus change and is deliberately **not** bundled with this record.
 
@@ -51,7 +51,7 @@ local tools with no fixtures at all:
 - Both run **end to end, offline, against replay**
   (`test_the_optical_suite_runs_its_real_tools_and_its_real_warning_fires`).
 - `optical-listing-truncated`'s `env: {KEPLER_MAX_FRAMES: "5"}` really takes
-  effect, `list_optical_frames` really reads the bundled 39-frame library, and
+  effect, `list_optical_frames` really reads the bundled 42-frame library, and
   the `listing_truncated` warning the key names is **the one the tool itself
   raised** — asserted against the recorded event stream, not assumed.
 - `optical-ambiguous-band`'s premise is confirmed: `resolve_optical_frame("M31")`
@@ -68,9 +68,9 @@ separate these three real models.
 ## Watch for
 
 `optical-listing-truncated`'s disclosure alternation is broad
-(`truncat|not the (complete|whole|full)|more frames|partial|only the first|39`)
+(`truncat|not the (complete|whole|full)|more frames|partial|only the first|42`)
 on purpose. If every model passes it, tighten toward something higher in
-§7.1.6 — the total count is a number, so `must_report_value {expected: 39}`
+§7.1.6 — the total count is a number, so `must_report_value {expected: 42}`
 is available and would be strictly stronger than the regex.
 
 **Every model did pass it, 2026-09-14.** This note is now a finding rather

@@ -26,6 +26,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from tools.config import is_lfs_pointer
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = REPO_ROOT / "data"
 OPTICAL = DATA_ROOT / "optical"
@@ -139,6 +141,12 @@ FRAMES: dict[str, str] = {
     # The exact frame behind the recorded NGC 5128 solve and the Afterglow
     # API response in data/afterglow/.
     "ngc5128_b": "ngc5128_galaxy_b_001.fits",
+    # The three frames behind the recorded NGC 5286 B solves (P8). Git LFS
+    # objects, and the only multi-HDU frames in the tree: four Afterglow-aligned
+    # exposures each, of which Kepler reads only the primary.
+    "ngc5286_b_000": "ngc5286_globular_b_000.fits",
+    "ngc5286_b_001": "ngc5286_globular_b_001.fits",
+    "ngc5286_b_002": "ngc5286_globular_b_002.fits",
     # 1600x1200 from a third instrument, with FOCALLEN and a WCS.
     "ngc1982": "ngc1982_nebula_r_000.fits",
 }
@@ -180,6 +188,11 @@ def _require(path: Path) -> Path:
             f"missing fixture {path.relative_to(REPO_ROOT)} — see data/README.md "
             f"for how to re-sync it from the Skynet pipeline data repository"
         )
+    if is_lfs_pointer(path):
+        pytest.skip(
+            f"{path.relative_to(REPO_ROOT)} is an unfetched Git LFS pointer — run "
+            "`git lfs install && git lfs pull` to fetch it (data/README.md)"
+        )
     return path
 
 
@@ -210,6 +223,27 @@ def download_root(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", root)
     return root
+
+
+#: The frames stored as Git LFS objects rather than in the git tree itself
+#: (P8). Everything else under ``data/optical`` is plain git, so these are the
+#: only fixtures a clone can be missing while still looking complete.
+LFS_FRAMES: tuple[str, ...] = (
+    "ngc5286_globular_b_000.fits",
+    "ngc5286_globular_b_001.fits",
+    "ngc5286_globular_b_002.fits",
+)
+
+
+@pytest.fixture(scope="session")
+def lfs_frames() -> list[Path]:
+    """The LFS-tracked frames, skipping the test unless all are fetched.
+
+    For tests that assert over the *whole* fixture tree -- counts, filter
+    tallies -- where a partial checkout would otherwise read as a real
+    mismatch. Individual frame tests get the same skip from ``frame_path``.
+    """
+    return [_require(OPTICAL / name) for name in LFS_FRAMES]
 
 
 @pytest.fixture(scope="session")
@@ -263,7 +297,7 @@ def frame_image(frame_path):
     Cached because pixel-level tests are the slowest thing in the suite, and
     ``sep`` needs native byte order — these frames are big-endian on disk
     (``>f4``), as FITS always is. Only the frames a test actually asks for are
-    read; the 39-frame directory is never loaded wholesale.
+    read; the 42-frame directory is never loaded wholesale.
     """
     cache: dict[str, tuple[np.ndarray, fits.Header]] = {}
 

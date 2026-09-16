@@ -1,0 +1,15 @@
+# Git LFS tracking.
+#
+# Scoped to three exact paths, never `data/optical/*.fits`. The other 39 frames
+# are already in this repository's history as plain git objects: a wildcard
+# would not shrink the clone, and it would rewrite how every existing checkout
+# resolves them. Keep this list explicit, one path per frame, the way
+# .gitleaks.toml's allowlist is path-scoped for the same reason.
+#
+# These three are here because each carries four Afterglow-aligned exposures at
+# 31 MB, well over the 9 MB cut-off that governs what data/optical/ puts in
+# plain git (data/README.md). Fetch them with `git lfs install && git lfs pull`;
+# without them the suite skips the tests that need the pixels.
+data/optical/ngc5286_globular_b_000.fits filter=lfs diff=lfs merge=lfs -text
+data/optical/ngc5286_globular_b_001.fits filter=lfs diff=lfs merge=lfs -text
+data/optical/ngc5286_globular_b_002.fits filter=lfs diff=lfs merge=lfs -text

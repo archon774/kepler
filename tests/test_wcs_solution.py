@@ -409,13 +409,36 @@ def test_equinox_and_radecsys_survive_a_rewrite(frame_header_copy, frame_header)
 
 
 def test_no_fixture_frame_carries_a_stale_frame_keyword(frame_header):
-    """Bound the exposure of the gap above."""
+    """Bound the exposure of the gap above.
+
+    The gap is that ``_write_wcs_to_header`` leaves ``EQUINOX``/``RADECSYS``
+    alone, so a pre-J2000 frame keyword would survive a solve that writes ICRS
+    and leave the header self-contradictory. What makes that harmless here is
+    that no bundled frame carries a *stale* one.
+
+    ``EQUINOX`` is no longer simply absent, and ``RADESYS`` is no longer always
+    ICRS: two of the NGC 5286 B stacks declare ``RADESYS = 'FK5'`` with
+    ``EQUINOX = 2000.0``. That pair is self-consistent and J2000-equivalent —
+    FK5 J2000 differs from ICRS by tens of milliarcseconds, four orders of
+    magnitude below these frames' 0.4"/px — so it is not the failure this
+    bounds. The stale case is a *pre-J2000* frame, ``FK4`` or ``EQUINOX 1950``,
+    surviving a solve that writes ICRS.
+
+    Stated as that property rather than by excluding the three frames, which
+    would have retired the check for exactly the frames that newly needed it.
+    Across the tree: 36 ICRS with no equinox, 4 declaring neither, 2 FK5 J2000.
+    """
     for frame in ALL_FRAMES:
         header = frame_header(frame)
-        assert "EQUINOX" not in header, frame
+        # RADECSYS is the deprecated spelling; nothing should introduce one.
         assert "RADECSYS" not in header, frame
+        if "EQUINOX" in header:
+            assert float(header["EQUINOX"]) == 2000.0, frame
         if "RADESYS" in header:
-            assert header["RADESYS"] == "ICRS", frame
+            assert header["RADESYS"] in ("ICRS", "FK5"), frame
+            # FK5 is only unambiguous with an equinox, and it must be J2000.
+            if header["RADESYS"] == "FK5":
+                assert float(header["EQUINOX"]) == 2000.0, frame
 
 
 def test_write_back_replaces_stale_wcs_keywords(frame_header_copy, frame_header):

@@ -1,13 +1,11 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
-`dev`, as are closure phases P1–P6 and P9. The remaining closure phases are
-planned below; they are independently deliverable unless a phase states an
-asset prerequisite.
+`dev`, as are closure phases P1–P9. The rollout is complete.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
 consolidation), 2026-09-09 (completion audit and approved closure rollout),
 2026-09-11 (P4 completion), 2026-09-12 (P5 and P6 completion), 2026-09-13
-(P9 completion)
+(P7 and P9 completion), 2026-09-16 (P8 completion)
 **Prerequisites:** No architectural prerequisite remains. The stateless rollout's
 prerequisite — broken-links Phase 4 — merged as PR #47. P8 has a separate
 maintainer-supplied asset gate.
@@ -1890,7 +1888,7 @@ describes the behaviour this PR adds, so landing them apart would leave
 does); the rule is for unrelated documentation riding along, and #59/#63
 landed the same way. Default suite after the review: 1806 passed, 42 skipped, 139 warnings.
 
-### Phase P8 — Restore NGC 5286 B-frame end-to-end evidence
+### Phase P8 — Restore NGC 5286 B-frame end-to-end evidence — Complete
 
 **Intent:** make all four recorded zero-point cases executable from pixels,
 rather than validating three NGC 5286 B cases only at the solution level.
@@ -1900,10 +1898,10 @@ rather than validating three NGC 5286 B cases only at the solution level.
 references, and add them through Git LFS. Do not expand broader FITS coverage
 in this phase.
 
-- [ ] Add Git LFS tracking for only the three recovered B frames and document
+- [x] Add Git LFS tracking for only the three recovered B frames and document
       the expected LFS checkout requirement.
-- [ ] Extend frame provenance and optical discovery tests to identify them.
-- [ ] Run the existing real-pixel calibration path against each B frame and
+- [x] Extend frame provenance and optical discovery tests to identify them.
+- [x] Run the existing real-pixel calibration path against each B frame and
       compare to the recorded reference at the established tolerance.
 
 **Validation:** LFS checkout test, focused field-calibration tests, default
@@ -1911,6 +1909,104 @@ suite, and a documented LFS-free skip for contributors without the assets.
 
 **Exit:** all four recorded zero-point references have an end-to-end local
 pixel path.
+
+**P8 record (2026-09-16).** The frames were recovered from
+`skynet-data/pipeline_data/test_subjects/optical/globulars/` as
+`ngc5286_globular_b_{000,001,002}.fits`, which is the name
+`tools/fieldcal_reference.py` had already reserved for them, and the mapping to
+the recorded solves is **index-for-index** — unlike the NGC 5128 pair, where
+`ngc5128_b_002` is `ngc5128_galaxy_b_001.fits`.
+
+*The pairing was established, not assumed*, and two independent routes agree.
+Header identity is not enough: `_000` and `_002` are the same object, band,
+geometry, telescope, exposure and OBSID, differing only in `DATE-OBS`.
+Re-extracting sources and matching them against each solve's recorded `x`,`y`
+separates them cleanly — the right frame reproduces its own recorded detections
+at a **median nearest-neighbour separation of 0.000 px** (1225/945/1317 of the
+recorded rows inside 0.5 px, against measured counts of 1231/947/1318 versus
+recorded 1228/949/1319), while every cross-pairing lands at 24–37%. Separately,
+`data/frame_provenance.json` — built from upstream's own `reorganize.py`, and
+predating this phase — maps the three stems to exactly the `input_fits_name`
+each `fit_summary.json` reports, browser deduplication suffixes (`-2 (1)`,
+`(2) (1)`) included. Its recorded `_collisions` entry is also resolved: the
+bundled `_000` is OBSID 12158933, the solved exposure, not the unrelated
+12158952 one.
+
+*One apparent mismatch is not one.* Two of the three report `SECPIX = 0.595`
+where all three references record `pixel_scale_arcsec = 0.398353`. Afterglow
+aligned every exposure onto one Prompt6 grid, so the **WCS** scale is 0.3984″/px
+throughout while `SECPIX` still names the instrument that took the frame. The
+WCS-derived scale matches the recorded value to eight digits on all three.
+
+**Two things the plan did not anticipate, both load-bearing.**
+
+*The recorded runs do not share an instrumental-magnitude scale.* Both families
+record `mag = -2.5 log10(flux / exposure) + zero`, but the older NGC 5286
+recorder put `zero` at **exactly 20.0** where `ngc5128_b_002` puts it at 0.0 —
+which is also what `algorithms.fieldcal` measures on today. Nothing in
+`fit_summary.json` names the constant, so an unconverted comparison misses by a
+clean 20 magnitudes: the same size and shape as the Afterglow base-20 trap
+`_compare_to_reference` already guards. It is now declared per field in
+`_INSTRUMENTAL_ZERO_BY_FIELD`, exposed as
+`ZeropointReference.instrumental_zero_mag`, applied by `calibrate_zeropoint`
+before comparing (the returned `zero_point` stays as measured), and
+**recomputed** from the recorded rows and each frame's `EXPTIME` by
+`test_recorded_instrumental_zero_is_the_declared_one`, so a fixture re-recorded
+on a third scale fails rather than shifting a comparison quietly.
+
+*The third checkbox needed code, not just assets.* `replay_catalog_sources`
+returned `[]` for all three fields and `calibrate_zeropoint` failed with
+`field_calibration_failed: Missing catalog sources`, because
+`_selected_row_sources` reads the newer `local_catalog_*` columns. The NGC 5286
+`fit_data.csv` is the older schema: `ra`/`dec`/`ref_mag`/`catalog_name`, with
+coordinates in **degrees** where the newer format is already in hours. Those
+`ra`/`dec` are also the *detection's* position — verified, they round-trip from
+`x`,`y` through the frame's WCS at 0.0000″ — not the catalog row's, which the
+older recorder never wrote down; it kept only `match_distance_arcsec` (median
+0.89″, max 2.04″) and wrote one identifier into both `source_id` and
+`catalog_id`. `_legacy_selected_row` handles that format and documents why the
+approximation is confined to what `"selected_rows"` already declares out of
+scope: every row it yields is one the recorded run matched, so re-matching
+cannot choose a different partner.
+
+**Results.** All three now run extract → measure → match → resolve → solve from
+pixels and land inside the 0.1-magnitude bound the NGC 5128 end-to-end cases
+already use:
+
+| Field | Measured (Kepler scale) | Recorded + 20.0 | Δ |
+| --- | --- | --- | --- |
+| `ngc5286_b_000` | 21.771578 | 21.821497 | −0.049919 |
+| `ngc5286_b_001` | 22.569106 | 22.602478 | −0.033372 |
+| `ngc5286_b_002` | 20.772267 | 20.830857 | −0.058590 |
+
+Loose, deliberately, and for the same reason as NGC 5128: the photometry is
+re-measured from pixels rather than replayed, so these are real solves, not
+bit-exact ones. `solve_zeropoint_from_reference` remains the bit-exact check and
+is untouched — `compare_zeropoint_to_reference`'s contract did not change, so
+its input is still on the recorded scale.
+
+**LFS scope and the no-LFS path.** `.gitattributes` names the three frames **by
+path**, never `data/optical/*.fits`: a wildcard would convert the other 39
+frames, whose content is already in history, buying nothing and breaking every
+existing clone. `lfs: true` is set on the `python-tests` job only — the other
+two read no pixels. Without the objects nothing breaks and nothing silently
+passes: `tools.config.is_lfs_pointer` recognises a stub, `list_optical_frames`
+drops it behind a `frames_not_checked_out` warning, `resolve_optical_frame` and
+`_frame_path` return `frame_not_checked_out`, and `tests/conftest.py::_require`
+plus the `lfs_frames` fixture skip the pixel and whole-tree tests with the
+`git lfs pull` line.
+
+*Why they are 31 MB each.* Each file carries **four** Afterglow-aligned
+exposures, of which every Kepler code path reads the primary — they are the only
+multi-HDU frames in `data/optical/`. Shipping the primary alone would have been
+7.74 MB apiece, under the 9 MB plain-git cut-off and no LFS at all; the
+maintainer chose to preserve all four exposures.
+
+*Counts that moved:* 39 frames → 42, B 2 → 5, and the truncation-warning text.
+`test_the_selection_replay_reports_a_field_it_cannot_run` now asserts
+`frame_not_bundled` is **absent** — the selection replay still cannot run on
+these three, but only for the remaining reason, the missing recorded cone
+response (BL-4 / P7 recorded one for NGC 5128 only).
 
 ### Phase P9 — Validate the ATLAS WCS backend with operator data
 

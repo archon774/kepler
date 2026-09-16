@@ -1,7 +1,7 @@
 """Tool-layer coverage for ``tools.astrometry``.
 
 BL-1: this file exists because ``describe_image_wcs`` raised ``TypeError`` on
-38 of the 39 bundled frames and no test imported the module. The parametrized
+38 of the 39 frames bundled at the time and no test imported the module. The parametrized
 sweep is the point -- a fix that works on one frame and not the rest is not a
 fix.
 
@@ -18,16 +18,21 @@ from pathlib import Path
 import pytest
 
 from tools.astrometry import describe_image_wcs
+from tools.config import is_lfs_pointer
 
 FRAME_PATHS = sorted((Path(__file__).resolve().parents[1] / "data" / "optical").glob("*.fits"))
 
 
 def test_the_fixture_directory_is_populated():
-    assert len(FRAME_PATHS) == 39
+    # Counted by glob, so an unfetched Git LFS pointer still counts: the three
+    # NGC 5286 B frames leave a stub with the frame's name either way.
+    assert len(FRAME_PATHS) == 42
 
 
 @pytest.mark.parametrize("path", FRAME_PATHS, ids=lambda p: p.stem)
 def test_describe_image_wcs_never_raises_on_a_bundled_frame(path):
+    if is_lfs_pointer(path):
+        pytest.skip(f"{path.name} is an unfetched Git LFS pointer — git lfs pull")
     summary = describe_image_wcs(path)
     assert summary.file.exists is True
 

@@ -218,8 +218,11 @@ class ZeropointReference(KeplerToolModel):
     three NGC 5286 B solves are the leaner "bad values" fixture and populate
     ``skynet_zero_point`` (the value ``calc_solution`` returned for those rows)
     only. ``skynet_zero_point`` is always ``calc_solution``'s
-    ``catalog_mag = instrumental_mag + zero_point`` offset, whichever
-    instrumental-magnitude scale the recorded rows use.
+    ``catalog_mag = instrumental_mag + zero_point`` offset, on whichever
+    instrumental-magnitude scale the recorded rows use -- and the two fixture
+    families do not use the same one. ``instrumental_zero_mag`` is that scale's
+    constant, so a zero point measured from pixels can be put on the recorded
+    scale before comparing; see ``tools.photometry.calibrate_zeropoint``.
     """
 
     field: str
@@ -231,6 +234,7 @@ class ZeropointReference(KeplerToolModel):
     afterglow_base: float | None = None
     afterglow_correction: float | None = None
     web_table_zero_point: float | None = None
+    instrumental_zero_mag: float | None = None
     parity_tolerance_mag: float | None = None
     measurements: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[ToolWarning] = Field(default_factory=list)

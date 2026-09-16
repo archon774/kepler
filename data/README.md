@@ -31,15 +31,16 @@ recursively (astroquery nests MAST products under
 resolves inside this directory. `KEPLER_DATA_DIR` moves the root and the
 boundary together; `KEPLER_OPTICAL_DATA_DIR` moves the frame library alone.
 
-**Total size: ~175 MB**, essentially all of it the 39 FITS frames. That is large
-for a plain git repository; see "Repository size" at the bottom.
+**Total size: ~175 MB in git**, essentially all of it the 39 plain-git FITS
+frames, plus **93 MB of Git LFS objects** — the three NGC 5286 B frames. That is
+large for a plain git repository; see "Repository size" at the bottom.
 
 ## Layout
 
 ```
 data/
   fits_downloads/              archive download root — UNTRACKED, gitignored
-  optical/                     39 FITS frames (~169 MB)
+  optical/                     42 FITS frames (~169 MB + 93 MB in Git LFS)
   afterglow/                   Afterglow web service ground truth (160 KB)
     afterglow_web_values_*.csv   zero points for 73 subjects
     build_master_table.py        upstream merge script
@@ -55,7 +56,7 @@ data/
     curated_periods.json       that curation, machine-readable, for the tools
 ```
 
-## `optical/` — 39 science frames
+## `optical/` — 42 science frames
 
 PROMPT / Skynet optical frames, `float32`, already bias/dark/flat corrected,
 copied from `pipeline_data/test_subjects/optical/<category>/`.
@@ -69,13 +70,40 @@ Collectively they span the variation the algorithms branch on:
 
 | Property | Coverage |
 | --- | --- |
-| Filters | V (25), R (7), B (2), Halpha (2), OIII (1), Lum (1), Open (1) |
-| Telescopes | Prompt5 (23), Prompt2 (8), PROMPT-MO-1 (3), OAUJ-CDK500 (3), R-COP (2) |
-| Geometry | 1056×1027 (34), 1024×1024 (3), 1600×1200 (2) |
-| WCS representation | `CD` matrix (33), `PC` + `CDELT` (5), none at all (1) |
-| Parity — sign of `det(CD)` | positive (35), negative (3), undefined (1) |
+| Filters | V (25), R (7), B (5), Halpha (2), OIII (1), Lum (1), Open (1) |
+| Telescopes | Prompt5 (23), Prompt2 (8), PROMPT-MO-1 (5), OAUJ-CDK500 (3), R-COP (2), Prompt6 (1) |
+| Geometry | 1056×1027 (34), 1406×1374 (3), 1024×1024 (3), 1600×1200 (2) |
+| WCS representation | `CD` matrix (34), `PC` + `CDELT` (7), none at all (1) |
+| Parity — sign of `det(CD)` | positive (38), negative (3), undefined (1) |
 | Rotation | ~0°, ~±2°, ~±90°, ~±178° all present |
 | `FOCALLEN` | 5 frames carry a real value (2011 mm, 4565 mm); the rest are 0 |
+
+### The three NGC 5286 B frames are Git LFS objects
+
+`ngc5286_globular_b_{000,001,002}.fits` are stored in **Git LFS**, not in the
+git tree; everything else in this directory is plain git. A clone made without
+LFS leaves a ~130-byte text pointer wearing each frame's name:
+
+```bash
+git lfs install && git lfs pull      # fetch the three frames (93 MB)
+```
+
+Nothing breaks without them. `tools.config.is_lfs_pointer` recognises a stub,
+`list_optical_frames` leaves it out of the listing behind a
+`frames_not_checked_out` warning, `resolve_optical_frame` returns a
+`frame_not_checked_out` error, and the tests that need the pixels skip with the
+`git lfs pull` line above. What you lose is the end-to-end half of three of the
+four recorded zero-point solves.
+
+They are also the **only multi-HDU frames** in this directory: each carries four
+Afterglow-aligned exposures of the same field, and every Kepler code path reads
+the primary and ignores the rest. That is why they are 31 MB apiece where a
+single-HDU frame of the same geometry would be 7.7 MB.
+
+Two of the three report `SECPIX = 0.595`, which **disagrees with their own
+recorded pixel scale and is not a provenance problem**: Afterglow aligned all
+four exposures onto one Prompt6 grid, so the WCS scale is 0.3984″/px throughout
+while `SECPIX` still names whichever instrument took the frame.
 
 Several tests parametrize over the whole directory rather than a fixed list, so
 adding a frame widens their coverage automatically. Frames the tests single out
@@ -93,6 +121,7 @@ by name have short aliases in `tests/conftest.py::FRAMES`:
 | `ngc2070` | `ngc2070_nebula_v_000.fits` | Southern field at dec −69°, where `cos(dec)` in the footprint maths stops being negligible. Upstream's default in `zp_fit.py`. |
 | `ngc5128_b` | `ngc5128_galaxy_b_001.fits` | **The frame behind the whole parity chain** — the recorded solve in `fieldcal/zp_solutions/ngc5128_b_002/`, the Afterglow API response, and the web table row all describe this exposure. |
 | `ngc1982` | `ngc1982_nebula_r_000.fits` | 1600×1200 from a fifth instrument, with a `FOCALLEN` of 2011 mm. |
+| `ngc5286_b_000` … `_002` | `ngc5286_globular_b_00N.fits` | **The three frames behind the recorded "bad values" solves**, and the only **Git LFS** and **multi-HDU** frames here — see below. |
 
 ## `afterglow/` — independent ground truth
 
@@ -136,17 +165,48 @@ recorded upstream, before the extraction. Kepler reproduces all four to the last
 float bit — the only value with any drift is `limmag5`, which goes through
 `np.polyfit`.
 
-| Directory | Upstream source | Field |
-| --- | --- | --- |
-| `ngc5286_b_000` | `zp-fits/test_bad_vals/ngc_5286_12158933` | NGC 5286, B |
-| `ngc5286_b_001` | `zp-fits/test_bad_vals/ngc_5286_12158933-2 (1)` | NGC 5286, B — same field, second frame |
-| `ngc5286_b_002` | `zp-fits/test_bad_vals/ngc_5286_12158933 (2) (1)` | NGC 5286, B — same field, third frame |
-| `ngc5128_b_002` | `zp-fits/afterglow_fits/ngc 5128_13909251_B_002` | NGC 5128, B — the Afterglow parity run |
+| Directory | Upstream source | Field | Frame |
+| --- | --- | --- | --- |
+| `ngc5286_b_000` | `zp-fits/test_bad_vals/ngc_5286_12158933` | NGC 5286, B | `ngc5286_globular_b_000.fits` |
+| `ngc5286_b_001` | `zp-fits/test_bad_vals/ngc_5286_12158933-2 (1)` | NGC 5286, B — same field, second frame | `ngc5286_globular_b_001.fits` |
+| `ngc5286_b_002` | `zp-fits/test_bad_vals/ngc_5286_12158933 (2) (1)` | NGC 5286, B — same field, third frame | `ngc5286_globular_b_002.fits` |
+| `ngc5128_b_002` | `zp-fits/afterglow_fits/ngc 5128_13909251_B_002` | NGC 5128, B — the Afterglow parity run | `ngc5128_galaxy_b_001.fits` |
+
+All four now have a bundled frame, so every recorded solve can be driven end to
+end from pixels (`tools.photometry.calibrate_zeropoint`) and not only replayed
+at the `calc_solution` level. The NGC 5286 mapping is index-for-index; the NGC
+5128 one is not, and neither was assumed — each frame was paired with its solve
+by re-extracting its sources and matching them against the recorded positions,
+which lands at a median separation of 0.000 px for the right frame and roughly a
+third of the rows for any other.
 
 The NGC 5286 trio are upstream's "bad values" fixtures: frames whose original
 filenames contained spaces and parentheses, with pathological header values.
 Their zero points differ by ~1.8 mag across three frames of one field, which is
 what makes them a good regression target.
+
+### The two families do not share an instrumental-magnitude scale
+
+Both record `mag = -2.5 log10(flux / exposure) + zero`, but the older NGC 5286
+recorder put `zero` at **20.0** where the newer NGC 5128 one put it at **0.0** —
+and 0.0 is what `algorithms.fieldcal` measures on today. Nothing in
+`fit_summary.json` names the constant. So a zero point solved from NGC 5286
+pixels lands a clean 20 magnitudes above the recorded number, which is the same
+size and shape as the Afterglow base-20 trap two sections down.
+
+`tools.fieldcal_reference._INSTRUMENTAL_ZERO_BY_FIELD` declares it per field and
+`ZeropointReference.instrumental_zero_mag` exposes it; `calibrate_zeropoint`
+puts its measurement on the reference's scale before comparing.
+`test_recorded_instrumental_zero_is_the_declared_one` recomputes the constant
+from the recorded rows and each frame's `EXPTIME`, so a fixture re-recorded on a
+third scale fails rather than shifting a comparison silently.
+
+Their `fit_data.csv` is also the **older column schema**: `ra`/`dec`/`ref_mag`/
+`catalog_name` rather than `local_catalog_*`, with coordinates in degrees where
+the newer format is already in hours. Those `ra`/`dec` are the *detection's*
+position, not the catalog row's — the older recorder kept only the separation,
+in `match_distance_arcsec` (median 0.89″, max 2.04″) — and it wrote one
+identifier into both `source_id` and `catalog_id`.
 
 The NGC 5128 case is the interesting one — its summary carries both the local
 result and Afterglow's, and declares them within a 5e-4 mag tolerance. The full
@@ -362,14 +422,18 @@ grow on its own, but two things are worth knowing:
 
 - Frames are binary and incompressible, so every re-copy of a frame adds its
   full size to history permanently. Replace a frame only when it must change.
-- If clone times become a problem, these are natural Git LFS candidates —
-  `data/optical/*.fits` is the whole of it, and the JSON/CSV ground truth
-  (160 KB) should stay in regular git either way.
+- Git LFS is in use, but **narrowly**: `.gitattributes` names the three NGC 5286
+  B frames by path and nothing else. It is deliberately not
+  `data/optical/*.fits` — a wildcard would convert the other 39 frames, whose
+  content is already in history, buying nothing and breaking every existing
+  clone. The JSON/CSV ground truth (160 KB) stays in regular git either way.
 
-The frame cut-off is 9 MB. The Afterglow table covers 73 subjects totalling
-~1.5 GB; the 36 frames above that cut-off were deliberately left out, and their
-web values still ship, so any of them can be added later without touching the
-ground-truth files.
+The 9 MB frame cut-off governs what plain git carries. The Afterglow table covers
+73 subjects totalling ~1.5 GB; the 36 frames above that cut-off were deliberately
+left out, and their web values still ship, so any of them can be added later
+without touching the ground-truth files. The three NGC 5286 B frames are 31 MB
+each and are the exception the LFS tracking exists for — they are large because
+each holds four aligned exposures, of which Kepler reads one.
 
 ## Refreshing
 

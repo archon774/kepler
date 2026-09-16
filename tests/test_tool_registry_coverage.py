@@ -2,7 +2,7 @@
 
 BL-2: before this test, every module in tools/ that reads local data -- except
 tools.pulsar -- was unregistered, so an agent loop could query eight remote
-archives but could not open any of the 39 bundled FITS frames.
+archives but could not open any of the bundled FITS frames.
 """
 
 from __future__ import annotations

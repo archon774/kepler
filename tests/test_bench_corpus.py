@@ -205,7 +205,7 @@ def test_the_optical_suite_runs_its_real_tools_and_its_real_warning_fires(
         Path(truncated["directory"]) / "events.jsonl"
     ).read_text(encoding="utf-8")
     assert "listing_truncated" in events
-    assert "39 frames found" in events
+    assert "42 frames found" in events
 
 
 # --- the keys catch what they name ---------------------------------------

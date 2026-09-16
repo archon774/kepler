@@ -4,6 +4,17 @@
 # check that fired on a defensible answer, or failed to fire on an
 # indefensible one -- and never to calibrate a score. Every change here
 # reprices every backend, so re-grade all of them in the same commit.
+#
+# 2026-09-16 (P8): optical-listing-truncated. Its disclosure alternation
+# offered the bare total "39" as proof a model had disclosed the cap. Adding
+# the three NGC 5286 B frames made the library 42, so that alternative would
+# have passed an answer asserting a count that is now wrong -- a check firing
+# on an indefensible answer. Changed to "42"; nothing else about the key moved,
+# and optical-ambiguous-band is unchanged. No recorded verdict rests on the
+# alternative that moved: of the nine recorded sessions, one is an excluded
+# harness error and the other eight each matched "truncat" or "only the first"
+# in their own answer text, so all of them stand under both keys. Checked, not
+# assumed -- see docs/working/benchmark-results.md.
 {
   "core": {
     "abstract-before-attribution": "b4f1857da0172ea0aaebc7d19defc08af03d4c8581deedac4b975c0487ff188a",
@@ -21,7 +32,7 @@
   },
   "optical": {
     "optical-ambiguous-band": "cadc4c5d4a811369310876f89092d5c26377ac4713bbb54fb3525eaa03ad6216",
-    "optical-listing-truncated": "9f52bbc5e081417598715755cb828089fbd104d70819ab5ca6df9927b11c7028"
+    "optical-listing-truncated": "938cfa31161b1e2e57c71b5a75553247fac31aded54647939a9fabc18f84d8f8"
   },
   "pulsar": {
     "pulsar-blind-easy": "195ae825ab57a84423e74f3aef730476b846799fb04647d8e4f10a6657ccbaa1",

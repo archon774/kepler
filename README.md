@@ -159,7 +159,7 @@ identical function any other caller would import and run.
   why. Documented parity quirks and known upstream bugs are deliberately kept
   rather than "fixed" in transit.
 - **Bit-exact parity test suite.** `tests/` backs the Python algorithms with
-  39 real PROMPT/Skynet FITS frames and four complete recorded Skynet
+  42 real PROMPT/Skynet FITS frames and four complete recorded Skynet
   zero-point solves, checked bit-for-bit against production output. These
   aren't tests of whether the algorithms are *right* — that was settled
   upstream — they're tests of whether the extraction still does exactly what
@@ -244,6 +244,25 @@ Kepler/
 ```
 
 ## Getting Started
+
+### Fixture Data and Git LFS
+
+Almost all of `data/` is plain git and arrives with a normal clone. Three frames
+are the exception — `data/optical/ngc5286_globular_b_{000,001,002}.fits`, 93 MB
+of **Git LFS** objects — so a clone made without LFS leaves a small text pointer
+in place of each:
+
+```bash
+git lfs install && git lfs pull      # fetch the three NGC 5286 B frames
+```
+
+They are optional. Without them the suite still passes: the tests that need
+those pixels skip themselves with the command above, `list_optical_frames`
+reports a `frames_not_checked_out` warning rather than the frames, and
+`resolve_optical_frame` returns a `frame_not_checked_out` error. What they buy
+is the end-to-end pixel path for three of the four recorded zero-point solves —
+without them, those three are checked at the `calc_solution` level only.
+`data/README.md` has the detail.
 
 ### Python Setup
 
@@ -342,7 +361,7 @@ Kepler's Python folders are byte-preserving extractions from Skynet, so
 `tests/` is not there to check whether the algorithms are *right* — that
 question was settled upstream. It checks whether the extraction still does
 **exactly what it did before**, including the parts that are wrong. Fixtures
-are 39 real PROMPT/Skynet frames and four complete recorded Skynet zero-point
+are 42 real PROMPT/Skynet frames and four complete recorded Skynet zero-point
 solves; the centerpiece, `test_fieldcal_solution.py`, feeds `calc_solution` the
 exact rows Skynet fed it and compares against the exact numbers Skynet
 returned, bit-for-bit, on four fields. Known upstream defects are pinned by
