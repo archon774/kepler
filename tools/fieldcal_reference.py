@@ -14,13 +14,22 @@ NGC 5128 B::
     Afterglow web table         21.147                (3 dp, recorded by hand)
 
 Two fixture families live under ``zp_solutions/``. ``ngc5128_b_002`` is the
-full Afterglow-parity record and is the only one with a bundled frame
-(``ngc5128_galaxy_b_001.fits``). ``ngc5286_b_{000,001,002}`` are the leaner
-"bad values" fixture: ``calc_solution`` output and matched catalog rows, but no
-Afterglow numbers and no bundled B frame (only ``ngc5286_globular_v_000.fits``
-ships). ``skynet_zero_point`` -- ``calc_solution``'s
-``catalog_mag = instrumental_mag + zero_point`` offset -- is recorded for all
-four and reproduced bit-for-bit by :func:`solve_zeropoint_from_reference`.
+full Afterglow-parity record, against ``ngc5128_galaxy_b_001.fits``.
+``ngc5286_b_{000,001,002}`` are the leaner "bad values" fixture:
+``calc_solution`` output and matched catalog rows, but no Afterglow numbers.
+All four now have a bundled frame (P8); the NGC 5286 three are
+``ngc5286_globular_b_00N.fits``, Git LFS objects. ``skynet_zero_point`` --
+``calc_solution``'s ``catalog_mag = instrumental_mag + zero_point`` offset --
+is recorded for all four and reproduced bit-for-bit by
+:func:`solve_zeropoint_from_reference`.
+
+The two families do **not** share an instrumental-magnitude scale: both record
+``mag = -2.5 log10(flux / exposure) + zero``, with ``zero`` at 20.0 for the
+older NGC 5286 recorder and 0.0 for ``ngc5128_b_002``, which is also what
+``algorithms.fieldcal`` measures on. Nothing in ``fit_summary.json`` names it,
+so it is declared in :data:`_INSTRUMENTAL_ZERO_BY_FIELD` and exposed as
+``ZeropointReference.instrumental_zero_mag``. Their ``fit_data.csv`` is also
+the older column schema; see :func:`_legacy_selected_row`.
 
 ``ngc5128_b_002`` additionally carries the recorded VizieR responses the
 run's catalog selection consumed -- ``apass_response.json`` (the full APASS
@@ -42,6 +51,7 @@ import math
 from pathlib import Path
 
 from tools.calibration import solve_zeropoint_from_measurements
+from tools.config import is_lfs_pointer
 from tools.models import (
     CatalogResponseReference,
     FieldCalMatch,
@@ -93,14 +103,38 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 #: The bundled frame each recorded solve describes. The solve-directory name
 #: (``ngc5128_b_002``) and the frame filename (``ngc5128_galaxy_b_001.fits``)
 #: do not match: upstream's ``(1)``/``(2)`` directory suffixes were flattened
-#: separately from the frame rename. Only ``ngc5128_b_002`` has a bundled
-#: frame; the three NGC 5286 B solves describe ``ngc5286_globular_b_00N.fits``,
-#: which are not in ``data/optical/``.
+#: separately from the frame rename. The three NGC 5286 B solves do line up
+#: index-for-index with ``ngc5286_globular_b_00N.fits`` -- established by
+#: re-extraction, not assumed: each frame reproduces its own solve's recorded
+#: detections at a median separation of 0.000 px, while every cross-pairing
+#: lands near 35% (P8). Those three frames are Git LFS objects; see
+#: :func:`_frame_path` for what happens when they are not checked out.
 _BUNDLED_FRAME_BY_FIELD: dict[str, str | None] = {
     "ngc5128_b_002": "ngc5128_galaxy_b_001.fits",
-    "ngc5286_b_000": None,
-    "ngc5286_b_001": None,
-    "ngc5286_b_002": None,
+    "ngc5286_b_000": "ngc5286_globular_b_000.fits",
+    "ngc5286_b_001": "ngc5286_globular_b_001.fits",
+    "ngc5286_b_002": "ngc5286_globular_b_002.fits",
+}
+
+#: The instrumental-magnitude zero each recorded run measured on, in
+#: magnitudes. Both fixture families normalise by exposure time --
+#: ``mag = -2.5 log10(flux / exp_length) + instrumental_zero`` -- but they do
+#: not agree on the constant, and nothing in ``fit_summary.json`` names it.
+#:
+#: The older "bad values" recorder used 20.0; the newer one used 0.0, which is
+#: also the scale ``algorithms.fieldcal`` measures on today. So a zero point
+#: solved from pixels is directly comparable to ``ngc5128_b_002``'s recorded
+#: value and sits a clean 20 magnitudes above the three NGC 5286 ones. That is
+#: the same size and shape as the Afterglow base-20 trap ``_compare_to_reference``
+#: already guards (data/README.md), and it is why this is a declared table
+#: rather than an inference: ``test_recorded_instrumental_zero_is_the_declared_one``
+#: recomputes each entry from the recorded rows and the bundled frame's
+#: ``EXPTIME`` and fails if a fixture is ever re-recorded on another scale.
+_INSTRUMENTAL_ZERO_BY_FIELD: dict[str, float] = {
+    "ngc5128_b_002": 0.0,
+    "ngc5286_b_000": 20.0,
+    "ngc5286_b_001": 20.0,
+    "ngc5286_b_002": 20.0,
 }
 
 
@@ -220,14 +254,22 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
         return None, [
             ToolWarning(
                 code="frame_not_bundled",
-                message=f"The frame for {field!r} (an NGC 5286 B exposure) is not "
-                "bundled -- only ngc5286_globular_v_000.fits ships. The solve is "
-                "checked at the calc_solution level only, not end to end from pixels.",
+                message=f"No frame is bundled for {field!r}. The solve is checked "
+                "at the calc_solution level only, not end to end from pixels.",
             )
         ]
 
     candidate = _REPO_ROOT / "data" / "optical" / bundled
     if candidate.is_file():
+        if is_lfs_pointer(candidate):
+            return None, [
+                ToolWarning(
+                    code="frame_not_checked_out",
+                    message=f"{bundled} is a Git LFS pointer, not the frame itself. "
+                    "Run `git lfs install && git lfs pull` to fetch it; until then "
+                    f"{field!r} is checked at the calc_solution level only.",
+                )
+            ]
         return str(candidate), []
     return None, [
         ToolWarning(
@@ -270,6 +312,7 @@ def _load_reference(field: str, field_dir: Path) -> ZeropointReference:
         afterglow_base=afterglow_base,
         afterglow_correction=afterglow_correction,
         web_table_zero_point=web_zp,
+        instrumental_zero_mag=_INSTRUMENTAL_ZERO_BY_FIELD.get(field),
         parity_tolerance_mag=_f(summary.get("parity_zp_tolerance")),
         measurements=[dict(row) for row in rows],
         warnings=warnings,
@@ -581,19 +624,20 @@ def _selected_row_sources(field: str, directory: str | Path | None) -> list:
 
     sources: list[CatalogSource] = []
     with csv_path.open(newline="") as handle:
-        for record in csv.DictReader(handle):
+        reader = csv.DictReader(handle)
+        legacy = "local_catalog_ra" not in (reader.fieldnames or [])
+        for record in reader:
             flag = str(record.get("used_for_calibration", "")).strip().lower()
             if flag not in ("true", "1"):
                 continue
-            ra_hours = _f(record.get("local_catalog_ra"))
-            dec_degs = _f(record.get("local_catalog_dec"))
-            ref_mag = _f(record.get("local_ref_mag"))
-            if ra_hours is None or dec_degs is None or ref_mag is None:
+            if legacy:
+                row = _legacy_selected_row(record)
+            else:
+                row = _recorded_selected_row(record)
+            if row is None:
                 continue
-            ref_mag_error = _f(record.get("local_ref_mag_error"))
-            catalog_name = (record.get("local_catalog_name") or "").strip() or None
+            ra_hours, dec_degs, ref_mag, ref_mag_error, catalog_name, source_id = row
             band = (record.get("filter") or "").strip() or None
-            source_id = (record.get("id") or "").strip() or None
             sources.append(
                 CatalogSource(
                     id=source_id,
@@ -606,6 +650,68 @@ def _selected_row_sources(field: str, directory: str | Path | None) -> list:
                 )
             )
     return sources
+
+
+#: One parsed ``fit_data.csv`` row: the fields a ``CatalogSource`` needs.
+_SelectedRow = tuple[float, float, float, float | None, str | None, str | None]
+
+
+def _recorded_selected_row(record: dict) -> _SelectedRow | None:
+    """A row of the newest ``fit_data.csv`` format (``ngc5128_b_002``).
+
+    ``local_catalog_ra`` is already in hours and ``local_catalog_dec`` in
+    degrees, and both are the *catalog* row's own position.
+    """
+    ra_hours = _f(record.get("local_catalog_ra"))
+    dec_degs = _f(record.get("local_catalog_dec"))
+    ref_mag = _f(record.get("local_ref_mag"))
+    if ra_hours is None or dec_degs is None or ref_mag is None:
+        return None
+    return (
+        ra_hours,
+        dec_degs,
+        ref_mag,
+        _f(record.get("local_ref_mag_error")),
+        (record.get("local_catalog_name") or "").strip() or None,
+        (record.get("id") or "").strip() or None,
+    )
+
+
+def _legacy_selected_row(record: dict) -> _SelectedRow | None:
+    """A row of the older ``fit_data.csv`` format (the three ``ngc5286_b_*``).
+
+    Two differences from the newer format, both load-bearing:
+
+    * ``ra``/``dec`` are in **degrees**, not hours, so RA is converted here.
+      ``CatalogSource.ra_hours`` is what the matching code compares against.
+    * They are the **detection's** position, not the catalog row's. The older
+      recorder never wrote the catalog row's own coordinates down -- it kept
+      only the separation, in ``match_distance_arcsec`` (median 0.89", max
+      2.04" across the three fields) -- and it wrote the same identifier into
+      both ``source_id`` and ``catalog_id``. So the position here is the
+      matched detection, displaced from the true catalog position by up to
+      about 2" in an unrecorded direction.
+
+    That approximation is confined to what ``"selected_rows"`` already
+    declares out of scope. Every row it yields is one the recorded run
+    matched, so re-matching cannot pick a different partner; what shifts is
+    the reported match distance, not the membership of the set or the
+    reference magnitudes the zero point is solved from. Use ``ngc5128_b_002``
+    and ``"full_response"`` for anything that tests selection itself.
+    """
+    ra_degs = _f(record.get("ra"))
+    dec_degs = _f(record.get("dec"))
+    ref_mag = _f(record.get("ref_mag"))
+    if ra_degs is None or dec_degs is None or ref_mag is None:
+        return None
+    return (
+        (ra_degs % 360.0) / 15.0,
+        dec_degs,
+        ref_mag,
+        _f(record.get("ref_mag_error")),
+        (record.get("catalog_name") or "").strip() or None,
+        (record.get("catalog_id") or "").strip() or None,
+    )
 
 
 def replay_catalog_sources(

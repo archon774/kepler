@@ -53,6 +53,7 @@ from tools.fieldcal_reference import (
     _variable_sources_warning,
     compare_zeropoint_to_reference,
     load_catalog_response,
+    load_zeropoint_reference,
     replay_catalog_sources,
     replay_variable_sources,
 )
@@ -324,12 +325,19 @@ def calibrate_zeropoint(
     result is a :class:`~tools.models.ZeropointComparison` against it. Omit it
     and ``reference`` is ``None`` -- just the solved ``zero_point``.
 
-    LIMITATION: only ``ngc5128_b_002`` / ``ngc5128_galaxy_b_001.fits`` can be
-    driven end to end -- the three NGC 5286 B solves have no bundled frame,
-    and only ``ngc5128_b_002`` has a recorded full response. This path
-    re-measures the photometry from pixels, so it is a real solve, not a
+    All four recorded solves can now be driven end to end (P8); only
+    ``ngc5128_b_002`` has a recorded full response, so ``"full_response"``
+    remains limited to it while ``"selected_rows"`` works for all four. This
+    path re-measures the photometry from pixels, so it is a real solve, not a
     bit-exact one; ``tools.fieldcal_reference.replay_field_calibration`` is
     the bit-exact selection replay over the recorded detections.
+
+    ``compare_to`` handles the two fixture families' differing
+    instrumental-magnitude scales: the solved value is put on the reference's
+    scale (``ZeropointReference.instrumental_zero_mag``, 20.0 for the three
+    NGC 5286 B solves and 0.0 for ``ngc5128_b_002``) before the comparison, so
+    ``delta_vs_skynet`` means the same thing for every field. The returned
+    ``zero_point`` is the value as measured, on Kepler's own scale.
     """
     # Argument errors first, before the filesystem is touched.
     warnings: list = []
@@ -502,7 +510,16 @@ def calibrate_zeropoint(
     zero_point = float(zero_point)
 
     if compare_to is not None:
-        comparison = compare_zeropoint_to_reference(zero_point, compare_to)
+        # The solve above measures on Kepler's own instrumental scale, whose
+        # zero is 0.0. A recorded run that used a different one is not directly
+        # comparable, so put this value on the reference's scale first -- for
+        # the three NGC 5286 B solves that is a clean 20 magnitudes, which is
+        # exactly the size of miss the Afterglow base-20 guard exists to catch.
+        # ``zero_point`` on the returned comparison stays as measured.
+        reference = load_zeropoint_reference(compare_to)
+        instrumental_zero = reference.instrumental_zero_mag or 0.0
+        comparison = compare_zeropoint_to_reference(zero_point - instrumental_zero, compare_to)
+        comparison.zero_point = zero_point
         comparison.warnings = warnings + list(comparison.warnings)
         return comparison
     return ZeropointComparison(zero_point=zero_point, reference=None, warnings=warnings)
