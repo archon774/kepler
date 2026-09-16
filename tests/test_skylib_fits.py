@@ -7,7 +7,7 @@ instrumental magnitude by a constant, and a wrong gain silently rescales every
 uncertainty — neither raises, and a zero-point solve absorbs the first without
 complaint.
 
-Exercised against all 39 real headers, plus the specific keyword fallbacks that
+Exercised against all 42 real headers, plus the specific keyword fallbacks that
 no fixture frame happens to use.
 """
 
@@ -101,7 +101,24 @@ def test_an_unparseable_gain_falls_through():
 
 @pytest.mark.parametrize("frame", ALL_FRAMES)
 def test_observation_times_are_recovered_for_every_real_frame(frame_header, frame):
-    """Start, centre and stop, all derived from DATE-OBS plus EXPTIME."""
+    """Start, centre and stop, all derived from DATE-OBS plus EXPTIME.
+
+    That derivation only holds where ``DATE-END`` is absent, which was every
+    frame until the three NGC 5286 B stacks arrived. They carry a real
+    ``DATE-END``, and it is the end of the *whole four-exposure stack* rather
+    than of the primary exposure — identical in all three files
+    (``15:53:59.92``) while each ``DATE-OBS`` differs. So the recovered span is
+    the stack's, from 77 s up to 12.1 hours for the frame whose primary was
+    taken first, and only ``_002`` — whose primary happens to be the last
+    exposure — still satisfies the single-exposure identity.
+
+    Those three also record ``DATE-CEN``, so ``get_fits_time`` returns all
+    three times as written rather than deriving any of them — and the recorded
+    centre is Afterglow's own stack centre, not the arithmetic midpoint
+    (``_001`` puts it at 11:12:17.939207, well off the half-way point of its
+    12-hour span). Preferring recorded values is right; only the derived branch
+    can claim the midpoint.
+    """
     header = frame_header(frame)
     t_start, t_cen, t_stop = get_fits_time(header)
 
@@ -110,8 +127,15 @@ def test_observation_times_are_recovered_for_every_real_frame(frame_header, fram
     assert t_start <= t_cen <= t_stop
 
     texp = get_fits_exp_length(header)
-    assert (t_stop - t_start).total_seconds() == pytest.approx(texp, abs=1e-6)
-    assert (t_cen - t_start).total_seconds() == pytest.approx(texp / 2, abs=1e-6)
+    span = (t_stop - t_start).total_seconds()
+
+    if "DATE-END" in header:
+        # A stack, every time recorded: the span has to cover the primary
+        # exposure, but nothing here is derived from it.
+        assert span >= texp - 1e-6, frame
+    else:
+        assert span == pytest.approx(texp, abs=1e-6)
+        assert (t_cen - t_start).total_seconds() == pytest.approx(texp / 2, abs=1e-6)
 
 
 def test_centre_and_stop_are_derived_from_start_and_exposure():

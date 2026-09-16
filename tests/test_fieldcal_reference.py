@@ -336,12 +336,21 @@ def test_the_selection_replay_opens_no_socket(monkeypatch):
     assert len(replay_catalog_sources("ngc5128_b_002", fixture="full_response")) == 132
 
 
-def test_the_selection_replay_reports_a_field_it_cannot_run():
+def test_the_selection_replay_reports_a_field_it_cannot_run(lfs_frames):
+    """One reason left, where there used to be two.
+
+    The *selection* replay needs a recorded cone response, and only
+    ``ngc5128_b_002`` has one (BL-4 / P7). It also used to need a frame, and P8
+    supplied it -- so ``frame_not_bundled`` must be gone from this list while
+    ``fixture_missing`` stays. A pixel solve over these three is available
+    through the selected-row path; see ``test_ngc5286_b_frames.py``.
+    """
     replay = replay_field_calibration("ngc5286_b_000")
     assert replay.solution is None
     codes = [e.code for e in replay.errors]
     assert "fixture_missing" in codes
-    assert "frame_not_bundled" in codes
+    assert "frame_not_bundled" not in codes
+    assert "frame_not_checked_out" not in codes
 
 
 @float32_mag_errors

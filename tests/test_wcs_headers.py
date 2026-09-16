@@ -2,7 +2,7 @@
 
 These are the functions that turn a telescope's header into the two hints the
 plate solver needs — a pixel scale and a rough pointing. Both are exercised
-against all 39 real frames, which is the point: the failure modes here are
+against all 42 real frames, which is the point: the failure modes here are
 vendor-specific header spellings, not algorithms. Five telescopes are
 represented, including one that writes RA/Dec with **comma decimal separators**
 (`'00:42:44,3'`).
@@ -52,7 +52,7 @@ FOCAL_LENGTH_FRAMES = {
 
 @pytest.mark.parametrize("frame", ALL_FRAMES)
 def test_pixel_scale_is_recovered_for_every_real_frame(frame_header, frame):
-    """All 39 frames carry SECPIX, so all 39 resolve — including the WCS-less one.
+    """All 42 frames carry SECPIX, so all 42 resolve — including the WCS-less one.
 
     Sub-arcsecond sampling across the board: these are 0.4-0.8 arcsec/pixel
     imagers. A value outside that band means a unit slipped.
@@ -99,18 +99,50 @@ def test_a_header_with_a_wcs_but_no_direct_keyword_returns_none(frame_header_cop
     assert estimate_pixel_scale_arcsec_per_pix(header) is None   # ...but not returned
 
 
-@pytest.mark.parametrize("frame", WCS_FRAMES)
+#: The frames where SECPIX and the WCS legitimately describe different optics.
+#: Afterglow aligned the NGC 5286 B stacks onto one Prompt6 grid, so their WCS
+#: scale is Prompt6's 0.3984"/px while SECPIX still reports the PROMPT-MO-1
+#: camera that took the primary exposure, 0.595"/px — a 49% gap that is correct
+#: rather than a misread. ``_001`` is absent because its primary is itself a
+#: Prompt6 exposure, so for that one the two agree.
+REALIGNED_FRAMES = ("ngc5286_globular_b_000.fits", "ngc5286_globular_b_002.fits")
+
+
+@pytest.mark.parametrize("frame", [f for f in WCS_FRAMES if f not in REALIGNED_FRAMES])
 def test_wcs_derived_scale_agrees_with_the_header_keyword(frame_header, frame):
     """SECPIX and the plate solution should agree to a few percent.
 
     They come from different places — the camera's own metadata versus the
     astrometric fit — so exact agreement is not expected, but a large
     disagreement would mean one of the two paths is misreading the header.
+
+    ``REALIGNED_FRAMES`` are excluded and checked by the test below instead,
+    which asserts the disagreement rather than tolerating it.
     """
     header = frame_header(frame)
     from_wcs = _arcsec_from_wcs(header)
     assert from_wcs is not None, frame
     assert from_wcs[2] == pytest.approx(header["SECPIX"], rel=0.05), frame
+
+
+@pytest.mark.parametrize("frame", REALIGNED_FRAMES)
+def test_a_realigned_stack_keeps_its_own_cameras_secpix(frame_header, frame):
+    """The one place SECPIX and the WCS are meant to disagree, pinned.
+
+    Excluding these frames from the sweep above would leave the reason
+    undocumented and let a genuine regression hide behind the exclusion. The
+    recorded field-calibration references use the WCS value, so this also pins
+    which of the two a caller must read: 0.3983530395178022, the number in all
+    three ``fit_summary.json`` files.
+    """
+    header = frame_header(frame)
+    from_wcs = _arcsec_from_wcs(header)
+
+    assert from_wcs is not None, frame
+    assert from_wcs[2] == pytest.approx(0.3983530395178022, rel=1e-9), frame
+    assert header["SECPIX"] == pytest.approx(0.595, abs=0.001), frame
+    # Not a near miss to be widened away: the two differ by roughly half.
+    assert abs(from_wcs[2] - header["SECPIX"]) / header["SECPIX"] > 0.3
 
 
 def test_wcs_scale_handles_a_pc_plus_cdelt_header(frame_header):
