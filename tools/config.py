@@ -84,6 +84,36 @@ def within(path: Path, root: Path) -> bool:
         return False
 
 
+#: First line of every Git LFS pointer file, per the v1 pointer spec.
+_LFS_POINTER_MAGIC = b"version https://git-lfs.github.com/spec/v1"
+
+#: A pointer file is three short text lines; the spec caps them well below this.
+_LFS_POINTER_MAX_BYTES = 1024
+
+
+def is_lfs_pointer(path: Path) -> bool:
+    """Whether ``path`` is an unfetched Git LFS pointer rather than real content.
+
+    A checkout without ``git lfs`` leaves a ~130-byte text stub in place of
+    every LFS-tracked file, with the *same name* as the real one. Handing that
+    to ``astropy.io.fits`` raises somewhere deep in the FITS reader, so the
+    tools that expect a bundled frame check this first and report the
+    actionable ``git lfs pull`` instead (P8).
+
+    Size is tested before any read, so this stays cheap on the multi-megabyte
+    frames it is called on. Unreadable paths are reported as not-a-pointer:
+    the caller's next step fails with its own, better-placed error.
+    """
+
+    try:
+        if path.stat().st_size > _LFS_POINTER_MAX_BYTES:
+            return False
+        with path.open("rb") as handle:
+            return handle.read(len(_LFS_POINTER_MAGIC)) == _LFS_POINTER_MAGIC
+    except (OSError, RuntimeError):
+        return False
+
+
 # Resolved to an absolute path at import. Artifact paths are handed back to
 # callers who may write files, change directory, or pass the path to another
 # process, and a bare "artifacts/..." silently means something different in

@@ -292,8 +292,23 @@ def category_from_stem(path: str | Path) -> str | None:
 def _summary(path: Path) -> OpticalFrame:
     """Read one frame's primary header without touching pixel data."""
 
+    from tools import config
+
     warnings: list[ToolWarning] = []
     errors: list[ToolError] = []
+    if config.is_lfs_pointer(path):
+        # Reached when a caller names an unfetched frame directly; the listing
+        # filters these out one level up.
+        return OpticalFrame(
+            path=str(path),
+            errors=[
+                ToolError(
+                    code="frame_not_checked_out",
+                    message=f"{path.name} is a Git LFS pointer, not the frame itself. "
+                    "Run `git lfs install && git lfs pull` to fetch it.",
+                )
+            ],
+        )
     try:
         header = fits.getheader(path)
     except Exception as exc:
@@ -412,6 +427,26 @@ def list_optical_frames(
                     f"or raise {config.MAX_FRAMES_ENV}. image_filter narrows "
                     "what was read, not what was found, so a filter on a "
                     "truncated listing can miss frames beyond the cap."
+                ),
+            )
+        )
+
+    # An LFS-tracked frame that was never fetched is a ~130-byte text stub
+    # wearing the frame's name. Drop those before any header read: a listing
+    # that carried them would report a FITS parse error per frame and poison
+    # the filter tally with a null band, where what the caller needs is one
+    # line saying the objects are not checked out (P8).
+    pointers = [p for p in paths if config.is_lfs_pointer(p)]
+    if pointers:
+        paths = [p for p in paths if p not in set(pointers)]
+        warnings.append(
+            ToolWarning(
+                code="frames_not_checked_out",
+                message=(
+                    f"{len(pointers)} frame(s) are Git LFS pointers, not frames, "
+                    "and were left out of this listing: "
+                    f"{', '.join(sorted(p.name for p in pointers))}. Run "
+                    "`git lfs install && git lfs pull` to fetch them."
                 ),
             )
         )
