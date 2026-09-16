@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import threading
 from types import SimpleNamespace
 
 from textual.widgets import Static
 
 from tests.llm_fakes import StubBackend
 from tools import artifacts, config
-from tools.agent.events import TextDelta
+from tools.agent.events import SessionFinished, SessionStarted, TextDelta
 from tools.llm.base import BackendUnavailableError
-from tools.llm.types import ModelResponse
+from tools.llm.types import ModelResponse, ToolCallBlock, ToolResultBlock
 from tools.tui import __main__ as tui_main
 from tools.tui.app import KeplerApp
 from tools.tui.render.capability import GraphicsTier
@@ -193,6 +194,243 @@ def test_resume_session_restores_assistant_text_without_starting_the_engine(
     _run(scenario())
 
 
+def test_resume_session_with_tool_history_restores_only_assistant_text(
+    monkeypatch, tmp_path
+):
+    """A durable tool trace must load without trying to render non-text blocks."""
+
+    from tools.tui import app as tui_app
+
+    path = tmp_path / "session_manifest.json"
+    manifest = {
+        "session_id": "20260914T120000Z_abcdef123456",
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            },
+            {
+                "role": "assistant",
+                "blocks": [
+                    {"type": "text", "text": "I will look it up."},
+                    {
+                        "type": "tool_call",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "arguments": {"name": "M31"},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "blocks": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "content": '{"status": "ok"}',
+                        "is_error": False,
+                    }
+                ],
+            },
+            {
+                "role": "assistant",
+                "blocks": [{"type": "text", "text": "M31 is Andromeda."}],
+            },
+        ],
+    }
+    monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            app.resume_session(path)
+            await pilot.pause()
+
+            transcript = app.query_one("#transcript", Transcript)
+            assert transcript.assistant_text == "I will look it up.\n\nM31 is Andromeda."
+            assert isinstance(app._history[1].blocks[1], ToolCallBlock)
+            assert isinstance(app._history[2].blocks[0], ToolResultBlock)
+
+    _run(scenario())
+
+
+def test_error_session_history_is_ready_for_the_next_prompt(monkeypatch, tmp_path):
+    """A worker error after SessionFinished must not discard resume context."""
+
+    from textual.widgets import Input
+    from tools.tui import app as tui_app
+
+    manifest_path = tmp_path / "session_manifest.json"
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            },
+            {
+                "role": "assistant",
+                "blocks": [{"type": "text", "text": "M31 is Andromeda."}],
+            },
+        ],
+    }
+    received: list[tuple] = []
+
+    def fake_run_session(_text, *, history, **_kwargs):
+        received.append(tuple(history))
+        yield SessionFinished(outcome="error", manifest_path=str(manifest_path))
+        if len(received) == 1:
+            raise RuntimeError("backend disconnected")
+
+    monkeypatch.setattr(tui_app, "describe_session", lambda path: manifest)
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            first = app.run_prompt("failed prompt")
+            async with asyncio.timeout(2):
+                while not first.is_finished:
+                    await pilot.pause()
+            prompt = app.query_one("#prompt", Input)
+            async with asyncio.timeout(2):
+                while prompt.disabled:
+                    await pilot.pause()
+            async with asyncio.timeout(2):
+                while not app._history:
+                    await pilot.pause()
+
+            prompt.value = "follow-up"
+            await pilot.press("enter")
+            async with asyncio.timeout(2):
+                while len(received) < 2:
+                    await pilot.pause()
+
+    _run(scenario())
+
+    assert [message.role for message in received[1]] == ["user", "assistant"]
+    assert [message.blocks[0].text for message in received[1]] == [
+        "Find M31.",
+        "M31 is Andromeda.",
+    ]
+
+
+def test_unexpected_engine_failure_is_rendered_in_the_transcript(monkeypatch):
+    """A failure before SessionFinished must not be silently converted to success."""
+
+    from textual.widgets import Input
+    from tools.tui import app as tui_app
+
+    def fake_run_session(*_args, **_kwargs):
+        raise RuntimeError("backend disconnected before session start")
+        yield
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            worker = app.run_prompt("Find M31.")
+            async with asyncio.timeout(2):
+                while not worker.is_finished:
+                    await pilot.pause()
+            prompt = app.query_one("#prompt", Input)
+            async with asyncio.timeout(2):
+                while prompt.disabled:
+                    await pilot.pause()
+
+            transcript = app.query_one("#transcript", Transcript)
+            rendered = "\n".join(
+                str(entry.render()) for entry in transcript.query(Static)
+            )
+            assert "The engine stopped unexpectedly." in rendered
+            assert "backend disconnected before session start" not in rendered
+
+    _run(scenario())
+
+
+def test_unexpected_engine_failure_does_not_retain_an_unanswered_prompt(
+    monkeypatch,
+):
+    """A follow-up after an early failure must start from valid prior history."""
+
+    from textual.widgets import Input
+    from tools.tui import app as tui_app
+
+    received: list[tuple[str, tuple]] = []
+
+    def fake_run_session(text, *, history, **_kwargs):
+        received.append((text, tuple(history)))
+        if text == "failed prompt":
+            raise RuntimeError("backend disconnected before session start")
+        yield TextDelta(text="recovered")
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            first = app.run_prompt("failed prompt")
+            async with asyncio.timeout(2):
+                while not first.is_finished:
+                    await pilot.pause()
+
+            prompt = app.query_one("#prompt", Input)
+            async with asyncio.timeout(2):
+                while prompt.disabled:
+                    await pilot.pause()
+            prompt.value = "follow-up"
+            await pilot.press("enter")
+            async with asyncio.timeout(2):
+                while len(received) < 2:
+                    await pilot.pause()
+
+    _run(scenario())
+
+    assert received[1] == ("follow-up", ())
+
+
+def test_resume_is_rejected_while_an_engine_session_is_running(monkeypatch, tmp_path):
+    """A live worker may not be overwritten by selecting another saved trace."""
+
+    from tools.tui import app as tui_app
+
+    started = threading.Event()
+    release = threading.Event()
+    loaded: list[object] = []
+
+    def fake_run_session(_text, **_kwargs):
+        started.set()
+        release.wait(timeout=2)
+        yield TextDelta(text="done")
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+    monkeypatch.setattr(
+        tui_app, "describe_session", lambda path: loaded.append(path) or {}
+    )
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            worker = app.run_prompt("running")
+            try:
+                async with asyncio.timeout(2):
+                    while not started.is_set():
+                        await pilot.pause()
+                app.resume_session(tmp_path / "other_session_manifest.json")
+                await pilot.pause()
+                assert loaded == []
+            finally:
+                release.set()
+            await worker.wait()
+
+    _run(scenario())
+
+
 def test_resume_command_loads_the_session_matching_its_id(monkeypatch, tmp_path):
     """The slash command must select by manifest id, not an opaque file path."""
 
@@ -265,7 +503,14 @@ def test_next_prompt_after_resume_sends_loaded_history_to_the_engine(
         "user_message": "Find M31.",
         "turns": [{"turn": 1, "assistant_text": "M31 is Andromeda."}],
     }
-    monkeypatch.setattr(tui_app, "describe_session", lambda selected: manifest)
+    from tools.workspace import describe_session as read_manifest
+
+    initial_path = tmp_path / "session_manifest.json"
+    monkeypatch.setattr(
+        tui_app,
+        "describe_session",
+        lambda selected: manifest if selected == initial_path else read_manifest(selected),
+    )
     backend = StubBackend(
         [ModelResponse(stop_reason="end_turn", text="2.5 million ly.")]
     )
@@ -273,7 +518,7 @@ def test_next_prompt_after_resume_sends_loaded_history_to_the_engine(
     async def scenario() -> None:
         app = KeplerApp(backend=backend)
         async with app.run_test() as pilot:
-            app.resume_session(tmp_path / "session_manifest.json")
+            app.resume_session(initial_path)
             prompt = app.query_one("#prompt", Input)
             prompt.value = "How far away is it?"
             await pilot.press("enter")
@@ -295,6 +540,149 @@ def test_next_prompt_after_resume_sends_loaded_history_to_the_engine(
     _run(scenario())
 
 
+def test_second_prompt_after_resume_keeps_the_first_follow_up_context(
+    monkeypatch, tmp_path
+):
+    """Resume history must remain available beyond one follow-up prompt."""
+
+    from tools.tui import app as tui_app
+    from textual.widgets import Input
+
+    manifest = {
+        "session_id": "20260914T120000Z_abcdef123456",
+        "user_message": "Find M31.",
+        "turns": [{"turn": 1, "assistant_text": "M31 is Andromeda."}],
+    }
+    from tools.workspace import describe_session as read_manifest
+
+    initial_path = tmp_path / "session_manifest.json"
+    monkeypatch.setattr(
+        tui_app,
+        "describe_session",
+        lambda selected: manifest if selected == initial_path else read_manifest(selected),
+    )
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="end_turn", text="2.5 million ly."),
+            ModelResponse(stop_reason="end_turn", text="Hubble measured it."),
+        ]
+    )
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=backend)
+        async with app.run_test() as pilot:
+            app.resume_session(initial_path)
+            prompt = app.query_one("#prompt", Input)
+            prompt.value = "How far away is it?"
+            await pilot.press("enter")
+            async with asyncio.timeout(2):
+                while len(backend.calls) < 1:
+                    await pilot.pause()
+            await pilot.pause()
+
+            prompt.value = "Who measured it?"
+            await pilot.press("enter")
+            async with asyncio.timeout(2):
+                while len(backend.calls) < 2:
+                    await pilot.pause()
+
+            messages = backend.calls[1]["messages"]
+            assert [message.role for message in messages] == [
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+            ]
+            assert [message.blocks[0].text for message in messages] == [
+                "Find M31.",
+                "M31 is Andromeda.",
+                "How far away is it?",
+                "2.5 million ly.",
+                "Who measured it?",
+            ]
+
+    _run(scenario())
+
+
+def test_next_prompt_keeps_tool_blocks_from_the_finished_session_manifest(
+    monkeypatch, tmp_path
+):
+    """The TUI must retain tool context when continuing a completed run."""
+
+    from tools.tui import app as tui_app
+    from textual.widgets import Input
+
+    manifest_path = tmp_path / "session_manifest.json"
+    manifest = {
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            },
+            {
+                "role": "assistant",
+                "blocks": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "arguments": {"name": "M31"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "blocks": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "content": '{"status": "ok"}',
+                        "is_error": False,
+                    }
+                ],
+            },
+            {"role": "assistant", "blocks": []},
+        ],
+        "user_message": "Find M31.",
+        "turns": [],
+    }
+    received: list[tuple] = []
+
+    def fake_run_session(_text, *, history, **_kwargs):
+        received.append(tuple(history))
+        yield SessionFinished(outcome="end_turn", manifest_path=str(manifest_path))
+
+    monkeypatch.setattr(tui_app, "describe_session", lambda path: manifest)
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt", Input)
+            prompt.value = "first follow-up"
+            await pilot.press("enter")
+            async with asyncio.timeout(2):
+                while len(received) < 1:
+                    await pilot.pause()
+            await pilot.pause()
+
+            prompt.value = "second follow-up"
+            await pilot.press("enter")
+            async with asyncio.timeout(2):
+                while len(received) < 2:
+                    await pilot.pause()
+
+    _run(scenario())
+
+    continued_history = received[1]
+    assert isinstance(continued_history[1].blocks[0], ToolCallBlock)
+    assert isinstance(continued_history[2].blocks[0], ToolResultBlock)
+    assert continued_history[1].blocks[0].call_id == "call-1"
+    assert continued_history[2].blocks[0].content == '{"status": "ok"}'
+
+
 def test_artifact_browser_uses_the_resumed_session_directory(monkeypatch, tmp_path):
     """F3 must expose referenced artifacts without replaying them into the transcript."""
 
@@ -311,7 +699,7 @@ def test_artifact_browser_uses_the_resumed_session_directory(monkeypatch, tmp_pa
     monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
     manifest = {
         "session_id": session_id,
-        "artifact_directory": str(session_directory),
+        "artifact_directory": str(tmp_path / "untrusted-artifact-directory"),
         "user_message": "Find M31.",
         "turns": [{"turn": 1, "assistant_text": "M31 is Andromeda."}],
     }
@@ -321,6 +709,45 @@ def test_artifact_browser_uses_the_resumed_session_directory(monkeypatch, tmp_pa
         app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
         async with app.run_test() as pilot:
             app.resume_session(session_directory / "session_manifest.json")
+            app.show_artifacts(())
+            await pilot.pause()
+
+            browser = app.screen
+            assert isinstance(browser, ArtifactBrowser)
+            assert [item.file.path for item in browser.artifacts] == [
+                str(artifact_path.resolve())
+            ]
+
+    _run(scenario())
+
+
+def test_artifact_browser_uses_the_live_session_directory(monkeypatch, tmp_path):
+    """F3 must list artifacts emitted by the session currently on screen."""
+
+    from tools.tui.widgets.artifacts import ArtifactBrowser
+
+    root = tmp_path / "artifacts"
+    session_directory = root / "sessions" / "20260914T120000Z_abcdef123456"
+    artifact_path = session_directory / "result.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("live result", encoding="utf-8")
+    monkeypatch.setattr(config, "ARTIFACT_DIR", root)
+    monkeypatch.setattr(artifacts, "ARTIFACT_DIR", root)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object(), graphics_tier=GraphicsTier.HALFBLOCK)
+        async with app.run_test() as pilot:
+            app.post_message(
+                KeplerApp.EngineEvent(
+                    SessionStarted(
+                        "20260914T120000Z_abcdef123456",
+                        str(session_directory / "session_manifest.json"),
+                        "stub/model",
+                        "model",
+                    )
+                )
+            )
+            await pilot.pause()
             app.show_artifacts(())
             await pilot.pause()
 

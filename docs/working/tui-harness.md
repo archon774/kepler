@@ -659,9 +659,10 @@ and no command text is ever forwarded to the engine.
       `describe_session`, listing id, timestamp, model, outcome, and turn count,
       with enter bound to `KeplerApp.resume_session`.
 - [x] Build `history_from_manifest`, seeding the engine's message history from a
-      manifest's recorded turns via `tools.sessions.read_session_manifest`. The
-      first entry is the original user message; every recorded assistant turn
-      follows.
+      manifest's recorded neutral history via `tools.sessions.read_session_manifest`.
+      Resume validates a bounded provider message grammar (paired known tool
+      calls and results) before forwarding anything to a backend. Legacy text
+      manifests retain the original-user/assistant-turn fallback.
 - [x] **Resume references artifacts rather than replaying them** (section 16,
       question 3): re-rendering every image on resume is slow for a long session,
       and the artifact browser is the way back to them.

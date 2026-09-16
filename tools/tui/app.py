@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Mapping
 from pathlib import Path
@@ -13,11 +14,14 @@ from textual.binding import Binding
 from textual.message import Message as TextualMessage
 from textual.screen import ModalScreen
 from textual.widgets import Button, Header, Input, Static
+from textual.worker import Worker, WorkerState
 
 from tools.agent.approval import Decision
 from tools.agent.engine import run_session
 from tools.agent.events import (
     Event,
+    SessionFinished,
+    SessionStarted,
     TextDelta,
     ToolCallFinished,
     ToolCallProposed,
@@ -25,6 +29,7 @@ from tools.agent.events import (
     TurnStarted,
 )
 from tools.agent.policy import SessionPolicy, policy_approver
+from tools.llm.types import Message, TextBlock
 from tools.tui.commands import help_text, parse_input, resolve
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.widgets.artifacts import ArtifactBrowser
@@ -34,9 +39,10 @@ from tools.workspace import describe_session, list_artifacts, list_sessions
 
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
-    from tools.llm.types import Message
 
 __all__ = ["ApprovalModal", "KeplerApp"]
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ApprovalModal(ModalScreen[Decision]):
@@ -104,6 +110,18 @@ class KeplerApp(App[None]):
             self.decision = Decision.DENY
             super().__init__()
 
+    class HistoryUpdated(TextualMessage):
+        """Carry the completed prompt and its text answer back to the UI."""
+
+        def __init__(self, history: tuple[Message, ...]) -> None:
+            self.history = history
+            super().__init__()
+
+    class EngineFailed(TextualMessage):
+        """Report a worker failure that did not reach the engine event stream."""
+
+        pass
+
     def __init__(
         self,
         backend: "ModelBackend",
@@ -120,9 +138,10 @@ class KeplerApp(App[None]):
         self.artifact_count = 0
         self.token_usage = None
         self.graphics_tier = detect_tier() if graphics_tier is None else graphics_tier
-        self.policy = SessionPolicy(self._request_approval)
         self._history: tuple["Message", ...] = ()
+        self._history_ready = False
         self._artifact_directory: Path | None = None
+        self._active_worker: Worker[None] | None = None
 
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
@@ -142,7 +161,9 @@ class KeplerApp(App[None]):
 
         event = message.event
         self.query_one("#transcript", Transcript).handle_event(event)
-        if isinstance(event, TurnStarted):
+        if isinstance(event, SessionStarted):
+            self._artifact_directory = Path(event.manifest_path).parent
+        elif isinstance(event, TurnStarted):
             self.current_turn = event.turn
         elif isinstance(event, TurnFinished):
             self.token_usage = event.usage
@@ -158,15 +179,28 @@ class KeplerApp(App[None]):
             lambda decision: self._resolve_approval(request, decision),
         )
 
+    def on_kepler_app_history_updated(self, message: HistoryUpdated) -> None:
+        """Keep completed text exchanges available to the next prompt."""
+
+        self._history = message.history
+        self._history_ready = True
+        self._finish_prompt_if_ready()
+
+    def on_kepler_app_engine_failed(self, message: EngineFailed) -> None:
+        """Make unexpected worker failures visible in the transcript."""
+
+        self._append_transcript("The engine stopped unexpectedly.")
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Keep UI slash commands out of the headless model engine."""
 
         parsed = parse_input(event.value)
         event.input.value = ""
         if parsed.kind == "message":
-            history = self._history
-            self._history = ()
-            self.run_prompt(parsed.text, history=history)
+            if self._session_running():
+                self._append_transcript("A session is already running.")
+                return
+            self.run_prompt(parsed.text, history=self._history)
             return
         if parsed.kind == "unknown":
             self._append_transcript(f"Unknown command: /{parsed.name}")
@@ -177,19 +211,80 @@ class KeplerApp(App[None]):
             handler = getattr(self, command.handler, self._command_not_available)
             handler(parsed.args)
 
-    @work(thread=True, exclusive=True)
-    def run_prompt(self, text: str, *, history: tuple["Message", ...] = ()) -> None:
+    def run_prompt(
+        self, text: str, *, history: tuple["Message", ...] = ()
+    ) -> Worker[None]:
+        """Start one engine session and keep the prompt unavailable until it ends."""
+
+        if self._session_running():
+            return self._active_worker
+        self.query_one("#prompt", Input).disabled = True
+        self._history_ready = False
+        worker = self._run_prompt(text, history=history)
+        self._active_worker = worker
+        return worker
+
+    @work(thread=True)
+    def _run_prompt(self, text: str, *, history: tuple["Message", ...] = ()) -> None:
         """Run the synchronous engine in a Textual thread worker."""
 
         self.engine_starts += 1
-        for event in run_session(
-            text,
-            backend=self.backend,
-            max_turns=self.max_turns,
-            approver=policy_approver(self.policy),
-            history=history,
+        policy = SessionPolicy(self._request_approval)
+        assistant_text: list[str] = []
+        manifest_path: Path | None = None
+        try:
+            for event in run_session(
+                text,
+                backend=self.backend,
+                max_turns=self.max_turns,
+                approver=policy_approver(policy),
+                history=history,
+            ):
+                if isinstance(event, TextDelta):
+                    assistant_text.append(event.text)
+                elif isinstance(event, SessionFinished):
+                    manifest_path = Path(event.manifest_path)
+                self.post_message(self.EngineEvent(event))
+        except Exception as exc:
+            # The engine emits its error SessionFinished event before reraising.
+            # Its saved manifest is enough to make the next prompt recoverable.
+            LOGGER.warning("Agent engine worker stopped: %s", type(exc).__name__)
+            self.post_message(self.EngineFailed())
+
+        if manifest_path is not None:
+            try:
+                completed_history = history_from_manifest(describe_session(manifest_path))
+            except (OSError, ValueError):
+                pass
+            else:
+                self.post_message(self.HistoryUpdated(completed_history))
+                return
+        if assistant_text:
+            updated_history = (
+                *history,
+                Message(role="user", blocks=(TextBlock(text=text),)),
+                Message(
+                    role="assistant",
+                    blocks=(TextBlock(text="".join(assistant_text)),),
+                ),
+            )
+        else:
+            updated_history = history
+        self.post_message(self.HistoryUpdated(updated_history))
+
+    def on_worker_state_changed(self, message: Worker.StateChanged) -> None:
+        """Restore prompt input only after the active synchronous worker stops."""
+
+        if (
+            message.worker is self._active_worker
+            and message.state
+            in {WorkerState.CANCELLED, WorkerState.ERROR, WorkerState.SUCCESS}
         ):
-            self.post_message(self.EngineEvent(event))
+            self._active_worker = None
+            if message.state is WorkerState.SUCCESS:
+                self._finish_prompt_if_ready()
+            else:
+                self._restore_prompt()
 
     def show_help(self, args: tuple[str, ...]) -> None:
         """Render generated command help in the transcript."""
@@ -214,6 +309,9 @@ class KeplerApp(App[None]):
     def show_sessions(self, args: tuple[str, ...]) -> None:
         """Open the saved-session browser without involving the model."""
 
+        if self._session_running():
+            self._append_transcript("A session is already running.")
+            return
         self.push_screen(SessionBrowser(), self.resume_session)
 
     def action_show_sessions(self) -> None:
@@ -246,6 +344,9 @@ class KeplerApp(App[None]):
 
         if path is None:
             return
+        if self._session_running():
+            self._append_transcript("A session is already running.")
+            return
         try:
             manifest = describe_session(path)
             history = history_from_manifest(manifest)
@@ -253,10 +354,7 @@ class KeplerApp(App[None]):
             self._append_transcript(f"Unable to load session: {path}")
             return
 
-        directory = manifest.get("artifact_directory")
-        self._artifact_directory = (
-            Path(directory) if isinstance(directory, str) else path.parent
-        )
+        self._artifact_directory = path.expanduser().resolve().parent
         transcript = self.query_one("#transcript", Transcript)
         transcript.clear()
         transcript.restore_assistant_text(
@@ -265,6 +363,7 @@ class KeplerApp(App[None]):
                 for message in history
                 if message.role == "assistant"
                 for block in message.blocks
+                if isinstance(block, TextBlock)
             )
         )
         session_id = manifest.get("session_id", path.parent.name)
@@ -281,6 +380,27 @@ class KeplerApp(App[None]):
 
     def _command_not_available(self, args: tuple[str, ...]) -> None:
         self._append_transcript("This command is not available in the current phase.")
+
+    def _session_running(self) -> bool:
+        """Return whether the application still owns a synchronous engine worker."""
+
+        return (
+            self._active_worker is not None and not self._active_worker.is_finished
+        )
+
+    def _finish_prompt_if_ready(self) -> None:
+        """Re-enable input only after both worker completion and history sync."""
+
+        if self._active_worker is None and self._history_ready:
+            self._history_ready = False
+            self._restore_prompt()
+
+    def _restore_prompt(self) -> None:
+        """Return focus to the prompt after a finished or cancelled worker."""
+
+        prompt = self.query_one("#prompt", Input)
+        prompt.disabled = False
+        prompt.focus()
 
     def _append_transcript(self, text: str) -> None:
         self.query_one("#transcript", Transcript).append_notice(text)

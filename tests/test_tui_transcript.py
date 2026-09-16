@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
 from tools.agent.approval import Decision
 from tools.agent.events import (
@@ -115,6 +116,87 @@ def test_thread_worker_delivers_engine_events_to_the_transcript_and_status():
             transcript = app.query_one("#transcript", Transcript)
             assert transcript.assistant_text == "done"
             assert "1/20 turns" in str(app.query_one("#status").render())
+
+    _run(scenario())
+
+
+def test_allow_always_is_requested_again_for_a_new_prompt_session(monkeypatch):
+    """A fresh prompt must not inherit a prior session's approval decision."""
+
+    from tools.tui import app as tui_app
+
+    asked: list[str] = []
+    decisions: list[Decision] = []
+
+    def approve_once_per_session(_app, proposed):
+        asked.append(proposed.call_id)
+        return Decision.ALLOW_ALWAYS
+
+    def fake_run_session(text, *, approver, **_kwargs):
+        decisions.append(
+            approver(ToolCallProposed(text, "search_ads", {"query": "M31"}))
+        )
+        yield TextDelta(text=text)
+
+    monkeypatch.setattr(KeplerApp, "_request_approval", approve_once_per_session)
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            for prompt in ("first", "second"):
+                worker = app.run_prompt(prompt)
+                async with asyncio.timeout(2):
+                    while not worker.is_finished:
+                        await pilot.pause()
+
+    _run(scenario())
+
+    assert decisions == [Decision.ALLOW, Decision.ALLOW]
+    assert asked == ["first", "second"]
+
+
+def test_prompt_stays_disabled_until_its_engine_worker_finishes(monkeypatch):
+    """A second submission cannot start a competing synchronous engine session."""
+
+    from textual.widgets import Input
+    from tools.tui import app as tui_app
+
+    started = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+
+    def fake_run_session(text, **_kwargs):
+        calls.append(text)
+        if text == "first":
+            started.set()
+            release.wait(timeout=2)
+        yield TextDelta(text=text)
+
+    monkeypatch.setattr(tui_app, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt", Input)
+            try:
+                prompt.value = "first"
+                await pilot.press("enter")
+                async with asyncio.timeout(2):
+                    while not started.is_set():
+                        await pilot.pause()
+
+                assert prompt.disabled is True
+                prompt.value = "second"
+                await pilot.press("enter")
+                await pilot.pause()
+                assert calls == ["first"]
+            finally:
+                release.set()
+
+            async with asyncio.timeout(2):
+                while prompt.disabled:
+                    await pilot.pause()
 
     _run(scenario())
 

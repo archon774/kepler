@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -28,6 +29,7 @@ SESSION_MANIFEST_NAME = "session_manifest.json"
 SESSION_SCHEMA_VERSION = 1
 SESSION_ROOT_SUBDIR = "sessions"
 _TEXT_LIMIT = 4000
+_MAX_SESSION_MANIFEST_BYTES = 1024 * 1024
 
 
 def _utc_now() -> datetime:
@@ -124,6 +126,8 @@ class AgentSession:
     completed_at: str | None = None
     outcome: Literal["running", "end_turn", "max_turns", "error"] = "running"
     current_turn: int | None = None
+    resumable: bool = True
+    history: list[dict[str, Any]] = field(default_factory=list)
     turns: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     protocol_faults: list[dict[str, Any]] = field(default_factory=list)
@@ -221,19 +225,21 @@ class AgentSession:
         self.updated_at = _utc_iso()
 
         path = self.manifest_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.to_manifest(), indent=2, sort_keys=True) + "\n")
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path.parent.chmod(0o700)
+        _write_private_json(path, self.to_manifest())
         return path
 
     def to_manifest(self) -> dict[str, Any]:
         cache_entries = self._cache_entries()
-        return {
+        manifest = {
             "schema_version": SESSION_SCHEMA_VERSION,
             "session_id": self.session_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
             "outcome": self.outcome,
+            "resumable": self.resumable,
             "user_message": self.user_message,
             "model": self.model,
             "max_turns": self.max_turns,
@@ -248,10 +254,15 @@ class AgentSession:
             "call_cache": cache_entries,
             "protocol_faults": self.protocol_faults,
             "notes": [
-                "Tool result previews and full payloads are intentionally omitted; "
-                "inspect the referenced artifact paths for complete data."
+                "Tool-call diagnostic previews omit full payloads; the neutral "
+                "conversation history retains them so a session can resume. "
+                "Session manifests may therefore contain sensitive prompts and "
+                "tool payloads."
             ],
         }
+        if self.history:
+            manifest["history"] = self.history
+        return manifest
 
     def _cache_entries(self) -> list[dict[str, Any]]:
         entries: dict[str, dict[str, Any]] = {}
@@ -296,4 +307,27 @@ def read_session_manifest(path: str | Path) -> dict[str, Any]:
     manifest_path = Path(path).expanduser()
     if manifest_path.is_dir():
         manifest_path = manifest_path / SESSION_MANIFEST_NAME
+    if manifest_path.stat().st_size > _MAX_SESSION_MANIFEST_BYTES:
+        raise ValueError("session manifest is too large")
     return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def _write_private_json(path: Path, value: Mapping[str, Any]) -> None:
+    """Atomically replace a session manifest with owner-only permissions."""
+
+    temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        descriptor = os.open(
+            temporary_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise

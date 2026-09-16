@@ -9,7 +9,7 @@ import pytest
 from textual.widgets import OptionList
 
 from tools.artifacts import describe_artifact_file
-from tools.llm.types import TextBlock
+from tools.llm.types import TextBlock, ToolCallBlock, ToolResultBlock
 from tools.tui.widgets.sessions import history_from_manifest
 
 
@@ -50,11 +50,196 @@ def test_history_from_manifest_preserves_user_prompt_and_assistant_turn_order():
     ]
 
 
+def test_history_from_manifest_includes_the_prior_text_recorded_by_a_follow_up():
+    """A later session must retain its complete neutral tool conversation."""
+
+    manifest = {
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            },
+            {
+                "role": "assistant",
+                "blocks": [
+                    {"type": "text", "text": "I will look it up."},
+                    {
+                        "type": "tool_call",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "arguments": {"name": "M31"},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "blocks": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "content": '{"status": "ok"}',
+                        "is_error": False,
+                    }
+                ],
+            },
+            {
+                "role": "assistant",
+                "blocks": [{"type": "text", "text": "M31 is Andromeda."}],
+            },
+        ],
+        "user_message": "How far away is it?",
+        "turns": [{"turn": 1, "assistant_text": "2.5 million ly."}],
+    }
+
+    history = history_from_manifest(manifest)
+
+    assert [message.role for message in history] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert [message.blocks for message in history] == [
+        (TextBlock(text="Find M31."),),
+        (
+            TextBlock(text="I will look it up."),
+            ToolCallBlock("call-1", "search_simbad", {"name": "M31"}),
+        ),
+        (
+            ToolResultBlock(
+                "call-1", "search_simbad", '{"status": "ok"}', is_error=False
+            ),
+        ),
+        (TextBlock(text="M31 is Andromeda."),),
+    ]
+
+
 def test_history_from_manifest_rejects_a_non_mapping_manifest():
     """A structurally invalid manifest must become a recoverable load failure."""
 
     with pytest.raises(ValueError, match="not an object"):
         history_from_manifest(["not", "a", "manifest"])
+
+
+def test_history_from_manifest_rejects_an_incomplete_tool_checkpoint():
+    """A trace with unmatched tool calls must never reach a model backend."""
+
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "resumable": False,
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="not resumable"):
+        history_from_manifest(manifest)
+
+
+def test_history_from_manifest_rejects_an_unknown_tool_before_model_resume():
+    """A tampered tool name must not become provider-native tool context."""
+
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            },
+            {
+                "role": "assistant",
+                "blocks": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "call-1",
+                        "name": "untrusted_tool",
+                        "arguments": {},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "blocks": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call-1",
+                        "name": "untrusted_tool",
+                        "content": "{}",
+                        "is_error": False,
+                    }
+                ],
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError, match="unknown tool"):
+        history_from_manifest(manifest)
+
+
+def test_history_from_manifest_rejects_mismatched_tool_results():
+    """A forged result must match the immediately preceding tool request."""
+
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "Find M31."}],
+            },
+            {
+                "role": "assistant",
+                "blocks": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "call-1",
+                        "name": "search_simbad",
+                        "arguments": {"name": "M31"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "blocks": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "forged-call-id",
+                        "name": "search_simbad",
+                        "content": "{}",
+                        "is_error": False,
+                    }
+                ],
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError, match="does not match"):
+        history_from_manifest(manifest)
+
+
+def test_history_from_manifest_rejects_oversized_persisted_context():
+    """A modified manifest cannot consume an unbounded future model context."""
+
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {
+                "role": "user",
+                "blocks": [{"type": "text", "text": "x" * 300_000}],
+            },
+            {"role": "assistant", "blocks": []},
+        ],
+    }
+
+    with pytest.raises(ValueError, match="too large"):
+        history_from_manifest(manifest)
 
 
 def test_session_browser_lists_manifest_metadata_and_selects_the_session(

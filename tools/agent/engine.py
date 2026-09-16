@@ -33,7 +33,13 @@ from tools.agent.approval import Approver, Decision, auto_approve
 from tools.agent.prompt import SYSTEM_PROMPT
 from tools.llm.base import ModelBackend
 from tools.llm.schema import for_dialect
-from tools.llm.types import Message, ModelResponse, TextBlock, ToolResultBlock
+from tools.llm.types import (
+    Message,
+    ModelResponse,
+    TextBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 from tools.llm.validation import index_schemas, validate_tool_call
 from tools.sessions import AgentSession, make_cache_key
 
@@ -65,7 +71,6 @@ def run_session(
     schemas, functions = _resolve_registry(tool_schemas, tool_functions)
     dialect_tools = for_dialect(backend.capabilities.schema_dialect, list(schemas))
     schema_index = index_schemas(schemas)
-
     if session is None:
         session = AgentSession(
             user_message=user_message,
@@ -76,6 +81,7 @@ def run_session(
 
     messages = list(history)
     messages.append(Message(role="user", blocks=(TextBlock(text=user_message),)))
+    session.history = _recorded_history(messages)
     call_cache: dict[str, dict[str, Any]] = {}
     max_tokens = backend.capabilities.max_output_tokens
 
@@ -128,6 +134,13 @@ def run_session(
                     assistant_text=response.text,
                     tool_call_sequences=[],
                 )
+                messages.append(
+                    Message(
+                        role="assistant",
+                        blocks=(TextBlock(text=response.text),) if response.text else (),
+                    )
+                )
+                session.history = _recorded_history(messages)
                 yield events.TurnFinished(
                     turn=turn_number,
                     stop_reason=response.stop_reason,
@@ -158,6 +171,40 @@ def run_session(
         raise exc
 
 
+def _recorded_history(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    """Serialize the complete neutral conversation for later TUI resume."""
+
+    records: list[dict[str, Any]] = []
+    for message in messages:
+        blocks: list[dict[str, Any]] = []
+        for block in message.blocks:
+            if isinstance(block, TextBlock):
+                blocks.append({"type": "text", "text": block.text})
+            elif isinstance(block, ToolCallBlock):
+                blocks.append(
+                    {
+                        "type": "tool_call",
+                        "call_id": block.call_id,
+                        "name": block.name,
+                        "arguments": json.loads(
+                            json.dumps(dict(block.arguments), default=str)
+                        ),
+                    }
+                )
+            elif isinstance(block, ToolResultBlock):
+                blocks.append(
+                    {
+                        "type": "tool_result",
+                        "call_id": block.call_id,
+                        "name": block.name,
+                        "content": block.content,
+                        "is_error": block.is_error,
+                    }
+                )
+        records.append({"role": message.role, "blocks": blocks})
+    return records
+
+
 def _run_tool_turn(
     *,
     response: ModelResponse,
@@ -174,6 +221,9 @@ def _run_tool_turn(
         assistant_blocks.append(TextBlock(text=response.text))
     assistant_blocks.extend(response.tool_calls)
     messages.append(Message(role="assistant", blocks=tuple(assistant_blocks)))
+    session.history = _recorded_history(messages)
+    session.resumable = False
+    session.save(current_turn=turn_number)
 
     result_blocks: list[ToolResultBlock] = []
     sequences: list[int] = []
@@ -250,6 +300,19 @@ def _run_tool_turn(
                 result=result,
             )
         )
+        result_blocks.append(
+            ToolResultBlock(
+                call_id=call.call_id,
+                name=call.name,
+                content=json.dumps(result, default=str),
+                is_error=result.get("status") == "error",
+            )
+        )
+        checkpoint = [
+            *messages,
+            Message(role="user", blocks=tuple(result_blocks)),
+        ]
+        session.history = _recorded_history(checkpoint)
         session.save(current_turn=turn_number)
 
         if not denied:
@@ -261,15 +324,9 @@ def _run_tool_turn(
                 duration_ms=duration_ms,
             )
 
-        result_blocks.append(
-            ToolResultBlock(
-                call_id=call.call_id,
-                name=call.name,
-                content=json.dumps(result, default=str),
-                is_error=result.get("status") == "error",
-            )
-        )
-
+    messages.append(Message(role="user", blocks=tuple(result_blocks)))
+    session.history = _recorded_history(messages)
+    session.resumable = True
     session.record_turn(
         turn=turn_number,
         stop_reason=response.raw_stop_reason or response.stop_reason,
@@ -283,7 +340,6 @@ def _run_tool_turn(
         usage=response.usage,
         latency_ms=response.latency_ms,
     )
-    messages.append(Message(role="user", blocks=tuple(result_blocks)))
 
 
 def _resolve_registry(
