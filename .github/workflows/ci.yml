@@ -33,9 +33,15 @@ jobs:
     name: python tests
     runs-on: ubuntu-latest
     steps:
+      # lfs: true only here. The three NGC 5286 B frames are Git LFS objects
+      # and the field-calibration tests that drive them from pixels skip
+      # themselves without the content -- which would let a regression pass CI
+      # silently. The other two jobs read no pixels, so they keep the cheaper
+      # pointer-only checkout.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          lfs: true
 
       - uses: actions/setup-python@v6
         with:
