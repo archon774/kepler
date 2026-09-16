@@ -744,7 +744,7 @@ the model is held constant:
 | The tool registry and its 55 schemas | same world, same affordances |
 | The fixture set and its `miss_policy` | same archive responses, same failures |
 | `max_turns`, temperature 0, seed where available | same budget, same determinism |
-| The bundled data | the same five scans, 39 frames, four recorded solves |
+| The bundled data | the same five scans, 42 frames, four recorded solves |
 
 **Exactly one thing varies besides the model: the schema dialect.** Anthropic
 gets JSON Schema, OpenAI and Ollama get the function wrapper, Gemini gets the
@@ -783,7 +783,7 @@ recorded truth, and `tests/` already pins against it:
 | `data/pulsar/curated_periods.json` | five literature periods (B0329+54 0.7145197 s … B2045−16 1.961572304 s), each with an ATNF cross-check and a difficulty rank | the pulsar suite |
 | `data/fieldcal/zp_solutions/*/fit_summary.json` | four complete recorded Skynet solves — `zero_point`, `zero_point_error`, `zero_point_slop`, filter, telescope, pixel scale | the fieldcal tasks |
 | `data/afterglow/afterglow_web_values_*.csv` | Afterglow's own zero point per bundled frame (`carina_nebula_v_000` 21.021 ± 0.013, …) | cross-implementation checks |
-| `data/frame_provenance.json` | what each of the 39 frames actually is | frame-identity checks |
+| `data/frame_provenance.json` | what each of the 42 frames actually is | frame-identity checks |
 
 **And Kepler ships tools that grade against that truth.**
 `compare_zeropoint_to_reference` returns `within_tolerance`, `delta_vs_skynet`

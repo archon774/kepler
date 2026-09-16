@@ -20,7 +20,7 @@ artifacts, so the default `pytest` run collects them with the rest of the suite.
 
 Three consequences shape everything here:
 
-1. **Real data, not synthetic.** Fixtures are 39 real PROMPT/Skynet frames and
+1. **Real data, not synthetic.** Fixtures are 42 real PROMPT/Skynet frames and
    four complete recorded Skynet zero-point solves. See `data/README.md`.
 2. **Recorded output, not recomputed expectations.** The centrepiece,
    `test_fieldcal_solution.py`, feeds `calc_solution` the exact rows Skynet fed
@@ -48,7 +48,7 @@ Three consequences shape everything here:
 | `test_photometry_extraction.py` | SEP extraction on real frames, crop regions, WCS construction |
 | `test_photometry_pipeline.py` | Aperture photometry, magnitude arithmetic, aperture correction |
 | `test_photometry_tool_smoke.py` | Cheap no-network smoke coverage for the Claude photometry tool and bundled target resolution |
-| `test_wcs_headers.py` | Pixel scale and pointing across all 39 real headers |
+| `test_wcs_headers.py` | Pixel scale and pointing across all 42 real headers |
 | `test_wcs_solution.py` | CD/PC matrices, parity, acceptance, header write-back |
 | `test_skylib_stats.py` | `chauvenet` and the statistics under the zero-point solve |
 | `test_skylib_geometry.py` | Pixel/aperture overlap, spherical angles, orientation decomposition |
