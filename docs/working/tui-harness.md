@@ -364,7 +364,8 @@ superseded: the backend is selectable from inside the session.
 
 `tools/tui/backends.py` holds the short list a person picks from —
 `anthropic` (default model `claude-sonnet-5`, reads `ANTHROPIC_API_KEY`) and
-`ollama` (default `qwen3:8b`, reads `OLLAMA_BASE_URL`, no key). `/backend` with
+`ollama` (default `qwen3.8:27b-mlx`, reads `OLLAMA_BASE_URL`, no key).
+`/backend` with
 no arguments describes both and marks the running one. `/backend anthropic`
 expands to that provider's default model; `/backend ollama llama3.1:8b` and
 `/backend ollama/llama3.1:8b` both name a model explicitly.
@@ -377,13 +378,22 @@ does not list — `openai`, `gemini` — remain reachable by spec.
 
 Four properties make the command safe to offer mid-session:
 
-* **Probe before swap.** Anthropic fails fast, at construction, when its key is
-  missing. Ollama does not: a backend pointed at a daemon that is not running
-  builds perfectly and then raises a connection error several seconds into the
-  first question, after the transcript already shows a turn starting. Section
-  11 requires "never a connection traceback", so `open_backend` calls the
-  port's `is_available()` probe and the session's backend is replaced only
-  after it answers.
+* **Probe before swap, in two steps.** Anthropic fails fast, at construction,
+  when its key is missing. Ollama does not, and fails in *two* different ways,
+  both mid-turn. A backend pointed at a daemon that is not running builds
+  perfectly and raises a connection error several seconds into the first
+  question, after the transcript already shows a turn starting. And **a daemon
+  that is up is not a daemon that has your model**: Ollama answers an unknown
+  one with a 404 from `/v1/chat/completions`, arriving as a bare
+  `httpx.HTTPStatusError` at exactly the same point. Section 11 requires
+  "never a connection traceback", so `open_backend` checks both —
+  `is_available()` for the service, then `installed_models()` for the model —
+  and the session's backend is replaced only after both pass. A failed
+  listing returns `()`, which means "could not ask" and is deliberately not
+  read as "holds nothing"; it never becomes a refusal to run.
+
+  The second check was added after the first live run against a working
+  daemon, which is also the run that found the default model wrong (8.2).
 * **A failed switch changes nothing.** The message names what to do *and*
   which backend is still answering, so it never reads as a session that has
   lost its model. One wording, `unavailable_message`, shared with the
@@ -398,7 +408,21 @@ Four properties make the command safe to offer mid-session:
   on the same fact, so the two cannot drift apart.
 * **The header follows.** `KeplerHeader.set_backend` runs on every switch.
 
-### 8.2 Where the Anthropic key comes from
+### 8.2 The Ollama default model
+
+`qwen3.8:27b-mlx`, not [model-backends.md](model-backends.md)'s planned
+`qwen3:8b`. Phase 2b could not find `qwen3:8b` on its measurement host and
+standardised on `qwen3.8:27b-mlx` — it is `tests/test_llm_ollama_backend.py`'s
+`OLLAMA_REFERENCE_MODEL` and what every [benchmark.md](benchmark.md) sweep
+ran. `README.md`'s `ollama/qwen3:8b` example is the stale plan value, and is
+where this console's default was first taken from.
+
+A live daemon confirmed it: eleven models installed, none of them `qwen3:8b`,
+and `/backend ollama` refused with the model listing rather than a traceback.
+A default nobody has installed makes the bare, most natural form of the
+command fail for everyone.
+
+### 8.3 Which key, and where it comes from
 
 `tools/config.py` gained `load_dotenv()`: a dependency-free reader that merges
 `KEY=value` lines from the repository's untracked `.env` into `os.environ`
@@ -421,7 +445,7 @@ services mint keys with it, so the prefix names no one provider.
 `open_backend` re-reads the file, so a key added while the console is open
 takes effect on the next `/backend` without a restart.
 
-### 8.3 Launch-time selection
+### 8.4 Launch-time selection
 
 `launch_spec()` resolves in one order and no other: the `--backend` flag, then
 `KEPLER_MODEL_BACKEND`, then the first offered choice. The flag accepts a bare
@@ -547,7 +571,10 @@ no daemon, no terminal.
   The interface is genuinely CI-testable.
 * **Rendering.** The capability probe against faked environments; the half-block
   renderer against a committed 4×4 PNG with byte-stable expected output.
-* **Backend selection.** `tests/test_tui_backends.py` covers the `.env` reader
+* **Backend selection.** `tests/test_llm_ollama_backend.py` covers
+  `installed_models()` against a mock transport, including that an unaskable
+  daemon yields `()` rather than an empty inventory.
+  `tests/test_tui_backends.py` covers the `.env` reader
   (quoting, `export`, comments, the bare-key line, and that the environment
   always wins), spec resolution, and both probe outcomes — `open_backend` takes
   its builder as a keyword argument precisely so no adapter is constructed and
@@ -576,7 +603,7 @@ changes stay separated per `CLAUDE.md`.
 | **C** | `photometry_pipeline.py` rename, consumer imports, docs. | **Complete** — `72d0bd7`; suite green. |
 | **D** | Textual dependency (eight pins, regenerated lockfile) and the TUI: application shell, slash-command registry, transcript, streaming, tool tree, status bar. | **Complete** — a real session runs end to end. |
 | **E** | Artifact rendering: probe, tiers, and the artifact browser. | **Complete** — half-block path green in CI. |
-| **E.1** | The titled header, and `/backend` selection over `.env`-backed Anthropic or a local Ollama daemon. Lifts the section 15 deferral. | **Complete** — a switch never lands on a backend that cannot answer, and a refused one leaves the session untouched. |
+| **E.1** | The titled header, and `/backend` selection over `.env`-backed Anthropic or a local Ollama daemon. Lifts the section 15 deferral. | **Complete and verified live** — `/backend ollama` switched a running session onto `ollama/qwen3.8:27b-mlx` and completed a two-turn tool-calling loop to `end_turn` in 464 s. A switch never lands on a backend that cannot answer, and a refused one leaves the session untouched. |
 | **F** | Session browser and resume. | **Complete** — a resumed session continues a prior trace. |
 | **G** | Retire entry points: delete the shim, edit the workflow, update the console scripts, sweep the documentation. | Nothing references the removed entry points. |
 

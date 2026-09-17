@@ -983,7 +983,7 @@ def test_launch_spec_prefers_the_flag_then_the_environment_then_the_default(
     monkeypatch,
 ):
     monkeypatch.setenv("KEPLER_MODEL_BACKEND", "gemini/gemini-2.5-pro")
-    assert tui_main.launch_spec("ollama") == "ollama/qwen3:8b"
+    assert tui_main.launch_spec("ollama") == "ollama/qwen3.8:27b-mlx"
     assert tui_main.launch_spec(None) == "gemini/gemini-2.5-pro"
 
     monkeypatch.delenv("KEPLER_MODEL_BACKEND")

@@ -113,7 +113,7 @@ def test_load_dotenv_is_silent_when_the_file_is_absent(tmp_path):
 
 def test_resolve_spec_expands_a_bare_provider_to_its_default_model():
     assert backends.resolve_spec("anthropic") == "anthropic/claude-sonnet-5"
-    assert backends.resolve_spec("ollama") == "ollama/qwen3:8b"
+    assert backends.resolve_spec("ollama") == "ollama/qwen3.8:27b-mlx"
 
 
 def test_resolve_spec_accepts_a_provider_and_model_as_separate_words():
@@ -182,6 +182,76 @@ def test_open_backend_refuses_a_backend_whose_service_is_silent():
     # The endpoint variable, not a credential one: Ollama authenticates with
     # nothing, so "set your key" would be the wrong instruction.
     assert excinfo.value.variable == "OLLAMA_BASE_URL"
+
+
+class _WithModels(_Probed):
+    """A backend that can also report which models its service holds."""
+
+    def __init__(self, spec: str, installed) -> None:
+        super().__init__(spec, available=True)
+        self._installed = installed
+
+    def installed_models(self):
+        return self._installed
+
+
+def test_open_backend_refuses_a_model_the_running_service_does_not_hold():
+    """The daemon being up is not the daemon having your model.
+
+    Ollama answers an unknown model with a 404 from the chat endpoint, which
+    lands mid-turn on the user's first question as an httpx error. The switch
+    is where that must be caught, while there is still a backend to stay on.
+    """
+
+    backend = _WithModels("ollama/qwen3:8b", ("gemma4:12b", "qwen3.5:9b"))
+
+    with pytest.raises(backends.ModelNotInstalled) as excinfo:
+        backends.open_backend("ollama/qwen3:8b", build=lambda spec: backend)
+
+    assert excinfo.value.model == "qwen3:8b"
+    assert excinfo.value.installed == ("gemma4:12b", "qwen3.5:9b")
+
+
+def test_open_backend_accepts_a_model_the_service_reports():
+    backend = _WithModels("ollama/qwen3.5:9b", ("gemma4:12b", "qwen3.5:9b"))
+
+    assert backends.open_backend("ollama/qwen3.5:9b", build=lambda spec: backend) is backend
+
+
+def test_an_unaskable_model_listing_is_not_treated_as_an_empty_one():
+    """`()` means "could not ask", never "holds nothing" -- a failed listing
+    must not become a refusal to run."""
+
+    backend = _WithModels("ollama/qwen3:8b", ())
+
+    assert backends.open_backend("ollama/qwen3:8b", build=lambda spec: backend) is backend
+
+
+def test_unavailable_message_for_a_missing_model_names_what_is_installed():
+    exc = backends.ModelNotInstalled(
+        "ollama/qwen3:8b", "qwen3:8b", ("gemma4:12b", "qwen3.5:9b")
+    )
+
+    message = backends.unavailable_message(
+        "ollama/qwen3:8b", exc, "anthropic/claude-sonnet-5"
+    )
+
+    assert "no model named 'qwen3:8b'" in message
+    assert "gemma4:12b" in message and "qwen3.5:9b" in message
+    # Not the daemon-down remedy: the daemon is up.
+    assert "ollama serve" not in message
+    assert "Still on anthropic/claude-sonnet-5" in message
+
+
+def test_unavailable_message_elides_a_long_model_listing():
+    exc = backends.ModelNotInstalled(
+        "ollama/absent", "absent", tuple(f"m{i}:1b" for i in range(12))
+    )
+
+    message = backends.unavailable_message("ollama/absent", exc)
+
+    assert "m0:1b" in message
+    assert "and 4 more" in message
 
 
 def test_open_backend_leaves_a_backend_without_a_probe_alone():

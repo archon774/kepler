@@ -98,7 +98,11 @@ class OllamaBackend(OpenAIBackend):
     def is_available(self) -> bool:
         """True when the daemon answers its native tags endpoint. A caller can
         probe this before a run and offer another backend on failure, rather
-        than hitting a mid-turn connection error."""
+        than hitting a mid-turn connection error.
+
+        This says the *daemon* is up, and nothing about whether it holds this
+        backend's model -- see :meth:`installed_models`.
+        """
 
         import httpx
 
@@ -107,6 +111,37 @@ class OllamaBackend(OpenAIBackend):
                 return client.get(self._native_tags_url()).status_code == 200
         except httpx.HTTPError:
             return False
+
+    def installed_models(self) -> tuple[str, ...]:
+        """The model names the daemon reports, or ``()`` if it cannot be asked.
+
+        A daemon that is running is not a daemon that has your model: Ollama
+        answers an unknown one with a 404 from ``/v1/chat/completions``, which
+        arrives *mid-turn*, on the user's first question, as an
+        ``httpx.HTTPStatusError``. An empty tuple means "could not ask" and is
+        deliberately not the same as "has nothing" -- a caller must not turn a
+        failed listing into a refusal to run.
+        """
+
+        import httpx
+
+        try:
+            with self._client() as client:
+                response = client.get(self._native_tags_url())
+            if response.status_code != 200:
+                return ()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return ()
+
+        models = payload.get("models") if isinstance(payload, dict) else None
+        if not isinstance(models, list):
+            return ()
+        return tuple(
+            entry["name"]
+            for entry in models
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        )
 
     def complete(
         self,

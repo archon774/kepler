@@ -32,6 +32,7 @@ __all__ = [
     "BackendChoice",
     "CHOICES",
     "UnknownBackendError",
+    "ModelNotInstalled",
     "choice_for",
     "names",
     "resolve_spec",
@@ -70,8 +71,15 @@ CHOICES: tuple[BackendChoice, ...] = (
         summary="Anthropic's hosted API. Streams natively; needs a key.",
     ),
     BackendChoice(
+        # `qwen3.8:27b-mlx`, not the `qwen3:8b` of model-backends.md's plan.
+        # Phase 2b could not find `qwen3:8b` on the measurement host and
+        # standardised on this one (`tests/test_llm_ollama_backend.py`'s
+        # OLLAMA_REFERENCE_MODEL, and every `benchmark.md` sweep); the
+        # README's `qwen3:8b` example is the stale plan value. A default
+        # nobody has installed makes the bare `/backend ollama` fail for
+        # everyone.
         provider="ollama",
-        default_model="qwen3:8b",
+        default_model="qwen3.8:27b-mlx",
         credential_env=None,
         endpoint_env="OLLAMA_BASE_URL",
         summary="A local Ollama daemon. No key; the daemon must be running.",
@@ -81,6 +89,23 @@ CHOICES: tuple[BackendChoice, ...] = (
 
 class UnknownBackendError(ValueError):
     """A bare name that is not one of :data:`CHOICES`."""
+
+
+class ModelNotInstalled(BackendUnavailableError):
+    """The service is up, but it does not hold the model the spec names.
+
+    Its own subclass because the remedy is nothing like the others': no
+    variable needs setting, and what the person needs is the list of models
+    that *are* there. :func:`unavailable_message` renders that list.
+    """
+
+    def __init__(self, spec: str, model: str, installed: tuple[str, ...]) -> None:
+        self.spec = spec
+        self.model = model
+        self.installed = installed
+        super().__init__(
+            "OLLAMA_BASE_URL", f"the daemon holds no model named {model!r}"
+        )
 
 
 def choice_for(provider: str) -> BackendChoice | None:
@@ -146,6 +171,14 @@ def open_backend(
     load_dotenv()
     backend = build(spec)
 
+    _require_service(backend, spec)
+    _require_model(backend, spec)
+    return backend
+
+
+def _require_service(backend: ModelBackend, spec: str) -> None:
+    """Refuse a backend whose service does not answer at all."""
+
     probe = getattr(backend, "is_available", None)
     if callable(probe) and not probe():
         provider, _, _ = spec.partition("/")
@@ -158,7 +191,31 @@ def open_backend(
         raise BackendUnavailableError(
             variable, f"{spec} built, but its service did not answer"
         )
-    return backend
+
+
+def _require_model(backend: ModelBackend, spec: str) -> None:
+    """Refuse a spec naming a model the (running) service does not hold.
+
+    A daemon that is up is not a daemon that has your model. Ollama answers an
+    unknown one with a 404 from the chat endpoint, which surfaces *mid-turn* as
+    an ``httpx.HTTPStatusError`` on the user's first question -- the raw
+    traceback ``docs/working/tui-harness.md`` section 11 says must never
+    happen. Checking here moves it to the switch, where there is still another
+    backend to stay on.
+
+    An empty listing means "could not ask", not "has nothing", so it is never
+    turned into a refusal.
+    """
+
+    listing = getattr(backend, "installed_models", None)
+    if not callable(listing):
+        return
+    installed = tuple(listing())
+    if not installed:
+        return
+    model = spec.partition("/")[2]
+    if model and model not in installed:
+        raise ModelNotInstalled(spec, model, installed)
 
 
 #: What to tell a person to *do*, keyed by the variable the port names. The
@@ -186,8 +243,20 @@ def unavailable_message(
     session that has lost its model.
     """
 
-    remedy = _REMEDIES.get(exc.variable, f"set {exc.variable}")
-    text = f"Cannot use {spec}: {remedy}."
+    if isinstance(exc, ModelNotInstalled):
+        # Naming the installed models is the whole remedy: there is no
+        # variable to set, and guessing a substitute would silently answer a
+        # different question than the one asked.
+        available = ", ".join(exc.installed[:8])
+        if len(exc.installed) > 8:
+            available += f", and {len(exc.installed) - 8} more"
+        text = (
+            f"Cannot use {spec}: the service holds no model named "
+            f"{exc.model!r}. Installed: {available}."
+        )
+    else:
+        remedy = _REMEDIES.get(exc.variable, f"set {exc.variable}")
+        text = f"Cannot use {spec}: {remedy}."
     if current_spec:
         text += f" Still on {current_spec}."
     return text
