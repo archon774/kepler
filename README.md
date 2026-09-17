@@ -53,8 +53,27 @@ reimplemented. See [Highlights](#highlights) below and
 
 ## The Agent
 
-Kepler has an agent entry point and a reusable local pipeline, both built on
-the plain Python functions in `tools/`:
+Kepler has an interactive console, a one-shot agent entry point, and a
+reusable local pipeline, all built on the plain Python functions in `tools/`:
+
+- **`kepler` — the interactive console.** The full-screen Textual application
+  over the same agent loop: a transcript that renders each tool call as it
+  runs, image and waveform previews of the artifacts a run produces, session
+  resume, and slash commands. It takes no required arguments — `uv run kepler`
+  opens it — because everything it needs is chosen inside the session. In
+  particular the model backend is: `/backend` lists what is on offer, and
+  `/backend ollama` (or `/backend anthropic`, or an explicit
+  `/backend ollama/qwen3.8:27b-mlx`) switches the live session over, retitling
+  the header, without restarting anything. A backend that cannot answer is
+  refused with the reason and the session stays on the one that works, so a
+  stopped daemon or a missing key costs a command rather than the session.
+  `--backend` picks the one it opens on, for a shell alias that always starts
+  somewhere particular; `/help` lists the rest.
+
+  ```bash
+  uv run kepler                       # opens on anthropic/claude-sonnet-5
+  uv run kepler --backend ollama      # or start on the local daemon
+  ```
 
 - **`tools.runner` — the astronomy research agent** (entry point:
   `kepler-astro-query`). A bounded tool-use loop (`max_turns=20`, default model
@@ -91,7 +110,7 @@ the plain Python functions in `tools/`:
   ANTHROPIC_API_KEY=... uv run kepler-astro-query "all historical radio data on Cassiopeia A"
 
   # or another provider, via a provider/model spec:
-  KEPLER_MODEL_BACKEND=ollama/qwen3:8b uv run kepler-astro-query "resolve NGC 6334"
+  KEPLER_MODEL_BACKEND=ollama/qwen3.8:27b-mlx uv run kepler-astro-query "resolve NGC 6334"
   ```
 
 - **`tools/photometry_pipeline.py` — reusable automated photometry.** It
@@ -126,7 +145,7 @@ the plain Python functions in `tools/`:
   column shape `tools.hr_diagram.crossmatch_gaia` expects, as a bridge between
   the two when a bundled photometry target turns out to be a cluster.
 
-Both components call directly into the same plain Python functions and
+All three call directly into the same plain Python functions and
 extracted algorithm packages described below — an agent's tool call is the
 identical function any other caller would import and run.
 
@@ -363,7 +382,7 @@ The agent loop's model backend is chosen by a `provider/model` spec, split on
 the first slash only. With `KEPLER_MODEL_BACKEND` unset it uses Anthropic.
 
 - `KEPLER_MODEL_BACKEND`: e.g. `anthropic/claude-sonnet-5`, `openai/gpt-4.1`,
-  `ollama/qwen3:8b`, `gemini/gemini-2.5-pro`.
+  `ollama/qwen3.8:27b-mlx`, `gemini/gemini-2.5-pro`.
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`: the provider key.
 - `OPENAI_BASE_URL`: an OpenAI-compatible endpoint. A non-default base URL
   needs its key passed explicitly alongside it — an environment

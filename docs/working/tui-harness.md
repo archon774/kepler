@@ -1,7 +1,8 @@
 # Kepler TUI Agentic Harness
 
 **Status:** Design approved; phases B–F complete, plus the backend switching
-that section 15 had deferred. Phase G remains.
+that section 15 had deferred and the `kepler` console script from G.1. The rest
+of phase G — retiring `tools/runner.py` and its console script — remains.
 **Date:** 2026-09-07
 **Prerequisites:** [model-backends.md](model-backends.md) phases -1 to 3, and the
 merged stateless optical rollout from [optical-tools.md](optical-tools.md).
@@ -414,8 +415,9 @@ Four properties make the command safe to offer mid-session:
 `qwen3:8b`. Phase 2b could not find `qwen3:8b` on its measurement host and
 standardised on `qwen3.8:27b-mlx` — it is `tests/test_llm_ollama_backend.py`'s
 `OLLAMA_REFERENCE_MODEL` and what every [benchmark.md](benchmark.md) sweep
-ran. `README.md`'s `ollama/qwen3:8b` example is the stale plan value, and is
-where this console's default was first taken from.
+ran. `README.md`'s `ollama/qwen3:8b` example was the stale plan value, and was
+where this console's default was first taken from; it now names the model the
+daemon actually holds.
 
 A live daemon confirmed it: eleven models installed, none of them `qwen3:8b`,
 and `/backend ollama` refused with the model listing rather than a traceback.
@@ -431,7 +433,7 @@ environment — this puts the file's contents *into* that environment, rather
 than teaching the port a second source.
 
 **The real environment always wins.** A variable already set is left alone, so
-`ANTHROPIC_API_KEY=… python -m tools.tui` still overrides the file and a test's
+`ANTHROPIC_API_KEY=… kepler` still overrides the file and a test's
 `monkeypatch.setenv` is not silently undone. A missing or unreadable file is
 not an error.
 
@@ -475,6 +477,22 @@ and falls back to half-blocks itself. **The half-block path via Pillow is the
 guaranteed floor** and composes with Textual perfectly, being nothing but coloured
 characters. The artifact path plus an open-externally action is available at every
 tier.
+
+### 9.1 The image library is imported on use, not on launch
+
+`textual_image.widget` probes the terminal for its cell size **at import time**,
+and the probe divides by the column count `TIOCGWINSZ` reports. A tty that
+reports no size at all — a pty a wrapper opened without setting one — makes
+that division raise `ZeroDivisionError` from inside a third-party import. It
+had `tools/tui/widgets/artifacts.py` at module scope, and `app.py` imports the
+browser, so the failure killed `kepler` before the first frame: a traceback
+where the header should be, from a library the session may never use.
+
+`_native_image()` imports it on first use instead, and a probe that fails there
+falls back to half-blocks rather than to an error — the native protocol is an
+improvement on the floor described above, never a requirement. Found by
+launching the real console script under an unsized pty; a sized one never
+reaches it, which is why nothing before this had.
 
 WAV sonifications render as a braille waveform with a play action shelling out to
 `ffplay`, `aplay`, or `afplay`. **The waveform is presentational only:**
@@ -531,7 +549,7 @@ than an implementation detail.
 | --- | --- |
 | `kepler-astro-query` → `tools.runner:main` | removed |
 | `python3 tools/claude_photometry_haiku_tool.py` | removed |
-| — | `kepler` → `tools.tui.__main__:main` |
+| — | `kepler` → `tools.tui.__main__:main` — **registered**, ahead of the rest of G.1 |
 | `tools/runner.py` | shim during migration, then deleted |
 | `SYSTEM_PROMPT` in `tools/runner.py` | `tools/agent/prompt.py`, unchanged |
 | The photometry tool's Anthropic path and CLI | deleted |
@@ -582,6 +600,16 @@ no daemon, no terminal.
   pilot: the header retitles, a refused backend leaves the session on the one
   that answers, and a switch attempted while a worker runs in the `engine`
   group is refused without building anything.
+* **Entry point.** `tests/test_tui_app.py` reads `pyproject.toml` and pins the
+  `kepler` script at `tools.tui.__main__:main`, and drives `main()` with an
+  empty `argv` to assert a bare invocation reaches the app on the default
+  backend. Both are worth pinning because `argparse` prints `usage: kepler`
+  whether or not the script is registered, so a dropped entry produces help
+  text for a command that does not exist rather than any failure.
+* **Launch robustness.** `tests/test_tui_artifacts.py` asserts by AST that the
+  artifact browser imports nothing from `textual_image` at module scope
+  (section 9.1), and that a native-image widget which cannot be built falls
+  back to half-blocks rather than to an error message.
 * **Migration.** After the rename, the existing photometry tests pass against the
   renamed module unchanged in substance.
 
@@ -806,6 +834,14 @@ and no command text is ever forwarded to the engine.
 
 ### Phase G.1 — Retire the old entry points (code)
 
+- [x] **Register `kepler` → `tools.tui.__main__:main`.** Split out and landed
+      early, on its own, because it is the only *additive* step in this phase:
+      the console had no command at all, and the argument parser's `prog` was
+      already `kepler`, so `--help` printed usage for a name that did not
+      exist. Adding the entry beside the two existing scripts leaves CI green
+      and the shim intact, so it carries none of the ordering hazard below.
+      Verified by launching the installed script under a pty: the header, the
+      prompt, and the footer draw, and `ctrl+q` exits cleanly.
 - [ ] **Confirm the shim has no remaining callers.** The grep should find only the
       console script in `pyproject.toml`, the session test, and the coverage
       allowlist. **Anything else must be migrated before continuing.**
@@ -814,8 +850,8 @@ and no command text is ever forwarded to the engine.
       `run_session`. **The manifest assertions stay exactly as they are.** If
       any needs changing, the engine diverged from the shim and that is a bug in
       Phase A, not here.
-- [ ] Delete the shim and replace the console scripts with the single `kepler`
-      entry.
+- [ ] Delete the shim and remove `kepler-astro-query`, leaving the `kepler`
+      entry already registered above as the only one.
 - [ ] Drop the stale `tools.runner` entry from `NOT_TOOL_MODULES`. Leaving it is
       harmless but it names a module that no longer exists — exactly the class of
       stale reference this work exists to remove.
