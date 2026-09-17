@@ -1,7 +1,7 @@
 # Kepler TUI Agentic Harness
 
-**Status:** Design approved; phases B–E complete, plus the backend
-switching that section 15 had deferred. Phases F and G remain.
+**Status:** Design approved; phases B–F complete, plus the backend switching
+that section 15 had deferred. Phase G remains.
 **Date:** 2026-09-07
 **Prerequisites:** [model-backends.md](model-backends.md) phases -1 to 3, and the
 merged stateless optical rollout from [optical-tools.md](optical-tools.md).
@@ -390,9 +390,12 @@ Four properties make the command safe to offer mid-session:
   launcher.
 * **Never mid-turn.** `run_session()` was handed the backend by value when the
   turn started; swapping it while that turn runs would retitle the header for
-  a turn the old backend is still finishing. The guard asks Textual's worker
-  registry (group `engine`) rather than a flag, because a flag set inside the
-  worker is still `False` during the one moment it exists to cover.
+  a turn the old backend is still finishing. The guard rides on
+  `_session_running()`, the session worker phase F already tracks for resume —
+  set on the UI thread inside `run_prompt`, *before* the worker starts. That
+  ordering is the point: a flag set inside the worker is still `False` during
+  the one moment the guard exists to cover, and phase F's prompt-disable rides
+  on the same fact, so the two cannot drift apart.
 * **The header follows.** `KeplerHeader.set_backend` runs on every switch.
 
 ### 8.2 Where the Anthropic key comes from
@@ -574,7 +577,7 @@ changes stay separated per `CLAUDE.md`.
 | **D** | Textual dependency (eight pins, regenerated lockfile) and the TUI: application shell, slash-command registry, transcript, streaming, tool tree, status bar. | **Complete** — a real session runs end to end. |
 | **E** | Artifact rendering: probe, tiers, and the artifact browser. | **Complete** — half-block path green in CI. |
 | **E.1** | The titled header, and `/backend` selection over `.env`-backed Anthropic or a local Ollama daemon. Lifts the section 15 deferral. | **Complete** — a switch never lands on a backend that cannot answer, and a refused one leaves the session untouched. |
-| **F** | Session browser and resume. | A resumed session continues a prior trace. |
+| **F** | Session browser and resume. | **Complete** — a resumed session continues a prior trace. |
 | **G** | Retire entry points: delete the shim, edit the workflow, update the console scripts, sweep the documentation. | Nothing references the removed entry points. |
 
 **Sequencing.** Phase A is a dependency, not work here. **Phase C is independent
@@ -760,14 +763,15 @@ and no command text is ever forwarded to the engine.
 
 ### Phase F — Session browser and resume
 
-- [ ] Build `SessionBrowser` over `tools.workspace.list_sessions()` and
+- [x] Build `SessionBrowser` over `tools.workspace.list_sessions()` and
       `describe_session`, listing id, timestamp, model, outcome, and turn count,
       with enter bound to `KeplerApp.resume_session`.
-- [ ] Build `history_from_manifest`, seeding the engine's message history from a
-      manifest's recorded turns via `tools.sessions.read_session_manifest`. The
-      first entry is the original user message; every recorded assistant turn
-      follows.
-- [ ] **Resume references artifacts rather than replaying them** (section 16,
+- [x] Build `history_from_manifest`, seeding the engine's message history from a
+      manifest's recorded neutral history via `tools.sessions.read_session_manifest`.
+      Resume validates a bounded provider message grammar (paired known tool
+      calls and results) before forwarding anything to a backend. Legacy text
+      manifests retain the original-user/assistant-turn fallback.
+- [x] **Resume references artifacts rather than replaying them** (section 16,
       question 3): re-rendering every image on resume is slow for a long session,
       and the artifact browser is the way back to them.
 

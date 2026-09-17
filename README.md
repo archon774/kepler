@@ -30,7 +30,7 @@ agent that plans and executes astronomy research and data-reduction tasks —
 literature and catalog search, target resolution, and, as the underlying
 algorithms come online, WCS plate solving, photometry, and photometric
 calibration — by calling a registry of purpose-built tools. See
-[The Agent](#the-agent) for the two agent surfaces that exist today.
+[The Agent](#the-agent) for the agent and its reusable local pipeline.
 
 This repository is where the agent's tools, and the algorithms they call, are
 built and staged. Its current state is a small installable Python tool
@@ -53,8 +53,8 @@ reimplemented. See [Highlights](#highlights) below and
 
 ## The Agent
 
-Kepler currently has two working agent surfaces, both built on the plain
-Python functions in `tools/`:
+Kepler has an agent entry point and a reusable local pipeline, both built on
+the plain Python functions in `tools/`:
 
 - **`tools.runner` — the astronomy research agent** (entry point:
   `kepler-astro-query`). A bounded tool-use loop (`max_turns=20`, default model
@@ -94,31 +94,17 @@ Python functions in `tools/`:
   KEPLER_MODEL_BACKEND=ollama/qwen3:8b uv run kepler-astro-query "resolve NGC 6334"
   ```
 
-- **`tools/claude_photometry_haiku_tool.py` — the automated photometry
-  pipeline.** Loads a FITS image, runs this repo's source extraction and
-  aperture photometry, optionally resolves a verified photometric zero point
-  through a live field-calibration catalog solve, saves a photometry plot,
-  and (unless `--no-claude`) asks Claude to summarize the results. `tools.photometry`
-  (`list_photometry_targets`, `run_photometry_on_target`) is the thin
-  `tools.runner`-facing wrapper over this same pipeline — same extraction,
-  same zero-point resolution, same plots — so a tool-use conversation
-  produces exactly what the standalone script produces. Run the script
-  directly with:
-
-  ```bash
-  ANTHROPIC_API_KEY=... python3 tools/claude_photometry_haiku_tool.py ngc1846_cluster_r_000
-  ```
-
-  `--list-targets` lists the bundled `data/optical` targets it can run
-  against with no live archive query; `--check-only` resolves a target
-  without running the pipeline. **Listing and resolving a target are offline;
-  running one is not.** Field calibration is on by default
-  (`--no-field-cal` to turn it off, `run_photometry_on_target(use_field_cal=...)`
-  defaults to `True`), and it queries VizieR for reference magnitudes — so a
-  bundled target gets a *verified* zero point only over the network. Three
-  ways to a zero point without one: `--no-field-cal` (uncalibrated
-  instrumental magnitudes, or whatever the header already carries),
-  `--zero-point` (apply a value you already trust), or the recorded-solve
+- **`tools/photometry_pipeline.py` — reusable automated photometry.** It
+  loads a FITS image, runs source extraction and aperture photometry, resolves
+  an optional verified zero point through a live field-calibration catalog
+  solve, and saves plots. `tools.photometry`
+  (`list_photometry_targets`, `run_photometry_on_target`) is the public wrapper
+  over this same pipeline. The retired standalone CLI and direct Claude summary
+  are not part of this module. **Listing and resolving a target are offline;
+  running field calibration is not.** `run_photometry_on_target` defaults to
+  `use_field_cal=True`, which queries VizieR for reference magnitudes. Pass
+  `use_field_cal=False` for instrumental magnitudes, or provide
+  `zero_point_mag` when a trusted value is already available. The recorded-solve
   replay — `tools.photometry.calibrate_zeropoint(path,
   catalog_fixture="selected_rows", compare_to="ngc5128_b_002")` injects the
   APASS rows Skynet actually matched, so extraction → photometry → matching →
@@ -140,19 +126,18 @@ Python functions in `tools/`:
   column shape `tools.hr_diagram.crossmatch_gaia` expects, as a bridge between
   the two when a bundled photometry target turns out to be a cluster.
 
-Both surfaces call directly into the same plain Python functions and
+Both components call directly into the same plain Python functions and
 extracted algorithm packages described below — an agent's tool call is the
 identical function any other caller would import and run.
 
 ## Highlights
 
-- **Two working agent surfaces, not just a plan.** `tools.runner`
+- **Provider-neutral agent surface.** `tools.runner`
   (`kepler-astro-query`) runs a bounded, provider-neutral tool-use loop over
   eight remote astronomy databases — Anthropic by default, or an
-  OpenAI-compatible, Ollama, or Gemini backend via `KEPLER_MODEL_BACKEND`;
-  `tools/claude_photometry_haiku_tool.py` runs an automated FITS photometry
-  pipeline with a live catalog-calibrated zero point and a Claude-generated
-  summary. See [The Agent](#the-agent).
+  OpenAI-compatible, Ollama, or Gemini backend via `KEPLER_MODEL_BACKEND`.
+  The registered `tools.photometry` wrapper runs the local FITS photometry
+  pipeline without a separate model client. See [The Agent](#the-agent).
 - **Byte-preserved extraction contract.** Every severed upstream dependency is
   marked inline with `# EXTRACTED: was <symbol>` (Python) or
   `// EXTRACTED: was …` (TypeScript) — an index of exactly what was cut and
@@ -180,7 +165,7 @@ identical function any other caller would import and run.
 | `tools/` | Python tools | Plain Python wrappers for local frame discovery (`tools/optical.py`), WCS description and plate solving (`tools/astrometry.py`, `tools/wcs.py`), catalog metadata, reference-band resolution, zero-point solving and the recorded-solve references (`tools/fieldcal_reference.py`), local artifact inspection, remote database/archive queries, local aperture photometry (`tools/photometry.py`), the pulsar pipeline (`tools/pulsar.py`), and FITS-to-HR-diagram pipeline orchestration (`tools/hr_diagram.py`). |
 | `tools/runner.py`, `tools/agent/`, `tools/llm/`, `tools/registry.py`, `tools/sessions.py` | Python agent | The `kepler-astro-query` tool-use loop: a console shim (`runner.py`) over the headless engine (`tools/agent/`), the provider-neutral model port (`tools/llm/`: Anthropic, OpenAI-compatible, Ollama, Gemini), the tool-schema registry, and the per-run session manifest recorder. See [The Agent](#the-agent). |
 | `tools/bench/`, `benchmarks/` | Python agent | The model benchmark harness (`kepler-bench`) and its corpus. Answers which model is better on this tool surface and at what cost in work: it reads the registry and the session manifest, replays the 22 remote tools from recorded fixtures, runs the 26 local ones live, and grades on four axes. It owns no tool. Offline and deterministic -- the smoke suite runs inside a plain `uv run pytest` with no key and no socket. See `docs/tool-architecture.md` 10.1. |
-| `tools/claude_photometry_haiku_tool.py` | Python agent | Automated FITS photometry pipeline with an optional Claude-generated results summary. See [The Agent](#the-agent). |
+| `tools/photometry_pipeline.py` | Python pipeline | Reusable FITS photometry, zero-point resolution, and plotting implementation used by `tools.photometry`; it has no CLI or model-provider client. |
 | `algorithms/wcs/` | Extracted Python algorithm | Skynet WCS calibration: source extraction, FITS-header hinting, astrometry.net `solve-field`, ATLAS triangle solving, solution validation, and FITS-header write-back. |
 | `algorithms/photometry/` | Extracted Python algorithm | Skynet source extraction and aperture photometry using the shared `algorithms/skylib_lite/` Skylib subset. |
 | `algorithms/fieldcal/` | Extracted Python algorithm | Skynet photometric zero-point calibration: catalog-source matching, variable-star filtering, reference-magnitude resolution, and weighted zero-point solving. |

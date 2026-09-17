@@ -7,6 +7,10 @@ hand-written stub backend, no SDK and no network.
 
 from __future__ import annotations
 
+import json
+import stat
+from pathlib import Path
+
 import pytest
 
 from tests.llm_fakes import StubBackend
@@ -15,7 +19,13 @@ from tools.agent import events
 from tools.agent.approval import Decision
 from tools.agent.engine import run_session
 from tools.agent.prompt import SYSTEM_PROMPT
-from tools.llm.types import ModelResponse, ProtocolFault, ToolCallBlock
+from tools.llm.types import (
+    Message,
+    ModelResponse,
+    ProtocolFault,
+    TextBlock,
+    ToolCallBlock,
+)
 from tools.models import ToolResult
 from tools.sessions import AgentSession
 
@@ -77,6 +87,219 @@ def test_the_system_prompt_defaults_to_the_moved_constant(monkeypatch):
     session = _session()
     list(run_session("hi", backend=backend, session=session, tool_functions={}))
     assert backend.calls[0]["system"] == SYSTEM_PROMPT
+
+
+def test_history_precedes_the_follow_up_user_message():
+    """A resumed prompt must retain recorded context in its first model request."""
+
+    history = (
+        Message(role="user", blocks=(TextBlock(text="Find M31."),)),
+        Message(role="assistant", blocks=(TextBlock(text="M31 is Andromeda."),)),
+    )
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="What next?")])
+
+    list(
+        run_session(
+            "How far away is it?",
+            backend=backend,
+            session=_session(),
+            history=history,
+            tool_schemas=[],
+            tool_functions={},
+        )
+    )
+
+    messages = backend.calls[0]["messages"]
+    assert [message.role for message in messages] == ["user", "assistant", "user"]
+    assert [message.blocks for message in messages] == [
+        (TextBlock(text="Find M31."),),
+        (TextBlock(text="M31 is Andromeda."),),
+        (TextBlock(text="How far away is it?"),),
+    ]
+
+
+def test_follow_up_session_manifest_records_prior_text_history():
+    """A new follow-up manifest must preserve context needed for later resume."""
+
+    history = (
+        Message(role="user", blocks=(TextBlock(text="Find M31."),)),
+        Message(role="assistant", blocks=(TextBlock(text="M31 is Andromeda."),)),
+    )
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="2.5 million ly.")])
+
+    stream = list(
+        run_session(
+            "How far away is it?",
+            backend=backend,
+            history=history,
+            tool_schemas=[],
+            tool_functions={},
+        )
+    )
+
+    manifest_path = next(
+        event.manifest_path for event in stream if isinstance(event, events.SessionFinished)
+    )
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    assert manifest["history"] == [
+        {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+        {
+            "role": "assistant",
+            "blocks": [{"type": "text", "text": "M31 is Andromeda."}],
+        },
+        {
+            "role": "user",
+            "blocks": [{"type": "text", "text": "How far away is it?"}],
+        },
+        {
+            "role": "assistant",
+            "blocks": [{"type": "text", "text": "2.5 million ly."}],
+        },
+    ]
+
+
+def test_session_manifest_retains_tool_call_and_result_blocks_for_resume():
+    """Durable history must preserve the exact neutral tool exchange."""
+
+    def lookup(target):
+        assert target == "M31"
+        return ToolResult(status="ok", count=1)
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(_tool_call(name="lookup", target="M31"),),
+            ),
+            ModelResponse(stop_reason="end_turn", text="M31 is Andromeda."),
+        ]
+    )
+    stream = list(
+        run_session(
+            "Find M31.",
+            backend=backend,
+            tool_schemas=[
+                {
+                    "name": "lookup",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"target": {"type": "string"}},
+                        "required": ["target"],
+                    },
+                }
+            ],
+            tool_functions={"lookup": lookup},
+        )
+    )
+
+    manifest_path = next(
+        event.manifest_path for event in stream if isinstance(event, events.SessionFinished)
+    )
+    history = json.loads(Path(manifest_path).read_text(encoding="utf-8"))["history"]
+    assert history[1]["blocks"] == [
+        {
+            "type": "tool_call",
+            "call_id": "call_0",
+            "name": "lookup",
+            "arguments": {"target": "M31"},
+        }
+    ]
+    result = history[2]["blocks"][0]
+    assert result["type"] == "tool_result"
+    assert result["call_id"] == "call_0"
+    assert result["name"] == "lookup"
+    assert result["is_error"] is False
+    assert json.loads(result["content"])["status"] == "ok"
+
+
+def test_session_manifest_and_directory_are_owner_only():
+    """Persisted prompts and tool payloads must not be world-readable."""
+
+    session = _session()
+    manifest_path = session.save()
+
+    assert stat.S_IMODE(session.directory.stat().st_mode) == 0o700
+    assert stat.S_IMODE(manifest_path.stat().st_mode) == 0o600
+
+
+def test_tool_checkpoint_is_non_resumable_before_approval_or_dispatch():
+    """A stopped run cannot advertise a pending tool call as resumable."""
+
+    session = _session()
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    stream = run_session(
+        "hi",
+        backend=backend,
+        session=session,
+        tool_schemas=[{"name": "lookup", "input_schema": {"type": "object"}}],
+        tool_functions={},
+        approver=lambda _proposed: Decision.DENY,
+    )
+
+    assert isinstance(next(stream), events.SessionStarted)
+    assert isinstance(next(stream), events.TurnStarted)
+    assert isinstance(next(stream), events.ToolCallProposed)
+
+    manifest = json.loads(session.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["resumable"] is False
+    assert manifest["history"][1]["blocks"][0]["type"] == "tool_call"
+    list(stream)
+
+
+def test_partial_tool_turn_checkpoint_retains_completed_tool_results():
+    """A crashed later call must not erase earlier tool context from resume."""
+
+    def first():
+        return ToolResult(status="ok", count=1)
+
+    def explode():
+        raise RuntimeError("tool exploded")
+
+    session = _session()
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(
+                    _tool_call(name="first", call_id="call-1"),
+                    _tool_call(name="explode", call_id="call-2"),
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="tool exploded"):
+        list(
+            run_session(
+                "hi",
+                backend=backend,
+                session=session,
+                tool_schemas=[
+                    {"name": "first", "input_schema": {"type": "object"}},
+                    {"name": "explode", "input_schema": {"type": "object"}},
+                ],
+                tool_functions={"first": first, "explode": explode},
+            )
+        )
+
+    manifest = json.loads(session.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["resumable"] is False
+    history = manifest["history"]
+    assert [block["name"] for block in history[1]["blocks"]] == [
+        "first",
+        "explode",
+    ]
+    result = history[2]["blocks"][0]
+    assert result["type"] == "tool_result"
+    assert result["call_id"] == "call-1"
+    assert result["name"] == "first"
+    assert result["is_error"] is False
+    assert json.loads(result["content"])["status"] == "ok"
 
 
 def test_max_tokens_comes_from_the_backend_capability(monkeypatch):

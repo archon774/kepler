@@ -73,6 +73,23 @@ class Transcript(VerticalScroll):
         self._append_note(text)
         self.scroll_end(animate=False)
 
+    def clear(self) -> None:
+        """Remove live nodes before replacing the transcript with saved text."""
+
+        self.assistant_text = ""
+        self.tool_nodes = {}
+        self._notices = []
+        self._assistant = Static("")
+        self.remove_children()
+        self.mount(self._assistant)
+
+    def restore_assistant_text(self, text: str) -> None:
+        """Display saved assistant text without replaying tool calls or artifacts."""
+
+        self.assistant_text = text
+        self._assistant.update(text)
+        self.scroll_end(animate=False)
+
     def _append_note(self, text: str) -> None:
         notice = Static(text)
         self._notices.append(notice)

@@ -306,8 +306,15 @@ Important modeling rules:
 - Agent-loop artifacts are session-scoped under
   `artifacts/sessions/<session_id>/...`; the runner writes
   `session_manifest.json` in that directory with the ordered tool-call trace,
-  cache hits, warning/error summaries, and artifact paths, but not full tool
-  payloads.
+  cache hits, warning/error summaries, and artifact paths. To resume safely,
+  current manifests also retain the complete neutral conversation, including
+  prompts and tool arguments/results; the diagnostic trace itself still omits
+  full result payloads. These are local, sensitive session records: on POSIX,
+  each session directory is owner-only (`0700`) and its manifest is `0600`.
+  Resume accepts at most a 1 MiB manifest and a 256 KiB history (128 messages,
+  256 blocks, 64 KiB per field); content is not redacted because the provider
+  protocol needs the exact prior exchange. Remove the session artifact
+  directory when that retention is no longer appropriate.
 
 ---
 
