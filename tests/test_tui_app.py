@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 from textual.widgets import Static
@@ -988,3 +989,41 @@ def test_launch_spec_prefers_the_flag_then_the_environment_then_the_default(
 
     monkeypatch.delenv("KEPLER_MODEL_BACKEND")
     assert tui_main.launch_spec(None) == "anthropic/claude-sonnet-5"
+
+
+def test_the_kepler_console_script_launches_this_module():
+    """``kepler`` is the console's entry point, and a bare ``kepler`` opens it.
+
+    Pinned because the command is the only documented way in and nothing else
+    would notice it going missing: ``argparse`` already prints ``usage: kepler``
+    whether or not the script is registered, so a dropped entry produces a
+    help text naming a command that does not exist.
+    """
+
+    import tomllib
+
+    pyproject = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert pyproject["project"]["scripts"]["kepler"] == "tools.tui.__main__:main"
+
+
+def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
+    """No flag, no environment variable, no subcommand: ``kepler`` runs."""
+
+    launched: dict[str, object] = {}
+
+    monkeypatch.delenv("KEPLER_MODEL_BACKEND", raising=False)
+    monkeypatch.setattr(sys, "argv", ["kepler"])
+    monkeypatch.setattr(tui_main, "load_dotenv", lambda: ())
+    monkeypatch.setattr(tui_main, "open_backend", lambda spec: launched.setdefault("spec", spec))
+    monkeypatch.setattr(
+        tui_main, "KeplerApp", lambda **kwargs: type("Stub", (), {"run": lambda self: launched.setdefault("ran", True)})()
+    )
+
+    assert tui_main.main() == 0
+    assert launched["spec"] == "anthropic/claude-sonnet-5"
+    assert launched["ran"] is True
