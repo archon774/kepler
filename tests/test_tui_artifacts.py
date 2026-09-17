@@ -11,6 +11,7 @@ from textual.widgets import OptionList, Static
 from tools.artifacts import describe_artifact_file
 from tools.tui.app import KeplerApp
 from tools.tui.render.capability import GraphicsTier
+from tools.tui.render.image import render_halfblocks
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tui" / "four_by_four.png"
 
@@ -97,3 +98,52 @@ def test_artifact_browser_opens_selected_path_only_after_user_action():
             assert opened == [FIXTURE.resolve()]
 
     _run(scenario())
+
+
+def test_the_image_library_is_not_imported_when_the_module_is():
+    """``textual_image.widget`` probes the terminal for its cell size at import
+    time, and that probe divides by the column count ``TIOCGWINSZ`` reports. A
+    tty that reports no size -- a pty a wrapper opened without setting one --
+    therefore raised ``ZeroDivisionError`` from inside the import, before the
+    console drew anything. Importing it at module scope makes every launch pay
+    that probe; nothing needs it until a native image is rendered.
+    """
+
+    import ast
+
+    from tools.tui.widgets import artifacts
+
+    tree = ast.parse(Path(artifacts.__file__).read_text(encoding="utf-8"))
+    module_level = {
+        node.module
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module
+    } | {
+        alias.name
+        for node in tree.body
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+
+    assert not {name for name in module_level if name.startswith("textual_image")}
+
+
+@pytest.mark.parametrize("failure", [ZeroDivisionError("no columns"), ImportError("x")])
+def test_an_unprobeable_terminal_still_gets_a_picture(monkeypatch, failure):
+    """The native protocol is an improvement on half-blocks, not a
+    requirement -- a library that cannot measure the terminal must cost the
+    user resolution, never the preview."""
+
+    from tools.tui.widgets import artifacts
+
+    def explode(path):
+        raise failure
+
+    monkeypatch.setattr(artifacts, "_native_image", explode)
+
+    preview = artifacts._preview_widget(
+        describe_artifact_file(FIXTURE), GraphicsTier.KITTY
+    )
+
+    assert isinstance(preview, Static)
+    assert str(preview.content) == str(render_halfblocks(FIXTURE))

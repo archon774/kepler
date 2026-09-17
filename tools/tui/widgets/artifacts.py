@@ -11,8 +11,8 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
+from textual.widget import Widget
 from textual.widgets import OptionList, Static
-from textual_image.widget import Image as NativeImage
 
 from tools.models import ArtifactMetadata
 from tools.tui.render.capability import GraphicsTier
@@ -142,7 +142,25 @@ def _artifact_label(artifact: ArtifactMetadata) -> str:
     return f"{Path(artifact.file.path).name} · {artifact.artifact_type}{size}"
 
 
-def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Static | NativeImage:
+def _native_image(path: Path) -> Widget:
+    """Build a native-protocol image widget, importing the library on first use.
+
+    The import is deferred because ``textual_image.widget`` probes the terminal
+    for its cell size at import time, and that probe divides by the column
+    count ``TIOCGWINSZ`` reports. A tty that reports no size at all -- a pty
+    opened by a wrapper that never set one -- makes the division raise
+    ``ZeroDivisionError`` from inside a third-party import, killing the console
+    before it has drawn anything. Nothing needs the probe until a native image
+    is actually rendered, which only happens above the half-block tier, so
+    deferring it keeps an unsized terminal launchable.
+    """
+
+    from textual_image.widget import Image
+
+    return Image(path)
+
+
+def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Widget:
     """Select a native or text preview without ever removing the path handle."""
 
     if not artifact.file.exists:
@@ -152,7 +170,13 @@ def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Static | 
     if artifact.artifact_type == "image":
         try:
             if tier is not GraphicsTier.HALFBLOCK:
-                return NativeImage(path)
+                try:
+                    return _native_image(path)
+                except (ArithmeticError, ImportError):
+                    # The native protocol is an improvement on half-blocks,
+                    # never a requirement: a terminal the library cannot probe
+                    # still gets a picture rather than an error.
+                    pass
             return Static(render_halfblocks(path))
         except (OSError, UnidentifiedImageError) as error:
             return Static(f"Unable to render image: {error}")
