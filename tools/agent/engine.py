@@ -14,11 +14,21 @@ Two behaviours from the pre-engine ``run()`` are load-bearing and preserved:
 * saving the session after every tool call, so a killed run still leaves a
   readable manifest.
 
-Streaming note: the Anthropic adapter streams text into ``on_text`` during
-``complete()``, but a generator cannot yield from a callback, so the engine
-buffers the chunks and emits the ``TextDelta`` events immediately after the
-call returns -- before any tool-call event, which is the same order the old
-loop printed them in.
+Streaming note: the Anthropic adapter streams text and reasoning into
+``on_text``/``on_thinking`` during ``complete()``, but a generator cannot yield
+from a callback. So by default the engine buffers the chunks and emits the
+``TextDelta`` and ``ThinkingDelta`` events immediately after the call returns --
+before any tool-call event, which is the same order the old loop printed them
+in. A caller that wants them as they arrive passes ``on_delta``: the engine
+then hands each delta straight to that callback and does not replay it, so the
+events are delivered exactly once either way.
+
+Three optional callables let an interactive caller stay in the loop while it
+runs. ``on_delta`` is the live stream above; ``pending_input`` is drained at
+the top of every turn and merged into the conversation, so a person can add
+information to a run in progress; ``should_stop`` is checked at each turn and
+before each tool call, so a person can end one. None of them is required and
+the loop is unchanged without them.
 """
 
 from __future__ import annotations
@@ -37,6 +47,7 @@ from tools.llm.types import (
     Message,
     ModelResponse,
     TextBlock,
+    ThinkingBlock,
     ToolCallBlock,
     ToolResultBlock,
 )
@@ -46,6 +57,10 @@ from tools.sessions import AgentSession, backend_record, make_cache_key
 __all__ = ["run_session"]
 
 _ToolFunctions = Mapping[str, Callable[..., Any]]
+
+#: Receives ``TextDelta`` and ``ThinkingDelta`` events as they stream, from
+#: inside the backend call. It runs on whatever thread ``complete()`` runs on.
+OnDelta = Callable[[events.Event], object]
 
 
 def run_session(
@@ -59,6 +74,9 @@ def run_session(
     session: AgentSession | None = None,
     tool_schemas: Sequence[dict[str, Any]] | None = None,
     tool_functions: _ToolFunctions | None = None,
+    on_delta: OnDelta | None = None,
+    pending_input: Callable[[], Sequence[str]] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> Iterator[events.Event]:
     """Run a bounded agent loop and yield its events.
 
@@ -66,6 +84,9 @@ def run_session(
     once, before the turn loop; every ``complete()`` call gets that payload.
     ``tool_schemas``/``tool_functions`` default to the live registry, read at
     call time.
+
+    ``on_delta``, ``pending_input`` and ``should_stop`` are the interactive
+    hooks described in the module docstring.
     """
 
     schemas, functions = _resolve_registry(tool_schemas, tool_functions)
@@ -98,18 +119,39 @@ def run_session(
 
             for turn in range(max_turns):
                 turn_number = turn + 1
+                if _stopped(should_stop):
+                    manifest_path = session.save(
+                        outcome="interrupted", current_turn=turn
+                    )
+                    yield events.SessionFinished(
+                        outcome="interrupted", manifest_path=str(manifest_path)
+                    )
+                    return
+
+                for note in _drain(pending_input):
+                    _add_user_text(messages, note)
+                    session.history = _recorded_history(messages)
+                    yield events.UserMessage(text=note, turn=turn_number)
+
                 yield events.TurnStarted(turn=turn_number)
 
                 streamed: list[str] = []
+                reasoned: list[str] = []
                 response = backend.complete(
                     messages=messages,
                     tools=dialect_tools,
                     system=system,
                     max_tokens=max_tokens,
-                    on_text=streamed.append,
+                    on_text=_collector(streamed, on_delta, events.TextDelta),
+                    on_thinking=_collector(reasoned, on_delta, events.ThinkingDelta),
                 )
-                for chunk in streamed:
-                    yield events.TextDelta(text=chunk)
+                if on_delta is None:
+                    # Reasoning before the answer: that is the order it was
+                    # produced in, and the order a reader needs it in.
+                    for chunk in reasoned:
+                        yield events.ThinkingDelta(text=chunk)
+                    for chunk in streamed:
+                        yield events.TextDelta(text=chunk)
                 for fault in response.faults:
                     session.record_fault(turn=turn_number, fault=fault)
                     yield events.ProtocolFault(
@@ -126,6 +168,7 @@ def run_session(
                         approver=approver,
                         session=session,
                         schema_index=schema_index,
+                        should_stop=should_stop,
                     )
                     continue
 
@@ -141,7 +184,7 @@ def run_session(
                 messages.append(
                     Message(
                         role="assistant",
-                        blocks=(TextBlock(text=response.text),) if response.text else (),
+                        blocks=_assistant_blocks(response, with_tool_calls=False),
                     )
                 )
                 session.history = _recorded_history(messages)
@@ -175,6 +218,85 @@ def run_session(
         raise exc
 
 
+def _assistant_blocks(
+    response: ModelResponse, *, with_tool_calls: bool
+) -> tuple[Any, ...]:
+    """The assistant turn as neutral blocks, reasoning first.
+
+    Reasoning leads because that is where the provider requires it and where
+    it happened. It is carried in the conversation, not only reported, because
+    a provider that signed its reasoning refuses the next request of the same
+    turn without it.
+    """
+
+    blocks: list[Any] = list(response.thinking)
+    if response.text:
+        blocks.append(TextBlock(text=response.text))
+    if with_tool_calls:
+        blocks.extend(response.tool_calls)
+    return tuple(blocks)
+
+
+def _collector(
+    sink: list[str], on_delta: OnDelta | None, event_type: Callable[..., events.Event]
+) -> Callable[[str], None]:
+    """Build one streaming hook: buffer the chunk, and pass it on if asked."""
+
+    def receive(chunk: str) -> None:
+        if on_delta is None:
+            sink.append(chunk)
+            return
+        on_delta(event_type(text=chunk))
+
+    return receive
+
+
+def _stopped(should_stop: Callable[[], bool] | None) -> bool:
+    """Whether the caller has asked the loop to end.
+
+    A hook that raises is treated as "keep going": a broken stop button must
+    not be able to end a session, and the caller can always ask again.
+    """
+
+    if should_stop is None:
+        return False
+    try:
+        return bool(should_stop())
+    except Exception:
+        return False
+
+
+def _drain(pending_input: Callable[[], Sequence[str]] | None) -> tuple[str, ...]:
+    """Take whatever the caller has queued since the last turn."""
+
+    if pending_input is None:
+        return ()
+    try:
+        notes = pending_input()
+    except Exception:
+        return ()
+    return tuple(note for note in notes if isinstance(note, str) and note.strip())
+
+
+def _add_user_text(messages: list[Message], text: str) -> None:
+    """Merge one mid-run note into the conversation.
+
+    It joins the trailing user message when there is one -- which is the
+    message carrying the tool results, so the note arrives with them, after
+    them. Two consecutive user messages are not a shape every provider
+    accepts, and a note is an addition to what the user last said rather than
+    a turn of its own.
+    """
+
+    if messages and messages[-1].role == "user":
+        last = messages[-1]
+        messages[-1] = Message(
+            role="user", blocks=(*last.blocks, TextBlock(text=text))
+        )
+        return
+    messages.append(Message(role="user", blocks=(TextBlock(text=text),)))
+
+
 def _recorded_history(messages: Sequence[Message]) -> list[dict[str, Any]]:
     """Serialize the complete neutral conversation for later TUI resume."""
 
@@ -184,6 +306,14 @@ def _recorded_history(messages: Sequence[Message]) -> list[dict[str, Any]]:
         for block in message.blocks:
             if isinstance(block, TextBlock):
                 blocks.append({"type": "text", "text": block.text})
+            elif isinstance(block, ThinkingBlock):
+                blocks.append(
+                    {
+                        "type": "thinking",
+                        "text": block.text,
+                        "signature": block.signature,
+                    }
+                )
             elif isinstance(block, ToolCallBlock):
                 blocks.append(
                     {
@@ -219,12 +349,11 @@ def _run_tool_turn(
     approver: Approver,
     session: AgentSession,
     schema_index: Mapping[str, Mapping[str, Any]],
+    should_stop: Callable[[], bool] | None = None,
 ) -> Iterator[events.Event]:
-    assistant_blocks: list[Any] = []
-    if response.text:
-        assistant_blocks.append(TextBlock(text=response.text))
-    assistant_blocks.extend(response.tool_calls)
-    messages.append(Message(role="assistant", blocks=tuple(assistant_blocks)))
+    messages.append(
+        Message(role="assistant", blocks=_assistant_blocks(response, with_tool_calls=True))
+    )
     session.history = _recorded_history(messages)
     session.resumable = False
     session.save(current_turn=turn_number)
@@ -254,7 +383,8 @@ def _run_tool_turn(
             call_id=call.call_id,
             func=functions.get(call.name),
         )
-        denied = fault is None and approver(proposed) is Decision.DENY
+        stopped = fault is None and _stopped(should_stop)
+        denied = fault is None and not stopped and approver(proposed) is Decision.DENY
 
         if fault is not None:
             session.record_fault(turn=turn_number, fault=fault)
@@ -268,11 +398,21 @@ def _run_tool_turn(
             cache_hit = cache_key in call_cache
             if not cache_hit:
                 call_cache[cache_key] = result
-        elif denied:
-            reason = "not permitted by the approval policy"
+        elif stopped or denied:
+            # An interrupted call is refused the same way a denied one is, and
+            # for the same reason: every ``tool_use`` needs a ``tool_result``
+            # or the conversation cannot be sent again. Stopping mid-turn
+            # leaves a usable record, not a broken one.
+            reason = (
+                "stopped by the user"
+                if stopped
+                else "not permitted by the approval policy"
+            )
             result = {
                 "status": "error",
-                "errors": [{"code": "denied", "message": reason}],
+                "errors": [
+                    {"code": "interrupted" if stopped else "denied", "message": reason}
+                ],
             }
             yield events.ToolCallDenied(
                 call_id=call.call_id, name=call.name, reason=reason
@@ -321,7 +461,7 @@ def _run_tool_turn(
         session.history = _recorded_history(checkpoint)
         session.save(current_turn=turn_number)
 
-        if not denied:
+        if not (denied or stopped):
             yield events.ToolCallFinished(
                 call_id=call.call_id,
                 name=call.name,

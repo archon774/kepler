@@ -1,6 +1,6 @@
 """The event union the agent loop emits.
 
-Ten frozen dataclasses, defined here (``docs/working/tui-harness.md`` section
+Twelve frozen dataclasses, defined here (``docs/working/tui-harness.md`` section
 4.1 specifies the shape; this document owns the construction). Events are
 ephemeral snapshots for the shim, the TUI, and the benchmark harness to read;
 the durable record is the session manifest. ``arguments`` and ``result`` are
@@ -19,6 +19,8 @@ __all__ = [
     "SessionStarted",
     "TurnStarted",
     "TextDelta",
+    "ThinkingDelta",
+    "UserMessage",
     "ToolCallProposed",
     "ToolCallStarted",
     "ToolCallFinished",
@@ -46,6 +48,33 @@ class TurnStarted:
 @dataclass(frozen=True)
 class TextDelta:
     text: str
+
+
+@dataclass(frozen=True)
+class ThinkingDelta:
+    """A run of the model's own reasoning, as the provider revealed it.
+
+    Separate from :class:`TextDelta` and never merged into it: a model's
+    working is a different kind of claim from its answer, and a consumer that
+    rendered the two alike would let a discarded hypothesis read as a finding.
+    A backend whose provider reveals nothing emits none of these, which says
+    nothing about whether the model reasoned.
+    """
+
+    text: str
+
+
+@dataclass(frozen=True)
+class UserMessage:
+    """User text that entered the conversation after the session started.
+
+    The opening message needs no event -- the caller had it before the
+    session existed. This announces the ones that did not exist yet: a note
+    typed while the loop was running, delivered at the turn named here.
+    """
+
+    text: str
+    turn: int
 
 
 @dataclass(frozen=True)
@@ -114,6 +143,8 @@ Event = Union[
     SessionStarted,
     TurnStarted,
     TextDelta,
+    ThinkingDelta,
+    UserMessage,
     ToolCallProposed,
     ToolCallStarted,
     ToolCallFinished,

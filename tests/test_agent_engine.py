@@ -24,6 +24,7 @@ from tools.llm.types import (
     ModelResponse,
     ProtocolFault,
     TextBlock,
+    ThinkingBlock,
     ToolCallBlock,
 )
 from tools.models import ToolResult
@@ -710,3 +711,212 @@ def test_a_tool_returning_something_that_is_neither_says_so():
                 tool_functions={"bad_tool": lambda: "not a model"},
             )
         )
+
+
+# --- reasoning, interruption, and adding to a run in flight ---------------
+
+
+def _run(backend, *, session=None, **kwargs):
+    """Drive one session with the interactive hooks under test."""
+
+    session = session or _session()
+    return list(
+        run_session(
+            "hi",
+            backend=backend,
+            session=session,
+            tool_schemas=[
+                {"name": "lookup", "input_schema": {"type": "object", "properties": {}}}
+            ],
+            tool_functions=kwargs.pop("tool_functions", {}),
+            max_turns=kwargs.pop("max_turns", 5),
+            **kwargs,
+        )
+    ), session
+
+
+def test_revealed_reasoning_is_its_own_event_and_precedes_the_answer():
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="APASS.",
+                thinking=(ThinkingBlock(text="Weighing two catalogs.", signature="s"),),
+            )
+        ]
+    )
+    stream, _ = _run(backend)
+    kinds = [type(event).__name__ for event in stream]
+
+    assert kinds == [
+        "SessionStarted",
+        "TurnStarted",
+        "ThinkingDelta",
+        "TextDelta",
+        "TurnFinished",
+        "SessionFinished",
+    ]
+    assert stream[2].text == "Weighing two catalogs."
+
+
+def test_on_delta_receives_the_stream_live_and_it_is_not_replayed():
+    """Exactly once, either way: a consumer that rendered both would double
+    every answer it showed."""
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="APASS.",
+                thinking=(ThinkingBlock(text="Weighing.", signature="s"),),
+            )
+        ]
+    )
+    live: list[events.Event] = []
+    stream, _ = _run(backend, on_delta=live.append)
+
+    assert [type(event).__name__ for event in live] == ["ThinkingDelta", "TextDelta"]
+    assert [event.text for event in live] == ["Weighing.", "APASS."]
+    assert not [
+        event
+        for event in stream
+        if isinstance(event, (events.TextDelta, events.ThinkingDelta))
+    ]
+
+
+def test_reasoning_is_carried_in_the_conversation_not_only_reported():
+    """A provider that signed its reasoning refuses the next request of the
+    same turn without it, so the blocks have to be in the history."""
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                thinking=(ThinkingBlock(text="Need the catalog.", signature="sig"),),
+                tool_calls=(_tool_call(),),
+            ),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    _run(backend, tool_functions={"lookup": lambda: ToolResult(status="ok")})
+
+    assistant = backend.calls[1]["messages"][1]
+    assert assistant.role == "assistant"
+    assert assistant.blocks[0] == ThinkingBlock(text="Need the catalog.", signature="sig")
+
+
+def test_recorded_history_keeps_the_signed_reasoning_for_a_resumed_session():
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="done",
+                thinking=(ThinkingBlock(text="why", signature="sig"),),
+            )
+        ]
+    )
+    _, session = _run(backend)
+
+    assert session.history[-1]["blocks"][0] == {
+        "type": "thinking",
+        "text": "why",
+        "signature": "sig",
+    }
+
+
+def test_a_note_typed_mid_run_joins_the_turn_that_answers_the_tool_call():
+    """Alongside the tool results, after them -- a note is an addition to what
+    the user last said, not a turn of its own, and consecutive user messages
+    are not a shape every provider accepts."""
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    # Nothing queued when turn 1 opens; the note is typed while it runs.
+    notes = [[], ["also check the 60 Hz line"]]
+
+    stream, session = _run(
+        backend,
+        tool_functions={"lookup": lambda: ToolResult(status="ok")},
+        pending_input=lambda: notes.pop(0) if notes else [],
+    )
+
+    delivered = [e for e in stream if isinstance(e, events.UserMessage)]
+    assert [(e.text, e.turn) for e in delivered] == [("also check the 60 Hz line", 2)]
+
+    results_message = backend.calls[1]["messages"][-1]
+    assert results_message.role == "user"
+    assert [type(block).__name__ for block in results_message.blocks] == [
+        "ToolResultBlock",
+        "TextBlock",
+    ]
+    assert results_message.blocks[-1].text == "also check the 60 Hz line"
+
+
+def test_an_empty_or_blank_note_is_not_delivered():
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="done")])
+    stream, _ = _run(backend, pending_input=lambda: ["", "   "])
+
+    assert not [e for e in stream if isinstance(e, events.UserMessage)]
+
+
+def test_a_stop_request_ends_the_session_with_its_own_outcome():
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="never")])
+    stream, session = _run(backend, should_stop=lambda: True)
+
+    assert [type(event).__name__ for event in stream] == [
+        "SessionStarted",
+        "SessionFinished",
+    ]
+    assert stream[-1].outcome == "interrupted"
+    assert session.outcome == "interrupted"
+    assert backend.calls == []
+
+
+def test_a_stop_during_a_tool_turn_refuses_the_call_but_still_answers_it():
+    """Every tool_use needs a tool_result or the conversation cannot be sent
+    again: stopping mid-turn leaves a usable record, not a broken one."""
+
+    stops = [False, True]
+    ran: list[str] = []
+
+    def tool() -> ToolResult:  # pragma: no cover - must never run
+        ran.append("lookup")
+        return ToolResult(status="ok")
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="unreached"),
+        ]
+    )
+    stream, session = _run(
+        backend,
+        tool_functions={"lookup": tool},
+        should_stop=lambda: stops.pop(0) if stops else True,
+    )
+
+    denied = [e for e in stream if isinstance(e, events.ToolCallDenied)]
+    assert [e.reason for e in denied] == ["stopped by the user"]
+    assert ran == []
+    assert stream[-1].outcome == "interrupted"
+
+    results = session.history[-1]
+    assert results["role"] == "user"
+    assert results["blocks"][0]["type"] == "tool_result"
+    assert json.loads(results["blocks"][0]["content"])["errors"][0]["code"] == "interrupted"
+
+
+def test_a_stop_hook_that_raises_cannot_end_a_session():
+    """A broken stop button must not be able to stop a run."""
+
+    def explode() -> bool:
+        raise RuntimeError("no")
+
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="done")])
+    stream, _ = _run(backend, should_stop=explode)
+
+    assert stream[-1].outcome == "end_turn"
