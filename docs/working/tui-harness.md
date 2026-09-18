@@ -1,8 +1,9 @@
 # Kepler TUI Agentic Harness
 
 **Status:** Design approved; phases B–F complete, plus the backend switching
-that section 15 had deferred and the `kepler` console script from G.1. The rest
-of phase G — retiring `tools/runner.py` and its console script — remains.
+that section 15 had deferred, the `kepler` console script from G.1, and section
+8's Tab completion with the menu behind it (7.2). The rest of phase G —
+retiring `tools/runner.py` and its console script — remains.
 **Date:** 2026-09-07
 **Prerequisites:** [model-backends.md](model-backends.md) phases -1 to 3, and the
 merged stateless optical rollout from [optical-tools.md](optical-tools.md).
@@ -151,11 +152,12 @@ pin because it reuses the already-pinned `pillow`.
 | `tools/tui/__init__.py` | Package marker. Exports nothing heavy. |
 | `tools/tui/__main__.py` | Console-script entry: argument parsing, `launch_spec`, backend construction, application launch. |
 | `tools/tui/app.py` | `KeplerApp`: layout, keybindings, the engine thread worker, the approval modal, `resume_session`. |
-| `tools/tui/commands.py` | `Command`, `COMMANDS`, `Parsed`, `parse_input`, `resolve`, `help_text`. No Textual imports beyond types. |
+| `tools/tui/commands.py` | `Command`, `COMMANDS`, `Parsed`, `Suggestion`, `parse_input`, `resolve`, `help_text`, `suggest`, `complete`. No Textual imports beyond types. |
 | `tools/tui/backends.py` | `BackendChoice`, `CHOICES`, `resolve_spec`, `open_backend`, `describe_choices`, `unavailable_message`. The UI-facing half of backend selection. No Textual. |
 | `tools/tui/widgets/header.py` | `KeplerHeader` — the titled frame, and the live backend spec inside it. |
 | `tools/tui/widgets/transcript.py` | `Transcript`, with a single `handle_event` entry point; assistant text and tool nodes. |
 | `tools/tui/widgets/tool_node.py` | `ToolNode` — one collapsible tool call, with `start()`, `finish()`, and `deny()`. |
+| `tools/tui/widgets/prompt.py` | `PromptInput` — the prompt line with Tab bound to completion — and `CommandMenu`, the list of offers above it. |
 | `tools/tui/widgets/artifacts.py` | Artifact browser modal screen. |
 | `tools/tui/widgets/sessions.py` | `SessionBrowser` modal screen, and `history_from_manifest`. |
 | `tools/tui/render/capability.py` | `GraphicsTier` and `detect_tier` — the terminal graphics capability probe. |
@@ -319,6 +321,43 @@ Each call is a collapsible transcript node. The live state is the point.
 * **Denied** — rendered distinctly, showing the error result returned to the
   model.
 
+### 7.1.1 A private Textual hook is not a free name
+
+`ToolNode` built its renderable in a method called `_render_content`, which is
+also the name of `textual.widget.Widget`'s private per-repaint hook: the one
+that renders the widget and fills its line cache, returning nothing. The
+override satisfied nobody. Textual called it expecting a filled cache, got a
+Rich `Text` back and discarded it, and **every tool call in the transcript
+painted as an empty row** while `node.content`, `node.state` and `node.render()`
+all stayed exactly right — which is why a suite that asserts state caught
+nothing. The builder is `_node_content` now, and `tests/test_tui_transcript.py`
+asserts the tool name reaches `render_line(0)`, not just the widget.
+
+The general rule for this package: a `_leading_underscore` method on a Textual
+subclass is in Textual's namespace, not a private one of ours.
+
+### 7.2 Vertical rhythm
+
+The transcript is a stack of separate widgets — assistant text, notices, tool
+nodes — and with nothing between them it reads as one dense paragraph however
+different they are. Every transcript child keeps a blank row beneath it
+(`#transcript > * { margin-bottom: 1 }`), which is what makes an entry look
+like an entry. The empty assistant widget is hidden rather than mounted blank,
+so that rule does not open each session with two rows of nothing, and the
+composer keeps a blank row between the input box and the status bar.
+
+Notices — session, turn and command lines — are muted, because they are the
+console talking about the session while the assistant text is the session.
+That distinguishes them without spending a row on a label. The two modal
+browsers name themselves in their border title the way `KeplerHeader` does,
+for the same reason: a heading inside the frame spends a row saying what the
+frame already is.
+
+Spacing is set once in the application's CSS and read from the theme, never by
+padding strings with spaces: a transcript that aligns itself by hand stops
+aligning the moment a terminal is resized or a theme changes its border
+weight.
+
 ---
 
 ## 8. Slash Commands
@@ -333,7 +372,7 @@ to a handler. Anything else is sent to the engine as a user message.
   model. Silently sending a mistyped command to an LLM would waste a turn and
   pollute the transcript.
 * Tab completes command names and, where a command declares a completer, its
-  arguments.
+  arguments, and typing a bare `/` lists the registry. See 8.5.
 
 The registry is declarative — name, aliases, help text, handler, optional argument
 completer — so `help_text()` is generated from `COMMANDS` rather than maintained,
@@ -463,6 +502,37 @@ be configured exits **2** — it is launched from shells and scripts, and
 reporting success after printing "cannot use" to stderr is how a wrapper ends
 up believing a session ran.
 
+### 8.5 Discovery: the menu and Tab
+
+**Typing `/` lists every command.** That is the discovery path — the registry is
+found by typing the character that starts one, not by remembering to ask
+`/help` first. The menu narrows as the name is typed and closes when nothing
+matches, and it is generated from `COMMANDS` exactly as `help_text()` is, so a
+new command is offered the moment it is registered.
+
+Tab then finishes what the menu is showing:
+
+* **One match** is filled in whole and given a trailing space, so completing a
+  command runs straight on into completing its first argument — `/bac` → Tab →
+  `/backend ` → Tab → the provider names.
+* **Several matches** extend only as far as they all agree, the shell rule.
+  Guessing between equal candidates is how a completion puts a command nobody
+  asked for into the prompt.
+* **No match** leaves Tab alone to move focus. A console that swallows Tab has
+  made its own footer unreachable.
+
+Aliases match but are never offered: `/q` finds `quit` and completes to
+`/quit`. The short form stays a shortcut for typing, and what lands in the
+prompt is the name the help text lists.
+
+`suggest()` and `complete()` are pure functions on the same Textual-free
+registry module, so completion is tested without a terminal; `PromptInput`
+binds Tab on the widget rather than the application because a widget's
+bindings are consulted before the screen's, and the screen binds Tab to moving
+focus. The one completer declared so far is `/backend`'s, which offers the
+provider names from `CHOICES` — imported on call, so the import-light registry
+stays import-light.
+
 ---
 
 ## 9. Artifact Rendering
@@ -585,6 +655,14 @@ no daemon, no terminal.
 * **No-UI-import.** `tools.agent` imports no UI package. Asserted directly.
 * **Slash commands.** Registry dispatch, escaping, unknown-command handling, and
   the assertion that no command text is ever forwarded to the engine.
+* **Completion.** `suggest()` and `complete()` are covered directly in
+  `tests/test_tui_commands.py` — a bare `/` offers the whole registry, an alias
+  completes to its name, several matches extend only to their shared prefix —
+  and through the pilot in `tests/test_tui_app.py`, which types `/bac`, presses
+  Tab, and asserts the prompt reads `/backend ` and then `/backend ollama `.
+* **Painted output.** `tests/test_tui_transcript.py` asserts a finished tool
+  call's name reaches `render_line(0)`. Every other test there reads widget
+  state, which stayed correct throughout the blank-node defect in 7.1.1.
 * **TUI.** Textual's headless pilot drives keypresses and asserts widget state.
   The interface is genuinely CI-testable.
 * **Rendering.** The capability probe against faked environments; the half-block

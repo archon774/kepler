@@ -68,7 +68,9 @@ reusable local pipeline, all built on the plain Python functions in `tools/`:
   refused with the reason and the session stays on the one that works, so a
   stopped daemon or a missing key costs a command rather than the session.
   `--backend` picks the one it opens on, for a shell alias that always starts
-  somewhere particular; `/help` lists the rest.
+  somewhere particular. Typing `/` lists every command there is, Tab finishes
+  the one you have started (`/bac` → `/backend `, then Tab again for the
+  provider names), and `/help` prints the same list to the transcript.
 
   ```bash
   uv run kepler                       # opens on anthropic/claude-sonnet-5
