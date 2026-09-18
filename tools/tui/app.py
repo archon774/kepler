@@ -796,7 +796,8 @@ class KeplerApp(App[None]):
                 parts.append(f"{self.token_usage.output_tokens} output tokens")
         parts.extend(
             [
-                f"{self.artifact_count} artifacts",
+                f"{self.artifact_count} artifact"
+                + ("" if self.artifact_count == 1 else "s"),
                 f"{self.graphics_tier.value} graphics",
                 "F3 artifacts",
                 "F4 sessions",
