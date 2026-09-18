@@ -33,6 +33,7 @@ __all__ = [
     "OLLAMA_DEFAULT_BASE_URL",
     "OLLAMA_MAX_OUTPUT_TOKENS",
     "OLLAMA_DEFAULT_TIMEOUT_S",
+    "OLLAMA_PROBE_TIMEOUT_S",
     "OLLAMA_TIMEOUT_ENV",
 ]
 
@@ -53,6 +54,14 @@ OLLAMA_MAX_OUTPUT_TOKENS = 8192
 #: a slower host or a larger model.
 OLLAMA_DEFAULT_TIMEOUT_S = 600.0
 OLLAMA_TIMEOUT_ENV = "OLLAMA_TIMEOUT_S"
+
+#: How long the *questions about the daemon* may take -- is it up, what does
+#: it hold. Nothing like the generation timeout above and deliberately so: a
+#: daemon answers ``/api/tags`` at once or it is not answering, and these are
+#: asked from a console that has a person waiting at it. Inheriting 600 s would
+#: mean one Tab against a host that accepts connections and then says nothing
+#: freezes the interface for ten minutes.
+OLLAMA_PROBE_TIMEOUT_S = 5.0
 
 _OLLAMA_CAPABILITIES = dataclasses.replace(
     _CAPABILITIES, streaming=False, max_output_tokens=OLLAMA_MAX_OUTPUT_TOKENS
@@ -112,7 +121,7 @@ class OllamaBackend(OpenAIBackend):
         import httpx
 
         try:
-            with self._client() as client:
+            with self._client(timeout_s=OLLAMA_PROBE_TIMEOUT_S) as client:
                 return client.get(self._native_tags_url()).status_code == 200
         except httpx.HTTPError:
             return False
@@ -131,7 +140,7 @@ class OllamaBackend(OpenAIBackend):
         import httpx
 
         try:
-            with self._client() as client:
+            with self._client(timeout_s=OLLAMA_PROBE_TIMEOUT_S) as client:
                 response = client.get(self._native_tags_url())
             if response.status_code != 200:
                 return ()

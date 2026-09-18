@@ -138,12 +138,21 @@ class BaseHTTPBackend:
         #: Tests pass an ``httpx.MockTransport`` here; production never does.
         self._transport = transport
 
-    def _client(self) -> Any:
+    def _client(self, *, timeout_s: float | None = None) -> Any:
+        """The shared HTTP client, optionally bounded tighter than a turn is.
+
+        ``timeout_s`` is for the questions that are not generation -- is the
+        daemon up, what does it hold -- which a host answers at once or not at
+        all. It never relaxes the bound, only tightens it.
+        """
+
         import httpx
 
         return httpx.Client(
             # S3: an explicit timeout, always -- never an unbounded request.
-            timeout=httpx.Timeout(self._timeout_s),
+            timeout=httpx.Timeout(
+                self._timeout_s if timeout_s is None else min(timeout_s, self._timeout_s)
+            ),
             # S3: never follow redirects. This is also httpx's default; it is
             # set explicitly so a future reader cannot delete it as
             # "redundant" -- a redirect must never carry an auth header to
