@@ -57,9 +57,13 @@ Kepler has an interactive console, a one-shot agent entry point, and a
 reusable local pipeline, all built on the plain Python functions in `tools/`:
 
 - **`kepler` — the interactive console.** The full-screen Textual application
-  over the same agent loop: a transcript that renders each tool call as it
-  runs, image and waveform previews of the artifacts a run produces, session
-  resume, and slash commands. It takes no required arguments — `uv run kepler`
+  over the same agent loop: a transcript that keeps your question in view and
+  renders each tool call as it runs, the model's reasoning where the provider
+  reveals it, image and waveform previews of the artifacts a run produces,
+  session resume, and slash commands. A turn is something you are in rather
+  than something you wait out — the prompt stays open while the model works, a
+  note typed mid-run reaches the next turn alongside the tool results, and
+  escape stops the run at its next safe point. It takes no required arguments — `uv run kepler`
   opens it — because everything it needs is chosen inside the session. In
   particular the model backend is: `/backend` lists what is on offer, and
   `/backend ollama` (or `/backend anthropic`, or an explicit
@@ -75,6 +79,7 @@ reusable local pipeline, all built on the plain Python functions in `tools/`:
   ```bash
   uv run kepler                       # opens on anthropic/claude-sonnet-5
   uv run kepler --backend ollama      # or start on the local daemon
+  uv run kepler --thinking-budget 0   # or without asking for reasoning
   ```
 
 - **`tools.runner` — the astronomy research agent** (entry point:

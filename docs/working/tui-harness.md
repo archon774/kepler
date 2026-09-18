@@ -1,9 +1,11 @@
 # Kepler TUI Agentic Harness
 
 **Status:** Design approved; phases B–F complete, plus the backend switching
-that section 15 had deferred, the `kepler` console script from G.1, and section
-8's Tab completion with the menu behind it (7.2). The rest of phase G —
-retiring `tools/runner.py` and its console script — remains.
+that section 15 had deferred, the `kepler` console script from G.1, section 8's
+Tab completion with the menu behind it (7.2), and the interactive turn of 4.4
+and 7.3 — visible prompts, revealed reasoning, a prompt that stays open
+mid-turn, and an interrupt. The rest of phase G — retiring `tools/runner.py` and
+its console script — remains.
 **Date:** 2026-09-07
 **Prerequisites:** [model-backends.md](model-backends.md) phases -1 to 3, and the
 merged stateless optical rollout from [optical-tools.md](optical-tools.md).
@@ -155,7 +157,7 @@ pin because it reuses the already-pinned `pillow`.
 | `tools/tui/commands.py` | `Command`, `COMMANDS`, `Parsed`, `Suggestion`, `parse_input`, `resolve`, `help_text`, `suggest`, `complete`. No Textual imports beyond types. |
 | `tools/tui/backends.py` | `BackendChoice`, `CHOICES`, `resolve_spec`, `open_backend`, `describe_choices`, `unavailable_message`. The UI-facing half of backend selection. No Textual. |
 | `tools/tui/widgets/header.py` | `KeplerHeader` — the titled frame, and the live backend spec inside it. |
-| `tools/tui/widgets/transcript.py` | `Transcript`, with a single `handle_event` entry point; assistant text and tool nodes. |
+| `tools/tui/widgets/transcript.py` | `Transcript`, with a single `handle_event` entry point, plus `UserEntry` (what the person said) and `ThoughtBlock` (what the provider revealed of the model's reasoning). |
 | `tools/tui/widgets/tool_node.py` | `ToolNode` — one collapsible tool call, with `start()`, `finish()`, and `deny()`. |
 | `tools/tui/widgets/prompt.py` | `PromptInput` — the prompt line with Tab bound to completion — and `CommandMenu`, the list of offers above it. |
 | `tools/tui/widgets/artifacts.py` | Artifact browser modal screen. |
@@ -184,18 +186,21 @@ consumable by the benchmark harness.
 
 `run_session()` takes the user message, and keyword-only: the backend (from
 `tools/llm/`), the system prompt defaulting to `SYSTEM_PROMPT`, a turn ceiling
-defaulting to 20, an approver defaulting to the allow-everything one, and an
-optional session. It returns an iterator of events.
+defaulting to 20, an approver defaulting to the allow-everything one, an
+optional session, and the three interactive hooks of 4.4. It returns an
+iterator of events.
 
 ### 4.1 The event union
 
-Ten frozen dataclasses:
+Twelve frozen dataclasses:
 
 | Event | Fields |
 | --- | --- |
 | `SessionStarted` | `session_id`, `manifest_path`, `backend_spec`, `model` |
 | `TurnStarted` | `turn` |
 | `TextDelta` | `text` — streamed assistant text |
+| `ThinkingDelta` | `text` — streamed reasoning, where the provider reveals it |
+| `UserMessage` | `text`, `turn` — user text that entered the conversation after the session started |
 | `ToolCallProposed` | `call_id`, `name`, `arguments` |
 | `ToolCallStarted` | `call_id`, `name`, `arguments`, `cache_hit` |
 | `ToolCallFinished` | `call_id`, `name`, `result`, `artifacts`, `duration_ms` |
@@ -207,6 +212,12 @@ Ten frozen dataclasses:
 `ProtocolFault` carries the `FaultType` literal defined by the model port, so the
 TUI renders faults the port already detects rather than inventing a second
 taxonomy.
+
+`ThinkingDelta` is never merged into `TextDelta`. A model's working is a
+different kind of claim from its answer -- it may contradict the answer -- and
+a consumer that rendered them alike would let a discarded hypothesis read as a
+finding. A backend whose provider reveals nothing emits none, which says
+nothing about whether the model reasoned.
 
 **These are built by [model-backends.md](model-backends.md) Phase 0c**, not here.
 That document owns the engine's construction; this one owns its interface.
@@ -228,6 +239,39 @@ The engine keeps two behaviours that are load-bearing in `run()` today:
   identical failing call across turns.
 * **Saving the session after every tool call**, so a killed run still leaves a
   readable manifest.
+
+### 4.4 Staying in the loop while it runs
+
+Three optional callables, none of them required and none of them changing the
+loop when absent:
+
+| Hook | When | What it does |
+| --- | --- | --- |
+| `on_delta` | Inside `backend.complete()`, per chunk | Receives `TextDelta` and `ThinkingDelta` as they stream. |
+| `pending_input` | Top of every turn | Drained, and whatever it returns is merged into the conversation. |
+| `should_stop` | Top of every turn, and before each tool call | Ends the session at the next safe point. |
+
+**`on_delta` replaces the buffered deltas rather than duplicating them.** A
+generator cannot yield from a callback, so without it the engine buffers the
+chunks and emits them the moment `complete()` returns; with it, each delta goes
+straight to the callback and is not emitted again. Either way a delta is
+delivered exactly once, which is the property a consumer needs — one that
+rendered both would double every answer it showed.
+
+**A mid-run note joins the trailing user message.** That message is the one
+carrying the tool results, so the note arrives with them and after them. Two
+consecutive user messages are not a shape every provider accepts, and a note is
+an addition to what the user last said rather than a turn of its own. The
+`UserMessage` event names the turn it landed in, so a UI can stop calling it
+pending at the moment it stops being pending.
+
+**Stopping refuses the remaining tool calls rather than abandoning them.** Every
+`tool_use` needs a `tool_result` or the conversation cannot be sent again, so an
+interrupted call takes the denial path with reason `stopped by the user` and an
+`interrupted` error result. The session ends with outcome `interrupted`, and
+what it did up to that point resumes like any other saved session. A
+`should_stop` that raises is read as "keep going": a broken stop button must not
+be able to end a session.
 
 ---
 
@@ -287,10 +331,11 @@ you scroll. Artifact and session browsers are modal screens on keybindings and
 slash commands, so they get the whole terminal when invoked and cost nothing when
 not.
 
-The screen is a titled frame carrying the backend spec, a scrolling transcript of
-assistant text and tool-call nodes, an input line prompting for a question or a
-slash command, and a status bar showing turn count against the ceiling, token
-usage, artifact count, and the artifact- and session-browser keybindings.
+The screen is a titled frame carrying the backend spec, a scrolling transcript
+of questions, reasoning, assistant text and tool-call nodes, an input line
+prompting for a question or a slash command, and a status bar showing turn
+count against the ceiling, token usage, artifact count, the artifact- and
+session-browser keybindings, and — while a turn is running — how to stop it.
 
 The titled frame is `KeplerHeader`, docked at the top from the moment the
 application mounts: the wordmark as its border title, the tagline and the live
@@ -357,6 +402,35 @@ Spacing is set once in the application's CSS and read from the theme, never by
 padding strings with spaces: a transcript that aligns itself by hand stops
 aligning the moment a terminal is resized or a theme changes its border
 weight.
+
+### 7.3 The turn is something you are in, not something you wait out
+
+Four properties, each of them a consequence of the same thing: the person
+watching a run is the one best placed to correct it.
+
+**What you typed stays visible.** The input clears the moment you press enter,
+and an answer read without the question that produced it is a different claim.
+Every submission mounts a `UserEntry` that stays for the session.
+
+**Reasoning is shown where the provider reveals it**, in its own muted, marked
+block per turn — never styled like the answer (4.1). A four-minute plate solve
+with nothing on screen but a spinner has nothing to show for the wait, and the
+working is often the part worth reading. The console asks for it by default
+(`--thinking-budget`, 4096 tokens, `0` to switch it off).
+
+**The prompt never closes.** A console that locks the input until the model is
+finished makes a person wait to correct it until saying so no longer helps.
+What is typed mid-turn is queued, marked queued until the engine says it was
+delivered, and merged into the next turn (4.4). A note the session ended
+before taking is put back into the prompt rather than dropped — but only when
+the prompt is empty, so it cannot overwrite what is being typed instead.
+
+**Escape stops the turn.** At the next safe point, not instantly: the step in
+flight has to finish, and the transcript says so rather than pretending
+otherwise. What ran is saved and resumable.
+
+Streaming is live: the console passes `on_delta`, so text and reasoning reach
+the transcript as they arrive rather than in one block when the turn ends.
 
 ---
 
@@ -663,6 +737,22 @@ no daemon, no terminal.
 * **Painted output.** `tests/test_tui_transcript.py` asserts a finished tool
   call's name reaches `render_line(0)`. Every other test there reads widget
   state, which stayed correct throughout the blank-node defect in 7.1.1.
+* **Reasoning.** `tests/test_llm_anthropic_backend.py` covers the request (a
+  budget enables thinking and drops `temperature`, a budget under the floor is
+  raised, an output ceiling too small for one gets no reasoning), the stream
+  (reasoning reaches its own hook and never the answer), and the replay rule
+  (signed blocks on the continued turn only; an unsigned one dropped; a turn
+  whose blocks are gone runs without thinking rather than failing).
+  `tests/test_llm_openai_backend.py` covers both field names a compatible
+  server might use.
+* **Staying in the loop.** `tests/test_agent_engine.py` covers each hook:
+  `on_delta` receives the stream and it is not replayed; a mid-run note lands
+  in the tool-result message of the next turn and is announced with its turn
+  number; a stop ends the session with outcome `interrupted`, refuses the
+  pending call with a `tool_result` rather than abandoning it, and a
+  `should_stop` that raises cannot stop anything.
+  `tests/test_tui_app.py` drives the same four through the pilot, including
+  that a note the session never took comes back to the prompt.
 * **TUI.** Textual's headless pilot drives keypresses and asserts widget state.
   The interface is genuinely CI-testable.
 * **Rendering.** The capability probe against faked environments; the half-block

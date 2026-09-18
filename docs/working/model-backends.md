@@ -190,13 +190,14 @@ stores tuples.
 | Type | Fields | Notes |
 | --- | --- | --- |
 | `TextBlock` | `text` | |
+| `ThinkingBlock` | `text`, `signature` (default empty) | One run of revealed reasoning. `signature` is the provider's opaque attestation — see 4.8. |
 | `ToolCallBlock` | `call_id`, `name`, `arguments` | `arguments` is a parsed mapping, never a JSON string. |
 | `ToolResultBlock` | `call_id`, `name`, `content`, `is_error` (default false) | |
-| `Block` | union of the three above | |
+| `Block` | union of the four above | |
 | `Message` | `role` (`user` or `assistant`), `blocks` | **No `system` role.** |
 | `Usage` | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens` | All optional; absent means `None`, never `0`. |
 | `ProtocolFault` | `type`, `detail`, `tool_name`, `call_id` | `type` is the `FaultType` literal of section 4.6. |
-| `ModelResponse` | `text`, `tool_calls`, `stop_reason`, `usage`, `latency_ms`, `raw_stop_reason`, `faults` | `faults` defaults to empty, `raw_stop_reason` to `None`. |
+| `ModelResponse` | `text`, `thinking`, `tool_calls`, `stop_reason`, `usage`, `latency_ms`, `raw_stop_reason`, `faults` | `thinking` and `faults` default to empty, `raw_stop_reason` to `None`. |
 
 `StopReason` is the closed set `end_turn`, `tool_use`, `max_tokens`, `refusal`,
 `other`. `raw_stop_reason` preserves the provider's own string verbatim so
@@ -209,6 +210,12 @@ force every adapter to special-case index 0. There is no `role="system"`.
 
 **Nothing in this module imports `anthropic`, `httpx`, `openai`, or `google`.**
 That is testable and is tested.
+
+**Reasoning is never merged into `text`.** A model's working is a different
+kind of claim from its answer — it may contradict the answer — and a consumer
+that could not tell them apart would read a discarded hypothesis as a finding.
+`ThinkingBlock` is a `Block` and travels in `Message.blocks`, because a
+provider that signed its reasoning requires it back (4.8).
 
 ### 4.2 The protocol
 
@@ -425,6 +432,49 @@ The engine contract itself — the ten-event union, the approver callable, the
 consumers — is specified in [tui-harness.md](tui-harness.md) section 4, because
 that is the document whose interface depends on it. Phase 0c below states what
 this port must build against it.
+
+### 4.8 Revealed reasoning
+
+`complete()` takes a second streaming hook, `on_thinking`, on exactly the terms
+of `on_text`: a streaming provider calls it per chunk, a one-shot provider once
+at the end, and a provider that reveals nothing never calls it. `Capabilities`
+gains `thinking`, which describes **the adapter, not the model** — `False`
+means this port cannot read that provider's reasoning, not that the model did
+not reason.
+
+| Adapter | Where reasoning comes from |
+| --- | --- |
+| Anthropic | Extended thinking, asked for with `thinking_budget` and streamed as its own event type. Signed. |
+| OpenAI-compatible (incl. Ollama) | Whatever the server put in `reasoning_content` or `reasoning`. There is no standard field, so both are read. Unsigned. |
+| Gemini | Not read yet. Accepts the hook and never calls it. |
+
+Three consequences worth stating, because each one is a trade rather than a
+detail:
+
+**A thinking budget costs `temperature`.** The provider refuses extended
+thinking and an explicit temperature together. The adapter drops the
+temperature when a budget is set, and `temperature_supported` then reports
+`False` — so a benchmark run cannot claim the determinism of 6.5 while asking
+for reasoning. Thinking is therefore **off by default** everywhere except the
+console, which sets it deliberately.
+
+**A budget that will not fit is not sent.** The provider requires
+`max_tokens` to exceed the budget and the budget to clear its own floor
+(1024). A caller with a small output ceiling gets no reasoning instead of a
+rejected request: reasoning is an improvement on the answer, never a
+precondition for one.
+
+**Signed reasoning has to be replayed, and only where it is required.** When
+thinking is on, the provider demands the thinking blocks of the turn whose tool
+calls are being answered, signature intact, and discards them from every
+earlier turn. So the Anthropic renderer emits them for the **last** assistant
+message only — sending the rest would put a session's whole reasoning history
+on the wire each turn to be thrown away at the other end. A block with no
+signature is dropped rather than sent, since an unsigned one is refused. And if
+the turn being continued has no signed blocks at all — a session resumed from a
+manifest that lost them, or one that began with thinking off — the request is
+made **without** thinking rather than failing: a turn with no visible reasoning
+is a smaller loss than a turn that errors.
 
 ---
 

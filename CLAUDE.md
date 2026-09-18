@@ -215,9 +215,18 @@ state is retained between calls, and no tool writes state another tool reads.
 
 `tools/agent/` owns the headless agent loop and nothing else: `run_session()`
 (an iterator of events, with a `Decision` flowing back through an approver),
-the ten event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved verbatim
+the twelve event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved verbatim
 from `tools/runner.py` — `runner.py` re-exports it). It imports no UI toolkit.
 `tools/runner.py` is now a thin console shim over it.
+
+`run_session()` also takes three optional callables for an interactive caller,
+and behaves exactly as before without them: `on_delta` (receives `TextDelta`
+and `ThinkingDelta` live **instead of** their being emitted afterwards — a
+delta is delivered exactly once either way), `pending_input` (drained each turn
+and merged into the trailing user message, so a note typed mid-run arrives with
+the tool results), and `should_stop` (ends the session with outcome
+`interrupted`, refusing any pending tool call with a `tool_result` rather than
+leaving a `tool_use` unanswered).
 
 `tools/llm/` owns the provider-neutral **model port** and nothing else:
 neutral types, the `ModelBackend` protocol (`complete()` is the only required
@@ -236,6 +245,13 @@ the four adapters. Its rules:
 - The integer/number-or-null union is never downgraded to a plain scalar to
   make a weak model's life easier (`schema.py`); the string `"None"` is never
   coerced to `None` (`validation.py`).
+- **Revealed reasoning is never merged into assistant text.** `ThinkingBlock`
+  is a neutral block and `on_thinking` is its streaming hook, parallel to
+  `on_text`. Anthropic's is signed and must be replayed on the turn whose tool
+  calls are being answered — hence for the **last** assistant message only, and
+  never unsigned. Asking for a thinking budget costs `temperature`, which the
+  provider refuses alongside it, so thinking is **off by default** everywhere
+  but the console (`docs/working/model-backends.md` 4.8).
 
 `tools/bench/` owns the model benchmark harness and nothing else: the tool
 plane (`plane.py`), the fixture store (`fixtures.py`), the task loader
