@@ -205,7 +205,7 @@ identical function any other caller would import and run.
 | `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
 | `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
 | `tests/` | Python test suite | Algorithm-preservation and tool-smoke tests: bit-exact parity against recorded Skynet output, real FITS fixtures, and no-network coverage of the public `tools/` surface. See `tests/README.md`. |
-| `docs/` | Documentation | Reference documents at the top level, `docs/analysis/` for point-in-time reviews, `docs/working/` for in-progress plans, and one committed sample output in `docs/examples/`. `docs/README.md` is the map; [Architecture & Further Reading](#architecture--further-reading) lists what each one covers. |
+| `docs/` | Documentation | Reference documents at the top level, `docs/analysis/` for point-in-time reviews, `docs/benchmarking/` for the model benchmark, `docs/archive/` for completed track documents, `docs/working/` for in-progress plans, and one committed sample output in `docs/examples/`. `docs/README.md` is the map; [Architecture & Further Reading](#architecture--further-reading) lists what each one covers. |
 
 The consolidated extraction record in `docs/extraction.md` captures provenance,
 severed framework dependencies, known parity behaviors, dependency notes, and
@@ -228,6 +228,8 @@ Kepler/
     repository-folders.md        # per-folder guide
     pulsar-tool-pipeline.md      # the four-stage pulsar tool chain
     analysis/                    # point-in-time algorithm/design reviews
+    benchmarking/                # the model benchmark: design, results, figures
+    archive/                     # completed track documents, kept as records
     working/                     # in-progress plans
     examples/                    # one committed sample output
     assets/                      # the README banner
@@ -629,6 +631,10 @@ plate solving will not produce a solution.
   extracted Astromancer code behind each stage.
 - `docs/analysis/algorithm-remediation-plan.md` — the algorithm-review finding
   register and a proposed rollout for the defects pinned by the test suite.
+- `docs/benchmarking/README.md` — the model benchmark: what `tools/bench/`
+  measures, the 144-session sweep it produced, and the limits on reading it.
+- `docs/archive/README.md` — completed track documents, kept for the reasoning
+  a reference document has no room for. Records, not current state.
 - `tests/README.md` — what the test suite proves, its markers, and what it
   deliberately does not cover yet.
 

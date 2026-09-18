@@ -1,8 +1,8 @@
 # Working Documents
 
-Plans under active development. They describe intended work, not necessarily the
-current codebase. Each document states its **Status**, **Prerequisites**, and
-**Unblocks**.
+Plans under active development. They describe intended work, not necessarily
+the current codebase. Each document states its **Status**, **Prerequisites**,
+and **Unblocks**.
 
 There is **one document per track**. Each states the problem, the architecture
 that answers it, and the phased rollout that gets there — a track's design and
@@ -12,87 +12,41 @@ writes the code.
 
 ## Index
 
-| Track | Document | Status | Branch base | Prerequisites | Unblocks |
-| --- | --- | --- | --- | --- | --- |
-| Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
-| Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P7 complete; P8–P9 remain | `dev` | P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | The two asset-gated evidence gaps (NGC 5286 B from pixels, the ATLAS backend); the TUI stateless prerequisite is met |
-| Benchmark | [benchmark.md](benchmark.md) · results: [benchmark-results.md](benchmark-results.md) · full report: [benchmark-report.md](benchmark-report.md) | **Built and swept** — three backends over all 16 tasks, three repeats, 144 sessions | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
+**No tracks are in flight.** Every plan this folder carried has landed, and a
+completion audit on 2026-09-18 re-verified each one against `dev`: the default
+suite is green (2575 passed, 44 skipped), and the asset-gated evidence — the
+NGC 5286 B frames from pixels, the bounded M15 plate solve, the ATLAS backend
+against the operator UCAC5 tree, the local Girardi grid — was re-run rather
+than taken from the record.
 
-**The TUI track is done and its working document is gone.** Every phase (A–G)
-landed: the headless engine, the approval policy, the console, artifact
-rendering, session resume, backend and model selection, revealed reasoning, the
-interactive turn, and the retirement of `tools/runner.py` and
-`kepler-astro-query`. Per the lifecycle below, the durable outcome is now
-`docs/tool-architecture.md` section 10.2 and the working document was deleted;
-git history has it.
+| Track | Where it went | Finished |
+| --- | --- | --- |
+| Optical | [`../archive/optical-tools.md`](../archive/optical-tools.md) | 2026-09-16 (P8, the last phase) |
+| Model | [`../archive/model-backends.md`](../archive/model-backends.md) | 2026-09-09 (phases −1–3) |
+| Benchmark | [`../benchmarking/`](../benchmarking/README.md) — phases 4–5 of the model port, with its results, report and figures | 2026-09-14 (calibration gate) |
+| TUI | `../tool-architecture.md` section 10.2; working document deleted, git history has it | 2026-09-18 (phase G) |
 
-**The model track was implemented on `dev`** (the maintainer redirected the
-base from `main`, since `dev` carries the current plan and registry). Phases
-−1–3 are done — `tools/llm/` and `tools/agent/` exist, and the console drives
-them; the `tools/runner.py` shim that stood in between has been deleted.
-**The benchmark harness is the same track's second half, not a new track.**
-Phases 4–5 of the model port are what [benchmark.md](benchmark.md) plans and
-what `tools/bench/` now implements; `model-backends.md` section 9 deliberately
-left them unplanned until the port landed and the fault taxonomy was real
-rather than predicted. The two are one track in two documents —
-`model-backends.md` section 6 stays the design summary, `benchmark.md` is the
-architecture, the plan, and the record of what shipped. Every other branch here
-targets `dev`.
-
-Every phase of the benchmark rollout (4a–4d, 5a–5e) has landed. Eight of
-`model-backends.md`'s nine security requirements are implemented and tested;
-S1 is **retired** rather than satisfied — it confined the LLM judge, and the
-judge was removed (`benchmark.md` §7.5).
-
-**The calibration gate is met.** §7.1.9 makes a suite untrusted until it has
-been run against at least three backends of different tiers. Three have now run
-all sixteen tasks with three repeats each — `anthropic/claude-sonnet-5`,
-`ollama/qwen3.8:27b-mlx` and `ollama/qwen3.5:9b`, 144 sessions. The
-per-task results with figures and limits are
-[benchmark-results.md](benchmark-results.md); the generated report they select
-from is [benchmark-report.md](benchmark-report.md).
-
-Two limits keep this from being a finished track. Three of the four backends
-share one schema dialect, so dialect effects are not isolated; and the corpus
-was authored while watching the backend that now ranks first, which no test can
-fully rule out. Folding the durable outcome into a top-level `docs/` reference
-and deleting both working documents should wait for a second dialect.
-
-## Start here
-
-**[optical-tools.md](optical-tools.md), the approved closure rollout (phases
-P7–P8 remaining).**
-
-The stateless optical boundary and its TUI prerequisite have merged. P1 landed
-as PR #57, P2/P3 together as PR #59, P4 as PR #60, P5 as PR #62, P6 as PR #63
-and P7 as PR #64, so every phase that needed only the repository is done. What
-remains needs assets the repository does not carry: P8 the three NGC 5286 B
-frames, P9 an operator UCAC tree. The model and TUI tracks retain their own
-prerequisites; the phase table in `optical-tools.md` states the coordination
-constraints.
-
-## Implementation Sequence
-
-1. **The model port can proceed now**, independently. Its phases -1 to 3 build
-   `tools/llm/` and the headless engine in `tools/agent/`.
-2. **Optical P7–P8 close the remaining broken links.** P1 (pulsar periods),
-   P2/P3 (archive loop and documentation reconciliation), P4 (variable-star
-   port), P5 (local-grid HR diagram), P6 (WCS controls), and P9 (ATLAS
-   validation) have landed. P7 (APASS replay) and P8 (B-frame evidence) remain
-   independent at the code level.
-3. **The TUI track is complete.** Its phase A was owned by the model document
-   and landed there; the rest landed on `agent/tui-harness`.
-
-## What can run in parallel
-
-Optical closure phases may run in parallel when their modified files and asset
-gates do not overlap. The P2/P3 constraint is discharged — both changed the
-reference documents, so they were coordinated into one PR rather than landed
-serially. P1's system-prompt edit likewise landed against
-`tools/agent/prompt.py`, where model phase 0c moved it.
+The next plan goes here, and this table goes back to being a list of what is
+being worked on.
 
 ## Lifecycle
 
-When a track's work lands, fold the durable outcome into a reference document at
-the top level of `docs/`, then delete the working document. Git history preserves
-it. See [`../README.md`](../README.md) for how `docs/` is organized.
+When a track's work lands:
+
+1. Fold the durable outcome into a reference document at the top level of
+   `docs/` — that is the document that stays current against the code.
+2. Add an `Archived` block to the plan: when the track finished, what was
+   re-verified and how, and any statement in it that the repository has since
+   overtaken, marked inline where it sits rather than silently rewritten.
+3. Move it to [`../archive/`](../archive/README.md) and add its row there.
+
+A plan whose subject has its own folder — as the benchmark harness has
+[`../benchmarking/`](../benchmarking/README.md) — is archived beside its
+evidence instead, and `../archive/README.md` says so.
+
+**Archiving is not the same as deleting**, which is what this rule used to say.
+Git history preserves a deleted file, but only for someone who already knows it
+existed and what it was called; these documents carry reasoning that no
+reference document has room for. See `../archive/README.md`.
+
+See [`../README.md`](../README.md) for how `docs/` is organized.
