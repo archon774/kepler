@@ -19,22 +19,35 @@ _BRAILLE_DOTS = ((0x01, 0x02, 0x04, 0x40), (0x08, 0x10, 0x20, 0x80))
 
 
 def render_waveform(path: str | Path, *, width: int = 60) -> Text:
-    """Render PCM WAV amplitudes in ``width`` two-by-four braille cells."""
+    """Render PCM WAV amplitudes in ``width`` two-by-four braille cells.
+
+    Only the frames it draws are read. The preview picks evenly spaced frames
+    and seeks to each one, rather than decoding the file and then sampling
+    what it decoded: a preview is 120 numbers wide, and the bundled 10 MB
+    example alone cost 0.75 s and ~300 MB of Python floats that way -- on the
+    UI thread, where that is a frozen console. The chosen frames are the same
+    frames either way.
+    """
 
     if width < 1:
         raise ValueError("width must be positive")
 
+    count = width * 2
     with wave.open(str(path), "rb") as source:
         if source.getcomptype() != "NONE":
             raise ValueError("WAV preview requires uncompressed PCM audio")
         channels = source.getnchannels()
-        samples = _decode_pcm(source.readframes(source.getnframes()), source.getsampwidth())
+        sample_width = source.getsampwidth()
+        frames = source.getnframes()
+        if channels < 1:
+            raise ValueError("WAV must contain at least one channel")
+        if frames < 1:
+            return Text("No audio samples.")
+        points = [
+            _frame_amplitude(source, index * frames // count, channels, sample_width)
+            for index in range(count)
+        ]
 
-    if not samples:
-        return Text("No audio samples.")
-
-    amplitudes = _downmix(samples, channels)
-    points = _sample_points(amplitudes, width * 2)
     glyphs = []
     for index in range(0, len(points), 2):
         dots = _BRAILLE_DOTS[0][_amplitude_row(points[index])]
@@ -60,24 +73,21 @@ def _decode_pcm(raw: bytes, sample_width: int) -> list[float]:
     raise ValueError(f"Unsupported PCM sample width: {sample_width} bytes")
 
 
-def _downmix(samples: list[float], channels: int) -> list[float]:
-    """Average interleaved channels into one display-only amplitude stream."""
+def _frame_amplitude(
+    source: wave.Wave_read, position: int, channels: int, sample_width: int
+) -> float:
+    """The mean amplitude of one frame, read where it lies in the file.
 
-    if channels < 1:
-        raise ValueError("WAV must contain at least one channel")
-    return [
-        sum(samples[index : index + channels]) / channels
-        for index in range(0, len(samples), channels)
-    ]
+    A frame past the end -- a header that overstates its own length -- reads
+    as silence rather than raising: a truncated file should draw a short
+    waveform, not refuse to preview.
+    """
 
-
-def _sample_points(amplitudes: list[float], count: int) -> list[float]:
-    """Choose evenly spaced source samples for the available braille columns."""
-
-    return [
-        amplitudes[min(index * len(amplitudes) // count, len(amplitudes) - 1)]
-        for index in range(count)
-    ]
+    source.setpos(position)
+    samples = _decode_pcm(source.readframes(1), sample_width)
+    if not samples:
+        return 0.0
+    return sum(samples) / channels
 
 
 def _amplitude_row(value: float) -> int:
