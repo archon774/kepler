@@ -12,17 +12,19 @@ from textual.widgets import Input, OptionList, Static
 
 from tests.llm_fakes import StubBackend
 from tools import artifacts, config
+from tools.agent.approval import Decision
 from tools.agent.events import (
     SessionFinished,
     SessionStarted,
     TextDelta,
     ThinkingDelta,
+    ToolCallProposed,
 )
 from tools.agent.events import UserMessage as UserMessageEvent
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import ModelResponse, ToolCallBlock, ToolResultBlock
 from tools.tui import __main__ as tui_main
-from tools.tui.app import KeplerApp
+from tools.tui.app import ApprovalModal, KeplerApp
 from tools.tui.render.capability import GraphicsTier
 from tools.tui.commands import Suggestion
 from tools.tui.widgets.header import WORDMARK, KeplerHeader
@@ -1386,3 +1388,37 @@ def test_the_picker_does_not_mark_another_providers_model_as_current():
     assert _model_of("anthropic/claude-sonnet-5", "ollama") == ""
     assert _model_of("ollama/gemma4:12b", "ollama") == "gemma4:12b"
     assert _model_of(None, "ollama") == ""
+
+
+def test_quitting_with_an_approval_open_releases_the_worker_waiting_on_it():
+    """A thread worker blocked on a decision cannot be cancelled: nothing but
+    this interface sets that event, and Python joins its executor threads at
+    exit. Left unreleased, quitting with a modal open hangs the process."""
+
+    decisions: list[Decision] = []
+    finished = threading.Event()
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+
+        def worker() -> None:
+            decisions.append(
+                app._request_approval(ToolCallProposed("c1", "search_ads", {}))
+            )
+            finished.set()
+
+        async with app.run_test() as pilot:
+            thread = threading.Thread(target=worker, daemon=True)
+            thread.start()
+            async with asyncio.timeout(2):
+                while not isinstance(app.screen, ApprovalModal):
+                    await pilot.pause()
+            app.exit()
+            await pilot.pause()
+
+        assert finished.wait(timeout=3), "the worker was left blocked forever"
+        assert thread.join(timeout=3) is None and not thread.is_alive()
+
+    _run(scenario())
+
+    assert decisions == [Decision.DENY]

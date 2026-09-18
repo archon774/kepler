@@ -15,7 +15,7 @@ from textual.containers import Horizontal, Vertical
 from textual.message import Message as TextualMessage
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
-from textual.worker import Worker, WorkerState
+from textual.worker import Worker, WorkerState, get_current_worker
 
 from tools.agent.approval import Decision
 from tools.agent.engine import run_session
@@ -65,6 +65,21 @@ __all__ = ["ApprovalModal", "KeplerApp", "DEFAULT_THINKING_BUDGET"]
 DEFAULT_THINKING_BUDGET = 4096
 
 LOGGER = logging.getLogger(__name__)
+
+#: How often a worker waiting on an approval re-checks whether it has been
+#: cancelled. Short enough that quitting feels immediate, long enough that a
+#: modal left open overnight costs nothing.
+_APPROVAL_POLL_S = 0.2
+
+
+def _current_worker() -> Worker | None:
+    """The worker this thread belongs to, if it belongs to one."""
+
+    try:
+        return get_current_worker()
+    except Exception:
+        # Called from a plain thread, or from the UI thread in a test.
+        return None
 
 
 class ApprovalModal(ModalScreen[Decision]):
@@ -209,12 +224,14 @@ class KeplerApp(App[None]):
         self._history_ready = False
         self._artifact_directory: Path | None = None
         self._active_worker: Worker[None] | None = None
-        # Touched from the engine thread as well as the UI thread: the worker
-        # drains the queue between turns and reads the stop flag, while the
-        # person types into both from here.
+        # Guards both collections below, which the engine thread touches as
+        # well as the UI thread: the worker drains the queue between turns and
+        # registers itself as waiting for an approval, while the person types
+        # into the queue and answers the modal from here.
         self._queue_lock = threading.Lock()
         self._queued_input: list[str] = []
         self._stop_requested = False
+        self._pending_approvals: set[KeplerApp.ApprovalRequest] = set()
 
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
@@ -230,6 +247,21 @@ class KeplerApp(App[None]):
         """Start keyboard interaction in the prompt, not the transcript."""
 
         self.query_one("#prompt", Input).focus()
+
+    def on_unmount(self) -> None:
+        """Release every worker still waiting on a decision this UI owed it.
+
+        A thread worker blocked on an approval cannot be cancelled -- it is
+        blocked on an event only the interface sets, and the interface is
+        going away. Nothing would ever set it, and Python joins its executor
+        threads at exit, so quitting with a modal open would hang the process
+        rather than close it. Every pending request is answered ``DENY``: the
+        user is leaving, and a call they did not approve must not run.
+        """
+
+        for request in self._release_pending_approvals():
+            request.decision = Decision.DENY
+            request.ready.set()
 
     def on_kepler_app_engine_event(self, message: EngineEvent) -> None:
         """Render each worker event on Textual's UI thread."""
@@ -664,14 +696,40 @@ class KeplerApp(App[None]):
         self.query_one("#transcript", Transcript).append_notice(text)
 
     def _request_approval(self, proposed: ToolCallProposed) -> Decision:
+        """Block this worker until the UI answers -- or stops being able to.
+
+        The wait is polled rather than indefinite so a cancelled worker can
+        give up. ``App.exit`` cancels its workers, so this is what turns a
+        quit during an open modal into a denial and a clean shutdown.
+        """
+
         request = self.ApprovalRequest(proposed)
+        with self._queue_lock:
+            self._pending_approvals.add(request)
         self.post_message(request)
-        request.ready.wait()
+
+        worker = _current_worker()
+        while not request.ready.wait(timeout=_APPROVAL_POLL_S):
+            if worker is not None and worker.is_cancelled:
+                self._forget_approval(request)
+                return Decision.DENY
+        self._forget_approval(request)
         return request.decision
+
+    def _release_pending_approvals(self) -> tuple["KeplerApp.ApprovalRequest", ...]:
+        with self._queue_lock:
+            pending = tuple(self._pending_approvals)
+            self._pending_approvals.clear()
+        return pending
+
+    def _forget_approval(self, request: "KeplerApp.ApprovalRequest") -> None:
+        with self._queue_lock:
+            self._pending_approvals.discard(request)
 
     def _resolve_approval(
         self, request: ApprovalRequest, decision: Decision | None
     ) -> None:
+        self._forget_approval(request)
         request.decision = decision or Decision.DENY
         request.ready.set()
 
