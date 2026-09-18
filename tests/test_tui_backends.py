@@ -167,7 +167,7 @@ class _Probed:
 def test_open_backend_returns_a_backend_whose_service_answers():
     backend = _Probed("ollama/qwen3:8b", available=True)
 
-    opened = backends.open_backend("ollama/qwen3:8b", build=lambda spec: backend)
+    opened = backends.open_backend("ollama/qwen3:8b", build=lambda spec, **_: backend)
 
     assert opened is backend
     assert backend.probes == 1
@@ -177,7 +177,7 @@ def test_open_backend_refuses_a_backend_whose_service_is_silent():
     backend = _Probed("ollama/qwen3:8b", available=False)
 
     with pytest.raises(BackendUnavailableError) as excinfo:
-        backends.open_backend("ollama/qwen3:8b", build=lambda spec: backend)
+        backends.open_backend("ollama/qwen3:8b", build=lambda spec, **_: backend)
 
     # The endpoint variable, not a credential one: Ollama authenticates with
     # nothing, so "set your key" would be the wrong instruction.
@@ -206,7 +206,7 @@ def test_open_backend_refuses_a_model_the_running_service_does_not_hold():
     backend = _WithModels("ollama/qwen3:8b", ("gemma4:12b", "qwen3.5:9b"))
 
     with pytest.raises(backends.ModelNotInstalled) as excinfo:
-        backends.open_backend("ollama/qwen3:8b", build=lambda spec: backend)
+        backends.open_backend("ollama/qwen3:8b", build=lambda spec, **_: backend)
 
     assert excinfo.value.model == "qwen3:8b"
     assert excinfo.value.installed == ("gemma4:12b", "qwen3.5:9b")
@@ -215,7 +215,7 @@ def test_open_backend_refuses_a_model_the_running_service_does_not_hold():
 def test_open_backend_accepts_a_model_the_service_reports():
     backend = _WithModels("ollama/qwen3.5:9b", ("gemma4:12b", "qwen3.5:9b"))
 
-    assert backends.open_backend("ollama/qwen3.5:9b", build=lambda spec: backend) is backend
+    assert backends.open_backend("ollama/qwen3.5:9b", build=lambda spec, **_: backend) is backend
 
 
 def test_an_unaskable_model_listing_is_not_treated_as_an_empty_one():
@@ -224,7 +224,7 @@ def test_an_unaskable_model_listing_is_not_treated_as_an_empty_one():
 
     backend = _WithModels("ollama/qwen3:8b", ())
 
-    assert backends.open_backend("ollama/qwen3:8b", build=lambda spec: backend) is backend
+    assert backends.open_backend("ollama/qwen3:8b", build=lambda spec, **_: backend) is backend
 
 
 def test_unavailable_message_for_a_missing_model_names_what_is_installed():
@@ -260,11 +260,11 @@ def test_open_backend_leaves_a_backend_without_a_probe_alone():
 
     backend = _Unprobeable()
 
-    assert backends.open_backend("anthropic/claude-sonnet-5", build=lambda spec: backend) is backend
+    assert backends.open_backend("anthropic/claude-sonnet-5", build=lambda spec, **_: backend) is backend
 
 
 def test_open_backend_propagates_a_construction_failure_unchanged():
-    def build(spec: str):
+    def build(spec: str, **_):
         raise BackendUnavailableError("ANTHROPIC_API_KEY")
 
     with pytest.raises(BackendUnavailableError) as excinfo:

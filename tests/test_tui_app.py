@@ -12,7 +12,13 @@ from textual.widgets import Input, Static
 
 from tests.llm_fakes import StubBackend
 from tools import artifacts, config
-from tools.agent.events import SessionFinished, SessionStarted, TextDelta
+from tools.agent.events import (
+    SessionFinished,
+    SessionStarted,
+    TextDelta,
+    ThinkingDelta,
+)
+from tools.agent.events import UserMessage as UserMessageEvent
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import ModelResponse, ToolCallBlock, ToolResultBlock
 from tools.tui import __main__ as tui_main
@@ -21,7 +27,7 @@ from tools.tui.render.capability import GraphicsTier
 from tools.tui.commands import Suggestion
 from tools.tui.widgets.header import WORDMARK, KeplerHeader
 from tools.tui.widgets.prompt import CommandMenu
-from tools.tui.widgets.transcript import Transcript
+from tools.tui.widgets.transcript import ThoughtBlock, Transcript, UserEntry
 
 
 def _run(coroutine):
@@ -810,7 +816,7 @@ def test_failed_resume_keeps_the_prior_session_artifact_directory(
 def test_main_builds_the_requested_backend_and_runs_the_app(monkeypatch):
     backend = object()
     created: list[KeplerApp] = []
-    monkeypatch.setattr(tui_main, "open_backend", lambda spec: backend)
+    monkeypatch.setattr(tui_main, "open_backend", lambda spec, **_: backend)
     monkeypatch.setattr(tui_main.KeplerApp, "run", lambda self: created.append(self))
     monkeypatch.setattr(sys, "argv", ["kepler", "--backend", "stub/model"])
 
@@ -825,7 +831,9 @@ def test_main_shows_a_configuration_error_for_an_unavailable_backend(
     monkeypatch.setattr(
         tui_main,
         "open_backend",
-        lambda spec: (_ for _ in ()).throw(BackendUnavailableError("OPENAI_API_KEY")),
+        lambda spec, **_: (_ for _ in ()).throw(
+            BackendUnavailableError("OPENAI_API_KEY")
+        ),
     )
     monkeypatch.setattr(sys, "argv", ["kepler", "--backend", "openai/gpt-4.1"])
 
@@ -874,7 +882,7 @@ def test_backend_command_switches_the_session_and_retitles_the_header(monkeypatc
         from tools.tui import app as app_module
 
         replacement = SimpleNamespace(spec="ollama/qwen3:8b")
-        monkeypatch.setattr(app_module, "open_backend", lambda spec: replacement)
+        monkeypatch.setattr(app_module, "open_backend", lambda spec, **_: replacement)
 
         app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
@@ -895,7 +903,7 @@ def test_a_refused_backend_leaves_the_session_on_the_one_that_answers(monkeypatc
     async def scenario() -> None:
         from tools.tui import app as app_module
 
-        def refuse(spec: str):
+        def refuse(spec: str, **_):
             raise BackendUnavailableError("OLLAMA_BASE_URL")
 
         monkeypatch.setattr(app_module, "open_backend", refuse)
@@ -920,7 +928,7 @@ def test_an_unknown_backend_name_is_refused_without_building_anything(monkeypatc
     async def scenario() -> None:
         from tools.tui import app as app_module
 
-        def explode(spec: str):  # pragma: no cover - must never run
+        def explode(spec: str, **_):  # pragma: no cover - must never run
             raise AssertionError("resolution should have refused first")
 
         monkeypatch.setattr(app_module, "open_backend", explode)
@@ -949,7 +957,7 @@ def test_a_switch_is_refused_while_a_turn_is_still_running(monkeypatch):
     async def scenario() -> None:
         from tools.tui import app as app_module
 
-        def explode(spec: str):  # pragma: no cover - must never run
+        def explode(spec: str, **_):  # pragma: no cover - must never run
             raise AssertionError("a running turn must not be switched under")
 
         release = threading.Event()
@@ -1021,7 +1029,9 @@ def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
     monkeypatch.delenv("KEPLER_MODEL_BACKEND", raising=False)
     monkeypatch.setattr(sys, "argv", ["kepler"])
     monkeypatch.setattr(tui_main, "load_dotenv", lambda: ())
-    monkeypatch.setattr(tui_main, "open_backend", lambda spec: launched.setdefault("spec", spec))
+    monkeypatch.setattr(
+        tui_main, "open_backend", lambda spec, **_: launched.setdefault("spec", spec)
+    )
     monkeypatch.setattr(
         tui_main, "KeplerApp", lambda **kwargs: type("Stub", (), {"run": lambda self: launched.setdefault("ran", True)})()
     )
@@ -1100,3 +1110,157 @@ def test_the_completion_menu_counts_the_offers_it_cannot_show():
 
     assert rendered.count("\n") == CommandMenu.MAX_ROWS
     assert "… 3 more" in rendered
+
+
+def test_what_you_typed_stays_visible_after_you_send_it(monkeypatch):
+    """An answer read without the question that produced it is a different
+    claim, and the input clears the moment you press enter."""
+
+    from tools.tui import app as app_module
+
+    monkeypatch.setattr(
+        app_module, "run_session", lambda text, **_: iter((TextDelta(text="ok"),))
+    )
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            app.query_one("#prompt", Input).value = "resolve M31"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            entries = app.query_one("#transcript", Transcript).query(UserEntry)
+            assert [entry.text for entry in entries] == ["resolve M31"]
+
+    _run(scenario())
+
+
+def test_a_message_typed_mid_turn_is_queued_and_then_marked_delivered(monkeypatch):
+    from tools.tui import app as app_module
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_run_session(text, **kwargs):
+        started.set()
+        release.wait(timeout=2)
+        yield TextDelta(text="ok")
+
+    monkeypatch.setattr(app_module, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            transcript = app.query_one("#transcript", Transcript)
+            prompt = app.query_one("#prompt", Input)
+            try:
+                prompt.value = "first"
+                await pilot.press("enter")
+                async with asyncio.timeout(2):
+                    while not started.is_set():
+                        await pilot.pause()
+
+                prompt.value = "also check the 60 Hz line"
+                await pilot.press("enter")
+                await pilot.pause()
+
+                queued = transcript.query(UserEntry).last()
+                assert queued.pending is True
+                assert "queued" in str(queued.render())
+
+                transcript.handle_event(
+                    UserMessageEvent(text="also check the 60 Hz line", turn=2)
+                )
+                await pilot.pause()
+                assert queued.pending is False
+                assert "queued" not in str(queued.render())
+            finally:
+                release.set()
+
+            worker = app._active_worker
+            async with asyncio.timeout(2):
+                while worker is not None and not worker.is_finished:
+                    await pilot.pause()
+
+    _run(scenario())
+
+
+def test_escape_asks_the_running_loop_to_stop_and_the_status_bar_says_so(monkeypatch):
+    from tools.tui import app as app_module
+
+    started = threading.Event()
+    release = threading.Event()
+    stopped: list[bool] = []
+
+    def fake_run_session(text, **kwargs):
+        started.set()
+        release.wait(timeout=2)
+        stopped.append(kwargs["should_stop"]())
+        yield TextDelta(text="ok")
+
+    monkeypatch.setattr(app_module, "run_session", fake_run_session)
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            try:
+                app.query_one("#prompt", Input).value = "first"
+                await pilot.press("enter")
+                async with asyncio.timeout(2):
+                    while not started.is_set():
+                        await pilot.pause()
+
+                assert "esc stop" in str(app.query_one("#status").render())
+                await pilot.press("escape")
+                await pilot.pause()
+                assert "stopping" in str(app.query_one("#status").render())
+            finally:
+                release.set()
+
+            worker = app._active_worker
+            async with asyncio.timeout(2):
+                while worker is not None and not worker.is_finished:
+                    await pilot.pause()
+
+    _run(scenario())
+
+    assert stopped == [True]
+
+
+def test_a_note_the_session_never_took_comes_back_to_the_prompt():
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            app._queued_input.append("and the 60 Hz line")
+            app.post_message(
+                KeplerApp.EngineEvent(
+                    SessionFinished(outcome="end_turn", manifest_path="/tmp/m.json")
+                )
+            )
+            await pilot.pause()
+
+            assert app.query_one("#prompt", Input).value == "and the 60 Hz line"
+            assert "ended before your note was delivered" in _transcript_text(app)
+
+    _run(scenario())
+
+
+def test_reasoning_renders_apart_from_the_answer():
+    """A discarded hypothesis rendered like a finding is how a transcript
+    misleads, so the two are different widgets."""
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            transcript = app.query_one("#transcript", Transcript)
+            transcript.handle_event(ThinkingDelta(text="Weighing two catalogs."))
+            transcript.handle_event(TextDelta(text="APASS."))
+            await pilot.pause()
+
+            thought = transcript.query_one(ThoughtBlock)
+            assert thought.thinking == "Weighing two catalogs."
+            assert "thinking" in str(thought.render())
+            assert transcript.assistant_text == "APASS."
+            assert "Weighing" not in transcript.assistant_text
+
+    _run(scenario())

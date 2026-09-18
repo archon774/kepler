@@ -14,7 +14,13 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import OptionList, Static
 
-from tools.llm.types import Message, TextBlock, ToolCallBlock, ToolResultBlock
+from tools.llm.types import (
+    Message,
+    TextBlock,
+    ThinkingBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 from tools.models import ArtifactMetadata
 from tools.workspace import describe_session, list_sessions
 
@@ -182,6 +188,17 @@ def _history_from_records(value: Any) -> list[Message]:
                     TextBlock(text=_bounded_history_text(block["text"]))
                 )
             elif (
+                block_type == "thinking"
+                and isinstance(block.get("text"), str)
+                and isinstance(block.get("signature"), str)
+            ):
+                restored_blocks.append(
+                    ThinkingBlock(
+                        text=_bounded_history_text(block["text"]),
+                        signature=_bounded_history_text(block["signature"]),
+                    )
+                )
+            elif (
                 block_type == "tool_call"
                 and isinstance(block.get("call_id"), str)
                 and isinstance(block.get("name"), str)
@@ -312,13 +329,22 @@ def _validate_history_protocol(history: list[Message]) -> None:
             if index + 1 == len(history):
                 raise ValueError("session manifest history has an unpaired tool call")
             results = history[index + 1]
-            if results.role != "user" or not all(
-                isinstance(block, ToolResultBlock) for block in results.blocks
+            # Tool results first, then any notes the user typed while the turn
+            # was running: the engine merges a mid-run message into this one
+            # rather than opening a user turn of its own.
+            returned = [
+                block for block in results.blocks if isinstance(block, ToolResultBlock)
+            ]
+            trailing = results.blocks[len(returned):]
+            if (
+                results.role != "user"
+                or len(returned) != len(results.blocks) - len(trailing)
+                or not all(isinstance(block, TextBlock) for block in trailing)
             ):
                 raise ValueError("session manifest history has an unpaired tool call")
-            if len(calls) != len(results.blocks):
+            if len(calls) != len(returned):
                 raise ValueError("session manifest history has an unpaired tool call")
-            for call, result in zip(calls, results.blocks):
+            for call, result in zip(calls, returned):
                 if call.call_id != result.call_id or call.name != result.name:
                     raise ValueError("session manifest tool result does not match its call")
             index += 2
@@ -326,7 +352,9 @@ def _validate_history_protocol(history: list[Message]) -> None:
                 raise ValueError("session manifest history has an invalid message order")
             continue
 
-        if not all(isinstance(block, TextBlock) for block in message.blocks):
+        if not all(
+            isinstance(block, (TextBlock, ThinkingBlock)) for block in message.blocks
+        ):
             raise ValueError("session manifest history has an invalid assistant message")
         index += 1
         if index < len(history) and history[index].role != "user":

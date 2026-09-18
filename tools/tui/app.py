@@ -29,6 +29,7 @@ from tools.agent.events import (
     TurnFinished,
     TurnStarted,
 )
+from tools.agent.events import UserMessage as UserMessageEvent
 from tools.agent.policy import SessionPolicy, policy_approver
 from tools.llm.base import BackendUnavailableError
 from tools.llm.types import Message, TextBlock
@@ -52,7 +53,13 @@ from tools.workspace import describe_session, list_artifacts, list_sessions
 if TYPE_CHECKING:
     from tools.llm.base import ModelBackend
 
-__all__ = ["ApprovalModal", "KeplerApp"]
+__all__ = ["ApprovalModal", "KeplerApp", "DEFAULT_THINKING_BUDGET"]
+
+#: What the console asks a provider to spend on reasoning it will show.
+#: Enabled by default: a research console whose model works silently for four
+#: minutes has nothing to show for the wait, and the working is often the part
+#: worth reading. ``--thinking-budget 0`` turns it off.
+DEFAULT_THINKING_BUDGET = 4096
 
 LOGGER = logging.getLogger(__name__)
 
@@ -116,6 +123,7 @@ class KeplerApp(App[None]):
     BINDINGS = [
         Binding("f3", "show_artifacts", "Artifacts"),
         Binding("f4", "show_sessions", "Sessions"),
+        Binding("escape", "interrupt", "Stop the turn"),
     ]
 
     CSS = """
@@ -182,10 +190,12 @@ class KeplerApp(App[None]):
         *,
         max_turns: int = 20,
         graphics_tier: GraphicsTier | None = None,
+        thinking_budget: int | None = DEFAULT_THINKING_BUDGET,
     ) -> None:
         super().__init__()
         self.backend = backend
         self.max_turns = max_turns
+        self.thinking_budget = thinking_budget
         self.sub_title = spec_of(backend)
         self.engine_starts = 0
         self.current_turn = 0
@@ -196,6 +206,12 @@ class KeplerApp(App[None]):
         self._history_ready = False
         self._artifact_directory: Path | None = None
         self._active_worker: Worker[None] | None = None
+        # Touched from the engine thread as well as the UI thread: the worker
+        # drains the queue between turns and reads the stop flag, while the
+        # person types into both from here.
+        self._queue_lock = threading.Lock()
+        self._queued_input: list[str] = []
+        self._stop_requested = False
 
     def compose(self) -> ComposeResult:
         """Build the minimal, full-screen console shell."""
@@ -225,7 +241,9 @@ class KeplerApp(App[None]):
             self.token_usage = event.usage
         elif isinstance(event, ToolCallFinished):
             self.artifact_count += len(event.artifacts)
-        self.query_one("#status", Static).update(self._status_text())
+        elif isinstance(event, SessionFinished):
+            self._return_undelivered_input()
+        self._refresh_status()
 
     def on_kepler_app_approval_request(self, request: ApprovalRequest) -> None:
         """Display a modal and unblock the worker when the user answers."""
@@ -259,9 +277,12 @@ class KeplerApp(App[None]):
         parsed = parse_input(event.value)
         event.input.value = ""
         if parsed.kind == "message":
-            if self._session_running():
-                self._append_transcript("A session is already running.")
+            if not parsed.text.strip():
                 return
+            if self._session_running():
+                self.queue_for_running_session(parsed.text)
+                return
+            self.query_one("#transcript", Transcript).append_user(parsed.text)
             self.run_prompt(parsed.text, history=self._history)
             return
         if parsed.kind == "unknown":
@@ -276,14 +297,24 @@ class KeplerApp(App[None]):
     def run_prompt(
         self, text: str, *, history: tuple["Message", ...] = ()
     ) -> Worker[None]:
-        """Start one engine session and keep the prompt unavailable until it ends."""
+        """Start one engine session, leaving the prompt open while it runs.
+
+        The prompt stays live for the whole turn. A person watching a tool
+        chain is the person best placed to correct it, and a console that
+        locks the input until the model is finished makes them wait to say so
+        until saying it no longer helps.
+        """
 
         if self._session_running():
             return self._active_worker
-        self.query_one("#prompt", Input).disabled = True
         self._history_ready = False
+        self._stop_requested = False
         worker = self._run_prompt(text, history=history)
         self._active_worker = worker
+        # The status bar carries how to stop a running turn, so it has to be
+        # redrawn when one starts -- not only when the first event arrives,
+        # which on a slow first token is many seconds later.
+        self._refresh_status()
         return worker
 
     @work(thread=True)
@@ -301,6 +332,9 @@ class KeplerApp(App[None]):
                 max_turns=self.max_turns,
                 approver=policy_approver(policy),
                 history=history,
+                on_delta=self._post_delta,
+                pending_input=self._take_queued_input,
+                should_stop=self._stop_is_requested,
             ):
                 if isinstance(event, TextDelta):
                     assistant_text.append(event.text)
@@ -343,10 +377,77 @@ class KeplerApp(App[None]):
             in {WorkerState.CANCELLED, WorkerState.ERROR, WorkerState.SUCCESS}
         ):
             self._active_worker = None
+            self._refresh_status()
             if message.state is WorkerState.SUCCESS:
                 self._finish_prompt_if_ready()
             else:
                 self._restore_prompt()
+
+    def queue_for_running_session(self, text: str) -> None:
+        """Hand a mid-turn note to the running loop, and say it is waiting.
+
+        It is delivered at the next turn boundary, alongside the tool results
+        of the turn in flight, rather than starting a second conversation. The
+        entry says "queued" until the engine reports it delivered, because a
+        note that looks sent but is not is worse than one that looks queued.
+        """
+
+        with self._queue_lock:
+            self._queued_input.append(text)
+        self.query_one("#transcript", Transcript).append_user(text, pending=True)
+
+    def action_interrupt(self) -> None:
+        """Ask the running loop to stop at its next safe point."""
+
+        if not self._session_running():
+            return
+        if self._stop_requested:
+            return
+        self._stop_requested = True
+        self._append_transcript(
+            "Stopping — the step in flight has to finish first."
+        )
+        self._refresh_status()
+
+    def _post_delta(self, event: Event) -> None:
+        """Carry one streamed delta from the engine thread to the UI.
+
+        The same message the buffered events travel on, so a delta rendered
+        live and a delta replayed afterwards reach the transcript by exactly
+        one path.
+        """
+
+        self.post_message(self.EngineEvent(event))
+
+    def _take_queued_input(self) -> tuple[str, ...]:
+        """Hand the engine everything typed since the last turn, and forget it."""
+
+        with self._queue_lock:
+            notes = tuple(self._queued_input)
+            self._queued_input.clear()
+        return notes
+
+    def _stop_is_requested(self) -> bool:
+        return self._stop_requested
+
+    def _return_undelivered_input(self) -> None:
+        """Give back a note the session ended before it could take.
+
+        Into the prompt, not into the void: the person wrote it and the loop
+        never saw it. It is only put back when the prompt is empty, so it
+        cannot overwrite whatever they have started typing since.
+        """
+
+        notes = self._take_queued_input()
+        if not notes:
+            return
+        prompt = self.query_one("#prompt", Input)
+        self._append_transcript(
+            "The session ended before your note was delivered."
+        )
+        if not prompt.value:
+            prompt.value = " ".join(notes)
+            prompt.cursor_position = len(prompt.value)
 
     def show_help(self, args: tuple[str, ...]) -> None:
         """Render generated command help in the transcript."""
@@ -384,7 +485,7 @@ class KeplerApp(App[None]):
             return
 
         try:
-            backend = open_backend(spec)
+            backend = open_backend(spec, thinking_budget=self.thinking_budget)
         except BackendUnavailableError as exc:
             self._append_transcript(
                 unavailable_message(
@@ -513,6 +614,9 @@ class KeplerApp(App[None]):
         prompt.disabled = False
         prompt.focus()
 
+    def _refresh_status(self) -> None:
+        self.query_one("#status", Static).update(self._status_text())
+
     def _append_transcript(self, text: str) -> None:
         self.query_one("#transcript", Transcript).append_notice(text)
 
@@ -543,4 +647,6 @@ class KeplerApp(App[None]):
                 "F4 sessions",
             ]
         )
+        if self._session_running():
+            parts.append("stopping" if self._stop_requested else "esc stop")
         return " • ".join(parts)

@@ -156,8 +156,16 @@ def test_allow_always_is_requested_again_for_a_new_prompt_session(monkeypatch):
     assert asked == ["first", "second"]
 
 
-def test_prompt_stays_disabled_until_its_engine_worker_finishes(monkeypatch):
-    """A second submission cannot start a competing synchronous engine session."""
+def test_a_second_submission_is_queued_rather_than_starting_a_second_session(
+    monkeypatch,
+):
+    """The prompt stays open mid-turn, and what is typed into it waits.
+
+    A person watching a tool chain is the one best placed to correct it, so
+    the input is never locked; but only one synchronous engine session may
+    run at a time, so the second message is handed to the loop already
+    running instead of starting a competing one.
+    """
 
     from textual.widgets import Input
     from tools.tui import app as tui_app
@@ -165,12 +173,14 @@ def test_prompt_stays_disabled_until_its_engine_worker_finishes(monkeypatch):
     started = threading.Event()
     release = threading.Event()
     calls: list[str] = []
+    drained: list[tuple[str, ...]] = []
 
-    def fake_run_session(text, **_kwargs):
+    def fake_run_session(text, **kwargs):
         calls.append(text)
         if text == "first":
             started.set()
             release.wait(timeout=2)
+            drained.append(tuple(kwargs["pending_input"]()))
         yield TextDelta(text=text)
 
     monkeypatch.setattr(tui_app, "run_session", fake_run_session)
@@ -186,7 +196,7 @@ def test_prompt_stays_disabled_until_its_engine_worker_finishes(monkeypatch):
                     while not started.is_set():
                         await pilot.pause()
 
-                assert prompt.disabled is True
+                assert prompt.disabled is False
                 prompt.value = "second"
                 await pilot.press("enter")
                 await pilot.pause()
@@ -194,11 +204,14 @@ def test_prompt_stays_disabled_until_its_engine_worker_finishes(monkeypatch):
             finally:
                 release.set()
 
+            worker = app._active_worker
             async with asyncio.timeout(2):
-                while prompt.disabled:
+                while worker is not None and not worker.is_finished:
                     await pilot.pause()
 
     _run(scenario())
+
+    assert drained == [("second",)]
 
 
 def test_approval_request_opens_a_modal_and_releases_the_waiting_worker():

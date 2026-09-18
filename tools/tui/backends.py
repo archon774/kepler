@@ -155,9 +155,16 @@ def names() -> tuple[str, ...]:
 
 
 def open_backend(
-    spec: str, *, build: Callable[..., ModelBackend] = build_backend
+    spec: str,
+    *,
+    build: Callable[..., ModelBackend] = build_backend,
+    thinking_budget: int | None = None,
 ) -> ModelBackend:
     """Build the backend named by ``spec`` and refuse to return a dead one.
+
+    ``thinking_budget`` asks the provider to reveal its reasoning; it reaches
+    the factory unexamined, because which providers take a budget is the
+    factory's business and not this module's.
 
     ``.env`` is re-read first, so a key added to the file while the console is
     open takes effect on the next ``/backend`` without a restart. It never
@@ -169,7 +176,7 @@ def open_backend(
     """
 
     load_dotenv()
-    backend = build(spec)
+    backend = build(spec, thinking_budget=thinking_budget)
 
     _require_service(backend, spec)
     _require_model(backend, spec)

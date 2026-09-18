@@ -8,7 +8,7 @@ import sys
 
 from tools.config import load_dotenv
 from tools.llm.base import BackendUnavailableError
-from tools.tui.app import KeplerApp
+from tools.tui.app import DEFAULT_THINKING_BUDGET, KeplerApp
 from tools.tui.backends import (
     CHOICES,
     UnknownBackendError,
@@ -32,6 +32,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--max-turns", type=int, default=20)
+    parser.add_argument(
+        "--thinking-budget",
+        type=int,
+        default=DEFAULT_THINKING_BUDGET,
+        help=(
+            "Tokens the model may spend on reasoning the console will show. "
+            "0 turns it off; providers that reveal reasoning without being "
+            "asked still do."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -80,8 +90,10 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
+    thinking_budget = args.thinking_budget if args.thinking_budget > 0 else None
+
     try:
-        backend = open_backend(spec)
+        backend = open_backend(spec, thinking_budget=thinking_budget)
     except BackendUnavailableError as exc:
         print(unavailable_message(spec, exc), file=sys.stderr)
         return 2
@@ -89,7 +101,11 @@ def main() -> int:
         print(f"Cannot start on {spec}: {exc}", file=sys.stderr)
         return 2
 
-    KeplerApp(backend=backend, max_turns=args.max_turns).run()
+    KeplerApp(
+        backend=backend,
+        max_turns=args.max_turns,
+        thinking_budget=thinking_budget,
+    ).run()
     return 0
 
 

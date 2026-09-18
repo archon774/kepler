@@ -9,7 +9,12 @@ import pytest
 from textual.widgets import OptionList
 
 from tools.artifacts import describe_artifact_file
-from tools.llm.types import TextBlock, ToolCallBlock, ToolResultBlock
+from tools.llm.types import (
+    TextBlock,
+    ThinkingBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 from tools.tui.widgets.sessions import history_from_manifest
 
 
@@ -288,3 +293,77 @@ def test_session_browser_lists_manifest_metadata_and_selects_the_session(
             assert app.engine_starts == 0
 
     _run(scenario())
+
+
+def test_history_from_manifest_restores_signed_reasoning_and_a_mid_run_note():
+    """Both are shapes the engine now records: a signed thinking block the
+    provider will demand back, and a note typed while the turn ran, which the
+    engine merges into the message carrying the tool results."""
+
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+            {
+                "role": "assistant",
+                "blocks": [
+                    {"type": "thinking", "text": "NED resolves this.", "signature": "sig"},
+                    {
+                        "type": "tool_call",
+                        "call_id": "t1",
+                        "name": "search_ned",
+                        "arguments": {"name": "M31"},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "blocks": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "t1",
+                        "name": "search_ned",
+                        "content": "{}",
+                        "is_error": False,
+                    },
+                    {"type": "text", "text": "also check the redshift"},
+                ],
+            },
+        ],
+    }
+
+    history = history_from_manifest(manifest)
+
+    assert history[1].blocks[0] == ThinkingBlock(text="NED resolves this.", signature="sig")
+    assert [type(block).__name__ for block in history[2].blocks] == [
+        "ToolResultBlock",
+        "TextBlock",
+    ]
+
+
+def test_history_from_manifest_still_rejects_a_result_message_that_answers_nothing():
+    """Trailing notes are allowed; a missing result is not."""
+
+    manifest = {
+        "user_message": "Find M31.",
+        "turns": [],
+        "history": [
+            {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+            {
+                "role": "assistant",
+                "blocks": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "t1",
+                        "name": "search_ned",
+                        "arguments": {"name": "M31"},
+                    },
+                ],
+            },
+            {"role": "user", "blocks": [{"type": "text", "text": "never mind"}]},
+        ],
+    }
+
+    with pytest.raises(ValueError, match="unpaired tool call"):
+        history_from_manifest(manifest)
