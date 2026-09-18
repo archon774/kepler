@@ -396,6 +396,21 @@ class KeplerApp(App[None]):
         policy = SessionPolicy(self._request_approval)
         assistant_text: list[str] = []
         manifest_path: Path | None = None
+
+        def stream(event: Event) -> None:
+            """Carry one streamed delta to the UI, keeping the answer text.
+
+            The text is collected here and not from the event loop below
+            because passing ``on_delta`` is what stops the engine emitting
+            these events there at all. It is only ever read by the fallback
+            at the end of this method, which needs the answer when the
+            manifest that would have carried it cannot be re-read.
+            """
+
+            if isinstance(event, TextDelta):
+                assistant_text.append(event.text)
+            self._post_delta(event)
+
         try:
             for event in run_session(
                 text,
@@ -403,13 +418,11 @@ class KeplerApp(App[None]):
                 max_turns=self.max_turns,
                 approver=policy_approver(policy),
                 history=history,
-                on_delta=self._post_delta,
+                on_delta=stream,
                 pending_input=self._take_queued_input,
                 should_stop=self._stop_is_requested,
             ):
-                if isinstance(event, TextDelta):
-                    assistant_text.append(event.text)
-                elif isinstance(event, SessionFinished):
+                if isinstance(event, SessionFinished):
                     manifest_path = Path(event.manifest_path)
                 self.post_message(self.EngineEvent(event))
         except Exception as exc:
@@ -418,6 +431,11 @@ class KeplerApp(App[None]):
             LOGGER.warning("Agent engine worker stopped: %s", type(exc).__name__)
             self.post_message(self.EngineFailed())
 
+        # The manifest is the faithful record -- it carries the tool calls and
+        # their results, which this method never sees. The text below is the
+        # fallback for a manifest that cannot be read back: a follow-up
+        # question that remembers the answer but not the working beats one
+        # that remembers neither.
         if manifest_path is not None:
             try:
                 completed_history = history_from_manifest(describe_session(manifest_path))

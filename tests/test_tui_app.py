@@ -1448,3 +1448,37 @@ def test_a_huge_argument_is_truncated_rather_than_reshaping_the_dialog():
 
     assert len(rendered) < 2_100
     assert rendered.endswith("… truncated")
+
+
+def test_an_unreadable_manifest_still_leaves_the_answer_in_the_history(monkeypatch):
+    """The fallback the review found dead. The manifest is the faithful
+    record; when it cannot be read back, a follow-up that remembers the answer
+    but not the working beats one that remembers neither."""
+
+    from tools.tui import app as app_module
+
+    def unreadable(path):
+        raise OSError("manifest gone")
+
+    monkeypatch.setattr(app_module, "describe_session", unreadable)
+
+    async def scenario() -> None:
+        backend = StubBackend(
+            [ModelResponse(stop_reason="end_turn", text="M31 is Andromeda.")]
+        )
+        app = KeplerApp(backend=backend)
+        async with app.run_test() as pilot:
+            worker = app.run_prompt("what is M31?")
+            async with asyncio.timeout(2):
+                while not worker.is_finished:
+                    await pilot.pause()
+            await pilot.pause()
+
+            assert [
+                (message.role, message.blocks[0].text) for message in app._history
+            ] == [
+                ("user", "what is M31?"),
+                ("assistant", "M31 is Andromeda."),
+            ]
+
+    _run(scenario())
