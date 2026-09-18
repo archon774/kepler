@@ -69,7 +69,6 @@ paths = [
   # every entry here is.
   '''tools/config\.py''',
   '''tools/tui/backends\.py''',
-  '''tools/tui/__main__\.py''',
   '''tests/test_tui_backends\.py''',
   '''tests/test_tui_app\.py''',
 ]

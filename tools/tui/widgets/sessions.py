@@ -336,10 +336,8 @@ def _validate_history_protocol(history: list[Message]) -> None:
                 block for block in results.blocks if isinstance(block, ToolResultBlock)
             ]
             trailing = results.blocks[len(returned):]
-            if (
-                results.role != "user"
-                or len(returned) != len(results.blocks) - len(trailing)
-                or not all(isinstance(block, TextBlock) for block in trailing)
+            if results.role != "user" or not all(
+                isinstance(block, TextBlock) for block in trailing
             ):
                 raise ValueError("session manifest history has an unpaired tool call")
             if len(calls) != len(returned):
