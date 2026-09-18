@@ -1,6 +1,6 @@
 """The efficiency axis: three clocks kept apart, four token classes kept apart.
 
-docs/working/benchmark.md section 7.2. Pure reporting -- no pass/fail, and no
+docs/benchmarking/harness.md section 7.2. Pure reporting -- no pass/fail, and no
 money. There is no cost axis and no price table: tokens are the measurement,
 and converting them to money is the reader's job against their own current
 pricing page.

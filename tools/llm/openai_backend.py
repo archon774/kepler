@@ -1,7 +1,7 @@
 """``OpenAIBackend`` -- OpenAI Chat Completions over raw ``httpx``, and any
 OpenAI-compatible endpoint.
 
-Sections 4.2-4.5 of ``docs/working/model-backends.md``. Non-streaming: the
+Sections 4.2-4.5 of ``docs/archive/model-backends.md``. Non-streaming: the
 capability flag is off and ``on_text`` is called once with the finished text.
 Tool-call arguments arrive as a JSON *string* and are parsed; a parse failure
 is a ``malformed_arguments_json`` fault with the call dropped, never an

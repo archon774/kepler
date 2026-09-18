@@ -16,7 +16,9 @@ updated when the code changes.
 | Directory | Contents |
 | --- | --- |
 | [`analysis/`](analysis/README.md) | Point-in-time review and external-research output. Dated. Kept for the "why"; the action items land elsewhere as plans or code. |
-| [`working/`](working/README.md) | Plans under active development, one per file. |
+| [`benchmarking/`](benchmarking/README.md) | Measuring models on Kepler's tool surface: the harness design, the 144-session sweep, the generated report, and the figures. |
+| [`archive/`](archive/README.md) | Completed track documents, kept as records rather than deleted. Not current-state. |
+| [`working/`](working/README.md) | Plans under active development, one per file. Empty today — every track has landed. |
 | [`examples/`](examples/README.md) | Committed sample output — the deliberate exception to the repository's "no generated files" rule. |
 
 ## Document lifecycle
@@ -27,7 +29,13 @@ updated when the code changes.
   code; they record what a review found on a given date. Trim or delete one when
   it has been fully superseded.
 - **`working/`** holds plans that are being executed. When a plan's work lands,
-  fold the durable outcome into a reference doc and delete the plan — git history
-  preserves it. Completed plans are not meant to accumulate.
+  fold the durable outcome into a reference doc, add an `Archived` block to the
+  plan recording what was verified and what it got wrong, and move it to
+  `archive/`. That folder's README says why they are kept rather than deleted.
+- **`archive/`** documents are records. They are never updated to track the
+  code; a correction to one is dated and marked inline.
+- **`benchmarking/`** is the benchmark track's own folder — design, results,
+  report and figures together, because the document and its evidence are one
+  subject.
 - **`examples/`** output is regenerated deliberately and rarely; see that
   directory's README before adding to it.

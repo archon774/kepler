@@ -1,6 +1,6 @@
 """GeminiBackend: generateContent over raw httpx.
 
-Phase 3 of docs/working/model-backends.md -- the hardest adapter: a different
+Phase 3 of docs/archive/model-backends.md -- the hardest adapter: a different
 schema dialect, a different message shape, and no tool-call identifiers at all.
 """
 
@@ -204,7 +204,7 @@ def test_usage_is_read_from_usage_metadata():
 
 
 def test_every_response_carries_a_latency_and_a_populated_usage():
-    """The benchmark's efficiency axis (docs/working/benchmark.md 7.2) has no
+    """The benchmark's efficiency axis (docs/benchmarking/harness.md 7.2) has no
     data at all if an adapter leaves either at ``None``, and a silently absent
     field would read as an empty column rather than as an error. Asserted per
     adapter for that reason."""

@@ -179,7 +179,10 @@ map and the document lifecycle.
 - `pulsar-tool-pipeline.md` — the four-stage pulsar tool chain and the extracted
   Astromancer code behind each stage.
 - `analysis/` — point-in-time review and external-research output (dated).
-- `working/` — plans under active development.
+- `benchmarking/` — the model benchmark: harness design, sweep results, the
+  generated report, and the figures.
+- `archive/` — completed track documents, kept as records.
+- `working/` — plans under active development. Empty today.
 - `examples/` — committed sample output.
 
 ## `algorithms/fieldcal/`

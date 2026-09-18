@@ -1,6 +1,6 @@
 """The ModelBackend protocol and its capability record.
 
-Phase 0a of docs/working/model-backends.md, section 4.2.
+Phase 0a of docs/archive/model-backends.md, section 4.2.
 """
 
 from __future__ import annotations

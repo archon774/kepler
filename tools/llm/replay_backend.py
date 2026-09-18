@@ -1,6 +1,6 @@
 """``ReplayBackend`` -- replays a recorded model transcript. Test-only.
 
-``docs/working/benchmark.md`` section 5.4. The benchmark harness replays remote
+``docs/benchmarking/harness.md`` section 5.4. The benchmark harness replays remote
 *tools* against live models; this replays the *model* instead, so the harness
 itself can be exercised end to end with both sides recorded. A run with a
 replayed model and replayed tools is bit-deterministic, opens no socket, costs

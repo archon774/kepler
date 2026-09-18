@@ -1,6 +1,6 @@
 """OpenAIBackend: Chat Completions over raw httpx.
 
-Phase 2a of docs/working/model-backends.md, sections 4.2-4.5. No network: every
+Phase 2a of docs/archive/model-backends.md, sections 4.2-4.5. No network: every
 request goes through an httpx MockTransport that the test inspects.
 """
 

@@ -1,6 +1,6 @@
 """The fixture store: recorded results for the class-R tools.
 
-``docs/working/benchmark.md`` section 5.3. A fixture file is one remote tool's
+``docs/benchmarking/harness.md`` section 5.3. A fixture file is one remote tool's
 recorded results. The harness never executes a class-R tool during a run, so
 these files *are* the archive as far as a benchmarked model is concerned.
 

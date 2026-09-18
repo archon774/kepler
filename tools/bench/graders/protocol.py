@@ -1,6 +1,6 @@
 """The protocol axis -- *diagnostic*.
 
-``docs/working/benchmark.md`` section 7.4. Counts each of the seven
+``docs/benchmarking/harness.md`` section 7.4. Counts each of the seven
 ``FAULT_TYPES`` from the manifest's ``protocol_faults``, and evaluates
 ``null_argument_fidelity`` for each declared ``(tool, property)``:
 

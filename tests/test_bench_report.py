@@ -1,6 +1,6 @@
 """The matrix: column order, the header's contents, and the failure list.
 
-docs/working/benchmark.md sections 7.6 and 12. A reader who has never opened
+docs/benchmarking/harness.md sections 7.6 and 12. A reader who has never opened
 the suite should be able to tell what went wrong and why it counts.
 """
 

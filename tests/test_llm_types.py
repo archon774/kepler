@@ -1,6 +1,6 @@
 """Neutral model-port types: the currency every adapter speaks.
 
-Phase 0a of docs/working/model-backends.md, section 4.1 and 4.6. These types
+Phase 0a of docs/archive/model-backends.md, section 4.1 and 4.6. These types
 carry no provider dialect, do no I/O, and import no vendor SDK.
 """
 

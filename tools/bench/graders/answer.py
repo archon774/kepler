@@ -1,6 +1,6 @@
 """The answer-correctness axis -- **Q1**.
 
-``docs/working/benchmark.md`` section 7.1. This is the question the harness
+``docs/benchmarking/harness.md`` section 7.1. This is the question the harness
 exists for, and on this surface there are **three different kinds of right
 answer**, checked by different machinery:
 

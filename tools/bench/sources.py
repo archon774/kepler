@@ -1,6 +1,6 @@
 """Mechanical sources for an answer key's expected value.
 
-``docs/working/benchmark.md`` section 7.1 names three kinds of right answer --
+``docs/benchmarking/harness.md`` section 7.1 names three kinds of right answer --
 ground truth, fidelity, correct negative -- and every one of them is
 *determinable without consulting a model*. This module is where that stops
 being an aspiration and becomes a load-time requirement.

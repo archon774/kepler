@@ -1,6 +1,6 @@
 """Task and suite loading.
 
-``docs/working/benchmark.md`` section 6. One task per file, so a corpus diff is
+``docs/benchmarking/harness.md`` section 6. One task per file, so a corpus diff is
 reviewable per task and a suite's membership and order are explicit.
 
 The loader is strict in one specific way that matters: **unknown keys are an

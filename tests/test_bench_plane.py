@@ -1,6 +1,6 @@
 """The tool plane: closure, signature preservation, and per-call routing.
 
-docs/working/benchmark.md section 3 and requirement B1. The registry went from
+docs/benchmarking/harness.md section 3 and requirement B1. The registry went from
 49 tools to 55 in four days while the model port was being written. Without a
 closed plane, the first new remote tool added after the harness lands would run
 live, against a real service, inside a benchmark run that believes it is

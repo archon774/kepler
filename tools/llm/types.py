@@ -3,7 +3,7 @@
 Every adapter under ``tools.llm`` translates between one provider's wire
 dialect and the types defined here. Nothing in this module does I/O or imports
 a provider SDK -- that is a testable property and it is tested. See
-``docs/working/model-backends.md`` sections 4.1 and 4.6.
+``docs/archive/model-backends.md`` sections 4.1 and 4.6.
 """
 
 from __future__ import annotations

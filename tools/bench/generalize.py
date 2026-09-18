@@ -73,7 +73,7 @@ tasks are exchangeable with the questions a reader cares about. They are
 hand-picked probes of documented failure modes, deliberately concentrated on
 places models are known to fail. A model's rate on *that* population is not its
 rate on a uniform sample of everyday tool calls, and no amount of arithmetic
-here converts one into the other. Section 7.1.9 of ``docs/working/benchmark.md``
+here converts one into the other. Section 7.1.9 of ``docs/benchmarking/harness.md``
 is where that judgement belongs.
 """
 

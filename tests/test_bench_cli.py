@@ -1,6 +1,6 @@
 """``kepler-bench`` argument handling, chiefly the required token budget.
 
-docs/working/benchmark.md sections 5.7 and 11.
+docs/benchmarking/harness.md sections 5.7 and 11.
 """
 
 from __future__ import annotations

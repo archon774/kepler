@@ -1,5 +1,30 @@
 # Benchmarking Models on the Kepler Tool Surface
 
+> [!NOTE] Archived 2026-09-18
+> This track is complete and this document is a record, not a plan. Every
+> phase (4a–5d, with 5e built and removed) landed, and a completion audit on
+> 2026-09-18 re-verified the harness against the code: the tool plane covers
+> all 55 registered tools as 26 local / 22 remote / 7 mixed with none
+> unclassified, all sixteen tasks across five suites load with a committed
+> `calibration.md` each, and `run`, `grade`, `compare` and `falsify` were
+> driven end to end over the `smoke` suite offline, with `--max-tokens`
+> refusing a live backend that omits it. The durable summary is
+> [`../tool-architecture.md`](../tool-architecture.md) section 10.1; the
+> evidence sits beside this file — [results.md](results.md),
+> [report.md](report.md), `report.json` and `figures/`.
+>
+> The section 14 lifecycle box — fold the outcome into a reference and delete
+> the working documents — is what this archive discharges, with the caveat
+> that box records: the two limits in *Limits* (three of four backends share
+> one schema dialect, and the corpus was authored while watching the backend
+> that now ranks first) are **not** retired by archiving. A second dialect
+> would still be worth a re-run.
+>
+> **Three corrections applied at archive**, marked inline: the pulsar task
+> named in §9.3, the `fieldcal` note in §9.2 that P8 has since overtaken, and
+> the console script named in §11. `tools/bench/generalize.py` — written after
+> this document and never described by it — is now in the §4 layout table.
+
 **Status:** **Built and calibrated (2026-09-14).** Every phase of the
 section 14 rollout has landed on `agent/model-benchmark`, one commit per phase,
 with the full suite green. **§7.1.9's gate is met for every suite but `smoke`**,
@@ -13,22 +38,23 @@ failed by all three backends, both `optical` tasks are passed by all three and
 so discriminate nothing, and five checks were firing on correct answers and had
 to be fixed before the numbers meant anything — found by reading the prose with
 §11's `answers` verb, not by a second grader. See §14 for the per-phase record
-and `benchmark-results.md`, *Reading the answers*, for the sweep.
+and [results.md](results.md), *Reading the answers*, for the sweep.
 
-This is the detailed sequencing [model-backends.md](model-backends.md)
+This is the detailed sequencing [model-backends.md](../archive/model-backends.md)
 deferred: its section 9 says phases 4–5 "get their own detailed sequencing,
 written once the port lands and the fault taxonomy is real rather than
 predicted." The port landed on 2026-09-09; the taxonomy is real. This is that
 document.
 **Date:** 2026-09-13
-**Prerequisites:** [model-backends.md](model-backends.md) phases −1–3 —
-**met**: `tools/llm/` and `tools/agent/` exist, `tools/runner.py` is a shim,
-`validation.py` records faults, and `AgentSession.protocol_faults` persists
-them. No optical or TUI phase is a prerequisite.
-**Unblocks:** Nothing else in `docs/working/`. This is a leaf track — it
-consumes the port and produces a scoreboard.
+**Prerequisites:** [model-backends.md](../archive/model-backends.md) phases −1–3 —
+**met**: `tools/llm/` and `tools/agent/` exist, `tools/runner.py` is a shim (the
+console has since retired it), `validation.py` records faults, and
+`AgentSession.protocol_faults` persists them. No optical or TUI phase is a
+prerequisite.
+**Unblocks:** Nothing else. This is a leaf track — it consumes the port and
+produces a scoreboard.
 **Branch:** `agent/model-benchmark`, off `dev`, per the repository default.
-**Relationship to [model-backends.md](model-backends.md):** that document's
+**Relationship to [model-backends.md](../archive/model-backends.md):** that document's
 section 6 stays the *design summary* and its section 9 table stays the phase
 index. This document is the architecture and the implementation plan. Where
 the two disagree, the divergences are enumerated in section 15 with reasons —
@@ -335,6 +361,7 @@ contract is untouched by this work.
 | `tools/bench/cli.py` | `kepler-bench` — `run`, `record`, `grade`, `falsify`, `answers`, `compare`. |
 | `tools/bench/sources.py` | Mechanical resolution of an answer key's expected value. No key is ever a hand-typed literal. |
 | `tools/bench/falsify.py` | The adversarial pass over the keys themselves. Consults no model; can only accuse. |
+| `tools/bench/generalize.py` | **Added after this document** (2026-09-14). Would this pass rate hold on a tool-use question nobody has written yet? A Beta-Binomial over the per-task counts, fitted on a deterministic posterior grid, because a binomial interval over sessions cannot represent how much the questions differ from each other. It reports `expected_rate` (the mean over many new questions, which narrows as tasks are added) and `predictive_interval` (where one new question lands, which does not) and keeps them apart on purpose. Read by no verb and no report: it is an analysis module with its own test, not part of the pipeline. |
 | `tools/llm/replay_backend.py` | `ReplayBackend` — replays a recorded model transcript. Test-only. |
 | `benchmarks/suites/<suite>/suite.yaml` | Suite manifest: id, description, ordered member task files. |
 | `benchmarks/suites/<suite>/<task-id>.yaml` | One task per file — so a corpus diff is reviewable per task. |
@@ -1370,9 +1397,21 @@ Two tasks, both *ground truth*, both fully offline, and both graded with
 `must_not_call: [load_zeropoint_reference]` before the solve, so a model cannot
 hand the reference its own number and collect a free `within_tolerance`.
 
-The other three recorded solves (`ngc5286_b_000/001/002`) are not usable yet:
-their frames are the three the repository does not carry, pending
-`optical-tools.md` P8.
+The other three recorded solves (`ngc5286_b_000/001/002`) are not used by this
+suite: when it was written their frames were the three the repository did not
+carry.
+
+**Correction (2026-09-18):** `optical-tools.md` P8 landed on 2026-09-16 and the
+frames are now bundled through Git LFS, so the stated reason no longer holds —
+all four recorded solves run from pixels and
+`tests/test_ngc5286_b_frames.py` drives them. The suite is still two tasks:
+extending it is unblocked work, not a blocked prerequisite. Two things a task
+author would need to know first. The three NGC 5286 runs are on a different
+instrumental-magnitude scale (`zero` at exactly 20.0, declared per field in
+`_INSTRUMENTAL_ZERO_BY_FIELD`), and they have no recorded cone response, so
+`replay_field_calibration` still returns `fixture_missing` for them — a
+`must_reach_verdict` key as strong as `fieldcal-offline-solve`'s would need
+P7's recording repeated for this field.
 
 ### 9.3 `pulsar` — opt-in, marked slow
 
@@ -1382,8 +1421,22 @@ all, answer keys straight out of `data/pulsar/curated_periods.json`.
 | id | Scan | What it discriminates |
 | --- | --- | --- |
 | `pulsar-blind-easy` | B0329+54 (Easy, 0.7145197 s) | the ordinary success path end to end |
-| `pulsar-retune-mains` | any scan where the search lands on 0.016665 s | whether the model recognizes 60.006 Hz mains interference and retunes `back_scale`/`start`/`stop` instead of folding at it |
+| `pulsar-peak-does-not-fold` | B1933+16 (a confident peak that folds to nothing) | whether the model reports that the blind search failed, rather than the 2.18 s red-noise peak it returned at "99.73% Confidence" |
 | `pulsar-fallback-disclosure` | B2045−16 (Most Challenging, 1.961572304 s) | the whole point of this suite |
+
+**Correction (2026-09-18).** The middle row above was written as
+`pulsar-retune-mains`, a task premise that did not survive measurement — this
+is one of the two the section 14 phase table refers to, and it was never
+recorded here. Measured on 2026-09-13: B1933+16's default search returns
+2.1839357263460353 s at "99.73% Confidence" with `peak_fold_snr` 6.17 and a
+`peak_does_not_fold` warning, and **retuning does not rescue it** — start/stop
+0.2–0.6 gives 0.5972 s, 0.1–1.0 gives 0.8337 s, `back_scale` 1.0 gives
+0.8327 s, every one of them `peak_does_not_fold`. So there was no scan on which
+a retune was the right answer, and the shipped task grades the honest report of
+a failed blind search instead. The other revised premise is
+`pulsar-blind-easy`, which the measurement confirmed rather than overturned:
+B0329+54 is the one of the five bundled scans on which a blind search actually
+succeeds.
 
 `pulsar-fallback-disclosure` is worth stating in full. A blind search succeeds
 on **one of the five bundled scans**, so reaching the curated-period fallback
@@ -1452,8 +1505,12 @@ latency and failure folded into someone's scoreboard.
 ## 11. CLI
 
 `kepler-bench`, a new `[project.scripts]` entry
-(`tools.bench.cli:main`) alongside the existing `kepler-astro-query`. No
-dependency change; no `uv lock` churn.
+(`tools.bench.cli:main`). No dependency change; no `uv lock` churn.
+
+**Correction (2026-09-18):** this named `kepler-astro-query` as the script it
+sat alongside. That entry point and the `tools/runner.py` shim behind it were
+retired once the console replaced them; the two scripts today are `kepler` and
+`kepler-bench`.
 
 ```bash
 # Run a suite against two backends, three repeats, with a ceiling.
@@ -1534,6 +1591,7 @@ keys, no daemon, no new CI job.
 | `tests/test_bench_efficiency.py` | the three clocks stay separate and tool time never enters the timing-per-token rate; the four token classes are reported separately with a cache share; a non-streaming backend's rate is labelled as averaged |
 | `tests/test_llm_replay_backend.py` | transcript replay, `on_text`, exhaustion raises |
 | `tests/test_sessions_manifest_v2.py` | v2 payload; a v1 manifest still reads; absent usage is `None`, not `0` |
+| `tests/test_bench_generalize.py` | the Beta-Binomial fit: two corpora with an identical total and different spreads get different predictive intervals, and `expected_rate` is not read as `predictive_interval` |
 
 Live provider runs stay behind the existing `model_api` marker plus
 `KEPLER_TEST_MODEL_API=1`; the `pulsar` and `optical` suites' own end-to-end
@@ -1662,11 +1720,19 @@ adapters; `tools/runner.py`; anything under `algorithms/`.
       `algorithms/` or `tools/llm/` imports it; the plane is closed and a new
       registry tool must be classified in the same commit that adds it.
 - [x] **Verify every claim against the code before writing it.**
-- [ ] When the track lands, fold the durable outcome into a top-level
+- [x] When the track lands, fold the durable outcome into a top-level
       `docs/` reference and delete both working documents, per
-      `docs/working/README.md`'s lifecycle rule. **Blocked on the §7.1.9
+      `docs/working/README.md`'s lifecycle rule. **Was blocked on the §7.1.9
       calibration run** — a harness whose answer keys have never met a real
-      model is not a landed track.
+      model is not a landed track. That gate was met on 2026-09-14.
+      **Done 2026-09-18**, with one change to the rule: the documents are
+      archived rather than deleted — this one and `results.md`, `report.md`,
+      `report.json` and `figures/` into `docs/benchmarking/`, the other two
+      track documents into `docs/archive/`. The durable outcome is
+      `docs/tool-architecture.md` sections 10, 10.1 and 10.2. The archive does
+      **not** retire the two limits in `results.md`: three of four backends
+      share one schema dialect, and the corpus was authored while watching the
+      backend that ranks first. A second dialect is still worth a re-run.
 
 ---
 
@@ -1781,7 +1847,7 @@ hard-coded in the suite, which must stay model-agnostic. **Open.**
 
 ## 18. References
 
-* [model-backends.md](model-backends.md) — the port this consumes; section 6
+* [model-backends.md](../archive/model-backends.md) — the port this consumes; section 6
   is the design summary, section 9 the phase index, section 5 the security
   requirements deferred here.
 * `docs/tool-architecture.md` section 10 — the engine event contract the

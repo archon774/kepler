@@ -1,6 +1,6 @@
 """AnthropicBackend: the Anthropic Messages API adapter.
 
-Phase 0b of docs/working/model-backends.md. The behaviour requirements are
+Phase 0b of docs/archive/model-backends.md. The behaviour requirements are
 sections 4.2-4.6 plus the Phase 0b list; the implementer chooses how.
 """
 

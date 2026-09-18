@@ -1,6 +1,6 @@
 """OllamaBackend: a thin OpenAIBackend subclass for a local daemon.
 
-Phase 2b of docs/working/model-backends.md. The offline tests run by default;
+Phase 2b of docs/archive/model-backends.md. The offline tests run by default;
 the live measurement is marked ``ollama`` and is deselected unless
 KEPLER_TEST_MODEL_API=1 and the daemon is reachable.
 """
@@ -125,7 +125,7 @@ def test_a_tool_call_still_round_trips_through_the_compat_endpoint():
 
 def test_every_response_carries_a_latency_and_a_populated_usage():
     """Inherited from ``OpenAIBackend.complete``, and asserted here anyway:
-    the benchmark's efficiency axis (docs/working/benchmark.md 7.2) has no
+    the benchmark's efficiency axis (docs/benchmarking/harness.md 7.2) has no
     data if any one adapter leaves either at ``None``, and "it is inherited"
     is a claim about today's class body, not a test."""
 

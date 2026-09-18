@@ -1,7 +1,7 @@
 """``AnthropicBackend`` -- the Anthropic Messages API adapter.
 
 The only adapter that streams natively. Behaviour is specified by
-``docs/working/model-backends.md`` sections 4.2-4.6 and the Phase 0b list. The
+``docs/archive/model-backends.md`` sections 4.2-4.6 and the Phase 0b list. The
 ``anthropic`` import is function-local so ``import tools.llm`` stays cheap and
 ``tests/test_runner_session.py``'s ``sys.modules`` monkeypatch keeps working.
 """

@@ -1,6 +1,6 @@
 """Each grader against synthetic manifests, including adversarial ones.
 
-docs/working/benchmark.md section 13. The adversarial cases are the point: a
+docs/benchmarking/harness.md section 13. The adversarial cases are the point: a
 v1 manifest, a manifest with no usage_totals, a max_turns outcome, and a
 fabricated artifact path.
 """

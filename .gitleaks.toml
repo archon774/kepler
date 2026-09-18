@@ -36,7 +36,7 @@ paths = [
   '''README\.md''',
   '''docs/analysis/applicable-designs\.md''',
   '''docs/examples/README\.md''',
-  '''docs/working/model-backends\.md''',
+  '''docs/archive/model-backends\.md''',
   '''tests/test_agent_session_manifest\.py''',
   '''tools/ads\.py''',
   '''tools/registry\.py''',
@@ -62,7 +62,7 @@ paths = [
   '''benchmarks/fixtures/search_ads\.yaml''',
   '''benchmarks/fixtures/get_paper_abstract\.yaml''',
   '''benchmarks/suites/core/calibration\.md''',
-  '''docs/working/benchmark\.md''',
+  '''docs/benchmarking/harness\.md''',
   # The console's backend selection: the .env reader that puts the key into the
   # environment, the choice table that names the variable each provider reads,
   # and their tests. Added with the TUI's /backend command. Exact files, as

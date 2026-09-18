@@ -15,7 +15,7 @@ model.
 **What was run.** 16 tasks × 3 repeats × 3 backends = **144 sessions**, one
 host, sequential, temperature 0 where the provider allows it. Suite SHA-256
 `b681227692d1`, repository `4101b9f`. The full generated report is
-[benchmark-report.md](benchmark-report.md); this document selects from it.
+[report.md](report.md); this document selects from it.
 
 **These sessions were recorded once and graded twice.** Reading the answers
 found five checks that were firing on correct behaviour; the checks were fixed
@@ -593,11 +593,11 @@ repository data, or a deterministic tool's own return — never from a model's
 output (`tools/bench/sources.py`). Turn caps derive from each task's declared
 requirement rather than from any transcript (`tasks.derive_turn_cap`).
 
-The figures regenerate from `benchmark-report.json`, which is committed because
+The figures regenerate from `report.json`, which is committed because
 the run directories are not:
 
 ```bash
-uv run python docs/working/figures/make.py
+uv run python docs/benchmarking/figures/make.py
 ```
 
 The SVG is piped straight to `rsvg-convert` and never written out, so there is

@@ -1,7 +1,7 @@
 """The tool plane: which of Kepler's 55 registered tools run live in a
 benchmark, which are replayed from fixtures, and how a call decides.
 
-``docs/working/benchmark.md`` section 3. Kepler's tools are not one surface,
+``docs/benchmarking/harness.md`` section 3. Kepler's tools are not one surface,
 they are three:
 
 * **Class L** -- local and deterministic. They read the bundled fixture tree
@@ -230,7 +230,7 @@ def classify_call(
         raise KeyError(
             f"{name!r} is a registered tool with no benchmark classification; "
             "add it to TOOL_CLASSES in the same commit that registers it "
-            "(docs/working/benchmark.md B1)"
+            "(docs/benchmarking/harness.md B1)"
         )
     if tool_class == "remote":
         return "replay"
@@ -327,7 +327,7 @@ def build_tool_plane(
         raise KeyError(
             f"registered tool(s) with no benchmark classification: "
             f"{sorted(unclassified)}; add them to TOOL_CLASSES in the same "
-            "commit that registers them (docs/working/benchmark.md B1)"
+            "commit that registers them (docs/benchmarking/harness.md B1)"
         )
 
     return {

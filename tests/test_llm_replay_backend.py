@@ -1,6 +1,6 @@
 """``ReplayBackend``: transcript replay, ``on_text``, and loud exhaustion.
 
-docs/working/benchmark.md section 5.4. The harness replays remote *tools*
+docs/benchmarking/harness.md section 5.4. The harness replays remote *tools*
 against live models; this replays the *model*, so the harness can be tested
 with both sides recorded -- offline, deterministic, and free.
 """

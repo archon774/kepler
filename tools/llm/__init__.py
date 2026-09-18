@@ -8,7 +8,7 @@ Two rules govern the design:
 This package is import-light on purpose: importing it pulls in no provider SDK
 and no HTTP stack. Adapters (``anthropic_backend``, ``openai_backend``,
 ``ollama_backend``, ``gemini_backend``) are imported explicitly by the factory,
-never at package scope. See ``docs/working/model-backends.md``.
+never at package scope. See ``docs/archive/model-backends.md``.
 """
 
 from __future__ import annotations

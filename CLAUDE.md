@@ -255,7 +255,7 @@ the four adapters. Its rules:
   calls are being answered — hence for the **last** assistant message only, and
   never unsigned. Asking for a thinking budget costs `temperature`, which the
   provider refuses alongside it, so thinking is **off by default** everywhere
-  but the console (`docs/working/model-backends.md` 4.8).
+  but the console (`docs/archive/model-backends.md` 4.8).
 
 `tools/bench/` owns the model benchmark harness and nothing else: the tool
 plane (`plane.py`), the fixture store (`fixtures.py`), the task loader
@@ -283,8 +283,8 @@ the `kepler-bench` CLI. Its rules:
 - Zero new dependencies; nothing here opens a socket under a plain
   `uv run pytest`, and that is a test (B2), not a convention.
 
-`docs/working/model-backends.md` is the port's full design and
-`docs/working/benchmark.md` the harness's; `docs/tool-architecture.md`
+`docs/archive/model-backends.md` is the port's full design and
+`docs/benchmarking/harness.md` the harness's; `docs/tool-architecture.md`
 sections 10 and 10.1 are the summaries.
 
 ### Vendored `skylib` is consolidated

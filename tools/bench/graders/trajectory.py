@@ -1,6 +1,6 @@
 """The trajectory axis -- *diagnostic*.
 
-``docs/working/benchmark.md`` section 7.3. Reads the manifest's ordered
+``docs/benchmarking/harness.md`` section 7.3. Reads the manifest's ordered
 ``tool_calls``.
 
 The asymmetry here is the point, and it is deliberate:

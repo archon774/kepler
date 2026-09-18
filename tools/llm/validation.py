@@ -3,7 +3,7 @@
 Hand-rolled -- no ``jsonschema`` dependency, and none is needed: every registry
 schema is a flat object with scalar, enum, and array-of-scalar/object
 properties. The rules and their evaluation order are
-``docs/working/model-backends.md`` S8. Two are the whole point:
+``docs/archive/model-backends.md`` S8. Two are the whole point:
 
 * The string ``"None"`` is never coerced to ``None``. A ``stringified_null``
   fault on a null-accepting property is the highest-value signal in the
