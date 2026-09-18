@@ -21,7 +21,11 @@ __all__ = [
     "complete",
 ]
 
-Completer = Callable[[str], Iterable[str]]
+#: Offers completions for a command's arguments. It is handed every argument
+#: word typed so far, the last of which is the one being completed and may be
+#: empty -- so a completer can answer differently for the first argument than
+#: for the second. Filtering by that partial word is :func:`suggest`'s job.
+Completer = Callable[[tuple[str, ...]], Iterable[str]]
 
 
 @dataclass(frozen=True)
@@ -57,21 +61,27 @@ class Parsed:
     args: tuple[str, ...] = ()
 
 
-def _backend_names(prefix: str) -> tuple[str, ...]:
-    """The provider names ``/backend`` accepts bare.
+def _backend_completions(args: tuple[str, ...]) -> tuple[str, ...]:
+    """The provider names first, then the models that provider holds.
 
-    The prefix is ignored here and filtered by :func:`suggest`, so a completer
-    only ever has to say what exists.
+    The second question is answered by the provider's host, so completing a
+    model name asks the daemon what it has. That is a five-second question at
+    worst (``OLLAMA_PROBE_TIMEOUT_S``) and only asked on Tab, and a host that
+    will not answer offers nothing rather than blocking the key.
 
     Imported on call rather than at module scope. This registry is the
     import-light half of the console -- no Textual, and nothing that reaches
-    the network -- while :mod:`tools.tui.backends` pulls in the whole model
-    port to answer a question about two strings.
+    the network until asked -- while :mod:`tools.tui.backends` pulls in the
+    whole model port.
     """
 
-    from tools.tui.backends import names
+    from tools.tui.backends import names, offered_models
 
-    return names()
+    if len(args) <= 1:
+        return names()
+    if len(args) == 2:
+        return offered_models(args[0])
+    return ()
 
 
 COMMANDS: tuple[Command, ...] = (
@@ -85,7 +95,7 @@ COMMANDS: tuple[Command, ...] = (
         "Show the model backends, or switch to one (anthropic, ollama).",
         "switch_backend",
         aliases=("b",),
-        completer=_backend_names,
+        completer=_backend_completions,
     ),
     Command("tools", "Browse registered tool schemas.", "show_tools", aliases=("t",)),
     Command("approve", "View or change approval policy.", "configure_approval"),
@@ -163,10 +173,11 @@ def suggest(text: str) -> tuple[Suggestion, ...]:
     command = resolve(words[0]) if words else None
     if command is None or command.completer is None:
         return ()
-    partial = "" if body.endswith(" ") else words[-1]
+    arguments = tuple(words[1:]) + (("",) if body.endswith(" ") else ())
+    partial = arguments[-1] if arguments else ""
     return tuple(
         Suggestion(value)
-        for value in command.completer(partial)
+        for value in command.completer(arguments)
         if value.startswith(partial)
     )
 

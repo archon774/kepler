@@ -35,7 +35,9 @@ from tools.llm.base import BackendUnavailableError
 from tools.llm.types import Message, TextBlock
 from tools.tui.backends import (
     UnknownBackendError,
+    choice_for,
     describe_choices,
+    offered_models,
     open_backend,
     resolve_spec,
     spec_of,
@@ -45,6 +47,7 @@ from tools.tui.commands import help_text, parse_input, resolve, suggest
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.widgets.artifacts import ArtifactBrowser
 from tools.tui.widgets.header import KeplerHeader
+from tools.tui.widgets.models import ModelBrowser
 from tools.tui.widgets.prompt import CommandMenu, PromptInput
 from tools.tui.widgets.sessions import SessionBrowser, history_from_manifest
 from tools.tui.widgets.transcript import Transcript
@@ -457,10 +460,16 @@ class KeplerApp(App[None]):
     def switch_backend(self, args: tuple[str, ...]) -> None:
         """List the model backends, or switch the session to one of them.
 
-        With no arguments this only describes; a switch needs a name. The
-        running backend is replaced **only after** the new one is built and
-        probed, so a missing key or a stopped Ollama daemon leaves the session
-        exactly as it was rather than on a backend that cannot answer.
+        With no arguments this only describes; a switch needs a name. A bare
+        provider name whose host publishes an inventory opens the picker
+        instead of assuming a default -- a host holding eleven models has ten
+        answers a default gets wrong. Naming the model outright
+        (``/backend ollama gemma4:12b``) still switches directly, so a keybind
+        or a habit does not acquire a dialog.
+
+        The running backend is replaced **only after** the new one is built
+        and probed, so a missing key or a stopped Ollama daemon leaves the
+        session exactly as it was rather than on a backend that cannot answer.
         """
 
         if not args:
@@ -484,6 +493,9 @@ class KeplerApp(App[None]):
             self._append_transcript(str(exc))
             return
 
+        if len(args) == 1 and self._offer_model_choice(args[0]):
+            return
+
         try:
             backend = open_backend(spec, thinking_budget=self.thinking_budget)
         except BackendUnavailableError as exc:
@@ -502,6 +514,37 @@ class KeplerApp(App[None]):
         self.sub_title = spec_of(backend)
         self.query_one("#banner", KeplerHeader).set_backend(self.sub_title)
         self._append_transcript(f"Backend switched to {self.sub_title}.")
+
+    def _offer_model_choice(self, provider: str) -> bool:
+        """Open the picker for a bare provider name, if there is one to open.
+
+        Returns whether it opened. A host that cannot be asked reports no
+        models, and then this does nothing at all and the caller switches to
+        the default as before -- an unanswerable question must not be able to
+        stop the switch that was asked for.
+        """
+
+        models = offered_models(provider)
+        if not models:
+            return False
+
+        choice = choice_for(provider)
+        self.push_screen(
+            ModelBrowser(
+                provider,
+                models,
+                current=_model_of(spec_of(self.backend), provider),
+                default=choice.default_model if choice else "",
+            ),
+            lambda model: self._switch_to_model(provider, model),
+        )
+        return True
+
+    def _switch_to_model(self, provider: str, model: str | None) -> None:
+        """Complete a switch the picker chose, or say nothing if it was closed."""
+
+        if model:
+            self.switch_backend((provider, model))
 
     def show_artifacts(self, args: tuple[str, ...]) -> None:
         """Open the current artifact browser without involving the model."""
@@ -650,3 +693,16 @@ class KeplerApp(App[None]):
         if self._session_running():
             parts.append("stopping" if self._stop_requested else "esc stop")
         return " • ".join(parts)
+
+
+def _model_of(spec: str | None, provider: str) -> str:
+    """The model half of a spec, but only when it is this provider's.
+
+    Comparing providers first is the point: ``claude-sonnet-5`` is not a model
+    the Ollama picker should mark as current just because the session is on it.
+    """
+
+    if not spec or "/" not in spec:
+        return ""
+    current_provider, model = spec.split("/", 1)
+    return model if current_provider == provider else ""

@@ -117,3 +117,20 @@ def test_several_matches_extend_only_as_far_as_they_agree():
 
 def test_a_command_without_a_completer_offers_nothing_for_its_arguments():
     assert commands.suggest("/resume 2026") == ()
+
+
+def test_the_backend_completer_offers_providers_first_then_that_host_s_models(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "tools.tui.backends.offered_models",
+        lambda provider: ("gemma4:12b", "qwen3.8:27b-mlx") if provider == "ollama" else (),
+    )
+
+    assert [s.value for s in commands.suggest("/backend ")] == ["anthropic", "ollama"]
+    assert [s.value for s in commands.suggest("/backend ollama ")] == [
+        "gemma4:12b",
+        "qwen3.8:27b-mlx",
+    ]
+    assert commands.complete("/backend ollama gem") == "/backend ollama gemma4:12b "
+    assert commands.suggest("/backend ollama gemma4:12b ") == ()

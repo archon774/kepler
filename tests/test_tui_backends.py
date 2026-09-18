@@ -334,3 +334,35 @@ def test_backend_selection_has_no_textual_import():
     }
 
     assert not {name for name in imported if name.startswith("textual")}
+
+
+def test_offered_models_asks_only_the_provider_that_publishes_an_inventory():
+    assert backends.offered_models("anthropic") == ()
+
+
+def test_offered_models_reports_what_the_daemon_holds(monkeypatch):
+    class Listing:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def installed_models(self):
+            return ("gemma4:12b", "qwen3.8:27b-mlx")
+
+    monkeypatch.setattr(
+        "tools.llm.ollama_backend.OllamaBackend", Listing, raising=True
+    )
+
+    assert backends.offered_models("ollama") == ("gemma4:12b", "qwen3.8:27b-mlx")
+
+
+def test_a_host_that_cannot_be_asked_offers_nothing_rather_than_raising(monkeypatch):
+    """A listing is a convenience; failing to get one must not be able to stop
+    the switch the person actually asked for."""
+
+    class Broken:
+        def __init__(self, **kwargs):
+            raise RuntimeError("no daemon")
+
+    monkeypatch.setattr("tools.llm.ollama_backend.OllamaBackend", Broken, raising=True)
+
+    assert backends.offered_models("ollama") == ()

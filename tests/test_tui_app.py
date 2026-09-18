@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
-from textual.widgets import Input, Static
+from textual.widgets import Input, OptionList, Static
 
 from tests.llm_fakes import StubBackend
 from tools import artifacts, config
@@ -26,6 +26,7 @@ from tools.tui.app import KeplerApp
 from tools.tui.render.capability import GraphicsTier
 from tools.tui.commands import Suggestion
 from tools.tui.widgets.header import WORDMARK, KeplerHeader
+from tools.tui.widgets.models import ModelBrowser
 from tools.tui.widgets.prompt import CommandMenu
 from tools.tui.widgets.transcript import ThoughtBlock, Transcript, UserEntry
 
@@ -883,6 +884,9 @@ def test_backend_command_switches_the_session_and_retitles_the_header(monkeypatc
 
         replacement = SimpleNamespace(spec="ollama/qwen3:8b")
         monkeypatch.setattr(app_module, "open_backend", lambda spec, **_: replacement)
+        # A host with nothing to report is what makes a bare provider name
+        # switch to the default rather than opening the picker.
+        monkeypatch.setattr(app_module, "offered_models", lambda provider: ())
 
         app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
         async with app.run_test() as pilot:
@@ -907,6 +911,7 @@ def test_a_refused_backend_leaves_the_session_on_the_one_that_answers(monkeypatc
             raise BackendUnavailableError("OLLAMA_BASE_URL")
 
         monkeypatch.setattr(app_module, "open_backend", refuse)
+        monkeypatch.setattr(app_module, "offered_models", lambda provider: ())
 
         backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
         app = KeplerApp(backend=backend)
@@ -1264,3 +1269,120 @@ def test_reasoning_renders_apart_from_the_answer():
             assert "Weighing" not in transcript.assistant_text
 
     _run(scenario())
+
+
+def test_a_bare_provider_name_opens_the_picker_for_a_host_that_lists_models(
+    monkeypatch,
+):
+    """A host holding eleven models has ten answers a default gets wrong."""
+
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        replacement = SimpleNamespace(spec="ollama/gemma4:12b")
+        opened: list[str] = []
+
+        def open_backend(spec, **_):
+            opened.append(spec)
+            return replacement
+
+        monkeypatch.setattr(app_module, "open_backend", open_backend)
+        monkeypatch.setattr(
+            app_module,
+            "offered_models",
+            lambda provider: ("qwen3.8:27b-mlx", "gemma4:12b"),
+        )
+
+        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        async with app.run_test() as pilot:
+            for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
+                await pilot.press(key)
+            await pilot.pause()
+
+            assert isinstance(app.screen, ModelBrowser)
+            assert opened == []
+
+            app.screen.query_one("#model-list", OptionList).highlighted = 1
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert opened == ["ollama/gemma4:12b"]
+            assert app.sub_title == "ollama/gemma4:12b"
+
+    _run(scenario())
+
+
+def test_closing_the_picker_leaves_the_session_where_it_was(monkeypatch):
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        def explode(spec, **_):  # pragma: no cover - must never run
+            raise AssertionError("a closed picker must not switch anything")
+
+        monkeypatch.setattr(app_module, "open_backend", explode)
+        monkeypatch.setattr(
+            app_module, "offered_models", lambda provider: ("gemma4:12b",)
+        )
+
+        backend = SimpleNamespace(spec="anthropic/claude-sonnet-5")
+        app = KeplerApp(backend=backend)
+        async with app.run_test() as pilot:
+            for key in ("/", "b", "space", "o", "l", "l", "a", "m", "a", "enter"):
+                await pilot.press(key)
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+
+            assert app.backend is backend
+            assert app.sub_title == "anthropic/claude-sonnet-5"
+
+    _run(scenario())
+
+
+def test_naming_the_model_outright_switches_without_a_dialog(monkeypatch):
+    """A habit or a keybind should not acquire a dialog it did not have."""
+
+    async def scenario() -> None:
+        from tools.tui import app as app_module
+
+        replacement = SimpleNamespace(spec="ollama/gemma4:12b")
+        monkeypatch.setattr(app_module, "open_backend", lambda spec, **_: replacement)
+
+        def never(provider):  # pragma: no cover - must never run
+            raise AssertionError("an explicit model needs no inventory")
+
+        monkeypatch.setattr(app_module, "offered_models", never)
+
+        app = KeplerApp(backend=SimpleNamespace(spec="anthropic/claude-sonnet-5"))
+        async with app.run_test() as pilot:
+            app.query_one("#prompt", Input).value = "/backend ollama gemma4:12b"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.sub_title == "ollama/gemma4:12b"
+
+    _run(scenario())
+
+
+def test_the_picker_marks_what_is_current_and_what_is_default():
+    browser = ModelBrowser(
+        "ollama",
+        ("gemma4:12b", "qwen3.8:27b-mlx"),
+        current="gemma4:12b",
+        default="qwen3.8:27b-mlx",
+    )
+
+    assert browser.label_for("gemma4:12b") == "gemma4:12b  · current"
+    assert browser.label_for("qwen3.8:27b-mlx") == "qwen3.8:27b-mlx  · default"
+    assert browser.label_for("qwen3.5:9b") == "qwen3.5:9b"
+
+
+def test_the_picker_does_not_mark_another_providers_model_as_current():
+    """`claude-sonnet-5` is not a model the Ollama picker should call current
+    just because the session is on it."""
+
+    from tools.tui.app import _model_of
+
+    assert _model_of("anthropic/claude-sonnet-5", "ollama") == ""
+    assert _model_of("ollama/gemma4:12b", "ollama") == "gemma4:12b"
+    assert _model_of(None, "ollama") == ""

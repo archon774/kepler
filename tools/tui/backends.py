@@ -35,6 +35,7 @@ __all__ = [
     "ModelNotInstalled",
     "choice_for",
     "names",
+    "offered_models",
     "resolve_spec",
     "open_backend",
     "describe_choices",
@@ -152,6 +153,34 @@ def names() -> tuple[str, ...]:
     """The provider names ``/backend`` accepts bare."""
 
     return tuple(choice.provider for choice in CHOICES)
+
+
+def offered_models(provider: str) -> tuple[str, ...]:
+    """The models this provider's host says it holds, newest first.
+
+    ``()`` means "could not be asked" -- an unreachable daemon, or a provider
+    with nothing to ask. It never means "holds nothing", and a caller must not
+    turn it into a refusal: the answer to an unanswerable question is to carry
+    on with the default, not to block the switch.
+
+    Only Ollama answers today, because only Ollama publishes an inventory that
+    needs no credential. Anthropic's model list is a decision about which
+    models this console offers, and that is :data:`CHOICES`.
+    """
+
+    if provider != "ollama":
+        return ()
+
+    from tools.llm.ollama_backend import OllamaBackend
+
+    choice = choice_for(provider)
+    default = choice.default_model if choice else ""
+    try:
+        return OllamaBackend(model=default).installed_models()
+    except Exception:
+        # A listing is a convenience. Nothing about failing to get one should
+        # be able to stop the switch the person actually asked for.
+        return ()
 
 
 def open_backend(
