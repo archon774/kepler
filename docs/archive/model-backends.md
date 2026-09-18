@@ -1,15 +1,35 @@
 # Model Backends and Provider Port
 
+> [!NOTE] Archived 2026-09-18
+> This track is complete and this document is a record, not a plan. Phases
+> −1–3 built `tools/llm/` and `tools/agent/`; phases 4–5 became the benchmark
+> harness and landed under
+> [`../benchmarking/harness.md`](../benchmarking/harness.md). A completion
+> audit on 2026-09-18 re-verified the port against the code: all four adapters
+> report the capability record section 4.2 specifies, row for row, including
+> Gemini's `native_tool_call_ids=False` and `supports_union_types=False`;
+> specs split on the first slash only; the manifest is at schema version 2;
+> both opt-in markers exist; and no dependency was added. The durable outcome
+> is [`../tool-architecture.md`](../tool-architecture.md) section 10.
+>
+> **Three corrections applied at archive**, each marked inline where it sits:
+> the status line below (this block replaces it), `estimated_usd` in section 7,
+> and the two test module names in sections 8 and 9 that the console retired.
+> Everything else is left as it was written, including the rollout's own
+> constraint that `tools/runner.py` keep its path — that was true for the
+> duration of this rollout and the document already records who deleted it.
+
 **Status:** Phases −1 through 3 **implemented** (2026-09-09) on
 `agent/model-backends-impl`, off `dev` at the maintainer's instruction —
 delivered as one branch, one commit per phase. `tools/llm/` and `tools/agent/`
-exist and are wired into `tools/runner.py`. Phases 4–5 (the benchmark harness)
-remain deferred.
+exist; the `tools/runner.py` shim they were first wired into was retired by
+the console (`docs/tool-architecture.md` 10.2), and the engine is reached
+directly. Phases 4–5 (the benchmark harness) landed 2026-09-13.
 **Date:** 2026-09-04, consolidated 2026-09-07, implemented 2026-09-09
 **Prerequisites:** None.
 **Unblocks:** The headless agent engine every phase of
 the Kepler console depends on (now built), and the benchmark
-harness of phases 4–5 (now built, under [benchmark.md](benchmark.md)).
+harness of phases 4–5 (now built, under [harness.md](../benchmarking/harness.md)).
 **Branch:** implemented on `agent/model-backends-impl`, off `dev` — the
 maintainer redirected the base from `main` to `dev` at implementation time
 (`dev` carries the current plan doc and the 49-tool registry the design
@@ -493,10 +513,12 @@ Nine requirements, from the security review of this design. Each is an
 acceptance criterion with a test, not advice. IDs are referenced from the
 rollout in section 9.
 
-**Status (2026-09-13):** all nine **implemented and tested.** S3, S4, S8 and S9
+**Status (2026-09-13):** eight **implemented and tested**, and S1 **retired**
+rather than satisfied — the component it confined was removed, so the risk is
+eliminated rather than mitigated. S3, S4, S8 and S9
 landed in phases −1–3; S1, S2, S5, S6 and S7 landed with the benchmark harness
 (phases 4–5), whose architecture and rollout are
-[benchmark.md](benchmark.md) — see its section 10 for the test that carries
+[harness.md](../benchmarking/harness.md) — see its section 10 for the test that carries
 each one.
 
 | ID | Where | Test |
@@ -517,7 +539,7 @@ instructions from the data it grades, and because fixtures are committed and
 replayed, one poisoned capture would corrupt the scoreboard permanently and
 invisibly. S1 confined the judge to two strings to keep that unreachable.
 
-**The judge was removed** (`benchmark.md` 7.5). Every verdict in the harness is
+**The judge was removed** (`harness.md` 7.5). Every verdict in the harness is
 now a deterministic assertion against recorded evidence, and nothing asks a
 model whether an answer is correct — so there is no oracle for a poisoned
 fixture to reach. The risk is eliminated rather than mitigated, which is why
@@ -698,12 +720,12 @@ mode makes runaway loops free, which is a second reason it is the default.
 
 ---
 
-## 6. Benchmarking — the design summary; see [benchmark.md](benchmark.md)
+## 6. Benchmarking — the design summary; see [harness.md](../benchmarking/harness.md)
 
-**This section is the design summary. [benchmark.md](benchmark.md) is the
+**This section is the design summary. [harness.md](../benchmarking/harness.md) is the
 architecture, the rollout, and what actually shipped** — it was written once
 the port landed and the fault taxonomy was real rather than predicted, as this
-section said it would be. Where the two disagree, benchmark.md section 15
+section said it would be. Where the two disagree, harness.md section 15
 enumerates the divergences with reasons; they are not silent. The ones worth
 knowing before reading on:
 
@@ -785,7 +807,7 @@ and output tokens, wall-clock per turn, and estimated USD from
 date and an explicit note that it is not fetched. Ollama runs cost zero and report
 wall-clock only.
 
-> **As built, this paragraph is three divergences deep** (benchmark.md 15.3,
+> **As built, this paragraph is three divergences deep** (harness.md 15.3,
 > 15.8, 15.9). There is **no cost axis and no `prices.json`**: tokens are the
 > measurement and money is the reader's arithmetic, with spending bounded in
 > tokens instead. "Wall-clock per turn" became **three clocks reported
@@ -799,7 +821,7 @@ wall-clock only.
 **Answer correctness.** Deterministic first: regex assertions, numeric
 comparison with tolerance, and artifact-path presence checks against an answer
 key. **Nothing else** — an optional LLM judge was built here and removed
-(`benchmark.md` 7.5), and with it requirement S1.
+(`harness.md` 7.5), and with it requirement S1.
 
 **Protocol robustness.** Counts each fault type. Includes a specific
 `null_argument_fidelity` check for tasks tagged `null-argument`: JSON null is a
@@ -835,10 +857,17 @@ test asserts on it.
 
 Version 2 adds: `schema_version` set to 2; a `backend` object carrying the spec,
 provider, a `base_url_host` **scrubbed of userinfo** (S4), and the capability
-record; a `usage_totals` object with `input_tokens`, `output_tokens`, and
-`estimated_usd`; a `protocol_faults` list of turn-stamped fault records; and a
-`turns` list carrying per-turn latency, usage, and the provider's raw stop
-reason.
+record; a `usage_totals` object of token counts; a `protocol_faults` list of
+turn-stamped fault records; and a `turns` list carrying per-turn latency,
+usage, and the provider's raw stop reason.
+
+**Correction (2026-09-18):** this paragraph specified `estimated_usd` in
+`usage_totals`. It was never built, and section 6, open question 3 and
+[`../benchmarking/harness.md`](../benchmarking/harness.md) sections 8 and 15
+all say so — a price is not a property of a session, and writing one into a
+durable record freezes a number that ages badly. The implemented
+`usage_totals` carries token counts only. This sentence was the one place the
+document still disagreed with itself.
 
 The existing note that full tool payloads are omitted stays true: manifests
 reference artifact paths, they do not embed results.
@@ -878,6 +907,14 @@ Live provider runs sit behind a new `model_api` marker plus an environment gate
 tests get an `ollama` marker and skip when the daemon is unreachable.
 `pyproject.toml` gains both markers and nothing else — **no dependency changes.**
 
+**Correction (2026-09-18):** the gate this rollout kept naming,
+`tests/test_runner_session.py`, is now `tests/test_agent_session_manifest.py`
+— it drives `run_session` directly and every manifest assertion is unchanged.
+`tests/test_runner_validation.py` is gone; its two assertions that the engine's
+own tests did not already make moved into them. Both changes belong to the
+console's retirement of `tools/runner.py`, not to this rollout, whose phases
+ran and passed against the names as written.
+
 CI is unchanged in shape: `compileall`, `pytest`, `repository-shape`. No new
 required job, no live calls, no keys in CI.
 
@@ -915,7 +952,7 @@ each with the full suite green and the Phase 0c gate (an unedited
 
 Phases 4–5 — the benchmark harness (section 6) and manifest v2 (section 7),
 carrying S1, S2, S5, S6, S7 — landed on 2026-09-13 under
-[benchmark.md](benchmark.md); see the phase table below.
+[harness.md](../benchmarking/harness.md); see the phase table below.
 
 ### Global constraints
 
@@ -1290,7 +1327,7 @@ and behavior changes."* Docs land last and alone.
 
 ### Phases 4–5 — the benchmark harness — **done (2026-09-13)**
 
-Planned, built and landed under [benchmark.md](benchmark.md), which is the
+Planned, built and landed under [harness.md](../benchmarking/harness.md), which is the
 architecture and the sequencing; this table is the index. Their content is
 section 6 plus the manifest v2 payload of section 7, and they carried the
 remaining security requirements.
@@ -1305,7 +1342,7 @@ remaining security requirements.
 | **5b** | The four graders and `grade` | Three kinds of right answer; four fidelity families; three clocks. |
 | **5c** | The matrix and `compare` | Headline axes first; no blended score by default. |
 | **5d** | The corpus | 16 tasks over five suites. **The 7.1.9 calibration gate is met** (2026-09-14) for every suite but `smoke`, which is exempt — three backends of different tiers, three repeats, 144 sessions; each suite's `calibration.md` records what its run found. |
-| ~~**5e**~~ | ~~The judge (S1)~~ | Built, run once over a full sweep, and removed — see `benchmark.md` 7.5. S1 retired with it. |
+| ~~**5e**~~ | ~~The judge (S1)~~ | Built, run once over a full sweep, and removed — see `harness.md` 7.5. S1 retired with it. |
 
 **Not done:** the calibration run. A suite is untrusted until it has been run
 against at least three backends of different tiers, and that needs credentials
@@ -1382,7 +1419,7 @@ every tool run touches — depend on a benchmark data file needing maintenance
 forever. The question it answers is one a reader can answer themselves from the
 token counts and their own current pricing page. Spending is *bounded* instead,
 in tokens: `--max-tokens` is required for any live backend and is checked
-before dispatching each turn. See benchmark.md sections 5.7 and 15.3.
+before dispatching each turn. See harness.md sections 5.7 and 15.3.
 
 **4. How large should the seed suite be?** *Resolved: eight tasks, one per
 confirmed-live failure mode `SYSTEM_PROMPT` already documents.* Smallest suite
@@ -1415,8 +1452,10 @@ model strategies change.
 ## 12. References
 
 * `docs/tool-architecture.md` — the master architecture this design sits under.
-* `tools/runner.py` — the loop being refactored; `SYSTEM_PROMPT` is the source of
-  the seed benchmark tasks.
+* `tools/agent/engine.py`, `tools/agent/prompt.py` — where the loop and
+  `SYSTEM_PROMPT` live after Phase 0c moved them out of `tools/runner.py`, and
+  the source of the seed benchmark tasks. The shim this rollout refactored was
+  retired with `kepler-astro-query` once the console replaced both.
 * `tools/registry.py:339`, `:380` — the integer-or-null unions.
 * `tools/sessions.py` — the manifest this design extends to v2.
 * `tools/artifacts.py` — existing path controls and the two gaps S7 keeps

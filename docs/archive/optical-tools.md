@@ -1,5 +1,21 @@
 # Optical Tools: Broken Links and Stateless Architecture
 
+> [!NOTE] Archived 2026-09-18
+> This track is complete and this document is a record, not a plan. Every
+> phase — baseline 1–4, stateless S0–S6, closure P1–P9 — landed on `dev`, and
+> a completion audit on 2026-09-18 re-ran the evidence: the default suite is
+> green (2575 passed, 44 skipped), the three NGC 5286 B frames drive
+> `calibrate_zeropoint` from pixels, the bounded M15 plate solve returns a
+> solution in single-digit seconds against the operator's 4200-series indexes,
+> the ATLAS backend resolves against the operator UCAC5 tree, and the local
+> Girardi grid loads with no socket. The durable outcome lives in
+> [`../tool-architecture.md`](../tool-architecture.md); `docs/extraction.md`
+> keeps the per-domain provenance.
+>
+> **One correction applied at archive**, marked inline at Phase P4: the
+> variable-star parity fixture shipped at `test_data/variable_star/`, not at
+> `data/variable_star/` as the phase's first checkbox specifies.
+
 **Status:** Baseline phases 1–4 and stateless phases S0–S6 are complete on
 `dev`, as are closure phases P1–P9. The rollout is complete.
 **Date:** 2026-09-04 (findings), 2026-09-07 (stateless design, sequencing,
@@ -1482,6 +1498,15 @@ typed warnings/errors at the tool boundary.
       `data/variable_star/`, using the extracted parser input columns
       `id`, `mjd`, `mag`, and `mag_error`, plus a README naming it a parity
       fixture rather than a catalog download.
+      **Correction (2026-09-18):** it shipped at `test_data/variable_star/`
+      instead. The data-root rename recorded above (`test_data/` became
+      `data/`) landed before this phase, and `tools/variable_star.py`'s
+      `_fixture_dir()` was written against the old path, so the directory is
+      the one pre-rename path left in the tree and the only fixture root that
+      does not sit under `KEPLER_DATA_DIR`. It is tracked and the tools reach
+      it, so nothing is broken; moving it is a behaviour change and belongs in
+      its own commit, not in this record. Section 7.2's "there is none in
+      `data/`" describes the tree as it actually is.
 - [x] Port every computational variable TypeScript symbol needed by the runtime:
       `mergeSourcesByMjd`, `errorMSE`, `VariableData`, variable-source choice,
       differential values and error bars, JD range, period folding,
