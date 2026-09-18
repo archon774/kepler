@@ -66,15 +66,18 @@ reusable local pipeline, all built on the plain Python functions in `tools/`:
   escape stops the run at its next safe point. It takes no required arguments — `uv run kepler`
   opens it — because everything it needs is chosen inside the session. In
   particular the model backend is: `/backend` lists what is on offer, and
-  `/backend ollama` (or `/backend anthropic`, or an explicit
-  `/backend ollama/qwen3.8:27b-mlx`) switches the live session over, retitling
-  the header, without restarting anything. A backend that cannot answer is
+  `/backend ollama` opens a picker listing the models that daemon actually
+  holds, marking the one in use and the default. `/backend anthropic`, or an
+  explicit `/backend ollama/qwen3.8:27b-mlx`, switches straight over without
+  asking. Either way the live session moves and the header retitles, without
+  restarting anything. A backend that cannot answer is
   refused with the reason and the session stays on the one that works, so a
   stopped daemon or a missing key costs a command rather than the session.
   `--backend` picks the one it opens on, for a shell alias that always starts
   somewhere particular. Typing `/` lists every command there is, Tab finishes
   the one you have started (`/bac` → `/backend `, then Tab again for the
-  provider names), and `/help` prints the same list to the transcript.
+  provider names, and once more for that host's models), and `/help` prints
+  the same list to the transcript.
 
   ```bash
   uv run kepler                       # opens on anthropic/claude-sonnet-5

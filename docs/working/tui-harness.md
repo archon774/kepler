@@ -155,13 +155,14 @@ pin because it reuses the already-pinned `pillow`.
 | `tools/tui/__main__.py` | Console-script entry: argument parsing, `launch_spec`, backend construction, application launch. |
 | `tools/tui/app.py` | `KeplerApp`: layout, keybindings, the engine thread worker, the approval modal, `resume_session`. |
 | `tools/tui/commands.py` | `Command`, `COMMANDS`, `Parsed`, `Suggestion`, `parse_input`, `resolve`, `help_text`, `suggest`, `complete`. No Textual imports beyond types. |
-| `tools/tui/backends.py` | `BackendChoice`, `CHOICES`, `resolve_spec`, `open_backend`, `describe_choices`, `unavailable_message`. The UI-facing half of backend selection. No Textual. |
+| `tools/tui/backends.py` | `BackendChoice`, `CHOICES`, `resolve_spec`, `open_backend`, `offered_models`, `describe_choices`, `unavailable_message`. The UI-facing half of backend selection. No Textual. |
 | `tools/tui/widgets/header.py` | `KeplerHeader` — the titled frame, and the live backend spec inside it. |
 | `tools/tui/widgets/transcript.py` | `Transcript`, with a single `handle_event` entry point, plus `UserEntry` (what the person said) and `ThoughtBlock` (what the provider revealed of the model's reasoning). |
 | `tools/tui/widgets/tool_node.py` | `ToolNode` — one collapsible tool call, with `start()`, `finish()`, and `deny()`. |
 | `tools/tui/widgets/prompt.py` | `PromptInput` — the prompt line with Tab bound to completion — and `CommandMenu`, the list of offers above it. |
 | `tools/tui/widgets/artifacts.py` | Artifact browser modal screen. |
 | `tools/tui/widgets/sessions.py` | `SessionBrowser` modal screen, and `history_from_manifest`. |
+| `tools/tui/widgets/models.py` | `ModelBrowser` — the modal that picks which of a provider's models to switch to. |
 | `tools/tui/render/capability.py` | `GraphicsTier` and `detect_tier` — the terminal graphics capability probe. |
 | `tools/tui/render/image.py` | `render_halfblocks` — the half-block PNG renderer; native-protocol delegation. |
 | `tools/tui/render/waveform.py` | `render_waveform` — braille waveform for WAV artifacts. |
@@ -480,9 +481,9 @@ superseded: the backend is selectable from inside the session.
 `anthropic` (default model `claude-sonnet-5`, reads `ANTHROPIC_API_KEY`) and
 `ollama` (default `qwen3.8:27b-mlx`, reads `OLLAMA_BASE_URL`, no key).
 `/backend` with
-no arguments describes both and marks the running one. `/backend anthropic`
-expands to that provider's default model; `/backend ollama llama3.1:8b` and
-`/backend ollama/llama3.1:8b` both name a model explicitly.
+no arguments describes both and marks the running one. `/backend ollama
+llama3.1:8b` and `/backend ollama/llama3.1:8b` both name a model explicitly.
+A bare provider name asks rather than assumes — see 8.1.1.
 
 It owns **none** of the construction rules. Credential and endpoint binding
 stays in `tools/llm/factory.py` (S3): this module hands it a spec and
@@ -521,6 +522,46 @@ Four properties make the command safe to offer mid-session:
   the one moment the guard exists to cover, and phase F's prompt-disable rides
   on the same fact, so the two cannot drift apart.
 * **The header follows.** `KeplerHeader.set_backend` runs on every switch.
+
+#### 8.1.1 A bare provider name opens the picker
+
+`/backend ollama` used to expand to the default model and switch. That is the
+right answer for a host with one model and the wrong one for this host, which
+holds eleven: a default is ten wrong answers wearing a convenience.
+
+So a bare provider name whose host publishes an inventory opens
+`ModelBrowser`, a modal listing what the daemon reports, in the order it
+reports it (Ollama returns newest first), with the running model and the
+console default marked. Both marks matter and they are not the same thing:
+*current* is what choosing it would not change, *default* is what the person
+came here to pick something other than.
+
+Three rules keep it from being in the way:
+
+* **Naming a model outright still switches directly.** `/backend ollama
+  gemma4:12b` opens no dialog, so a habit or a keybind does not acquire one.
+* **A host that cannot be asked offers nothing, and the switch proceeds as
+  before** — to the default, which then passes or fails the 8.1 probes with
+  the message it already had. An unanswerable question must not be able to
+  stop the switch that was asked for.
+* **Only Ollama answers.** `offered_models` is a provider-by-provider
+  question, and Ollama's is the inventory that needs no credential. Which
+  Anthropic models this console offers is a decision, not a listing, and it
+  lives in `CHOICES`.
+
+Tab completes the same list: `/backend ollama ` then Tab offers the models the
+daemon holds, which is the keyboard path to the same answer. Completing an
+argument now sees every argument word typed so far, not just the partial one,
+which is what lets one completer answer "provider" for the first and "model"
+for the second.
+
+**A listing is not a generation, and is not timed like one.**
+`OLLAMA_DEFAULT_TIMEOUT_S` is 600 s because a local turn can take minutes
+(model-backends.md 4.3); `is_available()` and `installed_models()` now use
+`OLLAMA_PROBE_TIMEOUT_S`, five seconds, because a daemon answers `/api/tags`
+at once or it is not answering. Without that split, one Tab against a host
+that accepts connections and then says nothing would freeze the console for
+ten minutes.
 
 ### 8.2 The Ollama default model
 
@@ -598,6 +639,12 @@ Tab then finishes what the menu is showing:
 Aliases match but are never offered: `/q` finds `quit` and completes to
 `/quit`. The short form stays a shortcut for typing, and what lands in the
 prompt is the name the help text lists.
+
+A completer is handed **every argument word typed so far**, the last of which
+is the one being completed and may be empty. That is what lets `/backend`
+answer with provider names for the first argument and with the models that
+provider's host holds for the second (8.1.1). Filtering by the partial word
+stays `suggest`'s job, so a completer only ever has to say what exists.
 
 `suggest()` and `complete()` are pure functions on the same Textual-free
 registry module, so completion is tested without a terminal; `PromptInput`
@@ -753,6 +800,12 @@ no daemon, no terminal.
   `should_stop` that raises cannot stop anything.
   `tests/test_tui_app.py` drives the same four through the pilot, including
   that a note the session never took comes back to the prompt.
+* **Model selection.** `tests/test_tui_app.py` covers all three paths through
+  8.1.1 — a bare provider name opens the picker and builds nothing until a
+  row is chosen, a closed picker leaves the session where it was, and an
+  explicit model switches without asking for an inventory at all. The two
+  older `/backend ollama` tests now stub `offered_models` to return `()`
+  rather than depending on whether the machine running them has a daemon.
 * **TUI.** Textual's headless pilot drives keypresses and asserts widget state.
   The interface is genuinely CI-testable.
 * **Rendering.** The capability probe against faked environments; the half-block

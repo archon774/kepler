@@ -287,6 +287,15 @@ ids can themselves contain slashes (`openai/meta-llama/Llama-3-8b` is provider
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI and compatible endpoints. |
 | `GEMINI_API_KEY` | Gemini. Header only — never a query parameter (S4). |
 | `OLLAMA_BASE_URL` | Defaults to loopback port 11434. No auth. |
+| `OLLAMA_TIMEOUT_S` | Per-request timeout, default 600 s — a local turn is bounded by the host's hardware, not a provider's SLA. |
+
+**A question about the daemon is not timed like a turn.** `is_available()` and
+`installed_models()` use `OLLAMA_PROBE_TIMEOUT_S` (5 s) rather than the 600 s
+generation timeout: a daemon answers `/api/tags` at once or it is not
+answering, and both are asked from a console with a person waiting at it.
+`_client(timeout_s=...)` only ever tightens the bound, never relaxes it, so an
+explicitly lower timeout still wins and S3's "an explicit timeout, always"
+holds either way.
 
 Resolution order in `build_backend()`, and no other: an explicit argument beats
 the environment, which beats the class defaults. Credential and endpoint are
