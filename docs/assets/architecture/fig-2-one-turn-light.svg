@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="702" viewBox="0 0 880 702" role="img" aria-label="The control flow of one turn in run_session. Shaded as harness: drain pending input, the stop check, fault recording, argument validation, approval, the interrupt check, the cache lookup and the manifest save. Unshaded as turn-taking: the model call, the stop-reason branch, the tool dispatch, result serialisation and appending results to the conversation. Eight of the fourteen steps are harness steps.">
+  <title>The control flow of one turn in run_session. Shaded as harness: drain pending input, the stop check, fault recording, argument validation, approval, the interrupt check, the cache lookup and the manifest save. Unshaded as turn-taking: the model call, the stop-reason branch, the tool dispatch, result serialisation and appending results to the conversation. Eight of the fourteen steps are harness steps.</title>
+  <style>
+  svg { color: #0F1619; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #0F1619; }
+  .d-box { fill: #F5F8F7; stroke: #CBD5D3; stroke-width: 1.4; }
+  .d-boxA { fill: #D9EDEF; stroke: #0C6B78; stroke-width: 1.4; }
+  .d-boxW { fill: #F6E6D7; stroke: #A8500C; stroke-width: 1.4; }
+  .d-frame { fill: none; stroke: #CBD5D3; stroke-width: 1.4; opacity: .6; }
+  .d-panel { fill: none; stroke: #CBD5D3; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .d-plane { fill: #D9EDEF; stroke: none; opacity: .5; }
+  .d-line { stroke: #0F1619; stroke-width: 1.4; fill: none; opacity: .55; }
+  .d-lineA { stroke: #0C6B78; stroke-width: 1.6; fill: none; }
+  .d-lineW { stroke: #A8500C; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .d-lineW.solid { stroke-dasharray: 0; }
+  .d-rule { stroke: #0F1619; stroke-width: 1; fill: none; opacity: .25; }
+  .mk { fill: #0F1619; opacity: .55; }
+  .mkA { fill: #0C6B78; }
+  .t { font-size: 13px; font-weight: 500; }
+  .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #6B7C84; }
+  .tm { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; font-weight: 500; }
+  .tl { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #6B7C84; }
+  .tla { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #0C6B78; }
+  .tlw { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #A8500C; }
+  .tn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #6B7C84; }
+  .tn.ink { fill: #0F1619; }
+  .tn.ink2 { fill: #38474E; }
+  .tn.accent { fill: #0C6B78; }
+  .tn.warn { fill: #A8500C; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+  </defs>
+  <rect width="880" height="702" fill="#FFFFFF"/>
+
+  <rect class="d-box" x="180" y="6" width="13" height="13"/>
+  <text class="tn" x="200" y="17">turn-taking &#8212; the irreducible part</text>
+  <rect class="d-boxA" x="450" y="6" width="13" height="13"/>
+  <text class="tn" x="470" y="17">harness &#8212; what this loop adds</text>
+
+  <rect class="d-boxA" x="180" y="40" width="500" height="42"/>
+  <text class="t" x="196" y="59">drain pending_input()</text>
+  <text class="ts" x="196" y="75">a note typed mid-run is merged into the trailing user message</text>
+
+  <line class="d-line" x1="430" y1="82" x2="430" y2="94" marker-end="url(#a)"/>
+  <rect class="d-boxA" x="180" y="96" width="500" height="38"/>
+  <text class="t" x="196" y="114">should_stop()</text>
+  <text class="ts" x="196" y="128">&#8594; SessionFinished(interrupted)</text>
+
+  <line class="d-line" x1="430" y1="134" x2="430" y2="146" marker-end="url(#a)"/>
+  <rect class="d-box" x="180" y="148" width="500" height="54"/>
+  <text class="tm" x="196" y="172">backend.complete(messages, tools, system, max_tokens)</text>
+  <text class="ts" x="196" y="191">streams into on_text / on_thinking &#8212; reasoning is never merged into text</text>
+
+  <line class="d-line" x1="430" y1="202" x2="430" y2="214" marker-end="url(#a)"/>
+  <rect class="d-boxA" x="180" y="216" width="500" height="38"/>
+  <text class="t" x="196" y="234">response.faults &#8594; ProtocolFault</text>
+  <text class="ts" x="196" y="248">a max_tokens stop carrying tool calls means truncated arguments</text>
+
+  <line class="d-line" x1="430" y1="254" x2="430" y2="266" marker-end="url(#a)"/>
+  <rect class="d-box" x="180" y="268" width="500" height="42"/>
+  <text class="t" x="196" y="294">stop_reason?</text>
+
+  <line class="d-line" x1="680" y1="289" x2="736" y2="289" marker-end="url(#a)"/>
+  <rect class="d-box" x="740" y="266" width="128" height="46"/>
+  <text class="tn ink mid" x="804" y="285">end_turn &#8594;</text>
+  <text class="tn ink mid" x="804" y="300">SessionFinished</text>
+
+  <line class="d-line" x1="430" y1="310" x2="430" y2="328" marker-end="url(#a)"/>
+  <text class="tn" x="440" y="324">tool_use</text>
+
+  <rect class="d-panel" x="180" y="330" width="500" height="254"/>
+  <text class="ts" x="196" y="350">for each call in response.tool_calls:</text>
+
+  <rect class="d-boxA" x="196" y="358" width="468" height="26"/>
+  <text class="tn ink" x="208" y="375">validate_tool_call(...) &#8212; a bad argument never reaches the function</text>
+  <rect class="d-boxA" x="196" y="388" width="468" height="26"/>
+  <text class="tn ink" x="208" y="405">approver(proposed) &#8212; DENY returns an error result instead</text>
+  <rect class="d-boxA" x="196" y="418" width="468" height="26"/>
+  <text class="tn ink" x="208" y="435">should_stop() &#8212; an interrupted call still answers its tool_use</text>
+  <rect class="d-boxA" x="196" y="448" width="468" height="26"/>
+  <text class="tn ink" x="208" y="465">make_cache_key(name, args) &#8212; a repeat costs no second call</text>
+  <rect class="d-box" x="196" y="478" width="468" height="26"/>
+  <text class="tn ink" x="208" y="495">functions[name](**arguments)</text>
+  <rect class="d-box" x="196" y="508" width="468" height="26"/>
+  <text class="tn ink" x="208" y="525">model_dump() &#8594; json &#8594; ToolResultBlock</text>
+  <rect class="d-boxA" x="196" y="538" width="468" height="26"/>
+  <text class="tn ink" x="208" y="555">session.save() &#8212; after every single call</text>
+
+  <line class="d-line" x1="430" y1="584" x2="430" y2="602" marker-end="url(#a)"/>
+  <rect class="d-box" x="180" y="604" width="500" height="42"/>
+  <text class="t" x="196" y="630">messages.append(user, blocks = every tool_result)</text>
+
+  <path class="d-line" d="M 430 646 L 430 668 L 130 668 L 130 61 L 176 61" marker-end="url(#a)"/>
+  <text class="tn" x="14" y="336">next turn &#8212;</text>
+  <text class="tn" x="14" y="350">max_turns = 20</text>
+</svg>

@@ -9,6 +9,7 @@ updated when the code changes.
 | [tool-architecture.md](tool-architecture.md) | The master package architecture: the public tool layer, algorithm-package ownership, shared models and artifacts, `skylib_lite` consolidation, runtime and validation policy, and the non-goals. |
 | [extraction.md](extraction.md) | The master extraction record: one section per algorithm package, with exact upstream provenance (source path, line ranges, per-file diff fidelity), every severed dependency, the preserved parity quirks, and the verification actually performed. |
 | [repository-folders.md](repository-folders.md) | A current-state guide to every source folder in the repository — responsibilities, important files, and caveats. |
+| [architecture-layers.md](architecture-layers.md) | The layer map over the architecture: which parts of the repository are tools, which are turn-taking, and which are harness — with the flowcharts for each, the eight gates the loop adds over a bare tool-use wrapper, and the three seams the console and the benchmark fill differently. |
 | [pulsar-tool-pipeline.md](pulsar-tool-pipeline.md) | The four-stage pulsar tool chain (light curve → periodogram → fold → sonify): why the stage order is a dependency, each stage's extracted Astromancer provenance, result contracts, and where output goes. |
 
 ## Subdirectories

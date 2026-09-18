@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="472" viewBox="0 0 880 472" role="img" aria-label="Two panels side by side. On the left a plain turn-taking wrapper: the conversation, the model call, dispatch, append the result, repeat, with nothing between the steps. On the right Kepler's loop: the same four steps with seven gates sitting on the wires between them -- drain notes, the stop check, protocol faults, validate arguments, approve, cache, and save the manifest.">
+  <title>Two panels side by side. On the left a plain turn-taking wrapper: the conversation, the model call, dispatch, append the result, repeat, with nothing between the steps. On the right Kepler's loop: the same four steps with seven gates sitting on the wires between them -- drain notes, the stop check, protocol faults, validate arguments, approve, cache, and save the manifest.</title>
+  <style>
+  svg { color: #0F1619; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #0F1619; }
+  .d-box { fill: #F5F8F7; stroke: #CBD5D3; stroke-width: 1.4; }
+  .d-boxA { fill: #D9EDEF; stroke: #0C6B78; stroke-width: 1.4; }
+  .d-boxW { fill: #F6E6D7; stroke: #A8500C; stroke-width: 1.4; }
+  .d-frame { fill: none; stroke: #CBD5D3; stroke-width: 1.4; opacity: .6; }
+  .d-panel { fill: none; stroke: #CBD5D3; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .d-plane { fill: #D9EDEF; stroke: none; opacity: .5; }
+  .d-line { stroke: #0F1619; stroke-width: 1.4; fill: none; opacity: .55; }
+  .d-lineA { stroke: #0C6B78; stroke-width: 1.6; fill: none; }
+  .d-lineW { stroke: #A8500C; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .d-lineW.solid { stroke-dasharray: 0; }
+  .d-rule { stroke: #0F1619; stroke-width: 1; fill: none; opacity: .25; }
+  .mk { fill: #0F1619; opacity: .55; }
+  .mkA { fill: #0C6B78; }
+  .t { font-size: 13px; font-weight: 500; }
+  .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #6B7C84; }
+  .tm { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; font-weight: 500; }
+  .tl { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #6B7C84; }
+  .tla { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #0C6B78; }
+  .tlw { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #A8500C; }
+  .tn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #6B7C84; }
+  .tn.ink { fill: #0F1619; }
+  .tn.ink2 { fill: #38474E; }
+  .tn.accent { fill: #0C6B78; }
+  .tn.warn { fill: #A8500C; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+  </defs>
+  <rect width="880" height="472" fill="#FFFFFF"/>
+
+  <text class="tl" x="30" y="20">A TURN-TAKING WRAPPER</text>
+  <text class="tn" x="30" y="38">about 80 lines &#183; unbounded, ungated</text>
+  <rect class="d-frame" x="30" y="48" width="380" height="392"/>
+
+  <rect class="d-box" x="110" y="60" width="240" height="44"/>
+  <text class="t mid" x="230" y="87">the conversation</text>
+  <rect class="d-box" x="110" y="150" width="240" height="44"/>
+  <text class="t mid" x="230" y="177">model.complete()</text>
+  <rect class="d-box" x="110" y="280" width="240" height="44"/>
+  <text class="t mid" x="230" y="307">dispatch the call</text>
+  <rect class="d-box" x="110" y="370" width="240" height="44"/>
+  <text class="t mid" x="230" y="397">append the result</text>
+
+  <line class="d-line" x1="230" y1="104" x2="230" y2="148" marker-end="url(#a)"/>
+  <line class="d-line" x1="230" y1="194" x2="230" y2="278" marker-end="url(#a)"/>
+  <line class="d-line" x1="230" y1="324" x2="230" y2="368" marker-end="url(#a)"/>
+  <path class="d-line" d="M 110 392 L 60 392 L 60 82 L 106 82" marker-end="url(#a)"/>
+
+  <text class="tla" x="470" y="20">KEPLER'S LOOP &#8212; engine.py, 547 LINES</text>
+  <text class="tn" x="470" y="38">bounded at max_turns = 20 &#183; every call recorded</text>
+  <rect class="d-frame" x="470" y="48" width="380" height="392"/>
+
+  <rect class="d-box" x="550" y="60" width="240" height="44"/>
+  <text class="t mid" x="670" y="87">the conversation</text>
+  <rect class="d-box" x="550" y="150" width="240" height="44"/>
+  <text class="t mid" x="670" y="177">model.complete()</text>
+  <rect class="d-box" x="550" y="280" width="240" height="44"/>
+  <text class="t mid" x="670" y="307">dispatch the call</text>
+  <rect class="d-box" x="550" y="370" width="240" height="44"/>
+  <text class="t mid" x="670" y="397">append the result</text>
+
+  <line class="d-line" x1="670" y1="104" x2="670" y2="148" marker-end="url(#a)"/>
+  <line class="d-line" x1="670" y1="194" x2="670" y2="278" marker-end="url(#a)"/>
+  <line class="d-line" x1="670" y1="324" x2="670" y2="368" marker-end="url(#a)"/>
+  <path class="d-line" d="M 550 392 L 500 392 L 500 82 L 546 82" marker-end="url(#a)"/>
+
+  <rect class="d-boxA" x="600" y="106" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="119">drain notes</text>
+  <rect class="d-boxA" x="600" y="128" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="141">stop?</text>
+
+  <rect class="d-boxA" x="600" y="198" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="211">protocol faults</text>
+  <rect class="d-boxA" x="600" y="220" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="233">validate arguments</text>
+  <rect class="d-boxA" x="600" y="242" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="255">approve</text>
+  <rect class="d-boxA" x="600" y="264" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="277">cache</text>
+
+  <rect class="d-boxA" x="600" y="336" width="140" height="18" rx="9"/>
+  <text class="tn ink mid" x="670" y="349">save the manifest</text>
+</svg>
