@@ -1422,3 +1422,29 @@ def test_quitting_with_an_approval_open_releases_the_worker_waiting_on_it():
     _run(scenario())
 
     assert decisions == [Decision.DENY]
+
+
+def test_the_approval_modal_shows_the_arguments_not_just_the_name():
+    """Approving `search_vizier` says nothing about what it would query, and
+    the transcript node carrying the arguments is behind the modal."""
+
+    modal = ApprovalModal(
+        ToolCallProposed("c1", "search_vizier", {"target": "M31", "radius": 5})
+    )
+
+    rendered = str(modal.argument_text())
+
+    assert '"target": "M31"' in rendered
+    assert '"radius": 5' in rendered
+    assert str(ApprovalModal(ToolCallProposed("c", "n", {})).argument_text()) == (
+        "no arguments"
+    )
+
+
+def test_a_huge_argument_is_truncated_rather_than_reshaping_the_dialog():
+    modal = ApprovalModal(ToolCallProposed("c1", "search_ads", {"q": "x" * 50_000}))
+
+    rendered = str(modal.argument_text())
+
+    assert len(rendered) < 2_100
+    assert rendered.endswith("… truncated")

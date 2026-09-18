@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -66,6 +68,10 @@ DEFAULT_THINKING_BUDGET = 4096
 
 LOGGER = logging.getLogger(__name__)
 
+#: How much of a proposed call's arguments the approval modal shows. A model
+#: can put a megabyte in one argument; a dialog is not where that is read.
+_MAX_ARGUMENT_PREVIEW = 2000
+
 #: How often a worker waiting on an approval re-checks whether it has been
 #: cancelled. Short enough that quitting feels immediate, long enough that a
 #: modal left open overnight costs nothing.
@@ -102,6 +108,14 @@ class ApprovalModal(ModalScreen[Decision]):
         padding: 0 0 1 0;
     }
 
+    #approval-arguments {
+        max-height: 12;
+        max-width: 80;
+        overflow: auto auto;
+        padding: 0 0 1 0;
+        color: $text-muted;
+    }
+
     #approval-buttons {
         width: auto;
         height: auto;
@@ -118,11 +132,33 @@ class ApprovalModal(ModalScreen[Decision]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="approval-dialog"):
-            yield Static(f"Allow {self.proposed.name}?", id="approval-question")
+            yield Static(
+                f"Allow {self.proposed.name}?", id="approval-question", markup=False
+            )
+            yield Static(
+                self.argument_text(), id="approval-arguments", markup=False
+            )
             with Horizontal(id="approval-buttons"):
                 yield Button("Allow", id="allow", variant="success")
                 yield Button("Allow always", id="allow-always")
                 yield Button("Deny", id="deny", variant="error")
+
+    def argument_text(self) -> Text:
+        """The arguments this call would run with, as plain text.
+
+        Shown because the name alone is not the decision: approving
+        ``search_vizier`` says nothing about what it would query, and the
+        transcript node that carries the arguments is behind this modal.
+        Rendered as Rich text and bounded, so neither markup nor length in a
+        model-supplied argument can reshape the dialog.
+        """
+
+        if not self.proposed.arguments:
+            return Text("no arguments", style="italic")
+        rendered = json.dumps(dict(self.proposed.arguments), indent=2, default=str)
+        if len(rendered) > _MAX_ARGUMENT_PREVIEW:
+            rendered = rendered[:_MAX_ARGUMENT_PREVIEW] + "\n… truncated"
+        return Text(rendered)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         decisions = {
