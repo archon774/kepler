@@ -597,7 +597,7 @@ The figures regenerate from `benchmark-report.json`, which is committed because
 the run directories are not:
 
 ```bash
-uv run python docs/working/figures/make.py
+uv run python docs/benchmarking/figures/make.py
 ```
 
 The SVG is piped straight to `rsvg-convert` and never written out, so there is

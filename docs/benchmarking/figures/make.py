@@ -1,6 +1,6 @@
 """Regenerate the benchmark figures from the committed report JSON.
 
-    uv run python docs/working/figures/make.py
+    uv run python docs/benchmarking/figures/make.py
 
 Lives beside the figures rather than in ``tools/bench/`` because it is
 documentation tooling: it reads a committed report and writes PNG into this
@@ -16,8 +16,8 @@ survives a colour-blind reader and a monochrome print.
 import json, collections
 from pathlib import Path
 
-REPORT = json.loads(Path("docs/working/benchmark-report.json").read_text())
-OUT = Path("docs/working/figures")
+REPORT = json.loads(Path("docs/benchmarking/report.json").read_text())
+OUT = Path("docs/benchmarking/figures")
 
 # Validated palette (dataviz skill reference instance).
 SERIES = {"anthropic/claude-sonnet-5": "#2a78d6",      # blue

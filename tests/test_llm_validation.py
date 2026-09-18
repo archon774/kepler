@@ -1,6 +1,6 @@
 """Pre-dispatch argument validation (S8).
 
-Phase 1b of docs/working/model-backends.md. The rule table and its evaluation
+Phase 1b of docs/archive/model-backends.md. The rule table and its evaluation
 order are section S8; property names are checked against the live registry.
 """
 

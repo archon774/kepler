@@ -1,6 +1,6 @@
 """The four grading axes, and the run-directory reader they share.
 
-``docs/working/benchmark.md`` section 7. Each grader is a pure function from
+``docs/benchmarking/harness.md`` section 7. Each grader is a pure function from
 ``(task, manifest, answer_text, events)`` to a result record: no I/O beyond
 reading the run directory, and no model calls at all. **Nothing in this
 package asks a model whether an answer is correct**; every verdict is a

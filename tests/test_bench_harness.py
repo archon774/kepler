@@ -1,7 +1,7 @@
 """The run loop: the smoke suite end to end, the no-socket guard (B2),
 run.json completeness (B4), and the token budget (B5).
 
-docs/working/benchmark.md sections 5.5-5.7. Everything here runs under a plain
+docs/benchmarking/harness.md sections 5.5-5.7. Everything here runs under a plain
 `uv run pytest`: offline, deterministic, no API keys, no daemon, no new CI job.
 """
 

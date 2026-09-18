@@ -1,4 +1,4 @@
-"""Session manifest schema version 2 (docs/working/benchmark.md section 8).
+"""Session manifest schema version 2 (docs/benchmarking/harness.md section 8).
 
 Version 2 is additive. The properties that matter are as much about what it
 does *not* do as what it adds: a recorded v1 manifest must still read, and an

@@ -1,6 +1,6 @@
 """The committed corpus: it loads, it runs, and its keys catch what they name.
 
-docs/working/benchmark.md section 9 and phase 5d.
+docs/benchmarking/harness.md section 9 and phase 5d.
 
 The end-to-end run proves plumbing, not discrimination: its transcripts were
 written to pass. What the second half of this file asserts is the thing that

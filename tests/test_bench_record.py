@@ -1,6 +1,6 @@
 """Record mode: the credential scan (S2) and response-only capture.
 
-docs/working/benchmark.md section 5.3. ``record`` is the only place in the
+docs/benchmarking/harness.md section 5.3. ``record`` is the only place in the
 harness that performs a live remote call, and everything it writes is reviewed
 by a human as adversarial input before it is committed.
 """

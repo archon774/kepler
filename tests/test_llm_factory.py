@@ -1,7 +1,7 @@
 """``parse_spec`` and ``build_backend`` -- spec parsing and the S3 credential/
 endpoint binding rule.
 
-Phase 2a of docs/working/model-backends.md, sections 4.3 and S3.
+Phase 2a of docs/archive/model-backends.md, sections 4.3 and S3.
 """
 
 from __future__ import annotations

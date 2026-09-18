@@ -1,6 +1,6 @@
 """The headless agent loop: ``tools.agent.engine.run_session``.
 
-Phase 0c of docs/working/model-backends.md. The engine emits events; a
+Phase 0c of docs/archive/model-backends.md. The engine emits events; a
 Decision flows back through the approver. These tests drive it with a
 hand-written stub backend, no SDK and no network.
 """

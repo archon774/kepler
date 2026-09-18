@@ -1,7 +1,7 @@
 """The fixture store: matching, miss policies, revalidation (B3), and the
 artifact rules (S7/S6/S5).
 
-docs/working/benchmark.md section 5.3. Fixture files are reviewed as
+docs/benchmarking/harness.md section 5.3. Fixture files are reviewed as
 adversarial input, not as test data: they are committed, replayed, and are the
 archive as far as a benchmarked model is concerned.
 """

@@ -1,6 +1,6 @@
 """The run loop and the run-directory writer.
 
-``docs/working/benchmark.md`` sections 5.5-5.7. ``run`` produces evidence;
+``docs/benchmarking/harness.md`` sections 5.5-5.7. ``run`` produces evidence;
 ``grade`` produces verdicts. Keeping them apart is what makes a grader fix free
 -- the first version of any grader is wrong, and re-grading must not cost a
 re-spend against four paid backends.

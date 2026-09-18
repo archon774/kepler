@@ -1,6 +1,6 @@
 """Tool-schema translation: the registry's schemas rendered into each provider
 dialect. Pure -- no I/O, every case a unit test. See
-``docs/working/model-backends.md`` section 4.4.
+``docs/archive/model-backends.md`` section 4.4.
 
 Two rules the translations must never break:
 

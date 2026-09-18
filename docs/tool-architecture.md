@@ -493,7 +493,7 @@ is unchanged without them:
 this tool surface: **which model is actually better, and at what** (answer
 correctness), and **at what cost in work** (efficiency). Everything else it
 reports exists to explain one of those. The full architecture is
-`docs/working/benchmark.md`.
+`docs/benchmarking/harness.md`.
 
 **It adds nothing to the tool surface.** It owns no tool, registers nothing,
 and is listed in `tests/test_tool_registry_coverage.py::NOT_TOOL_MODULES`

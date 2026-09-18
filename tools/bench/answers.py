@@ -1,6 +1,6 @@
 """``answers`` -- put the question and the model's reply side by side.
 
-``docs/working/benchmark.md`` section 11. Every other verb reduces a session
+``docs/benchmarking/harness.md`` section 11. Every other verb reduces a session
 to a verdict; this one does the opposite, because **a scoreboard cannot be
 audited against nothing**. A check that fires is a claim about a piece of
 prose, and the only way to tell a real failure from a regex artefact is to

@@ -1,7 +1,7 @@
 """The task loader: safe YAML (S5), containment (S6), env (B7), and the
 required ``because``.
 
-docs/working/benchmark.md section 6.1. The loader is strict in one specific
+docs/benchmarking/harness.md section 6.1. The loader is strict in one specific
 way that matters: unknown keys are an error. A typo in ``must_not_call`` that
 silently grades nothing is worse than a load failure, because the suite keeps
 reporting a pass that was never checked.

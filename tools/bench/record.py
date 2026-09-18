@@ -1,6 +1,6 @@
 """Record mode: capture live class-R results as reviewable fixture entries.
 
-``docs/working/benchmark.md`` section 5.3 and requirement S2. ``record`` is
+``docs/benchmarking/harness.md`` section 5.3 and requirement S2. ``record`` is
 the fifth CLI verb and sits outside the run/grade/compare flow: it performs
 **live** remote calls -- the only place in the harness that does -- and writes
 fixture entries for a human to review before they are committed.

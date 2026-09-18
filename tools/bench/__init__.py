@@ -1,6 +1,6 @@
 """``tools.bench`` -- the model benchmark harness.
 
-``docs/working/benchmark.md``. The harness answers two questions about swapping
+``docs/benchmarking/harness.md``. The harness answers two questions about swapping
 one model for another on Kepler's tool surface: **which model is actually
 better, and at what** (answer correctness), and **at what cost in work**
 (efficiency). Everything else it reports exists to explain one of those.

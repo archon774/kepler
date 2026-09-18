@@ -1,6 +1,6 @@
 """``grade`` -- turn a run directory into verdicts.
 
-``docs/working/benchmark.md`` section 5.1. A separate verb from ``run``,
+``docs/benchmarking/harness.md`` section 5.1. A separate verb from ``run``,
 because the first version of any grader is wrong and re-grading four paid
 backends must not cost a re-spend. ``run`` produces evidence; ``grade``
 produces verdicts; ``compare`` produces the matrix.

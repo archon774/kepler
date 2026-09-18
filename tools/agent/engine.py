@@ -4,7 +4,7 @@ Events flow out as an iterator; a :class:`~tools.agent.approval.Decision` flows
 in through the ``approver`` callable. Keeping the directions separate leaves the
 event stream pure and directly consumable by the Kepler console, a plain
 Python caller, and the benchmark harness alike. See
-``docs/working/model-backends.md`` section 4.7 and
+``docs/archive/model-backends.md`` section 4.7 and
 ``docs/tool-architecture.md`` section 10.
 
 Two behaviours from the pre-engine ``run()`` are load-bearing and preserved:

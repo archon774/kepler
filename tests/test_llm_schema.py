@@ -1,6 +1,6 @@
 """Tool-schema translation into each provider dialect.
 
-Phase 1a of docs/working/model-backends.md, section 4.4.
+Phase 1a of docs/archive/model-backends.md, section 4.4.
 
 The golden renderings under tests/fixtures/llm/schemas/ are the record of what
 every provider sees for the live registry. Any change to tools/registry.py

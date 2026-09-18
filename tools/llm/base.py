@@ -1,7 +1,7 @@
 """The ``ModelBackend`` protocol, its capability record, the port's one
 construction-time failure, and the shared HTTP transport.
 
-See ``docs/working/model-backends.md`` section 4.2. ``BaseHTTPBackend`` owns the
+See ``docs/archive/model-backends.md`` section 4.2. ``BaseHTTPBackend`` owns the
 transport rules (S3/S4) so the OpenAI, Ollama, and Gemini adapters cannot each
 get them subtly wrong. It imports ``httpx`` only inside a method, so
 ``import tools.llm`` still costs no HTTP stack.

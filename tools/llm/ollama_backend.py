@@ -10,7 +10,7 @@ Phase 2b measured the compatibility layer against ``qwen3.8:27b-mlx`` and
 found it faithful -- the integer-or-null union reaches the model, tool
 arguments arrive as a JSON string, and parallel calls return in one message --
 so the native chat endpoint fallback was not taken. See
-``docs/working/model-backends.md`` section 11 question 2.
+``docs/archive/model-backends.md`` section 11 question 2.
 """
 
 from __future__ import annotations
