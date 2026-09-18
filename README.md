@@ -1,7 +1,14 @@
-# Kepler
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kepler-banner-dark.svg">
+    <img src="docs/assets/kepler-banner-light.svg" alt="Kepler — astronomy research console" width="880">
+  </picture>
+</p>
 
-[![CI](https://github.com/archon774/kepler/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/archon774/kepler/actions/workflows/ci.yml)
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+<p align="center">
+  <a href="https://github.com/archon774/kepler/actions/workflows/ci.yml"><img src="https://github.com/archon774/kepler/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+">
+</p>
 
 An agentic, tool-enabled system for automated astronomy — an LLM agent,
 named Kepler, that plans and executes astronomy tasks by calling a registry
@@ -16,9 +23,9 @@ systems.
 - [Current Contents](#current-contents)
 - [Repository Shape](#repository-shape)
 - [Getting Started](#getting-started)
+  - [Running the Console](#running-the-console)
 - [Testing & Validation](#testing--validation)
 - [Configuration](#configuration)
-- [TypeScript Extracts](#typescript-extracts)
 - [Architecture & Further Reading](#architecture--further-reading)
 - [Development Notes](#development-notes)
 - [Contributing](#contributing)
@@ -53,37 +60,21 @@ reimplemented. See [Highlights](#highlights) below and
 
 ## The Agent
 
-Kepler has an interactive console, a one-shot agent entry point, and a
-reusable local pipeline, all built on the plain Python functions in `tools/`:
+Kepler has one model-driven entry point — the `kepler` console — and a
+reusable local pipeline, both built on the plain Python functions in `tools/`.
+[Running the Console](#running-the-console) is the guide; this section is what
+it is made of:
 
 - **`kepler` — the interactive console.** The full-screen Textual application
-  over the same agent loop: a transcript that keeps your question in view and
+  over the agent loop: a transcript that keeps your question in view and
   renders each tool call as it runs, the model's reasoning where the provider
   reveals it, image and waveform previews of the artifacts a run produces,
-  session resume, and slash commands. A turn is something you are in rather
-  than something you wait out — the prompt stays open while the model works, a
-  note typed mid-run reaches the next turn alongside the tool results, and
-  escape stops the run at its next safe point. It takes no required arguments — `uv run kepler`
-  opens it — because everything it needs is chosen inside the session. In
-  particular the model backend is: `/backend` lists what is on offer, and
-  `/backend ollama` opens a picker listing the models that daemon actually
-  holds, marking the one in use and the default. `/backend anthropic`, or an
-  explicit `/backend ollama/qwen3.8:27b-mlx`, switches straight over without
-  asking. Either way the live session moves and the header retitles, without
-  restarting anything. A backend that cannot answer is
-  refused with the reason and the session stays on the one that works, so a
-  stopped daemon or a missing key costs a command rather than the session.
-  `--backend` picks the one it opens on, for a shell alias that always starts
-  somewhere particular. Typing `/` lists every command there is, Tab finishes
-  the one you have started (`/bac` → `/backend `, then Tab again for the
-  provider names, and once more for that host's models), and `/help` prints
-  the same list to the transcript.
-
-  ```bash
-  uv run kepler                       # opens on anthropic/claude-sonnet-5
-  uv run kepler --backend ollama      # or start on the local daemon
-  uv run kepler --thinking-budget 0   # or without asking for reasoning
-  ```
+  session browsing and resume, and slash commands. A turn is something you are
+  in rather than something you wait out — the prompt stays open while the
+  model works, a note typed mid-run reaches the next turn alongside the tool
+  results, and escape stops the run at its next safe point. It takes no
+  required arguments, because everything it needs — the backend and the model
+  included — is chosen inside the session.
 
 - **`tools/agent/` — the loop the console drives.** A bounded tool-use loop
   (`max_turns=20`) over `tools.registry.TOOL_SCHEMAS`: one
@@ -214,13 +205,7 @@ identical function any other caller would import and run.
 | `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
 | `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
 | `tests/` | Python test suite | Algorithm-preservation and tool-smoke tests: bit-exact parity against recorded Skynet output, real FITS fixtures, and no-network coverage of the public `tools/` surface. See `tests/README.md`. |
-| `docs/` | Documentation | `docs/README.md` is the map: reference docs at the top level, `docs/analysis/` for review output, `docs/working/` for in-progress plans. |
-| `docs/tool-architecture.md` | Architecture | Master package architecture: public tools, algorithm ownership, future services, runtime policy, and `skylib_lite` consolidation. |
-| `docs/extraction.md` | Provenance | Consolidated extraction records for every algorithm package under `algorithms/`. |
-| `docs/pulsar-tool-pipeline.md` | Architecture | The pulsar tool chain — light curve, periodogram, fold, sonify — and the extracted Astromancer code behind each stage. |
-| `docs/repository-folders.md` | Folder guide | Per-folder responsibilities, important files, and current caveats for every source folder. |
-| `docs/analysis/` | Review output | Point-in-time algorithm and design reviews: the remediation plan's finding register, external-agent design analysis, and the pulsar tooling-bug list. |
-| `docs/examples/` | Sample output | One committed pulsar sonification (`psr_b0329_54_sonification.wav`), produced by the agent loop. The only generated file in the repository. |
+| `docs/` | Documentation | Reference documents at the top level, `docs/analysis/` for point-in-time reviews, `docs/working/` for in-progress plans, and one committed sample output in `docs/examples/`. `docs/README.md` is the map; [Architecture & Further Reading](#architecture--further-reading) lists what each one covers. |
 
 The consolidated extraction record in `docs/extraction.md` captures provenance,
 severed framework dependencies, known parity behaviors, dependency notes, and
@@ -245,7 +230,9 @@ Kepler/
     analysis/                    # point-in-time algorithm/design reviews
     working/                     # in-progress plans
     examples/                    # one committed sample output
-  tools/                         # public Python tool wrappers, runner, shared models
+    assets/                      # the README banner
+  tools/                         # public Python tool wrappers and shared models
+    agent/ llm/ tui/ bench/      #   the loop, the model port, the console, the benchmark
   algorithms/
     wcs/                         # Python WCS extraction from Skynet
     photometry/                  # Python photometry extraction from Skynet
@@ -253,9 +240,13 @@ Kepler/
     skylib_lite/                 # shared vendored Skylib subset
     catalogs/                    # Python catalog declarations (no network code)
     query/                       # Python remote catalog access (VizieR/SDSS/SIMBAD)
+    pulsar/                      # Python port of the Astromancer pulsar chain
+    hrdiagram_py/                # Python HR-diagram port plus a new optimizer
+    radio/                       # new Python radio SED capability
     lightcurve/                  # TypeScript light-curve extraction
     periodogram/                 # TypeScript periodogram extraction
     hrdiagram/                   # TypeScript HR-diagram extraction
+  benchmarks/                    # model benchmark corpus and fixtures
   tests/                         # pytest suite (algorithm-preservation + tool smoke)
   data/                          # the data root: fixture frames, recorded
                                  #   reference outputs, and the (untracked)
@@ -280,6 +271,112 @@ dependencies needed by the split database tools and extracted algorithm modules.
 Some extracted runtime paths also require non-Python solver data called out in
 `docs/extraction.md`, including astrometry.net index files and local
 UCAC4/UCAC5 catalogs.
+
+### Running the Console
+
+`kepler` is the one model-driven entry point, and it takes no required
+arguments — everything it needs is chosen inside the session:
+
+```bash
+uv run kepler
+```
+
+```text
+╭─ K E P L E R ──────────────────────────────────────────────────────────────╮
+│ astronomy research console · anthropic/claude-sonnet-5                     │
+╰────────────────────────────────────────────────────────────────────────────╯
+
+  › how far away is M31?
+
+  Session 20260918T164552Z_2ac41045d42a started.
+
+  Turn 1 started.
+
+  ▊  ✻ thinking
+  ▊  NED's resolver is weaker on colloquial names than SIMBAD's, so
+  ▊  resolve first.
+
+  ✓ search_simbad  (696 ms)
+
+  Turn 1 finished: tool_use.
+
+  Turn 2 started.
+
+  M31 is the Andromeda Galaxy, 2.5 Mly away.
+
+  Turn 2 finished: end_turn.
+
+  Session finished: end_turn.
+
+ ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎
+ ▊  Ask Kepler…                                                             ▎
+ ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎
+  2/20 turns • 1 artifact • halfblock graphics • F3 artifacts • F4 sessions
+```
+
+The header names the session's `provider/model`; the status bar counts turns
+against the ceiling, token usage once a turn reports it, the artifacts written,
+and the graphics tier detected for this terminal. Everything between is the
+transcript: what you asked, the model's reasoning where its provider reveals
+it, each tool call as it runs, and the answer.
+
+**It needs a backend before it will answer anything** — a key for the provider
+it opens on, or a local Ollama daemon, which needs none. If the default cannot
+be used, the console still opens and says why; `/backend` fixes it from inside
+the session. See [Model Backend Configuration](#model-backend-configuration).
+
+**Slash commands never reach the model.** Type `/` and the console lists them;
+Tab completes one match whole and several only as far as they agree. A doubled
+leading slash (`//`) escapes to a literal one, for the rare question that
+starts with a slash.
+
+| Command | Aliases | Does |
+| --- | --- | --- |
+| `/help` | `/?` | List the commands, generated from the registry. |
+| `/backend [name\|spec] [model]` | `/b` | List the backends, or switch. See below. |
+| `/artifacts` | `/a` | Browse what this session wrote, with previews. |
+| `/sessions` | `/s` | Browse saved sessions and resume one. |
+| `/resume <id>` | `/r` | Resume a saved session by id. |
+| `/quit` | `/q`, `/exit` | Exit. |
+
+`/status`, `/tools`, `/approve`, `/prompt` and `/new` are registered and
+offered by the menu, but not implemented yet: they answer with a notice rather
+than doing anything.
+
+| Key | Does |
+| --- | --- |
+| `Tab` | Complete the slash command being typed. |
+| `F3` / `F4` | Artifact browser · session browser. |
+| `Esc` | Stop the running turn at its next safe point; close a browser. |
+| `o` | In the artifact browser, open the selected file in the desktop handler. |
+| `Ctrl+Q` | Quit. |
+
+**Choosing a backend and a model.** `/backend` on its own lists what is
+offered and marks the running one. `/backend ollama` opens a picker of the
+models that daemon actually holds, marking the one in use and the default;
+`/backend anthropic`, or an explicit `/backend ollama/qwen3.8:27b-mlx`,
+switches straight over. A switch happens only after the new backend is built
+*and* probed, so a stopped daemon or a missing key costs a command rather than
+the session — the transcript says which backend is still answering.
+
+```bash
+uv run kepler --backend ollama       # or start on the local daemon
+uv run kepler --thinking-budget 0    # or without asking for reasoning
+uv run kepler --max-turns 40         # or with a higher ceiling than 20
+```
+
+**A turn is something you are in.** The prompt never closes while the model
+works: type into it and the note is queued, marked queued until the engine
+reports it delivered, and merged into the next turn alongside the tool results.
+`Esc` stops the run at its next safe point — the step in flight has to finish
+first, and the console says so rather than pretending otherwise. What ran is
+saved and resumable either way.
+
+**Everything a run writes is kept.** Tool artifacts land under
+`artifacts/sessions/<session_id>/`, and `F3` browses them with image and
+waveform previews at whatever tier the terminal supports. The session manifest
+beside them records every turn and tool call, which is what `/sessions` and
+`/resume` read back.
 
 ### Python Entry Points
 
@@ -377,11 +474,19 @@ uv run pytest
 git diff --check
 ```
 
-For TypeScript changes, also run (after `npm install` — see
-[TypeScript Extracts](#typescript-extracts); `node_modules/` is not in a fresh
-checkout, and this is not a CI job):
+`algorithms/lightcurve/`, `algorithms/periodogram/` and `algorithms/hrdiagram/`
+are framework-free TypeScript extracted from Astromancer, with a compiler-only
+setup and no runtime npm dependencies — nothing executes them, and where Kepler
+needs that behaviour at runtime it goes through a Python port
+(`algorithms/pulsar/`, `algorithms/hrdiagram_py/`). They get a type gate rather
+than a test suite, and **it is not a CI job**, so a `.ts` change means running
+it by hand. `node_modules/` is absent from a fresh checkout, so `npm install`
+comes first; the compiler targets ES2022 and includes the DOM library because
+the preserved light-curve ingest path still uses browser globals such as
+`FileReader`:
 
 ```bash
+npm install        # once
 npm run typecheck
 ```
 
@@ -404,10 +509,18 @@ the first slash only. With `KEPLER_MODEL_BACKEND` unset it uses Anthropic.
   needs its key passed explicitly alongside it — an environment
   `OPENAI_API_KEY` is only sent to `api.openai.com`.
 - `OLLAMA_BASE_URL`: defaults to `http://localhost:11434/v1`; no key.
+- `OLLAMA_TIMEOUT_S`: how long one local turn may take, default 600 s — a
+  turn here is bounded by the host's hardware rather than a provider's SLA.
+  Asking the daemon what it holds is not timed like a turn and is always
+  bounded at five seconds.
 
 ```bash
 KEPLER_MODEL_BACKEND=openai/gpt-4.1 OPENAI_API_KEY=... uv run kepler
 ```
+
+`.env` at the repository root is read at launch and on every `/backend`, so a
+key added while the console is open takes effect on the next switch. The real
+environment always wins over the file, and the file is gitignored.
 
 ### Catalog Query Configuration
 
@@ -481,28 +594,6 @@ For local blind astrometry.net validation on this host, use indexes under
 `/srv/agents/catalogs/astrometry` rather than the ATLAS catalog tree.
 If neither backend is configured, the package can still import, but end-to-end
 plate solving will not produce a solution.
-
-## TypeScript Extracts
-
-`algorithms/lightcurve/`, `algorithms/periodogram/`, and `algorithms/hrdiagram/` contain
-framework-free TypeScript source extracted from Astromancer. The root
-`package.json` and `tsconfig.json` provide a compiler-only setup for these
-modules; there are no runtime npm dependencies.
-
-Install the TypeScript toolchain with npm:
-
-```bash
-npm install
-```
-
-Run the TypeScript smoke check:
-
-```bash
-npm run typecheck
-```
-
-The compiler target is ES2022 and includes the DOM library because the preserved
-light-curve ingest path still uses browser globals such as `FileReader`.
 
 ## Architecture & Further Reading
 
