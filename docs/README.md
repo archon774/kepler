@@ -18,7 +18,7 @@ updated when the code changes.
 | [`analysis/`](analysis/README.md) | Point-in-time review and external-research output. Dated. Kept for the "why"; the action items land elsewhere as plans or code. |
 | [`benchmarking/`](benchmarking/README.md) | Measuring models on Kepler's tool surface: the harness design, the 144-session sweep, the generated report, and the figures. |
 | [`archive/`](archive/README.md) | Completed track documents, kept as records rather than deleted. Not current-state. |
-| [`working/`](working/README.md) | Plans under active development, one per file. Empty today — every track has landed. |
+| [`working/`](working/README.md) | Plans under active development, one per file. One track in flight: the MCP tool surface — reaching the tools from a console where this repository is not installed. |
 | [`examples/`](examples/README.md) | Committed sample output — the deliberate exception to the repository's "no generated files" rule. |
 
 ## Document lifecycle
