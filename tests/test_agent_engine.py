@@ -920,3 +920,91 @@ def test_a_stop_hook_that_raises_cannot_end_a_session():
     stream, _ = _run(backend, should_stop=explode)
 
     assert stream[-1].outcome == "end_turn"
+
+
+# --- validation, retargeted from the deleted runner shim -----------------
+
+
+def _capped_search_schema() -> dict:
+    return {
+        "name": "capped_search",
+        "description": "search with an optional cap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string"},
+                "max_catalogs": {"type": ["integer", "null"]},
+            },
+            "required": ["target"],
+        },
+    }
+
+
+def _capped_call(call_id: str, max_catalogs: object) -> ToolCallBlock:
+    return ToolCallBlock(
+        call_id=call_id,
+        name="capped_search",
+        arguments={"target": "Cas A", "max_catalogs": max_catalogs},
+    )
+
+
+def test_json_null_is_the_correct_way_to_uncap_and_dispatches_normally():
+    """The positive half of S8: the union the schema offers really is usable.
+    A validator that rejected `None` as well as `"None"` would pass every
+    stringified-null test and make the tool uncallable."""
+
+    dispatched: list[dict] = []
+
+    def capped_search(**kwargs):
+        dispatched.append(kwargs)
+        return ToolResult(status="ok", count=0)
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_capped_call("c0", None),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    session = _session()
+    list(
+        run_session(
+            "find everything",
+            backend=backend,
+            session=session,
+            max_turns=4,
+            tool_schemas=[_capped_search_schema()],
+            tool_functions={"capped_search": capped_search},
+        )
+    )
+
+    assert dispatched == [{"target": "Cas A", "max_catalogs": None}]
+    assert session.protocol_faults == []
+
+
+def test_an_identical_rejected_call_is_a_cache_hit_the_second_time():
+    """A model re-issuing a call the validator already refused pays for the
+    refusal once. The cache is keyed on the call, not on whether it ran."""
+
+    def capped_search(**kwargs):  # pragma: no cover - must never run
+        raise AssertionError("a rejected call must not dispatch")
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_capped_call("c0", "None"),)),
+            ModelResponse(stop_reason="tool_use", tool_calls=(_capped_call("c1", "None"),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    session = _session()
+    list(
+        run_session(
+            "find everything",
+            backend=backend,
+            session=session,
+            max_turns=4,
+            tool_schemas=[_capped_search_schema()],
+            tool_functions={"capped_search": capped_search},
+        )
+    )
+
+    assert [call["cache_hit"] for call in session.tool_calls] == [False, True]

@@ -86,7 +86,6 @@ dependencies = [
 
 [project.scripts]
 kepler = "tools.tui.__main__:main"
-kepler-astro-query = "tools.runner:main"
 kepler-bench = "tools.bench.cli:main"
 
 [tool.setuptools]

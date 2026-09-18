@@ -1,4 +1,16 @@
-"""Session manifest behavior for the optional agent runner."""
+"""Session manifest behaviour, engine and Anthropic adapter end to end.
+
+Retargeted from ``tools/runner.py`` when the shim was deleted (tui-harness.md
+phase G.1). The assertions are the shim's, unchanged: what they pin is the
+manifest the engine writes, and the engine wrote it before the shim was
+removed as well as after. Only the call site moved -- from ``runner.run()`` to
+iterating :func:`~tools.agent.engine.run_session` -- and the backend became
+explicit rather than built inside the shim.
+
+It is the one test that drives the engine, the real Anthropic adapter (over a
+fake SDK module) and the session recorder together, which is why it was worth
+keeping rather than folding into the engine's own tests.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +19,13 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from tools import artifacts, config, runner
+from tools import artifacts, config
+from tools.agent import events
+from tools.agent.engine import run_session
+from tools.agent.prompt import SYSTEM_PROMPT
+from tools.llm.anthropic_backend import AnthropicBackend
 from tools.models import ToolResult
+from tools.sessions import AgentSession
 
 
 class _FakeStream:
@@ -58,7 +75,7 @@ def _tool_use_response(tool_use_id: str):
     )
 
 
-def test_runner_persists_session_manifest_and_reuses_cached_tool_call(
+def test_a_session_persists_its_manifest_and_reuses_a_cached_tool_call(
     monkeypatch, tmp_path
 ):
     artifact_root = tmp_path / "artifacts"
@@ -100,20 +117,31 @@ def test_runner_persists_session_manifest_and_reuses_cached_tool_call(
         )
         return ToolResult(status="ok", count=1, artifact=artifact)
 
-    monkeypatch.setattr(runner, "TOOL_FUNCTIONS", {"fake_lookup": fake_lookup})
-    monkeypatch.setattr(
-        runner,
-        "TOOL_SCHEMAS",
-        [
-            {
-                "name": "fake_lookup",
-                "description": "Fake lookup.",
-                "input_schema": {"type": "object", "properties": {}},
-            }
-        ],
+    schemas = [
+        {
+            "name": "fake_lookup",
+            "description": "Fake lookup.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    session = AgentSession(
+        user_message="Find M31",
+        model="fake-model",
+        max_turns=5,
+        system=SYSTEM_PROMPT,
     )
 
-    manifest_path = runner.run("Find M31", max_turns=5, model="fake-model")
+    manifest_path = None
+    for event in run_session(
+        "Find M31",
+        backend=AnthropicBackend(model="fake-model"),
+        max_turns=5,
+        session=session,
+        tool_schemas=schemas,
+        tool_functions={"fake_lookup": fake_lookup},
+    ):
+        if isinstance(event, events.SessionFinished):
+            manifest_path = event.manifest_path
 
     assert manifest_path is not None
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))

@@ -15,7 +15,6 @@ NOT_TOOL_MODULES = {
     "tools.config",
     "tools.models",
     "tools.registry",
-    "tools.runner",
     "tools.sessions",
     # A reusable pipeline; its public surface is re-exported through
     # tools.optical and tools.photometry instead.
