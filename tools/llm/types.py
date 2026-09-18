@@ -14,6 +14,7 @@ from typing import Literal, Mapping
 
 __all__ = [
     "TextBlock",
+    "ThinkingBlock",
     "ToolCallBlock",
     "ToolResultBlock",
     "Block",
@@ -74,6 +75,25 @@ class TextBlock:
 
 
 @dataclass(frozen=True)
+class ThinkingBlock:
+    """One run of a model's own reasoning, as the provider revealed it.
+
+    ``signature`` is the provider's attestation of the block and is
+    **opaque**: it is carried back verbatim on the next request of the same
+    turn or the provider rejects it, and it is never parsed, trimmed or
+    rebuilt here. Providers that sign nothing leave it empty.
+
+    Reasoning is not assistant text and is never merged into it. A model's
+    working is a different kind of claim from its answer -- it may contradict
+    the answer, and a transcript that blurs the two invites reading a
+    discarded hypothesis as a finding.
+    """
+
+    text: str
+    signature: str = ""
+
+
+@dataclass(frozen=True)
 class ToolCallBlock:
     """A model's request to call one tool.
 
@@ -103,7 +123,7 @@ class ToolResultBlock:
     is_error: bool = False
 
 
-Block = TextBlock | ToolCallBlock | ToolResultBlock
+Block = TextBlock | ThinkingBlock | ToolCallBlock | ToolResultBlock
 
 
 @dataclass(frozen=True)
@@ -154,6 +174,10 @@ class ModelResponse:
 
     stop_reason: StopReason
     text: str = ""
+    #: The reasoning the provider revealed for this turn, in order. Empty for
+    #: a provider that reveals none, which is not the same as a model that did
+    #: not reason.
+    thinking: tuple[ThinkingBlock, ...] = ()
     tool_calls: tuple[ToolCallBlock, ...] = ()
     usage: Usage | None = None
     latency_ms: float | None = None
@@ -161,5 +185,6 @@ class ModelResponse:
     faults: tuple[ProtocolFault, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "thinking", tuple(self.thinking))
         object.__setattr__(self, "tool_calls", tuple(self.tool_calls))
         object.__setattr__(self, "faults", tuple(self.faults))

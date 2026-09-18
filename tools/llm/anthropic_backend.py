@@ -16,6 +16,7 @@ from tools.llm.base import (
     BackendUnavailableError,
     Capabilities,
     OnText,
+    OnThinking,
     truncation_fault,
 )
 from tools.llm.types import (
@@ -24,17 +25,26 @@ from tools.llm.types import (
     ProtocolFault,
     StopReason,
     TextBlock,
+    ThinkingBlock,
     ToolCallBlock,
     ToolResultBlock,
     Usage,
 )
 
-__all__ = ["AnthropicBackend", "ANTHROPIC_MAX_OUTPUT_TOKENS"]
+__all__ = [
+    "AnthropicBackend",
+    "ANTHROPIC_MAX_OUTPUT_TOKENS",
+    "ANTHROPIC_MIN_THINKING_BUDGET",
+]
 
 #: What ``tools/runner.py`` passes today, kept so Phase 0c is a no-op change.
 ANTHROPIC_MAX_OUTPUT_TOKENS = 128000
 
 _DEFAULT_MODEL = "claude-sonnet-5"
+
+#: The provider's floor for ``budget_tokens``. A smaller budget is refused by
+#: the API, so it is raised to this rather than sent and rejected.
+ANTHROPIC_MIN_THINKING_BUDGET = 1024
 
 _CAPABILITIES = Capabilities(
     streaming=True,
@@ -43,6 +53,7 @@ _CAPABILITIES = Capabilities(
     schema_dialect="json_schema",
     supports_union_types=True,
     max_output_tokens=ANTHROPIC_MAX_OUTPUT_TOKENS,
+    thinking=True,
 )
 
 #: Anthropic's own stop-reason strings mapped onto the neutral closed set.
@@ -73,7 +84,11 @@ class AnthropicBackend:
     """Adapter over ``anthropic.Anthropic`` with native streaming."""
 
     def __init__(
-        self, *, model: str = _DEFAULT_MODEL, api_key: str | None = None
+        self,
+        *,
+        model: str = _DEFAULT_MODEL,
+        api_key: str | None = None,
+        thinking_budget: int | None = None,
     ) -> None:
         resolved = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY")
         if not resolved:
@@ -82,6 +97,11 @@ class AnthropicBackend:
             )
         self._api_key = resolved
         self._model = model
+        self._thinking_budget = (
+            None
+            if thinking_budget is None
+            else max(int(thinking_budget), ANTHROPIC_MIN_THINKING_BUDGET)
+        )
         self.spec = f"anthropic/{model}"
         self.capabilities = _CAPABILITIES
 
@@ -94,6 +114,7 @@ class AnthropicBackend:
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse:
         import anthropic
 
@@ -106,12 +127,22 @@ class AnthropicBackend:
             "tools": tools,
             "messages": rendered,
         }
-        if self._model not in _TEMPERATURE_REJECTED:
+        budget = self._budget_for(max_tokens)
+        if budget is not None and not _thinking_replayable(rendered):
+            budget = None
+        if budget is not None:
+            request["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        elif self._model not in _TEMPERATURE_REJECTED:
+            # Extended thinking and an explicit temperature are mutually
+            # exclusive at the provider: thinking requires the default. The
+            # caller asked for reasoning, so the caller gets the temperature
+            # that comes with it -- and ``temperature_supported`` stops
+            # claiming a determinism this run does not have.
             request["temperature"] = temperature
 
         start = time.monotonic()
         try:
-            final, streamed = self._stream(client, request, on_text)
+            final, streamed = self._stream(client, request, on_text, on_thinking)
         except anthropic.BadRequestError as exc:
             if not _is_temperature_refusal(exc) or "temperature" not in request:
                 raise
@@ -120,10 +151,24 @@ class AnthropicBackend:
             # the caller did not choose.
             _TEMPERATURE_REJECTED.add(self._model)
             request.pop("temperature")
-            final, streamed = self._stream(client, request, on_text)
+            final, streamed = self._stream(client, request, on_text, on_thinking)
         latency_ms = (time.monotonic() - start) * 1000.0
 
         return _to_model_response(final, "".join(streamed), latency_ms)
+
+    def _budget_for(self, max_tokens: int) -> int | None:
+        """The thinking budget this call may actually ask for, if any.
+
+        The provider requires ``max_tokens`` to exceed the budget, and the
+        budget to clear its own floor. A caller with a small output ceiling
+        therefore gets no reasoning rather than a rejected request: thinking
+        is an improvement on the answer, never a precondition for one.
+        """
+
+        if self._thinking_budget is None:
+            return None
+        budget = min(self._thinking_budget, max_tokens - 1)
+        return budget if budget >= ANTHROPIC_MIN_THINKING_BUDGET else None
 
     @property
     def temperature_supported(self) -> bool:
@@ -135,17 +180,37 @@ class AnthropicBackend:
         reproducibility.
         """
 
-        return self._model not in _TEMPERATURE_REJECTED
+        return self._thinking_budget is None and self._model not in _TEMPERATURE_REJECTED
 
     def _stream(
-        self, client: Any, request: dict[str, Any], on_text: OnText | None
+        self,
+        client: Any,
+        request: dict[str, Any],
+        on_text: OnText | None,
+        on_thinking: OnThinking | None = None,
     ) -> tuple[Any, list[str]]:
+        """Drive one streamed turn, separating reasoning from answer.
+
+        Iterates the SDK's own event stream rather than ``text_stream``, which
+        yields answer text only: reasoning arrives as its own event type and
+        is invisible from there. Unknown event types are ignored, so an SDK
+        that grows a new one does not break a turn.
+        """
+
+        streamed: list[str] = []
         with client.messages.stream(**request) as stream:
-            streamed: list[str] = []
-            for chunk in stream.text_stream:
-                streamed.append(chunk)
-                if on_text is not None:
-                    on_text(chunk)
+            for event in stream:
+                kind = getattr(event, "type", None)
+                if kind == "text":
+                    chunk = getattr(event, "text", "") or ""
+                    if chunk:
+                        streamed.append(chunk)
+                        if on_text is not None:
+                            on_text(chunk)
+                elif kind == "thinking":
+                    chunk = getattr(event, "thinking", "") or ""
+                    if chunk and on_thinking is not None:
+                        on_thinking(chunk)
             return stream.get_final_message(), streamed
 
 
@@ -157,13 +222,29 @@ def _render_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
 
     Assistant turns become content blocks. A ``ToolResultBlock`` becomes a
     ``user`` message carrying a ``tool_result`` block keyed by ``tool_use_id``.
+
+    **Reasoning is replayed for the last assistant turn only.** When thinking
+    is enabled the provider requires the thinking blocks of the turn whose
+    tool calls are being answered, signature intact, or it refuses the
+    request; it discards them from every earlier turn regardless. Sending
+    them anyway would put the whole reasoning history of a long session back
+    on the wire each turn, to be thrown away at the other end.
     """
 
+    last_assistant = max(
+        (index for index, message in enumerate(messages) if message.role == "assistant"),
+        default=-1,
+    )
     rendered: list[dict[str, Any]] = []
-    for message in messages:
+    for index, message in enumerate(messages):
         if message.role == "assistant":
             rendered.append(
-                {"role": "assistant", "content": _assistant_content(message.blocks)}
+                {
+                    "role": "assistant",
+                    "content": _assistant_content(
+                        message.blocks, with_thinking=index == last_assistant
+                    ),
+                }
             )
             continue
 
@@ -178,8 +259,57 @@ def _render_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
     return rendered
 
 
-def _assistant_content(blocks: Sequence[Any]) -> list[dict[str, Any]]:
+def _thinking_replayable(rendered: Sequence[Mapping[str, Any]]) -> bool:
+    """Whether the turn being continued still carries the reasoning it signed.
+
+    With thinking enabled the provider requires the last assistant turn's
+    thinking blocks back, signature intact, before the tool results that
+    answer it. A session resumed from a manifest that lost them -- or one that
+    began with thinking switched off and has it switched on mid-flight --
+    cannot produce them, and asking for reasoning on that request fails the
+    whole turn. So reasoning is dropped for that one request instead: a turn
+    with no visible reasoning is a smaller loss than a turn that errors.
+    """
+
+    for entry in reversed(list(rendered)):
+        if entry.get("role") != "assistant":
+            continue
+        content = entry.get("content")
+        if not isinstance(content, list):
+            return True
+        blocks = [block for block in content if isinstance(block, Mapping)]
+        if not any(block.get("type") == "tool_use" for block in blocks):
+            return True
+        return any(
+            block.get("type") in {"thinking", "redacted_thinking"} for block in blocks
+        )
+    return True
+
+
+def _assistant_content(
+    blocks: Sequence[Any], *, with_thinking: bool = False
+) -> list[dict[str, Any]]:
     content: list[dict[str, Any]] = []
+    if with_thinking:
+        # Thinking leads the turn: the provider requires it before any text or
+        # tool_use block. A block with no signature is dropped rather than
+        # sent -- an unsigned thinking block is refused, and a refused request
+        # costs the whole turn to say what dropping it says for nothing.
+        for block in blocks:
+            if not isinstance(block, ThinkingBlock) or not block.signature:
+                continue
+            if block.text:
+                content.append(
+                    {
+                        "type": "thinking",
+                        "thinking": block.text,
+                        "signature": block.signature,
+                    }
+                )
+            else:
+                content.append(
+                    {"type": "redacted_thinking", "data": block.signature}
+                )
     for block in blocks:
         if isinstance(block, TextBlock):
             if block.text:
@@ -224,11 +354,29 @@ def _to_model_response(
     stop_reason: StopReason = _STOP_REASONS.get(raw_stop or "", "other")
 
     block_text: list[str] = []
+    thinking: list[ThinkingBlock] = []
     tool_calls: list[ToolCallBlock] = []
     for block in getattr(final, "content", None) or []:
         kind = getattr(block, "type", None)
         if kind == "text":
             block_text.append(getattr(block, "text", "") or "")
+        elif kind == "thinking":
+            # Read from the final message rather than accumulated from the
+            # deltas: only this copy carries the signature, and a thinking
+            # block replayed without its signature is refused.
+            thinking.append(
+                ThinkingBlock(
+                    text=getattr(block, "thinking", "") or "",
+                    signature=getattr(block, "signature", "") or "",
+                )
+            )
+        elif kind == "redacted_thinking":
+            # Encrypted by the provider and unreadable here, but it still has
+            # to survive the round trip, so it is carried as an empty-text
+            # block whose signature is the payload.
+            thinking.append(
+                ThinkingBlock(text="", signature=getattr(block, "data", "") or "")
+            )
         elif kind == "tool_use":
             tool_calls.append(
                 ToolCallBlock(
@@ -253,6 +401,7 @@ def _to_model_response(
     return ModelResponse(
         stop_reason=stop_reason,
         text=streamed_text or "".join(block_text),
+        thinking=tuple(thinking),
         tool_calls=tuple(tool_calls),
         usage=_read_usage(final),
         latency_ms=latency_ms,

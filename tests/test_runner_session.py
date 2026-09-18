@@ -14,7 +14,15 @@ from tools.models import ToolResult
 class _FakeStream:
     def __init__(self, response, text_chunks=()):
         self._response = response
-        self.text_stream = iter(text_chunks)
+        self._chunks = list(text_chunks)
+        self.text_stream = iter(self._chunks)
+
+    def __iter__(self):
+        # The adapter reads the SDK's own event stream, not `text_stream`:
+        # reasoning is invisible from there.
+        return iter(
+            [SimpleNamespace(type="text", text=chunk) for chunk in self._chunks]
+        )
 
     def __enter__(self):
         return self

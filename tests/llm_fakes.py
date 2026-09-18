@@ -44,11 +44,43 @@ def as_namespace(value: Any) -> Any:
 
 
 class FakeAnthropicStream:
-    """One streamed message: yields ``text_chunks`` then a final message."""
+    """One streamed message, shaped like the SDK's own event stream.
 
-    def __init__(self, final_message: Any, text_chunks: Iterable[str] = ()) -> None:
+    The SDK fires the raw ``content_block_delta`` **and** a synthesized
+    ``text`` or ``thinking`` event for the same chunk, so this fake fires both
+    too: an adapter that counted each chunk twice would pass against a fake
+    that emitted only one of them.
+    """
+
+    def __init__(
+        self,
+        final_message: Any,
+        text_chunks: Iterable[str] = (),
+        thinking_chunks: Iterable[str] = (),
+    ) -> None:
         self._final = final_message
+        events: list[Any] = []
+        for chunk in thinking_chunks:
+            events.append(
+                SimpleNamespace(
+                    type="content_block_delta",
+                    delta=SimpleNamespace(type="thinking_delta", thinking=chunk),
+                )
+            )
+            events.append(SimpleNamespace(type="thinking", thinking=chunk))
+        for chunk in text_chunks:
+            events.append(
+                SimpleNamespace(
+                    type="content_block_delta",
+                    delta=SimpleNamespace(type="text_delta", text=chunk),
+                )
+            )
+            events.append(SimpleNamespace(type="text", text=chunk))
+        self._events = events
         self.text_stream = iter(list(text_chunks))
+
+    def __iter__(self) -> Any:
+        return iter(self._events)
 
     def __enter__(self) -> "FakeAnthropicStream":
         return self
@@ -109,6 +141,7 @@ class StubBackend:
         max_tokens: int,
         temperature: float = 0.0,
         on_text: Any = None,
+        on_thinking: Any = None,
     ) -> Any:
         self.calls.append(
             {
@@ -120,6 +153,10 @@ class StubBackend:
             }
         )
         response = next(self._responses)
+        if on_thinking is not None:
+            for block in getattr(response, "thinking", ()):
+                if block.text:
+                    on_thinking(block.text)
         if on_text is not None and response.text:
             on_text(response.text)
         return response

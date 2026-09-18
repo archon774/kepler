@@ -19,7 +19,12 @@ import dataclasses
 import os
 from typing import Any, Sequence
 
-from tools.llm.base import BackendUnavailableError, BaseHTTPBackend, OnText
+from tools.llm.base import (
+    BackendUnavailableError,
+    BaseHTTPBackend,
+    OnText,
+    OnThinking,
+)
 from tools.llm.openai_backend import OpenAIBackend, _CAPABILITIES
 from tools.llm.types import Message, ModelResponse
 
@@ -152,6 +157,7 @@ class OllamaBackend(OpenAIBackend):
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse:
         import httpx
 
@@ -163,6 +169,7 @@ class OllamaBackend(OpenAIBackend):
                 max_tokens=max_tokens,
                 temperature=temperature,
                 on_text=on_text,
+                on_thinking=on_thinking,
             )
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise BackendUnavailableError(

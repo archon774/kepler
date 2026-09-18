@@ -27,6 +27,7 @@ __all__ = [
     "Capabilities",
     "BackendUnavailableError",
     "OnText",
+    "OnThinking",
     "ModelBackend",
     "BaseHTTPBackend",
     "truncation_fault",
@@ -48,6 +49,11 @@ SchemaDialect = Literal["json_schema", "openai_function", "gemini_openapi"]
 #: streams into it; every other adapter calls it once with the finished text.
 OnText = Callable[[str], object]
 
+#: Called with reasoning text as it becomes available, on the same terms. A
+#: backend that declares no ``thinking`` capability never calls it; one that
+#: reveals reasoning only when the turn is over calls it once at the end.
+OnThinking = Callable[[str], object]
+
 
 @dataclass(frozen=True)
 class Capabilities:
@@ -59,6 +65,10 @@ class Capabilities:
     schema_dialect: SchemaDialect
     supports_union_types: bool
     max_output_tokens: int
+    #: Whether this backend can reveal the model's reasoning. Declared
+    #: ``False`` by a provider that hides it *and* by one this port has not
+    #: taught to read it -- the flag describes the adapter, not the model.
+    thinking: bool = False
 
 
 class BackendUnavailableError(RuntimeError):
@@ -186,4 +196,5 @@ class ModelBackend(Protocol):
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse: ...

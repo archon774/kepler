@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from tools.llm.base import Capabilities, OnText
+from tools.llm.base import Capabilities, OnText, OnThinking
 from tools.llm.types import (
     FAULT_TYPES,
     STOP_REASONS,
@@ -286,6 +286,7 @@ class ReplayBackend:
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse:
         if self._index >= len(self._responses):
             raise TranscriptExhausted(self.name, len(self._responses))
