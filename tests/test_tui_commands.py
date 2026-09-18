@@ -71,3 +71,49 @@ def test_command_registry_has_no_textual_import():
     }
 
     assert not {name for name in imports if name.startswith("textual")}
+
+
+def test_a_bare_slash_offers_every_command():
+    """Typing the character that starts a command is the discovery path."""
+
+    offered = [suggestion.value for suggestion in commands.suggest("/")]
+
+    assert offered == [f"/{command.name}" for command in commands.COMMANDS]
+    assert all(suggestion.help for suggestion in commands.suggest("/"))
+
+
+def test_a_prefix_narrows_the_offers_to_what_it_could_still_become():
+    assert [s.value for s in commands.suggest("/bac")] == ["/backend"]
+    assert [s.value for s in commands.suggest("/s")] == ["/sessions", "/status"]
+    assert commands.suggest("/zzz") == ()
+
+
+def test_an_alias_matches_but_the_name_is_what_gets_completed():
+    """`/q` is a shortcut for typing, not a second name to learn."""
+
+    assert [s.value for s in commands.suggest("/q")] == ["/quit"]
+    assert commands.complete("/q") == "/quit "
+
+
+def test_nothing_is_offered_for_a_message_or_an_escaped_slash():
+    assert commands.suggest("M31") == ()
+    assert commands.suggest("//catalog") == ()
+    assert commands.complete("M31") == "M31"
+
+
+def test_one_match_completes_whole_and_runs_on_into_its_arguments():
+    assert commands.complete("/bac") == "/backend "
+    assert [s.value for s in commands.suggest("/backend ")] == ["anthropic", "ollama"]
+    assert commands.complete("/backend o") == "/backend ollama "
+
+
+def test_several_matches_extend_only_as_far_as_they_agree():
+    """The shell rule. Guessing between equal candidates is how a completion
+    puts a command nobody asked for into the prompt."""
+
+    assert commands.complete("/s") == "/s"
+    assert commands.complete("/") == "/"
+
+
+def test_a_command_without_a_completer_offers_nothing_for_its_arguments():
+    assert commands.suggest("/resume 2026") == ()

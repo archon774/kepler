@@ -40,10 +40,11 @@ from tools.tui.backends import (
     spec_of,
     unavailable_message,
 )
-from tools.tui.commands import help_text, parse_input, resolve
+from tools.tui.commands import help_text, parse_input, resolve, suggest
 from tools.tui.render.capability import GraphicsTier, detect_tier
 from tools.tui.widgets.artifacts import ArtifactBrowser
 from tools.tui.widgets.header import KeplerHeader
+from tools.tui.widgets.prompt import CommandMenu, PromptInput
 from tools.tui.widgets.sessions import SessionBrowser, history_from_manifest
 from tools.tui.widgets.transcript import Transcript
 from tools.workspace import describe_session, list_artifacts, list_sessions
@@ -202,7 +203,8 @@ class KeplerApp(App[None]):
         yield KeplerHeader(self.sub_title, id="banner")
         yield Transcript(id="transcript")
         with Vertical(id="composer"):
-            yield Input(placeholder="Ask Kepler…", id="prompt")
+            yield CommandMenu(id="completions")
+            yield PromptInput(placeholder="Ask Kepler…", id="prompt")
         yield Static(self._status_text(), id="status")
 
     def on_mount(self) -> None:
@@ -244,6 +246,12 @@ class KeplerApp(App[None]):
         """Make unexpected worker failures visible in the transcript."""
 
         self._append_transcript("The engine stopped unexpectedly.")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Offer the commands the line being typed could still become."""
+
+        if event.input.id == "prompt":
+            self.query_one("#completions", CommandMenu).offer(suggest(event.value))
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Keep UI slash commands out of the headless model engine."""

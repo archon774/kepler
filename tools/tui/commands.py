@@ -13,9 +13,12 @@ __all__ = [
     "Command",
     "COMMANDS",
     "Parsed",
+    "Suggestion",
     "parse_input",
     "resolve",
     "help_text",
+    "suggest",
+    "complete",
 ]
 
 Completer = Callable[[str], Iterable[str]]
@@ -33,6 +36,18 @@ class Command:
 
 
 @dataclass(frozen=True)
+class Suggestion:
+    """One completion the console offers for a partially typed line.
+
+    Carries its own help text so the menu is generated from the registry the
+    same way :func:`help_text` is, rather than describing the commands twice.
+    """
+
+    value: str
+    help: str = ""
+
+
+@dataclass(frozen=True)
 class Parsed:
     """A message, known command, or unknown slash-command input."""
 
@@ -40,6 +55,23 @@ class Parsed:
     text: str = ""
     name: str = ""
     args: tuple[str, ...] = ()
+
+
+def _backend_names(prefix: str) -> tuple[str, ...]:
+    """The provider names ``/backend`` accepts bare.
+
+    The prefix is ignored here and filtered by :func:`suggest`, so a completer
+    only ever has to say what exists.
+
+    Imported on call rather than at module scope. This registry is the
+    import-light half of the console -- no Textual, and nothing that reaches
+    the network -- while :mod:`tools.tui.backends` pulls in the whole model
+    port to answer a question about two strings.
+    """
+
+    from tools.tui.backends import names
+
+    return names()
 
 
 COMMANDS: tuple[Command, ...] = (
@@ -53,6 +85,7 @@ COMMANDS: tuple[Command, ...] = (
         "Show the model backends, or switch to one (anthropic, ollama).",
         "switch_backend",
         aliases=("b",),
+        completer=_backend_names,
     ),
     Command("tools", "Browse registered tool schemas.", "show_tools", aliases=("t",)),
     Command("approve", "View or change approval policy.", "configure_approval"),
@@ -98,3 +131,84 @@ def help_text() -> str:
         aliases = "".join(f", /{alias}" for alias in command.aliases)
         lines.append(f"/{command.name}{aliases} — {command.help}")
     return "\n".join(lines)
+
+
+def suggest(text: str) -> tuple[Suggestion, ...]:
+    """Offer what a partially typed line could still become.
+
+    A bare ``/`` offers every command, which is the point: the registry is
+    discoverable by typing the character that starts one, rather than by
+    remembering to ask ``/help`` first. Once the command word is finished the
+    offers come from that command's own completer, if it declares one.
+
+    Aliases match but are never offered as the completion. ``/q`` finds
+    ``quit`` and completes to ``/quit`` -- the short form stays a shortcut for
+    typing, and what lands in the prompt is the name the help text lists.
+    """
+
+    if not text.startswith("/") or text.startswith("//"):
+        return ()
+
+    body = text[1:]
+    if " " not in body:
+        prefix = body.lower()
+        return tuple(
+            Suggestion(f"/{command.name}", command.help)
+            for command in COMMANDS
+            if command.name.startswith(prefix)
+            or any(alias.startswith(prefix) for alias in command.aliases)
+        )
+
+    words = body.split()
+    command = resolve(words[0]) if words else None
+    if command is None or command.completer is None:
+        return ()
+    partial = "" if body.endswith(" ") else words[-1]
+    return tuple(
+        Suggestion(value)
+        for value in command.completer(partial)
+        if value.startswith(partial)
+    )
+
+
+def complete(text: str) -> str:
+    """Return the line Tab should leave behind, completed as far as it can go.
+
+    One match is filled in whole and given a trailing space, so completing a
+    command runs straight on into completing its first argument. Several
+    matches extend only as far as they agree, leaving the rest to the menu --
+    the shell behaviour, chosen because guessing between equal candidates is
+    how a completion puts a command nobody asked for into the prompt.
+    """
+
+    matches = suggest(text)
+    if not matches:
+        return text
+
+    values = [match.value for match in matches]
+    if len(values) == 1:
+        return _replace_last_token(text, values[0]) + " "
+
+    shared = _shared_prefix(values)
+    extended = _replace_last_token(text, shared)
+    return extended if len(extended) > len(text) else text
+
+
+def _replace_last_token(text: str, value: str) -> str:
+    """Swap the word Tab was pressed inside for a completion of it."""
+
+    if " " not in text:
+        # The command word, whose completions carry their own leading slash.
+        return value
+    head, _, _ = text.rpartition(" ")
+    return f"{head} {value}"
+
+
+def _shared_prefix(values: list[str]) -> str:
+    """The longest prefix every candidate agrees on."""
+
+    shortest = min(values, key=len)
+    for index, character in enumerate(shortest):
+        if any(value[index] != character for value in values):
+            return shortest[:index]
+    return shortest

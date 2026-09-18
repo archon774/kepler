@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
-from textual.widgets import Static
+from textual.widgets import Input, Static
 
 from tests.llm_fakes import StubBackend
 from tools import artifacts, config
@@ -18,7 +18,9 @@ from tools.llm.types import ModelResponse, ToolCallBlock, ToolResultBlock
 from tools.tui import __main__ as tui_main
 from tools.tui.app import KeplerApp
 from tools.tui.render.capability import GraphicsTier
+from tools.tui.commands import Suggestion
 from tools.tui.widgets.header import WORDMARK, KeplerHeader
+from tools.tui.widgets.prompt import CommandMenu
 from tools.tui.widgets.transcript import Transcript
 
 
@@ -1027,3 +1029,74 @@ def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
     assert tui_main.main() == 0
     assert launched["spec"] == "anthropic/claude-sonnet-5"
     assert launched["ran"] is True
+
+
+def test_typing_a_slash_offers_the_whole_command_registry():
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            menu = app.query_one("#completions", CommandMenu)
+            assert menu.display is False
+
+            await pilot.press("slash")
+            await pilot.pause()
+
+            assert menu.display is True
+            assert "/backend" in str(menu.menu_text())
+
+    _run(scenario())
+
+
+def test_tab_completes_a_partial_command_and_then_its_arguments():
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt", Input)
+            await pilot.press("slash", "b", "a", "c")
+            await pilot.pause()
+            assert [s.value for s in app.query_one("#completions", CommandMenu).suggestions] == [
+                "/backend"
+            ]
+
+            await pilot.press("tab")
+            await pilot.pause()
+            assert prompt.value == "/backend "
+            assert prompt.cursor_position == len("/backend ")
+
+            await pilot.press("o", "tab")
+            await pilot.pause()
+            assert prompt.value == "/backend ollama "
+
+    _run(scenario())
+
+
+def test_the_menu_closes_and_tab_is_left_alone_for_an_ordinary_message():
+    """A console that swallows Tab has made its own footer unreachable."""
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=object())
+        async with app.run_test() as pilot:
+            prompt = app.query_one("#prompt", Input)
+            await pilot.press("M", "3", "1")
+            await pilot.pause()
+
+            assert app.query_one("#completions", CommandMenu).display is False
+
+            await pilot.press("tab")
+            await pilot.pause()
+            assert prompt.value == "M31"
+            assert app.focused is not prompt
+
+    _run(scenario())
+
+
+def test_the_completion_menu_counts_the_offers_it_cannot_show():
+    menu = CommandMenu()
+    menu.suggestions = tuple(
+        Suggestion(f"/c{index}", "help") for index in range(CommandMenu.MAX_ROWS + 3)
+    )
+
+    rendered = str(menu.menu_text())
+
+    assert rendered.count("\n") == CommandMenu.MAX_ROWS
+    assert "… 3 more" in rendered
