@@ -6,7 +6,11 @@ import webbrowser
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+import struct
+import wave
+
 from PIL import UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -89,7 +93,7 @@ class ArtifactBrowser(ModalScreen[None]):
                 id="artifact-list",
                 markup=False,
             )
-            yield Static(id="artifact-path")
+            yield Static(id="artifact-path", markup=False)
             yield Vertical(id="artifact-preview")
 
     def on_mount(self) -> None:
@@ -144,6 +148,16 @@ def _artifact_label(artifact: ArtifactMetadata) -> str:
     return f"{Path(artifact.file.path).name} · {artifact.artifact_type}{size}"
 
 
+#: What a preview is allowed to fail with. Neither library raises what it
+#: looks like it raises: Pillow's ``DecompressionBombError`` is a bare
+#: ``Exception`` rather than an ``OSError``, and so are ``wave.Error`` and
+#: ``struct.error``. A preview that only caught the obvious ones let a large
+#: PNG, or any non-WAV file named ``.wav``, raise out of an event handler and
+#: take the console with it.
+_IMAGE_FAULTS = (OSError, UnidentifiedImageError, DecompressionBombError)
+_AUDIO_FAULTS = (OSError, ValueError, wave.Error, struct.error)
+
+
 def _native_image(path: Path) -> Widget:
     """Build a native-protocol image widget, importing the library on first use.
 
@@ -168,6 +182,10 @@ def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Widget:
     if not artifact.file.exists:
         return Static("Artifact file is no longer available.")
 
+    # Every `Static` below that carries a path or a library's error message
+    # sets markup=False: both can contain square brackets, which Textual would
+    # read as content markup and silently remove from the screen.
+
     path = Path(artifact.file.path)
     if artifact.artifact_type == "image":
         try:
@@ -180,11 +198,11 @@ def _preview_widget(artifact: ArtifactMetadata, tier: GraphicsTier) -> Widget:
                     # still gets a picture rather than an error.
                     pass
             return Static(render_halfblocks(path))
-        except (OSError, UnidentifiedImageError) as error:
-            return Static(f"Unable to render image: {error}")
+        except _IMAGE_FAULTS as error:
+            return Static(f"Unable to render image: {error}", markup=False)
     if artifact.file.suffix and artifact.file.suffix.lower() == ".wav":
         try:
             return Static(render_waveform(path))
-        except (OSError, ValueError) as error:
-            return Static(f"Unable to render waveform: {error}")
-    return Static(f"{artifact.artifact_type.capitalize()} artifact")
+        except _AUDIO_FAULTS as error:
+            return Static(f"Unable to render waveform: {error}", markup=False)
+    return Static(f"{artifact.artifact_type.capitalize()} artifact", markup=False)

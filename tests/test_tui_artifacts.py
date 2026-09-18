@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import struct
+import wave
 from pathlib import Path
 
 import pytest
+from PIL import UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 from textual.widgets import OptionList, Static
 
 from tools.artifacts import describe_artifact_file
@@ -147,3 +151,55 @@ def test_an_unprobeable_terminal_still_gets_a_picture(monkeypatch, failure):
 
     assert isinstance(preview, Static)
     assert str(preview.content) == str(render_halfblocks(FIXTURE))
+
+
+def test_a_preview_catches_what_the_libraries_actually_raise():
+    """Neither library raises what it looks like it raises: Pillow's bomb
+    guard, `wave.Error` and `struct.error` are all bare `Exception`s, so a
+    catch list of `OSError` lets them out of a Textual event handler."""
+
+    from PIL.Image import DecompressionBombError
+
+    from tools.tui.widgets import artifacts
+
+    assert DecompressionBombError in artifacts._IMAGE_FAULTS
+    assert wave.Error in artifacts._AUDIO_FAULTS
+    assert struct.error in artifacts._AUDIO_FAULTS
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(lambda path: _raise(DecompressionBombError("too big")), id="bomb"),
+        pytest.param(lambda path: _raise(UnidentifiedImageError("what")), id="unknown"),
+    ],
+)
+def test_an_unrenderable_image_becomes_a_message_not_a_crash(monkeypatch, failure):
+    from tools.tui.widgets import artifacts
+
+    monkeypatch.setattr(artifacts, "render_halfblocks", failure)
+
+    preview = artifacts._preview_widget(
+        describe_artifact_file(FIXTURE), GraphicsTier.HALFBLOCK
+    )
+
+    assert isinstance(preview, Static)
+    assert "Unable to render image" in str(preview.content)
+
+
+def test_a_file_named_wav_that_is_not_one_becomes_a_message(tmp_path):
+    from tools.tui.widgets import artifacts
+
+    impostor = tmp_path / "not-audio.wav"
+    impostor.write_bytes(b"this is not a RIFF file")
+
+    preview = artifacts._preview_widget(
+        describe_artifact_file(impostor), GraphicsTier.HALFBLOCK
+    )
+
+    assert isinstance(preview, Static)
+    assert "Unable to render waveform" in str(preview.content)
+
+
+def _raise(error: Exception):
+    raise error
