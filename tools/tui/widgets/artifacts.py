@@ -81,7 +81,6 @@ class ArtifactBrowser(ModalScreen[None]):
         """Build a compact browser with a full-width preview area."""
 
         with Vertical(id="artifact-browser"):
-            yield Static("Artifacts")
             if not self.artifacts:
                 yield Static("No artifacts found.")
                 return
@@ -94,8 +93,11 @@ class ArtifactBrowser(ModalScreen[None]):
             yield Vertical(id="artifact-preview")
 
     def on_mount(self) -> None:
-        """Select and display the first artifact once all preview nodes exist."""
+        """Title the dialog and display the first artifact once it is built."""
 
+        # In the border, as the console header does it: a heading inside the
+        # frame spends a row saying what the frame already is.
+        self.query_one("#artifact-browser").border_title = "Artifacts"
         if self._selected_index is not None:
             self._show_artifact(self._selected_index)
             self.query_one("#artifact-list", OptionList).focus()

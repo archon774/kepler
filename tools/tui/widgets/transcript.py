@@ -27,11 +27,24 @@ __all__ = ["Transcript"]
 class Transcript(VerticalScroll):
     """Render engine events without making the engine aware of Textual."""
 
+    DEFAULT_CSS = """
+    /* Session, turn and command notices are the console talking about the
+       session; the model's answer is the session. Muting one distinguishes
+       them without spending a row on a label. */
+    Transcript .notice {
+        color: $text-muted;
+    }
+    """
+
     def __init__(self, *children, **kwargs) -> None:
         super().__init__(*children, **kwargs)
         self.assistant_text = ""
         self.tool_nodes: dict[str, ToolNode] = {}
         self._assistant = Static("")
+        # Hidden while it holds nothing. Every transcript child keeps a blank
+        # row beneath it, so an always-mounted empty answer would open each
+        # session with two rows of nothing above the first notice.
+        self._assistant.display = False
         self._notices: list[Static] = []
 
     def compose(self) -> ComposeResult:
@@ -42,7 +55,7 @@ class Transcript(VerticalScroll):
 
         if isinstance(event, TextDelta):
             self.assistant_text += event.text
-            self._assistant.update(self.assistant_text)
+            self._show_assistant()
         elif isinstance(event, ToolCallProposed):
             node = ToolNode(event.call_id, event.name, event.arguments)
             self.tool_nodes[event.call_id] = node
@@ -80,6 +93,7 @@ class Transcript(VerticalScroll):
         self.tool_nodes = {}
         self._notices = []
         self._assistant = Static("")
+        self._assistant.display = False
         self.remove_children()
         self.mount(self._assistant)
 
@@ -87,11 +101,17 @@ class Transcript(VerticalScroll):
         """Display saved assistant text without replaying tool calls or artifacts."""
 
         self.assistant_text = text
-        self._assistant.update(text)
+        self._show_assistant()
         self.scroll_end(animate=False)
 
+    def _show_assistant(self) -> None:
+        """Render the accumulated answer, revealing the widget once it has one."""
+
+        self._assistant.update(self.assistant_text)
+        self._assistant.display = bool(self.assistant_text)
+
     def _append_note(self, text: str) -> None:
-        notice = Static(text)
+        notice = Static(text, classes="notice")
         self._notices.append(notice)
         self.mount(notice)
 

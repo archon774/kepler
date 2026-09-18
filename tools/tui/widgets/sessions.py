@@ -60,7 +60,6 @@ class SessionBrowser(ModalScreen[Path | None]):
         """Build a compact list of saved session summaries."""
 
         with Vertical(id="session-browser"):
-            yield Static("Sessions")
             if not self.sessions:
                 yield Static("No saved sessions found.")
                 return
@@ -74,8 +73,9 @@ class SessionBrowser(ModalScreen[Path | None]):
             )
 
     def on_mount(self) -> None:
-        """Place keyboard selection on the session list."""
+        """Title the dialog and place keyboard selection on the session list."""
 
+        self.query_one("#session-browser").border_title = "Sessions"
         if self.sessions:
             self.query_one("#session-list", OptionList).focus()
 

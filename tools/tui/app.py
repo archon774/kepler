@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.message import Message as TextualMessage
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
@@ -58,15 +59,44 @@ LOGGER = logging.getLogger(__name__)
 class ApprovalModal(ModalScreen[Decision]):
     """Ask the UI user for one risky tool-call decision."""
 
+    CSS = """
+    ApprovalModal {
+        align: center middle;
+    }
+
+    #approval-dialog {
+        width: auto;
+        height: auto;
+        padding: 1 3;
+        border: round $accent;
+        background: $surface;
+    }
+
+    #approval-question {
+        padding: 0 0 1 0;
+    }
+
+    #approval-buttons {
+        width: auto;
+        height: auto;
+    }
+
+    #approval-buttons Button {
+        margin-right: 2;
+    }
+    """
+
     def __init__(self, proposed: ToolCallProposed) -> None:
         super().__init__()
         self.proposed = proposed
 
     def compose(self) -> ComposeResult:
-        yield Static(f"Allow {self.proposed.name}?")
-        yield Button("Allow", id="allow", variant="success")
-        yield Button("Allow always", id="allow-always")
-        yield Button("Deny", id="deny", variant="error")
+        with Vertical(id="approval-dialog"):
+            yield Static(f"Allow {self.proposed.name}?", id="approval-question")
+            with Horizontal(id="approval-buttons"):
+                yield Button("Allow", id="allow", variant="success")
+                yield Button("Allow always", id="allow-always")
+                yield Button("Deny", id="deny", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         decisions = {
@@ -91,16 +121,29 @@ class KeplerApp(App[None]):
     #transcript {
         height: 1fr;
         padding: 1 2;
+        scrollbar-gutter: stable;
     }
 
-    #prompt {
+    /* Assistant text, notices and tool nodes are separate widgets stacked
+       edge to edge, which reads as one dense paragraph however different
+       they are. The blank row between them is what makes a transcript entry
+       look like an entry. */
+    #transcript > * {
+        margin-bottom: 1;
+    }
+
+    #composer {
         dock: bottom;
+        height: auto;
+        padding: 0 1;
+        margin-bottom: 1;
     }
 
     #status {
         dock: bottom;
         height: 1;
-        padding: 0 1;
+        padding: 0 2;
+        color: $text-muted;
     }
     """
 
@@ -158,7 +201,8 @@ class KeplerApp(App[None]):
 
         yield KeplerHeader(self.sub_title, id="banner")
         yield Transcript(id="transcript")
-        yield Input(placeholder="Ask Kepler…", id="prompt")
+        with Vertical(id="composer"):
+            yield Input(placeholder="Ask Kepler…", id="prompt")
         yield Static(self._status_text(), id="status")
 
     def on_mount(self) -> None:
