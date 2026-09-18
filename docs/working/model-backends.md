@@ -8,14 +8,14 @@ remain deferred.
 **Date:** 2026-09-04, consolidated 2026-09-07, implemented 2026-09-09
 **Prerequisites:** None.
 **Unblocks:** The headless agent engine every phase of
-[tui-harness.md](tui-harness.md) depends on (now built), and the benchmark
+the Kepler console depends on (now built), and the benchmark
 harness of phases 4–5 (now built, under [benchmark.md](benchmark.md)).
 **Branch:** implemented on `agent/model-backends-impl`, off `dev` — the
 maintainer redirected the base from `main` to `dev` at implementation time
 (`dev` carries the current plan doc and the 49-tool registry the design
 describes). The original `agent/model-backends` branch carried PR #46
 (docs only) and is superseded.
-**Consumed by:** [tui-harness.md](tui-harness.md), the Kepler console, which
+**Consumed by:** the Kepler console (`docs/tool-architecture.md` 10.2), which
 drives this port through the headless engine in `tools/agent/`.
 
 Kepler's agent loop is hardwired to one vendor. This document specifies a
@@ -434,11 +434,11 @@ it. The gate above is unchanged and still meaningful — it is now the shim's
 contract. `SYSTEM_PROMPT` moves verbatim to `tools/agent/prompt.py` and is
 re-exported from `tools/runner.py`, so both `runner.SYSTEM_PROMPT` and the
 default argument keep resolving. `tools/runner.py` is deleted later, by
-[tui-harness.md](tui-harness.md) Phase G, together with the workflow change that
+the TUI track's phase G, together with the workflow change that
 retires the CI assertion — not here.
 
 The engine contract itself — the ten-event union, the approver callable, the
-consumers — is specified in [tui-harness.md](tui-harness.md) section 4, because
+consumers — is described in `docs/tool-architecture.md` section 10, because
 that is the document whose interface depends on it. Phase 0c below states what
 this port must build against it.
 
@@ -936,7 +936,7 @@ Every phase's requirements implicitly include this section.
 - **`tools/runner.py` must keep its path for the duration of this rollout.** CI's
   `repository-shape` job asserts `README.md`, `pyproject.toml`, `uv.lock`,
   `tools/registry.py`, `tools/runner.py`, and `docs/tool-architecture.md` all
-  exist. It is deleted later by [tui-harness.md](tui-harness.md) Phase G,
+  exist. It was deleted by the TUI track's phase G,
   together with the workflow change that retires the assertion.
 - **No changes to `algorithms/`.** The extraction contract is untouched by this
   work. Do not edit any file carrying an `# EXTRACTED:` or `# PORTED:` marker.
@@ -989,7 +989,7 @@ git diff --check                          # whitespace
 **Deliberately not touched:** `tools/registry.py` — the schemas are the input to
 translation, not a subject of it; `tools/claude_photometry_haiku_tool.py` —
 deferred by section 10, and renamed with its Anthropic path deleted by
-[tui-harness.md](tui-harness.md) Phase C; anything under `algorithms/`.
+the TUI track's phase C; anything under `algorithms/`.
 
 ### Phase -1 — Fix the stale gitleaks allowlist (S9)
 
@@ -1081,14 +1081,14 @@ regression here means an import-time side effect.
       and the source of all eight benchmark seed tasks (section 11, question 4).
       Move it; do not reword it while moving it.
 - [ ] Build `tools/agent/events.py` — the ten frozen event dataclasses and their
-      union, defined in [tui-harness.md](tui-harness.md) section 4.1. The fault
+      union, now described in `docs/tool-architecture.md` section 10. The fault
       event carries this port's `FaultType`, so there is one taxonomy, not two.
 - [ ] Build `tools/agent/engine.py` — `run_session()`, which takes the user
       message plus a backend, system prompt, turn ceiling, an approver callable,
       and an optional session, and **returns an iterator of events**.
 - [ ] The approver parameter gets a module-level default that allows everything.
       `tools/agent/policy.py` — where the real policy lives — is built by
-      [tui-harness.md](tui-harness.md) Phase B. Giving the parameter a default
+      the TUI track's phase B. Giving the parameter a default
       now means that phase supplies a policy rather than changing a contract.
 - [ ] Reduce `tools/runner.py` to a shim: same signature, plus the optional
       `backend` keyword; it consumes `run_session()`, prints, and returns the
@@ -1276,7 +1276,7 @@ and behavior changes."* Docs land last and alone.
       fact that `complete()` is the only required method.
 - [ ] `README.md`: the `KEPLER_MODEL_BACKEND` variable and a one-line example.
       Write it against the entry point that exists **now**; the console that
-      replaces it is retired into place by [tui-harness.md](tui-harness.md)
+      replaces it is retired into place by the TUI track's
       Phase G, which updates this line rather than documenting a script that does
       not exist yet.
 - [ ] `CLAUDE.md`: extend *Python domain boundaries* with `tools/llm/` — it owns
@@ -1324,7 +1324,7 @@ visible in all four dialects.
 * **`tools/claude_photometry_haiku_tool.py` is not migrated *by this document*.**
   It is a separate raw-HTTP Anthropic caller with its own prompt and its own
   result contract, and folding it in would mix a behaviour change into an
-  architecture change. **Resolved 2026-09-07:** [tui-harness.md](tui-harness.md)
+  architecture change. **Resolved 2026-09-07:** the TUI track
   Phase C renames it to `tools/photometry_pipeline.py` and deletes its Anthropic
   path and CLI outright rather than migrating them, since the console supersedes
   the entry point. The ~1,000-line photometry and plotting pipeline it wraps is
@@ -1422,5 +1422,5 @@ model strategies change.
 * `tools/artifacts.py` — existing path controls and the two gaps S7 keeps
   unreachable.
 * `.gitleaks.toml` — the stale allowlist paths fixed in Phase -1.
-* [tui-harness.md](tui-harness.md) — the console that consumes this port, and the
+* `docs/tool-architecture.md` 10.2 — the console that consumes this port, and the
   owner of the engine contract Phase 0c builds against.

@@ -12,7 +12,7 @@ consolidation), 2026-09-09 (completion audit and approved closure rollout),
 prerequisite — broken-links Phase 4 — merged as PR #47. P8 has a separate
 maintainer-supplied asset gate.
 **Unblocks:** The stateless boundary required by every phase of
-[tui-harness.md](tui-harness.md) is complete. The remaining phases close
+the TUI track is complete. The remaining phases close
 local-data and solver-convergence gaps.
 **Merged at:** `dev` commit `33617a4adaf89aadd006ec8be11fe6678f19d0cd` (PR #52,
 "Refactor optical processing to stateless S0–S6 contracts").
@@ -639,7 +639,7 @@ the batch driver as deliberately removed from the maintained architecture.
 
 **The rollout is complete.** The stateless rollout (phases S0–S6) merged as one
 focused PR before implementation of the remaining P1–P9 phases began, and before any
-[tui-harness.md](tui-harness.md) phase. The TUI's later photometry-pipeline
+TUI phase. The TUI's later photometry-pipeline
 rename therefore operates on the stateless pipeline; it must not preserve,
 recreate, or rename the removed processing-run or batch architecture.
 
@@ -2084,7 +2084,7 @@ frame.
   — algorithm correctness, deliberately out of scope.
 * `data/README.md` — the zero-point convention warning behind BL-5, and the
   Git LFS note behind section 7.3.
-* [tui-harness.md](tui-harness.md) — unblocked by the stateless rollout but
+* The TUI track (`docs/tool-architecture.md` 10.2) — unblocked by the stateless rollout but
   separately scoped; it owns the photometry-pipeline rename that must operate on
   this document's result.
 * [model-backends.md](model-backends.md) — owner of the system-prompt move that

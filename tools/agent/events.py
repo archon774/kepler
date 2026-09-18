@@ -1,7 +1,7 @@
 """The event union the agent loop emits.
 
-Twelve frozen dataclasses, defined here (``docs/working/tui-harness.md`` section
-4.1 specifies the shape; this document owns the construction). Events are
+Twelve frozen dataclasses (``docs/tool-architecture.md`` section 10 is the
+reference description of the contract they make up). Events are
 ephemeral snapshots for the shim, the TUI, and the benchmark harness to read;
 the durable record is the session manifest. ``arguments`` and ``result`` are
 stored as plain dict copies so a consumer can serialise or ``repr`` them

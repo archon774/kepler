@@ -311,7 +311,7 @@ source counts).
 `solve_astrometry` (asset-gated, see `optical-tools.md` P9),
 `tools/claude_photometry_haiku_tool.py` (a second Anthropic caller,
 deferred by model-backends.md section 10 and deleted by
-`tui-harness.md` Phase C), and anything under `algorithms/` — the extraction
+the TUI track's phase C), and anything under `algorithms/` — the extraction
 contract is untouched by this work.
 
 ---
@@ -1561,7 +1561,7 @@ Every phase's requirements implicitly include this section.
   a convention.
 - **`tools/runner.py` keeps its path** for the duration of this rollout; CI's
   `repository-shape` job asserts it. It is deleted later by
-  [tui-harness.md](tui-harness.md) Phase G.
+  the TUI track's phase G.
 - **`tests/test_tool_registry_coverage.py::NOT_TOOL_MODULES` must gain
   `tools.bench` in the same commit that creates the package** (phase 4c).
   `pkgutil.iter_modules` yields packages as well as modules, so the commit
@@ -1745,7 +1745,7 @@ Stated rather than silently taken.
 * **`solve_astrometry` stays blocked by default** until `optical-tools.md` P9
   supplies an operator UCAC tree and the ATLAS backend is validated.
 * **No migration of `tools/claude_photometry_haiku_tool.py`.** Deferred by
-  model-backends.md section 10; deleted by `tui-harness.md` Phase C.
+  model-backends.md section 10; deleted by the TUI track's phase C.
 
 ---
 
@@ -1784,7 +1784,7 @@ hard-coded in the suite, which must stay model-agnostic. **Open.**
 * [model-backends.md](model-backends.md) — the port this consumes; section 6
   is the design summary, section 9 the phase index, section 5 the security
   requirements deferred here.
-* [tui-harness.md](tui-harness.md) — owner of the engine event contract the
+* `docs/tool-architecture.md` section 10 — the engine event contract the
   harness reads, and of `tools/runner.py`'s eventual deletion.
 * `tools/agent/engine.py` — `run_session`'s `tool_schemas=`/`tool_functions=`
   seam, and the `scoped_artifacts` wrapper.

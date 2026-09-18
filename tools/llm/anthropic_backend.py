@@ -37,7 +37,7 @@ __all__ = [
     "ANTHROPIC_MIN_THINKING_BUDGET",
 ]
 
-#: What ``tools/runner.py`` passes today, kept so Phase 0c is a no-op change.
+#: What the pre-engine loop passed, kept so its extraction was a no-op change.
 ANTHROPIC_MAX_OUTPUT_TOKENS = 128000
 
 _DEFAULT_MODEL = "claude-sonnet-5"

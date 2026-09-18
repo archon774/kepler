@@ -2,9 +2,8 @@
 
 ``tools.agent.engine.run_session`` drives a model backend from ``tools.llm``
 over the tool registry and yields a stream of events; a ``Decision`` flows back
-through an approver callable. The shim in ``tools/runner.py``, the Kepler
-console in ``tools/tui/``, and the benchmark harness all consume that one
-stream.
+through an approver callable. The Kepler console in ``tools/tui/``, the
+benchmark harness, and any plain Python caller all consume that one stream.
 
 This package imports no UI toolkit -- no ``textual``, no ``rich`` -- which is
 what keeps every tool callable from plain Python per

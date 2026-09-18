@@ -199,7 +199,7 @@ def _fetch_literature_params(cluster_name: str) -> dict[str, Any]:
         raise _NotFound(f"VizieR returned no {literature.CLUSTER_CATALOG} rows near {cluster_name!r}")
 
     rows = _read_table_artifact(result.artifacts[0].path)
-    # Confirmed live (tools/runner.py's system prompt): target= resolution orders
+    # Confirmed live (``tools/agent/prompt.py``): target= resolution orders
     # matches by increasing separation from the resolved position, so the first
     # row is the nearest catalog entry -- for a cluster-parameter catalog, that
     # is the cluster itself. Not independently re-verified for this specific

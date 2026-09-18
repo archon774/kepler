@@ -1,7 +1,6 @@
 """Session manifest behaviour, engine and Anthropic adapter end to end.
 
-Retargeted from ``tools/runner.py`` when the shim was deleted (tui-harness.md
-phase G.1). The assertions are the shim's, unchanged: what they pin is the
+Retargeted from ``tools/runner.py`` when the shim was deleted. The assertions are the shim's, unchanged: what they pin is the
 manifest the engine writes, and the engine wrote it before the shim was
 removed as well as after. Only the call site moved -- from ``runner.run()`` to
 iterating :func:`~tools.agent.engine.run_session` -- and the backend became

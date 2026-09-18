@@ -52,7 +52,7 @@ def launch_spec(requested: str | None = None) -> str:
     ``KEPLER_MODEL_BACKEND``, then the first offered choice. The flag accepts a
     bare name so ``kepler --backend ollama`` works; the environment variable
     does not, because it is the model port's own contract and is read
-    identically by ``tools/runner.py`` and the benchmark harness.
+    identically by the model port's own factory and the benchmark harness.
 
     Falling back to a default rather than refusing is deliberate. The backend
     is no longer a launch-time decision a person is stuck with -- ``/backend``

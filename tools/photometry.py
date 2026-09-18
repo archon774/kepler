@@ -9,7 +9,7 @@ module does not reimplement any of that; it imports and reuses it directly.
 
 There is no live image archive behind photometry -- see
 ``list_photometry_targets``. That fixed, local library is the reason a
-caller (human or Claude, via ``tools.runner``) should always check what's
+caller (human or Claude, via ``tools.agent``) should always check what's
 bundled before claiming to have analyzed something that isn't.
 
 Not the same job as ``tools.hr_diagram``, despite both running source

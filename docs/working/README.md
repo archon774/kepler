@@ -17,12 +17,20 @@ writes the code.
 | Model | [model-backends.md](model-backends.md) | Approved; implementation pending | `agent/model-backends` off **`main`** | None | The headless agent engine the TUI depends on; the deferred benchmark harness |
 | Optical | [optical-tools.md](optical-tools.md) | Baseline and stateless phases (S0–S6) complete; P1–P7 complete; P8–P9 remain | `dev` | P8 needs three recovered NGC 5286 B frames through Git LFS; P9 needs operator UCAC data | The two asset-gated evidence gaps (NGC 5286 B from pixels, the ATLAS backend); the TUI stateless prerequisite is met |
 | Benchmark | [benchmark.md](benchmark.md) · results: [benchmark-results.md](benchmark-results.md) · full report: [benchmark-report.md](benchmark-report.md) | **Built and swept** — three backends over all 16 tasks, three repeats, 144 sessions | `agent/model-benchmark` off `dev` | Model backends phases -1 to 3 (met) | The model/tool scoreboard; nothing else depends on it |
-| TUI | [tui-harness.md](tui-harness.md) | Phases B–E complete; F and G pending | `agent/tui-harness` off `dev` | Model backends phases -1 to 3, and the merged stateless optical rollout | The Textual `kepler` console |
+
+**The TUI track is done and its working document is gone.** Every phase (A–G)
+landed: the headless engine, the approval policy, the console, artifact
+rendering, session resume, backend and model selection, revealed reasoning, the
+interactive turn, and the retirement of `tools/runner.py` and
+`kepler-astro-query`. Per the lifecycle below, the durable outcome is now
+`docs/tool-architecture.md` section 10.2 and the working document was deleted;
+git history has it.
 
 **The model track was implemented on `dev`** (the maintainer redirected the
 base from `main`, since `dev` carries the current plan and registry). Phases
-−1–3 are done — `tools/llm/` and `tools/agent/` exist; `tools/runner.py` is a
-shim over them. **The benchmark harness is the same track's second half, not a new track.**
+−1–3 are done — `tools/llm/` and `tools/agent/` exist, and the console drives
+them; the `tools/runner.py` shim that stood in between has been deleted.
+**The benchmark harness is the same track's second half, not a new track.**
 Phases 4–5 of the model port are what [benchmark.md](benchmark.md) plans and
 what `tools/bench/` now implements; `model-backends.md` section 9 deliberately
 left them unplanned until the port landed and the fault taxonomy was real
@@ -72,9 +80,8 @@ constraints.
    port), P5 (local-grid HR diagram), P6 (WCS controls), and P9 (ATLAS
    validation) have landed. P7 (APASS replay) and P8 (B-frame evidence) remain
    independent at the code level.
-3. **The TUI stateless prerequisite is satisfied.** TUI phase A remains owned
-   by the model document; TUI phase C may proceed once its model prerequisites
-   are complete.
+3. **The TUI track is complete.** Its phase A was owned by the model document
+   and landed there; the rest landed on `agent/tui-harness`.
 
 ## What can run in parallel
 
@@ -83,9 +90,6 @@ gates do not overlap. The P2/P3 constraint is discharged — both changed the
 reference documents, so they were coordinated into one PR rather than landed
 serially. P1's system-prompt edit likewise landed against
 `tools/agent/prompt.py`, where model phase 0c moved it.
-
-- **TUI G.1 and G.2 leave CI red between them.** They merge as a stacked pair;
-  G.3 follows.
 
 ## Lifecycle
 

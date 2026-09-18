@@ -1,4 +1,4 @@
-"""Agent-session manifest helpers for ``tools.runner``.
+"""Agent-session manifest helpers for ``tools.agent``.
 
 The manifest is schema version 2 (``docs/working/benchmark.md`` section 8).
 Version 2 is *additive over version 1*: every key version 1 wrote is still

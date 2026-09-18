@@ -72,5 +72,4 @@ paths = [
   '''tools/tui/__main__\.py''',
   '''tests/test_tui_backends\.py''',
   '''tests/test_tui_app\.py''',
-  '''docs/working/tui-harness\.md''',
 ]
