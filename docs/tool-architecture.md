@@ -562,6 +562,21 @@ and `policy_approver`. A denied call never dispatches: it returns an error
 result to the model and the loop continues. The default everywhere else is
 `auto_approve`, so a plain-Python caller behaves exactly as before.
 
+Two properties of the ask itself:
+
+- **Risk can live in an argument, not only in a tool.** `search_mast` and
+  `search_casda` return a table when asked to search and pull the matched
+  products into the data tree when asked to download — 121,515 of them for
+  Cassiopeia A. `DOWNLOAD_FLAGS` tags the call rather than the tool, so an
+  ordinary search stays unprompted and a fetch asks.
+- **The modal shows the arguments.** Approving `search_vizier` says nothing
+  about what it would query, and the transcript node carrying the arguments is
+  behind the modal. They are rendered as bounded plain text.
+- **Quitting answers every pending ask with `DENY`.** A thread worker blocked
+  on a decision cannot be cancelled — it waits on an event only the interface
+  sets — and Python joins its executor threads at exit, so an unreleased
+  modal turns a quit into a hung process rather than a closed one.
+
 **Slash commands** (`tools/tui/commands.py`) are UI-level and never reach the
 model — a mistyped command would otherwise cost a turn and pollute the
 transcript. The registry is declarative (name, aliases, help, handler, optional
@@ -629,7 +644,7 @@ terminal's cell size at import time and divides by the reported column count,
 so a tty that reports no size at all — a pty opened by a wrapper — killed the
 console before it drew anything.
 
-**Two traps worth keeping written down.**
+**Three traps worth keeping written down.**
 
 - A `_leading_underscore` method on a Textual subclass is in *Textual's*
   namespace, not a private one of ours. `ToolNode` built its renderable in a
@@ -637,7 +652,21 @@ console before it drew anything.
   every tool call painted as a blank row while `state`, `content` and
   `render()` all stayed correct. Tests that assert widget state cannot catch
   that; one that asserts `render_line(0)` can.
+- **A `Static` given a plain string parses it as content markup.** Anything
+  carrying model output, a tool's error text, or a path sets `markup=False`;
+  everything else passes a Rich `Text`, which is never parsed. Both halves
+  matter: markup would let a model mint a clickable `[@click=…]` action link
+  in the transcript, and it silently eats ordinary astronomy text, since
+  `The [OIII] line` renders as `The  line`.
 - Textual 8's `Static` exposes `content`, not `renderable`.
+
+**A preview fails the way its library fails, not the way it looks like it
+does.** Pillow's `DecompressionBombError`, `wave.Error` and `struct.error` are
+all bare `Exception`s rather than the `OSError`/`ValueError` a reader assumes,
+so a catch list written from the obvious guess let a large PNG, or any
+non-WAV file named `.wav`, raise out of an event handler. And a preview reads
+only the frames it draws: sampling a decoded file instead cost 0.75 s and
+~300 MB on the bundled 10 MB example, on the UI thread.
 
 **Testing.** Everything above runs under `uv run pytest` with no terminal:
 Textual's headless pilot drives keypresses and asserts widget state, the
