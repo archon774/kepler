@@ -10,7 +10,7 @@ session.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping
 
 from tools.agent.approval import Approver, Decision, auto_approve
 
@@ -21,6 +21,7 @@ __all__ = [
     "Decision",
     "RiskTag",
     "TOOL_RISK",
+    "DOWNLOAD_FLAGS",
     "Approver",
     "auto_approve",
     "risk_tags",
@@ -46,17 +47,42 @@ TOOL_RISK: dict[str, frozenset[RiskTag]] = {
     "plot_field_sed": frozenset({"writes"}),
 }
 
+#: Tools whose risk is carried by one argument rather than by being called at
+#: all: the argument that turns a search into a fetch. A plain archive query
+#: returns a table and is cheap; the same call with the flag set pulls the
+#: matched products into the data tree over the network, which is the most
+#: expensive thing on this surface -- 121,515 products for Cassiopeia A, by
+#: ``tools.mast.search_mast``'s own measured docstring. Tagging the tool
+#: outright would put a dialog in front of every ordinary search; this asks
+#: only when the call would actually write.
+DOWNLOAD_FLAGS: dict[str, str] = {
+    "search_mast": "download",
+    "search_casda": "download",
+}
 
-def risk_tags(name: str) -> frozenset[RiskTag]:
-    """Return the declared risk tags for one registered tool name."""
 
-    return TOOL_RISK.get(name, frozenset())
+def risk_tags(
+    name: str, arguments: Mapping[str, Any] | None = None
+) -> frozenset[RiskTag]:
+    """Return the risk tags for one proposed call.
+
+    ``arguments`` is optional so the table can still be read by name alone,
+    and is what :data:`DOWNLOAD_FLAGS` needs to tell a search from a fetch.
+    """
+
+    tags = TOOL_RISK.get(name, frozenset())
+    flag = DOWNLOAD_FLAGS.get(name)
+    if flag and arguments and arguments.get(flag):
+        return tags | frozenset({"writes", "slow"})
+    return tags
 
 
-def needs_confirmation(name: str) -> bool:
-    """Whether a tool's declared risk requires a caller to ask."""
+def needs_confirmation(
+    name: str, arguments: Mapping[str, Any] | None = None
+) -> bool:
+    """Whether a proposed call's risk requires a caller to ask."""
 
-    return bool(risk_tags(name))
+    return bool(risk_tags(name, arguments))
 
 
 @dataclass
@@ -69,7 +95,7 @@ class SessionPolicy:
     def approve(self, proposed: "ToolCallProposed") -> Decision:
         """Return the decision for one proposed tool call."""
 
-        if not needs_confirmation(proposed.name):
+        if not needs_confirmation(proposed.name, proposed.arguments):
             return Decision.ALLOW
         if proposed.name in self._always_allowed:
             return Decision.ALLOW
