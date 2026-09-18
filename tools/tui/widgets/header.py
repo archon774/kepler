@@ -40,7 +40,9 @@ class KeplerHeader(Static):
     """
 
     def __init__(self, backend_spec: str = "", **kwargs) -> None:
-        super().__init__("", **kwargs)
+        # markup=False: the spec half of this line is whatever `/backend` was
+        # given, and a heading is not a place to parse someone's typing.
+        super().__init__("", markup=False, **kwargs)
         self._backend_spec = backend_spec
 
     def on_mount(self) -> None:

@@ -224,7 +224,13 @@ class Transcript(VerticalScroll):
 
     def _answer_block(self) -> Static:
         if self._answer is None:
-            self._answer = Static("")
+            # markup=False: this holds whatever the model said. Textual parses
+            # content markup in a `Static` by default, which would let a model
+            # mint clickable action links in the transcript -- and would quietly
+            # eat ordinary astronomy text, since `The [OIII] line` renders as
+            # `The  line`. Every other transcript widget passes Rich `Text`,
+            # which is never parsed; these two take a plain string.
+            self._answer = Static("", markup=False)
             self.mount(self._answer)
         return self._answer
 
@@ -235,7 +241,7 @@ class Transcript(VerticalScroll):
         return self._thought
 
     def _append_note(self, text: str) -> None:
-        notice = Static(text, classes="notice")
+        notice = Static(text, classes="notice", markup=False)
         self._notices.append(notice)
         self.mount(notice)
 

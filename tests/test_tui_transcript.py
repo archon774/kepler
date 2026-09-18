@@ -16,6 +16,7 @@ from tools.agent.events import (
 from tools.llm.types import ModelResponse
 from tools.tui.app import ApprovalModal, KeplerApp
 from tools.tui.widgets.transcript import Transcript
+from textual.widgets import Static
 from textual.worker import Worker
 
 from tests.llm_fakes import StubBackend
@@ -256,5 +257,30 @@ def test_a_finished_tool_call_actually_paints_its_line():
 
             node = transcript.tool_nodes["call-1"]
             assert "search_simbad" in node.render_line(0).text
+
+    _run(scenario())
+
+
+def test_model_text_is_never_read_as_console_markup():
+    """Textual parses content markup in a `Static` by default, so a plain
+    string from the model could mint a clickable action link -- and would eat
+    ordinary astronomy text on the way, since `[OIII]` is markup-shaped."""
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            transcript = app.query_one("#transcript", Transcript)
+            transcript.handle_event(
+                TextDelta(text="The [OIII] line, [@click=app.quit]click[/], done.")
+            )
+            transcript.append_notice("Denied [bold red]tool[/] call")
+            await pilot.pause()
+
+            painted = "\n".join(
+                widget.render_line(0).text for widget in transcript.query(Static)
+            )
+            assert "[OIII]" in painted
+            assert "[@click=app.quit]" in painted
+            assert "[bold red]" in painted
 
     _run(scenario())
