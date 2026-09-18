@@ -79,9 +79,19 @@ class ToolNode(Static):
             self._refresh()
 
     def _refresh(self) -> None:
-        self.update(self._render_content())
+        self.update(self._node_content())
 
-    def _render_content(self) -> RenderableType:
+    def _node_content(self) -> RenderableType:
+        """Build this node's renderable.
+
+        Named ``_node_content`` and not ``_render_content``: Textual's
+        ``Widget._render_content`` is the private hook that fills the line
+        cache every repaint. An override of that name with a different
+        contract returns a renderable to a caller that wanted no return, the
+        cache is filled with blanks, and every tool call in the transcript
+        paints as an empty row while still reporting the right ``content``.
+        """
+
         status, details = self._summary()
         header = Text(f"{status} {self.tool_name}{details}")
         if not self.expanded:

@@ -218,3 +218,30 @@ def test_approval_request_opens_a_modal_and_releases_the_waiting_worker():
             assert request.decision is Decision.ALLOW
 
     _run(scenario())
+
+
+def test_a_finished_tool_call_actually_paints_its_line():
+    """Guards the transcript against a silently blank tool node.
+
+    Every other test here reads the node's state, which stayed perfectly
+    correct while `_render_content` shadowed Textual's private repaint hook
+    and each call painted an empty row. What a person sees is the thing worth
+    asserting: the name has to reach the screen.
+    """
+
+    async def scenario() -> None:
+        app = KeplerApp(backend=StubBackend([]))
+        async with app.run_test() as pilot:
+            transcript = app.query_one("#transcript", Transcript)
+            transcript.handle_event(
+                ToolCallProposed("call-1", "search_simbad", {"name": "M31"})
+            )
+            transcript.handle_event(
+                ToolCallFinished("call-1", "search_simbad", {"status": "ok"})
+            )
+            await pilot.pause()
+
+            node = transcript.tool_nodes["call-1"]
+            assert "search_simbad" in node.render_line(0).text
+
+    _run(scenario())
