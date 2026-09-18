@@ -4,7 +4,7 @@ Pure parsing: no network, no astroquery import. The catalog row itself is
 fetched one layer up, in ``tools.hr_diagram``, via
 ``tools.vizier.search_vizier(target=cluster_name, catalog=CLUSTER_CATALOG)`` --
 VizieR's own name resolver (the same one SIMBAD uses; confirmed live and
-documented in ``tools/runner.py``'s system prompt) turns a common name or
+documented in ``tools/agent/prompt.py``) turns a common name or
 alias ("M35") into a position, and a position-based query against a
 cluster-parameter catalog finds that cluster's own row by proximity. That
 sidesteps needing a bespoke alias-resolution cascade here entirely: name

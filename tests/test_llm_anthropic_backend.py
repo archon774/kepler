@@ -20,6 +20,7 @@ from tests.llm_fakes import (
     load_response_fixture,
 )
 from tools.llm import BackendUnavailableError, Message, TextBlock, ToolCallBlock, ToolResultBlock
+from tools.llm.types import ThinkingBlock
 from tools.llm import anthropic_backend as ab
 
 
@@ -415,3 +416,189 @@ def test_a_backend_that_does_not_report_temperature_support_omits_the_key():
     from tools.sessions import backend_record
 
     assert "temperature_supported" not in backend_record(StubBackend([]))
+
+
+# --- extended thinking ------------------------------------------------------
+
+
+def _thinking_message(signature: str = "sig-1", **overrides):
+    payload = {
+        "stop_reason": "end_turn",
+        "content": [
+            {"type": "thinking", "thinking": "Weighing two catalogs.", "signature": signature},
+            {"type": "text", "text": "APASS."},
+        ],
+    }
+    payload.update(overrides)
+    return as_namespace(payload)
+
+
+def test_no_budget_asks_for_no_thinking_and_keeps_temperature(monkeypatch):
+    messages = _install(monkeypatch, [FakeAnthropicStream(_end_turn_message(), ["Done."])])
+    ab.AnthropicBackend(api_key="k").complete(
+        messages=(), tools=[], system="s", max_tokens=1000
+    )
+
+    assert "thinking" not in messages.requests[0]
+    assert messages.requests[0]["temperature"] == 0.0
+
+
+def test_a_budget_asks_for_thinking_and_drops_the_temperature(monkeypatch):
+    """The provider refuses both together, and the caller asked for reasoning."""
+
+    messages = _install(monkeypatch, [FakeAnthropicStream(_thinking_message(), ["APASS."])])
+    backend = ab.AnthropicBackend(api_key="k", thinking_budget=2048)
+    backend.complete(messages=(), tools=[], system="s", max_tokens=8000)
+
+    assert messages.requests[0]["thinking"] == {
+        "type": "enabled",
+        "budget_tokens": 2048,
+    }
+    assert "temperature" not in messages.requests[0]
+    assert backend.temperature_supported is False
+
+
+def test_a_budget_under_the_provider_floor_is_raised_to_it(monkeypatch):
+    messages = _install(monkeypatch, [FakeAnthropicStream(_thinking_message(), ["APASS."])])
+    ab.AnthropicBackend(api_key="k", thinking_budget=10).complete(
+        messages=(), tools=[], system="s", max_tokens=8000
+    )
+
+    assert (
+        messages.requests[0]["thinking"]["budget_tokens"]
+        == ab.ANTHROPIC_MIN_THINKING_BUDGET
+    )
+
+
+def test_an_output_ceiling_too_small_for_a_budget_gets_no_thinking(monkeypatch):
+    """Reasoning is an improvement on the answer, never a precondition."""
+
+    messages = _install(monkeypatch, [FakeAnthropicStream(_end_turn_message(), ["Done."])])
+    ab.AnthropicBackend(api_key="k", thinking_budget=4096).complete(
+        messages=(), tools=[], system="s", max_tokens=512
+    )
+
+    assert "thinking" not in messages.requests[0]
+
+
+def test_reasoning_streams_to_its_own_hook_and_never_into_the_answer(monkeypatch):
+    _install(
+        monkeypatch,
+        [FakeAnthropicStream(_thinking_message(), ["APASS."], ["Weighing ", "two catalogs."])],
+    )
+    text: list[str] = []
+    reasoning: list[str] = []
+
+    response = ab.AnthropicBackend(api_key="k", thinking_budget=2048).complete(
+        messages=(),
+        tools=[],
+        system="s",
+        max_tokens=8000,
+        on_text=text.append,
+        on_thinking=reasoning.append,
+    )
+
+    assert text == ["APASS."]
+    assert reasoning == ["Weighing ", "two catalogs."]
+    assert response.text == "APASS."
+    assert response.thinking[0].text == "Weighing two catalogs."
+    assert response.thinking[0].signature == "sig-1"
+
+
+def test_a_redacted_block_survives_the_round_trip_it_cannot_be_read_on(monkeypatch):
+    _install(
+        monkeypatch,
+        [
+            FakeAnthropicStream(
+                as_namespace(
+                    {
+                        "stop_reason": "end_turn",
+                        "content": [
+                            {"type": "redacted_thinking", "data": "encrypted-payload"},
+                            {"type": "text", "text": "Done."},
+                        ],
+                    }
+                ),
+                ["Done."],
+            )
+        ],
+    )
+    response = ab.AnthropicBackend(api_key="k", thinking_budget=2048).complete(
+        messages=(), tools=[], system="s", max_tokens=8000
+    )
+
+    assert response.thinking == (ThinkingBlock(text="", signature="encrypted-payload"),)
+
+
+def test_reasoning_is_replayed_only_for_the_turn_being_continued(monkeypatch):
+    """The provider requires it there, signature intact, and discards it
+    everywhere else; sending the rest is a growing payload thrown away."""
+
+    messages = _install(monkeypatch, [FakeAnthropicStream(_end_turn_message(), ["Done."])])
+    history = (
+        Message(role="user", blocks=(TextBlock(text="first"),)),
+        Message(
+            role="assistant",
+            blocks=(ThinkingBlock(text="old", signature="sig-old"), TextBlock(text="a")),
+        ),
+        Message(role="user", blocks=(TextBlock(text="second"),)),
+        Message(
+            role="assistant",
+            blocks=(
+                ThinkingBlock(text="new", signature="sig-new"),
+                ToolCallBlock(call_id="t1", name="search_ned", arguments={}),
+            ),
+        ),
+        Message(
+            role="user",
+            blocks=(ToolResultBlock(call_id="t1", name="search_ned", content="{}"),),
+        ),
+    )
+    ab.AnthropicBackend(api_key="k", thinking_budget=2048).complete(
+        messages=history, tools=[], system="s", max_tokens=8000
+    )
+
+    rendered = messages.requests[0]["messages"]
+    assert [block["type"] for block in rendered[1]["content"]] == ["text"]
+    assert [block["type"] for block in rendered[3]["content"]] == ["thinking", "tool_use"]
+    assert rendered[3]["content"][0]["signature"] == "sig-new"
+
+
+def test_a_turn_whose_reasoning_cannot_be_replayed_runs_without_it(monkeypatch):
+    """A resumed session that lost its signed blocks would otherwise fail the
+    whole turn; it loses the reasoning for one request instead."""
+
+    messages = _install(monkeypatch, [FakeAnthropicStream(_end_turn_message(), ["Done."])])
+    history = (
+        Message(role="user", blocks=(TextBlock(text="first"),)),
+        Message(
+            role="assistant",
+            blocks=(ToolCallBlock(call_id="t1", name="search_ned", arguments={}),),
+        ),
+        Message(
+            role="user",
+            blocks=(ToolResultBlock(call_id="t1", name="search_ned", content="{}"),),
+        ),
+    )
+    ab.AnthropicBackend(api_key="k", thinking_budget=2048).complete(
+        messages=history, tools=[], system="s", max_tokens=8000
+    )
+
+    assert "thinking" not in messages.requests[0]
+
+
+def test_an_unsigned_thinking_block_is_dropped_rather_than_sent(monkeypatch):
+    messages = _install(monkeypatch, [FakeAnthropicStream(_end_turn_message(), ["Done."])])
+    history = (
+        Message(role="user", blocks=(TextBlock(text="first"),)),
+        Message(
+            role="assistant",
+            blocks=(ThinkingBlock(text="unsigned"), TextBlock(text="a")),
+        ),
+    )
+    ab.AnthropicBackend(api_key="k", thinking_budget=2048).complete(
+        messages=history, tools=[], system="s", max_tokens=8000
+    )
+
+    rendered = messages.requests[0]["messages"]
+    assert [block["type"] for block in rendered[1]["content"]] == ["text"]

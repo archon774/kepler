@@ -64,6 +64,34 @@ def test_is_available_is_false_on_a_connection_error():
     assert backend.is_available() is False
 
 
+def test_installed_models_reads_the_names_the_daemon_reports():
+    capture = CapturingTransport(
+        {"models": [{"name": "gemma4:12b"}, {"name": "qwen3.5:9b"}]}
+    )
+    backend = OllamaBackend(model="qwen3:8b", transport=capture())
+
+    assert backend.installed_models() == ("gemma4:12b", "qwen3.5:9b")
+    assert capture.last.url.path.endswith("/api/tags")
+
+
+def test_installed_models_is_empty_when_the_daemon_cannot_be_asked():
+    """`()` means "could not ask", not "holds nothing" -- a caller must not
+    turn a failed listing into a refusal to run."""
+
+    backend = OllamaBackend(model="qwen3:8b", transport=failing_transport())
+
+    assert backend.installed_models() == ()
+
+
+def test_installed_models_ignores_entries_without_a_usable_name():
+    capture = CapturingTransport(
+        {"models": [{"name": "gemma4:12b"}, {"size": 1}, {"name": 7}]}
+    )
+    backend = OllamaBackend(model="qwen3:8b", transport=capture())
+
+    assert backend.installed_models() == ("gemma4:12b",)
+
+
 def test_is_available_is_true_when_the_tags_endpoint_answers_200():
     capture = CapturingTransport({"models": []})
     backend = OllamaBackend(model="qwen3:8b", transport=capture())

@@ -206,11 +206,17 @@ with what results.
 tool calls under `artifacts/sessions/<session_id>/...`, and writes a
 `session_manifest.json` at session start, after each tool call, and when the loop ends
 (`end_turn`, `max_turns`, or exception). The manifest records tool name, arguments,
-cache-hit status, result status/count, warnings/errors, and artifact paths — not full tool
-payloads. `tools.workspace.list_sessions()` and `tools.workspace.describe_session()` expose
-those manifests for later review without re-running remote queries. This is the minimum
-version of the Kosmos-style shared-state idea, using Kepler's existing local artifact model
-rather than adopting a cross-agent world-model architecture wholesale.
+cache-hit status, result status/count, warnings/errors, and artifact paths. Current manifests
+also preserve the complete neutral conversation — prompts and tool arguments/results — for
+safe provider-context resume, while the diagnostic trace itself still omits full result
+payloads. The files are local, sensitive records: POSIX session directories are `0700` and
+manifests `0600`; resume rejects a manifest above 1 MiB or history above 256 KiB (128 messages,
+256 blocks, and 64 KiB per field). Exact context is intentionally not redacted; remove the
+session artifact directory when it should no longer be retained.
+`tools.workspace.list_sessions()` and `tools.workspace.describe_session()` expose those
+manifests for later review without re-running remote queries. This is the minimum version of
+the Kosmos-style shared-state idea, using Kepler's existing local artifact model rather than
+adopting a cross-agent world-model architecture wholesale.
 
 ---
 

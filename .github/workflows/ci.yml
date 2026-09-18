@@ -70,7 +70,8 @@ jobs:
           test -f uv.lock
           test -f docs/tool-architecture.md
           test -f tools/registry.py
-          test -f tools/runner.py
+          test -f tools/agent/engine.py
+          test -f tools/tui/app.py
 
   required:
     name: "required: ci"

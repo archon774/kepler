@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="108" viewBox="0 0 880 108" role="img" aria-label="Kepler — astronomy research console">
+  <title>Kepler — astronomy research console</title>
+  <rect width="880" height="108" rx="8" fill="#121212"/>
+  <rect x="14" y="20" width="852" height="72" rx="10" fill="#242F38" stroke="#FEA62B" stroke-width="2"/>
+  <rect x="42" y="12" width="158" height="16" fill="#242F38"/>
+  <text x="54" y="27" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;DejaVu Sans Mono&quot;, monospace" font-size="19" font-weight="600" letter-spacing="0.06em" fill="#FEA62B">K E P L E R</text>
+  <text x="46" y="63" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;DejaVu Sans Mono&quot;, monospace" font-size="15" fill="#A7ACAF">astronomy research console</text>
+</svg>

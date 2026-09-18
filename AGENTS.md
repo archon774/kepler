@@ -8,7 +8,7 @@ Kepler is a staging area for extracted astronomy algorithms. Public Python tools
 
 - `uv sync`: create/update the Python environment (3.14 in CI; 3.12 is the floor in `pyproject.toml`) from `pyproject.toml` and `uv.lock`.
 - `uv run pytest`: the test suite (see Testing Guidelines below) — no network access by default.
-- `uv run kepler-astro-query "<question>"`: run the optional agentic loop over the `tools` schemas (requires `ANTHROPIC_API_KEY`).
+- `uv run kepler`: open the console, the optional agentic loop over the `tools` schemas. It needs a model backend — a key for the provider it opens on, or a local Ollama daemon, which needs none. `KEPLER_MODEL_BACKEND=provider/model` picks which one it starts on; `/backend` changes it inside the session.
 - `python3 -m compileall tools algorithms`: syntax smoke test.
 - `npm run typecheck`: `tsc --noEmit` over the TypeScript algorithm folders (not a CI job; run by hand when touching a `.ts` file).
 - `git diff --check`: catch trailing whitespace and patch formatting issues before review.
@@ -41,4 +41,4 @@ Recent history uses short, imperative commit subjects such as `Use uv for depend
 
 ## Security & Configuration Tips
 
-Never commit API keys, local environment files, large astronomy datasets, archive dumps, or generated artifacts. `ANTHROPIC_API_KEY` is required only for `tools.runner`'s optional agentic loop; `ADS_DEV_KEY` is required for `tools.ads` (literature search and reviews) — get one from https://ui.adsabs.harvard.edu/user/settings/token. Workflow changes should remain narrow and pass the secret-scan and workflow-safety jobs.
+Never commit API keys, local environment files, large astronomy datasets, archive dumps, or generated artifacts. `ANTHROPIC_API_KEY` is required only for the optional agentic loop (the `kepler` console and `tools/agent/` under it), and only when it runs on Anthropic; `ADS_DEV_KEY` is required for `tools.ads` (literature search and reviews) — get one from https://ui.adsabs.harvard.edu/user/settings/token. Workflow changes should remain narrow and pass the secret-scan and workflow-safety jobs.

@@ -42,10 +42,11 @@ tools/
   casda.py            # CASDA archive tools
   resolve.py          # SIMBAD-backed target resolution
   registry.py         # optional agent/tool schema registry
-  runner.py           # thin console shim over tools/agent/ (kept for kepler-astro-query)
   sessions.py         # per-run session manifest recording + the loop's cache-key helper
   agent/              # headless agent loop: run_session, events, the moved SYSTEM_PROMPT
   llm/                # provider-neutral model port -- see section 10
+  tui/                # the `kepler` console over the loop -- see section 10.2
+  bench/              # model benchmark harness -- see section 10.1
   workspace.py        # local artifact helpers
   models.py           # shared result, warning/error, WCS, catalog, artifact models
   config.py           # small environment-backed settings helpers
@@ -274,7 +275,7 @@ Keep shared Python models small until a tool needs more:
 
 - warning/error records;
 - file and artifact metadata;
-- runner session manifests;
+- agent session manifests;
 - table summaries;
 - WCS summaries;
 - catalog summaries;
@@ -304,10 +305,17 @@ Important modeling rules:
 - Measurements preserve uncertainty, method, calibration assumptions, and source.
 - Artifacts include local path, MIME type, size, created time, and producing tool.
 - Agent-loop artifacts are session-scoped under
-  `artifacts/sessions/<session_id>/...`; the runner writes
+  `artifacts/sessions/<session_id>/...`; the engine writes
   `session_manifest.json` in that directory with the ordered tool-call trace,
-  cache hits, warning/error summaries, and artifact paths, but not full tool
-  payloads.
+  cache hits, warning/error summaries, and artifact paths. To resume safely,
+  current manifests also retain the complete neutral conversation, including
+  prompts and tool arguments/results; the diagnostic trace itself still omits
+  full result payloads. These are local, sensitive session records: on POSIX,
+  each session directory is owner-only (`0700`) and its manifest is `0600`.
+  Resume accepts at most a 1 MiB manifest and a 256 KiB history (128 messages,
+  256 blocks, 64 KiB per field); content is not redacted because the provider
+  protocol needs the exact prior exchange. Remove the session artifact
+  directory when that retention is no longer appropriate.
 
 ---
 
@@ -388,10 +396,10 @@ Runtime behavior should be bounded:
 - credentials redacted from logs and outputs;
 - recursive local file scans avoided by default;
 - large payloads returned as artifacts plus summaries.
-- `tools.runner` persists a session manifest when it starts, after each tool
-  call, and at terminal states (`end_turn`, `max_turns`, or an exception), so
-  another caller can inspect the exact session context without re-running
-  remote queries.
+- `tools.agent` persists a session manifest when a session starts, after each
+  tool call, and at terminal states (`end_turn`, `max_turns`, `interrupted`, or
+  an exception), so another caller can inspect the exact session context
+  without re-running remote queries. The console resumes a session from one.
 
 Serving is optional. A Python caller must be able to import and call every tool
 without running a server. If a serving surface is added later, generate it from
@@ -436,13 +444,26 @@ from plain Python without any of this. When an agent loop *is* wanted, it is
 built in two layers.
 
 `tools/agent/` is the headless loop. `run_session()` drives a model backend
-over the tool registry and yields a stream of events (`SessionStarted`,
-`TurnStarted`, `TextDelta`, `ToolCallProposed`/`Started`/`Finished`/`Denied`,
-`ProtocolFault`, `TurnFinished`, `SessionFinished`); a `Decision` flows back in
-through an approver callable. It imports no UI toolkit. `SYSTEM_PROMPT` lives
-in `tools/agent/prompt.py`. `tools/runner.py` is now a thin shim that iterates
-`run_session()` and prints, kept so the `kepler-astro-query` console script and
-its output are unchanged.
+over the tool registry and yields a stream of twelve event types
+(`SessionStarted`, `TurnStarted`, `TextDelta`, `ThinkingDelta`, `UserMessage`,
+`ToolCallProposed`/`Started`/`Finished`/`Denied`, `ProtocolFault`,
+`TurnFinished`, `SessionFinished`); a `Decision` flows back in through an
+approver callable. It imports no UI toolkit. `SYSTEM_PROMPT` lives in
+`tools/agent/prompt.py`.
+
+`ThinkingDelta` is never merged into `TextDelta`. A model's working is a
+different kind of claim from its answer — it may contradict the answer — and a
+consumer that rendered them alike would let a discarded hypothesis read as a
+finding.
+
+Three optional callables let an interactive caller stay in a run, and the loop
+is unchanged without them:
+
+| Hook | When | What it does |
+| --- | --- | --- |
+| `on_delta` | Inside `complete()`, per chunk | Receives `TextDelta` and `ThinkingDelta` as they stream, **instead of** their being emitted afterwards. A generator cannot yield from a callback, so without it the engine buffers and emits on return. Either way a delta is delivered exactly once. |
+| `pending_input` | Top of every turn | Drained; what it returns is merged into the **trailing user message**, which is the one carrying the tool results. Two consecutive user messages are not a shape every provider accepts, and a note is an addition to what the user last said, not a turn of its own. `UserMessage` announces the turn it landed in. |
+| `should_stop` | Top of every turn, and before each tool call | Ends the session with outcome `interrupted`. A pending tool call takes the denial path with an `interrupted` result rather than being abandoned: every `tool_use` needs a `tool_result` or the conversation cannot be sent again. A hook that raises is read as "keep going". |
 
 `tools/llm/` is the provider-neutral **model port**. Two rules govern it:
 
@@ -503,7 +524,7 @@ defaulting to replay measures a fixture miss instead of the tool. **A new
 registry tool must be classified in the same commit that adds it.**
 
 **Four verbs over a directory on disk** (`kepler-bench`, a console script
-beside `kepler-astro-query`): `run` produces evidence, `grade` produces
+beside `kepler`): `run` produces evidence, `grade` produces
 verdicts, `compare` produces the matrix, and `record` captures a fixture for
 human review. Grading is separate from running because the first version of any
 grader is wrong and re-grading must not cost a re-spend. `--max-tokens` is
@@ -518,3 +539,136 @@ Nothing added here opens a socket under a plain `uv run pytest`, and that is a
 test rather than a convention: the smoke suite runs end to end with both sides
 replayed, under a socket guard, in milliseconds. There is **no CI benchmark
 job** — CI stays offline, deterministic, and keyless.
+
+### 10.2 The Kepler Console
+
+`tools/tui/` is the Textual console over the same loop, and the repository's
+one model-driven entry point: `kepler`, with **no required arguments**, because
+everything it needs is chosen inside the session. It is the only package
+permitted new dependencies -- `textual` and `textual-image` are the two it
+added, over the already-pinned `pillow` and `rich`. `tools/agent/` and
+`tools/llm/` stay zero-new-dependency, which is what keeps the loop callable
+from plain Python.
+
+**Threading.** The engine is synchronous, so the console runs it in a Textual
+thread worker and posts each event to the UI thread as a message. Approval runs
+the other way: the worker posts a request carrying a `threading.Event`, blocks
+on it, and the UI thread sets it when the modal is answered. Nothing about the
+engine knows a UI exists.
+
+**Approval.** `tools/agent/policy.py` holds `Decision` (`ALLOW`, `DENY`,
+`ALLOW_ALWAYS` — the last persisting for the session), the per-tool risk tags,
+and `policy_approver`. A denied call never dispatches: it returns an error
+result to the model and the loop continues. The default everywhere else is
+`auto_approve`, so a plain-Python caller behaves exactly as before.
+
+Two properties of the ask itself:
+
+- **Risk can live in an argument, not only in a tool.** `search_mast` and
+  `search_casda` return a table when asked to search and pull the matched
+  products into the data tree when asked to download — 121,515 of them for
+  Cassiopeia A. `DOWNLOAD_FLAGS` tags the call rather than the tool, so an
+  ordinary search stays unprompted and a fetch asks.
+- **The modal shows the arguments.** Approving `search_vizier` says nothing
+  about what it would query, and the transcript node carrying the arguments is
+  behind the modal. They are rendered as bounded plain text.
+- **Quitting answers every pending ask with `DENY`.** A thread worker blocked
+  on a decision cannot be cancelled — it waits on an event only the interface
+  sets — and Python joins its executor threads at exit, so an unreleased
+  modal turns a quit into a hung process rather than a closed one.
+
+**Slash commands** (`tools/tui/commands.py`) are UI-level and never reach the
+model — a mistyped command would otherwise cost a turn and pollute the
+transcript. The registry is declarative (name, aliases, help, handler, optional
+argument completer), so `/help` is generated from it rather than maintained. A
+doubled leading slash escapes to a literal one. Typing `/` lists every command;
+Tab completes one match whole and several only as far as they agree, the shell
+rule, because guessing between equal candidates puts a command nobody asked for
+into the prompt. A completer is handed every argument word typed so far, which
+is what lets `/backend` answer with providers for the first argument and with a
+host's models for the second. The module imports no Textual, so all of it is
+testable without a terminal.
+
+**Backend selection** (`tools/tui/backends.py`) is live: `/backend` lists what
+is offered and switches the running session, retitling the header. Three rules
+make that safe to offer mid-session.
+
+- **Probe before swap, in two steps.** Anthropic fails at construction when its
+  key is missing; Ollama does not. A backend pointed at a stopped daemon builds
+  perfectly and raises a connection error several seconds into the first
+  question, and *a daemon that is up is not a daemon that has your model* —
+  an unknown one answers with a 404 from `/v1/chat/completions` at the same
+  point. So `open_backend` checks the service and then the model, and the
+  session's backend is replaced only after both pass. A failed listing is `()`,
+  meaning "could not ask", never "holds nothing".
+- **A bare provider name asks rather than assumes.** `/backend ollama` opens a
+  picker of what the daemon reports, marking the running model and the default;
+  naming a model outright switches directly. A host that cannot be asked offers
+  nothing and the switch proceeds to the default, because an unanswerable
+  question must not stop the switch that was asked for.
+- **Never mid-turn.** `run_session()` was handed the backend by value when the
+  turn started; swapping it would retitle the header for a turn the old backend
+  is still finishing.
+
+A question *about* a daemon is not timed like a turn: `OLLAMA_TIMEOUT_S`
+defaults to 600 s because a local turn is bounded by the host's hardware, while
+`is_available()` and `installed_models()` use a five-second probe timeout. One
+Tab against a host that accepts connections and then says nothing would
+otherwise freeze the interface for ten minutes.
+
+**The interactive turn.** The console is where the three engine hooks above are
+used, and the properties they buy are all the same property: the person
+watching a run is the one best placed to correct it.
+
+- What you typed stays in the transcript; an answer read without the question
+  that produced it is a different claim.
+- Reasoning is rendered where the provider reveals it, in its own muted block
+  per turn, never styled like the answer. The console asks for it by default
+  (`--thinking-budget`, 4096 tokens, `0` to switch it off) — everywhere else
+  thinking stays off, because asking for it costs `temperature` and with it the
+  benchmark's determinism claim.
+- The prompt never closes. What is typed mid-turn is queued, marked queued
+  until the engine reports it delivered, and merged into the next turn; a note
+  the session ended before taking goes back into the prompt rather than the
+  void.
+- Escape stops the turn at its next safe point, and says so rather than
+  pretending it stopped instantly.
+
+**Artifact rendering** probes the terminal once at startup —
+`KITTY_WINDOW_ID`/`TERM`, then `TERM_PROGRAM`, then a Sixel device-attributes
+query under a short timeout — and picks a `GraphicsTier` of `KITTY`, `ITERM2`,
+`SIXEL` or `HALFBLOCK`. Half-blocks are the floor and always work, so a
+terminal that cannot be probed loses resolution rather than the picture. The
+native-protocol library is imported **on use, not at import**: it measures the
+terminal's cell size at import time and divides by the reported column count,
+so a tty that reports no size at all — a pty opened by a wrapper — killed the
+console before it drew anything.
+
+**Three traps worth keeping written down.**
+
+- A `_leading_underscore` method on a Textual subclass is in *Textual's*
+  namespace, not a private one of ours. `ToolNode` built its renderable in a
+  method called `_render_content`, which is also Textual's per-repaint hook:
+  every tool call painted as a blank row while `state`, `content` and
+  `render()` all stayed correct. Tests that assert widget state cannot catch
+  that; one that asserts `render_line(0)` can.
+- **A `Static` given a plain string parses it as content markup.** Anything
+  carrying model output, a tool's error text, or a path sets `markup=False`;
+  everything else passes a Rich `Text`, which is never parsed. Both halves
+  matter: markup would let a model mint a clickable `[@click=…]` action link
+  in the transcript, and it silently eats ordinary astronomy text, since
+  `The [OIII] line` renders as `The  line`.
+- Textual 8's `Static` exposes `content`, not `renderable`.
+
+**A preview fails the way its library fails, not the way it looks like it
+does.** Pillow's `DecompressionBombError`, `wave.Error` and `struct.error` are
+all bare `Exception`s rather than the `OSError`/`ValueError` a reader assumes,
+so a catch list written from the obvious guess let a large PNG, or any
+non-WAV file named `.wav`, raise out of an event handler. And a preview reads
+only the frames it draws: sampling a decoded file instead cost 0.75 s and
+~300 MB on the bundled 10 MB example, on the UI thread.
+
+**Testing.** Everything above runs under `uv run pytest` with no terminal:
+Textual's headless pilot drives keypresses and asserts widget state, the
+capability probe runs against faked environments, and the half-block renderer
+is pinned byte-for-byte against a committed 4×4 PNG.

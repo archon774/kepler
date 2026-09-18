@@ -148,18 +148,18 @@ def test_the_frame_registry_is_reachable_from_an_agent_loop():
     assert TOOL_FUNCTIONS["resolve_optical_frame"] is resolve_optical_frame
 
 
-def test_the_cli_resolver_delegates_to_the_registry():
+def test_the_pipeline_resolver_delegates_to_the_registry():
     """One resolution rule, not two. BL-3."""
-    from tools.claude_photometry_haiku_tool import resolve_fits_path
+    from tools.photometry_pipeline import resolve_fits_path
 
     resolved = resolve_fits_path("ngc5128_galaxy_b_001")
     frame = resolve_optical_frame("ngc5128_galaxy_b_001")
     assert Path(resolved) == Path(frame.path)
 
 
-def test_the_cli_resolver_still_raises_for_its_own_callers():
-    """The CLI contract is an exception; the tool contract is a ToolError."""
-    from tools.claude_photometry_haiku_tool import resolve_fits_path
+def test_the_pipeline_resolver_still_raises_for_its_own_callers():
+    """The pipeline contract is an exception; the tool contract is a ToolError."""
+    from tools.photometry_pipeline import resolve_fits_path
 
     with pytest.raises(FileNotFoundError):
         resolve_fits_path("messier 87")
@@ -323,7 +323,7 @@ def test_photometry_targets_exclude_the_archive_download_root(download_root):
     A downloaded product has no <object>_<category>_<filter>_<seq> token to
     parse, and a CASDA radio cube is not an optical photometry target.
     """
-    from tools.claude_photometry_haiku_tool import list_bundled_targets
+    from tools.photometry_pipeline import list_bundled_targets
 
     _write_frame(
         download_root / "idxq01010_drz.fits", object_name="NGC 1234", image_filter="F606W"
@@ -622,7 +622,7 @@ def test_bundled_targets_are_an_uncapped_inventory(monkeypatch, lfs_frames):
     itself the complete fixed set. It is an inventory of filenames now --
     no header reads, no cap."""
     from tools import config
-    from tools.claude_photometry_haiku_tool import list_bundled_targets
+    from tools.photometry_pipeline import list_bundled_targets
 
     monkeypatch.setattr(config, "DEFAULT_MAX_FRAMES", 3)
     targets = list_bundled_targets()

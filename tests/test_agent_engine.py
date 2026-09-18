@@ -7,6 +7,10 @@ hand-written stub backend, no SDK and no network.
 
 from __future__ import annotations
 
+import json
+import stat
+from pathlib import Path
+
 import pytest
 
 from tests.llm_fakes import StubBackend
@@ -15,7 +19,14 @@ from tools.agent import events
 from tools.agent.approval import Decision
 from tools.agent.engine import run_session
 from tools.agent.prompt import SYSTEM_PROMPT
-from tools.llm.types import ModelResponse, ProtocolFault, ToolCallBlock
+from tools.llm.types import (
+    Message,
+    ModelResponse,
+    ProtocolFault,
+    TextBlock,
+    ThinkingBlock,
+    ToolCallBlock,
+)
 from tools.models import ToolResult
 from tools.sessions import AgentSession
 
@@ -77,6 +88,219 @@ def test_the_system_prompt_defaults_to_the_moved_constant(monkeypatch):
     session = _session()
     list(run_session("hi", backend=backend, session=session, tool_functions={}))
     assert backend.calls[0]["system"] == SYSTEM_PROMPT
+
+
+def test_history_precedes_the_follow_up_user_message():
+    """A resumed prompt must retain recorded context in its first model request."""
+
+    history = (
+        Message(role="user", blocks=(TextBlock(text="Find M31."),)),
+        Message(role="assistant", blocks=(TextBlock(text="M31 is Andromeda."),)),
+    )
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="What next?")])
+
+    list(
+        run_session(
+            "How far away is it?",
+            backend=backend,
+            session=_session(),
+            history=history,
+            tool_schemas=[],
+            tool_functions={},
+        )
+    )
+
+    messages = backend.calls[0]["messages"]
+    assert [message.role for message in messages] == ["user", "assistant", "user"]
+    assert [message.blocks for message in messages] == [
+        (TextBlock(text="Find M31."),),
+        (TextBlock(text="M31 is Andromeda."),),
+        (TextBlock(text="How far away is it?"),),
+    ]
+
+
+def test_follow_up_session_manifest_records_prior_text_history():
+    """A new follow-up manifest must preserve context needed for later resume."""
+
+    history = (
+        Message(role="user", blocks=(TextBlock(text="Find M31."),)),
+        Message(role="assistant", blocks=(TextBlock(text="M31 is Andromeda."),)),
+    )
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="2.5 million ly.")])
+
+    stream = list(
+        run_session(
+            "How far away is it?",
+            backend=backend,
+            history=history,
+            tool_schemas=[],
+            tool_functions={},
+        )
+    )
+
+    manifest_path = next(
+        event.manifest_path for event in stream if isinstance(event, events.SessionFinished)
+    )
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    assert manifest["history"] == [
+        {"role": "user", "blocks": [{"type": "text", "text": "Find M31."}]},
+        {
+            "role": "assistant",
+            "blocks": [{"type": "text", "text": "M31 is Andromeda."}],
+        },
+        {
+            "role": "user",
+            "blocks": [{"type": "text", "text": "How far away is it?"}],
+        },
+        {
+            "role": "assistant",
+            "blocks": [{"type": "text", "text": "2.5 million ly."}],
+        },
+    ]
+
+
+def test_session_manifest_retains_tool_call_and_result_blocks_for_resume():
+    """Durable history must preserve the exact neutral tool exchange."""
+
+    def lookup(target):
+        assert target == "M31"
+        return ToolResult(status="ok", count=1)
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(_tool_call(name="lookup", target="M31"),),
+            ),
+            ModelResponse(stop_reason="end_turn", text="M31 is Andromeda."),
+        ]
+    )
+    stream = list(
+        run_session(
+            "Find M31.",
+            backend=backend,
+            tool_schemas=[
+                {
+                    "name": "lookup",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"target": {"type": "string"}},
+                        "required": ["target"],
+                    },
+                }
+            ],
+            tool_functions={"lookup": lookup},
+        )
+    )
+
+    manifest_path = next(
+        event.manifest_path for event in stream if isinstance(event, events.SessionFinished)
+    )
+    history = json.loads(Path(manifest_path).read_text(encoding="utf-8"))["history"]
+    assert history[1]["blocks"] == [
+        {
+            "type": "tool_call",
+            "call_id": "call_0",
+            "name": "lookup",
+            "arguments": {"target": "M31"},
+        }
+    ]
+    result = history[2]["blocks"][0]
+    assert result["type"] == "tool_result"
+    assert result["call_id"] == "call_0"
+    assert result["name"] == "lookup"
+    assert result["is_error"] is False
+    assert json.loads(result["content"])["status"] == "ok"
+
+
+def test_session_manifest_and_directory_are_owner_only():
+    """Persisted prompts and tool payloads must not be world-readable."""
+
+    session = _session()
+    manifest_path = session.save()
+
+    assert stat.S_IMODE(session.directory.stat().st_mode) == 0o700
+    assert stat.S_IMODE(manifest_path.stat().st_mode) == 0o600
+
+
+def test_tool_checkpoint_is_non_resumable_before_approval_or_dispatch():
+    """A stopped run cannot advertise a pending tool call as resumable."""
+
+    session = _session()
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    stream = run_session(
+        "hi",
+        backend=backend,
+        session=session,
+        tool_schemas=[{"name": "lookup", "input_schema": {"type": "object"}}],
+        tool_functions={},
+        approver=lambda _proposed: Decision.DENY,
+    )
+
+    assert isinstance(next(stream), events.SessionStarted)
+    assert isinstance(next(stream), events.TurnStarted)
+    assert isinstance(next(stream), events.ToolCallProposed)
+
+    manifest = json.loads(session.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["resumable"] is False
+    assert manifest["history"][1]["blocks"][0]["type"] == "tool_call"
+    list(stream)
+
+
+def test_partial_tool_turn_checkpoint_retains_completed_tool_results():
+    """A crashed later call must not erase earlier tool context from resume."""
+
+    def first():
+        return ToolResult(status="ok", count=1)
+
+    def explode():
+        raise RuntimeError("tool exploded")
+
+    session = _session()
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                tool_calls=(
+                    _tool_call(name="first", call_id="call-1"),
+                    _tool_call(name="explode", call_id="call-2"),
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="tool exploded"):
+        list(
+            run_session(
+                "hi",
+                backend=backend,
+                session=session,
+                tool_schemas=[
+                    {"name": "first", "input_schema": {"type": "object"}},
+                    {"name": "explode", "input_schema": {"type": "object"}},
+                ],
+                tool_functions={"first": first, "explode": explode},
+            )
+        )
+
+    manifest = json.loads(session.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["resumable"] is False
+    history = manifest["history"]
+    assert [block["name"] for block in history[1]["blocks"]] == [
+        "first",
+        "explode",
+    ]
+    result = history[2]["blocks"][0]
+    assert result["type"] == "tool_result"
+    assert result["call_id"] == "call-1"
+    assert result["name"] == "first"
+    assert result["is_error"] is False
+    assert json.loads(result["content"])["status"] == "ok"
 
 
 def test_max_tokens_comes_from_the_backend_capability(monkeypatch):
@@ -487,3 +711,300 @@ def test_a_tool_returning_something_that_is_neither_says_so():
                 tool_functions={"bad_tool": lambda: "not a model"},
             )
         )
+
+
+# --- reasoning, interruption, and adding to a run in flight ---------------
+
+
+def _run(backend, *, session=None, **kwargs):
+    """Drive one session with the interactive hooks under test."""
+
+    session = session or _session()
+    return list(
+        run_session(
+            "hi",
+            backend=backend,
+            session=session,
+            tool_schemas=[
+                {"name": "lookup", "input_schema": {"type": "object", "properties": {}}}
+            ],
+            tool_functions=kwargs.pop("tool_functions", {}),
+            max_turns=kwargs.pop("max_turns", 5),
+            **kwargs,
+        )
+    ), session
+
+
+def test_revealed_reasoning_is_its_own_event_and_precedes_the_answer():
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="APASS.",
+                thinking=(ThinkingBlock(text="Weighing two catalogs.", signature="s"),),
+            )
+        ]
+    )
+    stream, _ = _run(backend)
+    kinds = [type(event).__name__ for event in stream]
+
+    assert kinds == [
+        "SessionStarted",
+        "TurnStarted",
+        "ThinkingDelta",
+        "TextDelta",
+        "TurnFinished",
+        "SessionFinished",
+    ]
+    assert stream[2].text == "Weighing two catalogs."
+
+
+def test_on_delta_receives_the_stream_live_and_it_is_not_replayed():
+    """Exactly once, either way: a consumer that rendered both would double
+    every answer it showed."""
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="APASS.",
+                thinking=(ThinkingBlock(text="Weighing.", signature="s"),),
+            )
+        ]
+    )
+    live: list[events.Event] = []
+    stream, _ = _run(backend, on_delta=live.append)
+
+    assert [type(event).__name__ for event in live] == ["ThinkingDelta", "TextDelta"]
+    assert [event.text for event in live] == ["Weighing.", "APASS."]
+    assert not [
+        event
+        for event in stream
+        if isinstance(event, (events.TextDelta, events.ThinkingDelta))
+    ]
+
+
+def test_reasoning_is_carried_in_the_conversation_not_only_reported():
+    """A provider that signed its reasoning refuses the next request of the
+    same turn without it, so the blocks have to be in the history."""
+
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="tool_use",
+                thinking=(ThinkingBlock(text="Need the catalog.", signature="sig"),),
+                tool_calls=(_tool_call(),),
+            ),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    _run(backend, tool_functions={"lookup": lambda: ToolResult(status="ok")})
+
+    assistant = backend.calls[1]["messages"][1]
+    assert assistant.role == "assistant"
+    assert assistant.blocks[0] == ThinkingBlock(text="Need the catalog.", signature="sig")
+
+
+def test_recorded_history_keeps_the_signed_reasoning_for_a_resumed_session():
+    backend = StubBackend(
+        [
+            ModelResponse(
+                stop_reason="end_turn",
+                text="done",
+                thinking=(ThinkingBlock(text="why", signature="sig"),),
+            )
+        ]
+    )
+    _, session = _run(backend)
+
+    assert session.history[-1]["blocks"][0] == {
+        "type": "thinking",
+        "text": "why",
+        "signature": "sig",
+    }
+
+
+def test_a_note_typed_mid_run_joins_the_turn_that_answers_the_tool_call():
+    """Alongside the tool results, after them -- a note is an addition to what
+    the user last said, not a turn of its own, and consecutive user messages
+    are not a shape every provider accepts."""
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    # Nothing queued when turn 1 opens; the note is typed while it runs.
+    notes = [[], ["also check the 60 Hz line"]]
+
+    stream, session = _run(
+        backend,
+        tool_functions={"lookup": lambda: ToolResult(status="ok")},
+        pending_input=lambda: notes.pop(0) if notes else [],
+    )
+
+    delivered = [e for e in stream if isinstance(e, events.UserMessage)]
+    assert [(e.text, e.turn) for e in delivered] == [("also check the 60 Hz line", 2)]
+
+    results_message = backend.calls[1]["messages"][-1]
+    assert results_message.role == "user"
+    assert [type(block).__name__ for block in results_message.blocks] == [
+        "ToolResultBlock",
+        "TextBlock",
+    ]
+    assert results_message.blocks[-1].text == "also check the 60 Hz line"
+
+
+def test_an_empty_or_blank_note_is_not_delivered():
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="done")])
+    stream, _ = _run(backend, pending_input=lambda: ["", "   "])
+
+    assert not [e for e in stream if isinstance(e, events.UserMessage)]
+
+
+def test_a_stop_request_ends_the_session_with_its_own_outcome():
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="never")])
+    stream, session = _run(backend, should_stop=lambda: True)
+
+    assert [type(event).__name__ for event in stream] == [
+        "SessionStarted",
+        "SessionFinished",
+    ]
+    assert stream[-1].outcome == "interrupted"
+    assert session.outcome == "interrupted"
+    assert backend.calls == []
+
+
+def test_a_stop_during_a_tool_turn_refuses_the_call_but_still_answers_it():
+    """Every tool_use needs a tool_result or the conversation cannot be sent
+    again: stopping mid-turn leaves a usable record, not a broken one."""
+
+    stops = [False, True]
+    ran: list[str] = []
+
+    def tool() -> ToolResult:  # pragma: no cover - must never run
+        ran.append("lookup")
+        return ToolResult(status="ok")
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_tool_call(),)),
+            ModelResponse(stop_reason="end_turn", text="unreached"),
+        ]
+    )
+    stream, session = _run(
+        backend,
+        tool_functions={"lookup": tool},
+        should_stop=lambda: stops.pop(0) if stops else True,
+    )
+
+    denied = [e for e in stream if isinstance(e, events.ToolCallDenied)]
+    assert [e.reason for e in denied] == ["stopped by the user"]
+    assert ran == []
+    assert stream[-1].outcome == "interrupted"
+
+    results = session.history[-1]
+    assert results["role"] == "user"
+    assert results["blocks"][0]["type"] == "tool_result"
+    assert json.loads(results["blocks"][0]["content"])["errors"][0]["code"] == "interrupted"
+
+
+def test_a_stop_hook_that_raises_cannot_end_a_session():
+    """A broken stop button must not be able to stop a run."""
+
+    def explode() -> bool:
+        raise RuntimeError("no")
+
+    backend = StubBackend([ModelResponse(stop_reason="end_turn", text="done")])
+    stream, _ = _run(backend, should_stop=explode)
+
+    assert stream[-1].outcome == "end_turn"
+
+
+# --- validation, retargeted from the deleted runner shim -----------------
+
+
+def _capped_search_schema() -> dict:
+    return {
+        "name": "capped_search",
+        "description": "search with an optional cap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string"},
+                "max_catalogs": {"type": ["integer", "null"]},
+            },
+            "required": ["target"],
+        },
+    }
+
+
+def _capped_call(call_id: str, max_catalogs: object) -> ToolCallBlock:
+    return ToolCallBlock(
+        call_id=call_id,
+        name="capped_search",
+        arguments={"target": "Cas A", "max_catalogs": max_catalogs},
+    )
+
+
+def test_json_null_is_the_correct_way_to_uncap_and_dispatches_normally():
+    """The positive half of S8: the union the schema offers really is usable.
+    A validator that rejected `None` as well as `"None"` would pass every
+    stringified-null test and make the tool uncallable."""
+
+    dispatched: list[dict] = []
+
+    def capped_search(**kwargs):
+        dispatched.append(kwargs)
+        return ToolResult(status="ok", count=0)
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_capped_call("c0", None),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    session = _session()
+    list(
+        run_session(
+            "find everything",
+            backend=backend,
+            session=session,
+            max_turns=4,
+            tool_schemas=[_capped_search_schema()],
+            tool_functions={"capped_search": capped_search},
+        )
+    )
+
+    assert dispatched == [{"target": "Cas A", "max_catalogs": None}]
+    assert session.protocol_faults == []
+
+
+def test_an_identical_rejected_call_is_a_cache_hit_the_second_time():
+    """A model re-issuing a call the validator already refused pays for the
+    refusal once. The cache is keyed on the call, not on whether it ran."""
+
+    def capped_search(**kwargs):  # pragma: no cover - must never run
+        raise AssertionError("a rejected call must not dispatch")
+
+    backend = StubBackend(
+        [
+            ModelResponse(stop_reason="tool_use", tool_calls=(_capped_call("c0", "None"),)),
+            ModelResponse(stop_reason="tool_use", tool_calls=(_capped_call("c1", "None"),)),
+            ModelResponse(stop_reason="end_turn", text="done"),
+        ]
+    )
+    session = _session()
+    list(
+        run_session(
+            "find everything",
+            backend=backend,
+            session=session,
+            max_turns=4,
+            tool_schemas=[_capped_search_schema()],
+            tool_functions={"capped_search": capped_search},
+        )
+    )
+
+    assert [call["cache_hit"] for call in session.tool_calls] == [False, True]

@@ -20,6 +20,7 @@ from tools.llm.base import (
     BaseHTTPBackend,
     Capabilities,
     OnText,
+    OnThinking,
     truncation_fault,
 )
 from tools.llm.types import (
@@ -28,6 +29,7 @@ from tools.llm.types import (
     ProtocolFault,
     StopReason,
     TextBlock,
+    ThinkingBlock,
     ToolCallBlock,
     ToolResultBlock,
     Usage,
@@ -45,6 +47,7 @@ _CAPABILITIES = Capabilities(
     schema_dialect="openai_function",
     supports_union_types=True,
     max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
+    thinking=True,
 )
 
 #: OpenAI's ``finish_reason`` strings mapped onto the neutral closed set.
@@ -113,6 +116,7 @@ class OpenAIBackend(BaseHTTPBackend):
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse:
         payload: dict[str, Any] = {
             "model": self._model,
@@ -128,6 +132,13 @@ class OpenAIBackend(BaseHTTPBackend):
         latency_ms = (time.monotonic() - start) * 1000.0
 
         response = _to_model_response(data, latency_ms)
+        # Not streamed: this adapter posts once and reads the finished answer,
+        # so both hooks fire at the end. A caller gets the same content in the
+        # same order, one chunk later than a streaming provider would give it.
+        if on_thinking is not None:
+            for block in response.thinking:
+                if block.text:
+                    on_thinking(block.text)
         if on_text is not None and response.text:
             on_text(response.text)
         return response
@@ -234,12 +245,35 @@ def _to_model_response(data: Mapping[str, Any], latency_ms: float) -> ModelRespo
     return ModelResponse(
         stop_reason=stop_reason,
         text=message.get("content") or "",
+        thinking=_read_thinking(message),
         tool_calls=tuple(tool_calls),
         usage=_read_usage(data),
         latency_ms=latency_ms,
         raw_stop_reason=raw_finish,
         faults=tuple(faults),
     )
+
+
+#: What an OpenAI-compatible server calls the field it reveals reasoning in.
+#: There is no standard: Ollama and DeepSeek send ``reasoning_content``, and
+#: several other servers send ``reasoning``. Both are read; neither is
+#: required, and a server that reveals nothing is not a server whose model
+#: did not reason.
+_REASONING_FIELDS = ("reasoning_content", "reasoning")
+
+
+def _read_thinking(message: Mapping[str, Any]) -> tuple[ThinkingBlock, ...]:
+    """Read whatever reasoning this server chose to reveal.
+
+    Unsigned: none of these servers attest their reasoning, and none requires
+    it back. It is carried for the transcript, not for the next request.
+    """
+
+    for field in _REASONING_FIELDS:
+        value = message.get(field)
+        if isinstance(value, str) and value.strip():
+            return (ThinkingBlock(text=value),)
+    return ()
 
 
 def _parse_arguments(raw: Any) -> dict[str, Any] | None:

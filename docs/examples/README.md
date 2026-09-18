@@ -60,7 +60,7 @@ PSR B0329+54 rendered as audio: 60 s, stereo, 16-bit PCM, 44.1 kHz, 10.1 MB.
 Each polarization is one channel, and the pulse arrives as a burst of static
 roughly every 0.71 s.
 
-Produced by the **agent loop**, not by a script — `tools/runner.py` driving
+Produced by the **agent loop**, not by a script — `tools/agent/` driving
 `tools.registry.TOOL_SCHEMAS`, given only this instruction:
 
 > Sonify pulsar B0329+54, but measure the period from the observation itself
@@ -89,9 +89,17 @@ ATNF's live `P0` — with no catalogue consulted during the run.
 ### Regenerating it
 
 ```bash
-export ANTHROPIC_API_KEY=...          # the loop needs a key; the tools do not
-uv run kepler-astro-query "Sonify pulsar B0329+54, but measure the period from the observation itself with a periodogram rather than taking a catalogue value. Fold at what you measure, then render the audio."
+export ANTHROPIC_API_KEY=...          # the loop needs a backend; the tools do not
+uv run kepler                         # then ask, in the console:
 ```
+
+> Sonify pulsar B0329+54, but measure the period from the observation itself
+> with a periodogram rather than taking a catalogue value. Fold at what you
+> measure, then render the audio.
+
+The original run predates the console and was driven by the retired
+`kepler-astro-query` shim over the same loop and the same registry; what it
+did is unchanged by where it is typed.
 
 Or without an agent, three deterministic calls:
 

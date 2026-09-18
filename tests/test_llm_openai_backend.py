@@ -192,3 +192,38 @@ def test_an_http_error_status_raises_rather_than_returning_a_bad_response():
     backend = OpenAIBackend(model="gpt-4.1", api_key="sk-x", transport=capture())
     with pytest.raises(Exception):
         backend.complete(messages=(), tools=[], system="s", max_tokens=5)
+
+
+def test_reasoning_a_compatible_server_reveals_is_read_and_kept_out_of_the_answer():
+    """There is no standard field: Ollama and DeepSeek send
+    ``reasoning_content``, other servers send ``reasoning``. Both are read."""
+
+    for field in ("reasoning_content", "reasoning"):
+        payload = openai_chat_response(text="APASS.")
+        payload["choices"][0]["message"][field] = "Weighing two catalogs."
+        capture = CapturingTransport(payload)
+        reasoning: list[str] = []
+
+        response = OpenAIBackend(
+            model="m", api_key="k", transport=capture()
+        ).complete(
+            messages=(),
+            tools=[],
+            system="s",
+            max_tokens=64,
+            on_thinking=reasoning.append,
+        )
+
+        assert response.thinking[0].text == "Weighing two catalogs."
+        assert response.thinking[0].signature == ""
+        assert response.text == "APASS."
+        assert reasoning == ["Weighing two catalogs."]
+
+
+def test_a_server_that_reveals_nothing_reports_no_reasoning():
+    capture = CapturingTransport(openai_chat_response(text="APASS."))
+    response = OpenAIBackend(model="m", api_key="k", transport=capture()).complete(
+        messages=(), tools=[], system="s", max_tokens=64
+    )
+
+    assert response.thinking == ()

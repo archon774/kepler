@@ -37,11 +37,9 @@ paths = [
   '''docs/analysis/applicable-designs\.md''',
   '''docs/examples/README\.md''',
   '''docs/working/model-backends\.md''',
-  '''tests/test_runner_session\.py''',
+  '''tests/test_agent_session_manifest\.py''',
   '''tools/ads\.py''',
-  '''tools/claude_photometry_haiku_tool\.py''',
   '''tools/registry\.py''',
-  '''tools/runner\.py''',
   # OPENAI_API_KEY: the model port, added in Phase 2a with its first uses.
   '''tests/test_llm_factory\.py''',
   '''tests/test_llm_openai_backend\.py''',
@@ -65,4 +63,12 @@ paths = [
   '''benchmarks/fixtures/get_paper_abstract\.yaml''',
   '''benchmarks/suites/core/calibration\.md''',
   '''docs/working/benchmark\.md''',
+  # The console's backend selection: the .env reader that puts the key into the
+  # environment, the choice table that names the variable each provider reads,
+  # and their tests. Added with the TUI's /backend command. Exact files, as
+  # every entry here is.
+  '''tools/config\.py''',
+  '''tools/tui/backends\.py''',
+  '''tests/test_tui_backends\.py''',
+  '''tests/test_tui_app\.py''',
 ]

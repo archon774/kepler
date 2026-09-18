@@ -43,11 +43,22 @@ Important files and subfolders:
 - `radio_sources.py`: radio FITS -> catalog-identified sources -> labeled SED
   plot, backed by `algorithms.radio` plus `tools.vizier.search_vizier` and
   `tools.ned.search_ned`.
-- `registry.py`, `runner.py`: optional agent schema registry and Anthropic
-  runner over the same ordinary Python tool functions.
+- `registry.py`: the optional agent schema registry over the same ordinary
+  Python tool functions.
+- `agent/`: the headless agent loop -- `run_session()`, the twelve event
+  dataclasses, the approval policy, and `SYSTEM_PROMPT`. It imports no UI
+  toolkit and no provider SDK.
+- `llm/`: the provider-neutral model port -- neutral types, the
+  `ModelBackend` protocol, schema translation, pre-dispatch validation, the
+  `provider/model` spec factory, and adapters for Anthropic, OpenAI-compatible
+  servers, Ollama and Gemini.
+- `tui/`: the Textual `kepler` console over the loop -- application shell,
+  slash commands and their completion, backend and model selection,
+  transcript, artifact and session browsers.
+- `bench/`: the model benchmark harness (`kepler-bench`). It owns no tool.
 - `sessions.py`: `AgentSession` and `make_cache_key` -- per-run manifest
   recording (tool calls, cache hits, artifacts, turns) plus the shared cache
-  key used both by `runner.py`'s in-memory repeat-call cache and by the
+  key used both by the loop's in-memory repeat-call cache and by the
   manifest's own cache-hit bookkeeping. Manifests are written under
   `artifacts/sessions/<session_id>/session_manifest.json`; `list_session_manifests`
   and `read_session_manifest` read them back.

@@ -1,10 +1,9 @@
 """The system prompt for Kepler's agent loop.
 
-Moved verbatim from ``tools/runner.py`` in model-backends.md Phase 0c: it is
-~270 lines of confirmed-live failure-mode guidance and the source of the
-benchmark seed tasks in model-backends.md section 6.2, so it is relocated
-without a word changed. ``tools/runner.py`` re-exports ``SYSTEM_PROMPT`` from
-here for backwards compatibility.
+Moved verbatim from the retired ``tools/runner.py`` shim: it is ~270 lines of
+confirmed-live failure-mode guidance and the source of the benchmark seed
+tasks in model-backends.md section 6.2, so it was relocated without a word
+changed.
 """
 
 from __future__ import annotations

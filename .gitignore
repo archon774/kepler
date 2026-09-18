@@ -26,6 +26,9 @@ isochrone_cache/
 .env.*
 !.env.example
 
+# Git worktrees created for isolated feature work.
+.worktrees/
+
 # Python build/test output
 __pycache__/
 *.py[cod]

@@ -24,6 +24,7 @@ from tools.llm.base import (
     BaseHTTPBackend,
     Capabilities,
     OnText,
+    OnThinking,
     truncation_fault,
 )
 from tools.llm.types import (
@@ -112,6 +113,7 @@ class GeminiBackend(BaseHTTPBackend):
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse:
         body: dict[str, Any] = {
             "contents": _render_contents(messages),

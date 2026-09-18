@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import tools.claude_photometry_haiku_tool as claude_photometry_haiku_tool
-from tools.claude_photometry_haiku_tool import (
+import tools.photometry_pipeline as photometry_pipeline
+from tools.photometry_pipeline import (
     PhotometrySettings,
     ZeroPointResolution,
     _add_mentor_sidebar,
@@ -81,27 +79,8 @@ def test_magnitude_label_distinguishes_unverified_zero_points() -> None:
     assert magnitude_label_for(zero_point) == "magnitude (unverified zero point applied)"
 
 
-def test_check_only_cli_resolves_bundled_subject() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    tool_path = repo_root / "tools" / "claude_photometry_haiku_tool.py"
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(tool_path),
-            "ngc1846_cluster_r_000",
-            "--check-only",
-        ],
-        cwd=repo_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    assert "FOUND " in completed.stdout
-    assert "ngc1846_cluster_r_000.fits" in completed.stdout
+def test_pipeline_keeps_the_default_output_directory_constant() -> None:
+    assert photometry_pipeline.DEFAULT_OUTPUT_DIR == Path.home() / "Downloads"
 
 
 def test_replicate_zero_point_rejection_flags_planted_outlier() -> None:
@@ -145,15 +124,15 @@ def test_compute_photometry_disables_apcorr_for_field_cal_zero_point() -> None:
     fits_path = resolve_fits_path("nsv2849_star_v_000")
     fake_zero_point = ZeroPointResolution(value=20.0, source="field-cal", verified=True, diagnostics={})
     captured = {}
-    real_run_photometry = claude_photometry_haiku_tool.run_photometry
+    real_run_photometry = photometry_pipeline.run_photometry
 
     def spy(*args, **kwargs):
         captured["apcorr_tol"] = kwargs["settings"].apcorr_tol
         return real_run_photometry(*args, **kwargs)
 
     with (
-        patch.object(claude_photometry_haiku_tool, "select_zero_point_mag", return_value=fake_zero_point),
-        patch.object(claude_photometry_haiku_tool, "run_photometry", side_effect=spy),
+        patch.object(photometry_pipeline, "select_zero_point_mag", return_value=fake_zero_point),
+        patch.object(photometry_pipeline, "run_photometry", side_effect=spy),
     ):
         compute_photometry(fits_path, use_field_cal=True)
 
@@ -167,15 +146,15 @@ def test_compute_photometry_keeps_default_apcorr_for_non_field_cal_zero_point() 
     fits_path = resolve_fits_path("nsv2849_star_v_000")
     fake_zero_point = ZeroPointResolution(value=20.0, source="header", verified=False)
     captured = {}
-    real_run_photometry = claude_photometry_haiku_tool.run_photometry
+    real_run_photometry = photometry_pipeline.run_photometry
 
     def spy(*args, **kwargs):
         captured["apcorr_tol"] = kwargs["settings"].apcorr_tol
         return real_run_photometry(*args, **kwargs)
 
     with (
-        patch.object(claude_photometry_haiku_tool, "select_zero_point_mag", return_value=fake_zero_point),
-        patch.object(claude_photometry_haiku_tool, "run_photometry", side_effect=spy),
+        patch.object(photometry_pipeline, "select_zero_point_mag", return_value=fake_zero_point),
+        patch.object(photometry_pipeline, "run_photometry", side_effect=spy),
     ):
         compute_photometry(fits_path, use_field_cal=False)
 

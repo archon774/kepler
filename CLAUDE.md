@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Kepler is a **staging area for extracted astronomy algorithms**, not yet a coherent
 package. It holds four things:
 
-1. `tools/` — plain Python tool wrappers, split database/archive tools, an optional runner,
-   and shared tool-facing models.
+1. `tools/` — plain Python tool wrappers, split database/archive tools, the
+   optional agent loop and the `kepler` console over it, and shared
+   tool-facing models.
 2. `algorithms/` — extracted algorithm folders (`wcs/`, `photometry/`,
    `fieldcal/`, `catalogs/`, `query/`, `lightcurve/`, `periodogram/`,
    `hrdiagram/`) plus the shared `skylib_lite/` subset.
@@ -78,8 +79,9 @@ CI (`.github/workflows/ci.yml`) runs on **Python 3.14**; `pyproject.toml` keeps
 `RuntimeError` rather than `OSError` on a symlink loop under 3.12 — use
 `tools.config.within`/`safe_resolve`). It gates three jobs: `compileall` over
 `tools algorithms tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
-`README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`, `tools/runner.py`, and
-`docs/tool-architecture.md` exist. **The TypeScript typecheck is not a CI job** — run it
+`README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
+`tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
+exist. **The TypeScript typecheck is not a CI job** — run it
 by hand when touching a `.ts` file.
 
 The suite is algorithm-preservation testing, not correctness testing: it pins bit-exact
@@ -215,9 +217,20 @@ state is retained between calls, and no tool writes state another tool reads.
 
 `tools/agent/` owns the headless agent loop and nothing else: `run_session()`
 (an iterator of events, with a `Decision` flowing back through an approver),
-the ten event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved verbatim
-from `tools/runner.py` — `runner.py` re-exports it). It imports no UI toolkit.
-`tools/runner.py` is now a thin console shim over it.
+the twelve event dataclasses in `events.py`, and `SYSTEM_PROMPT` (moved
+verbatim from the retired `tools/runner.py`). It imports no UI toolkit.
+`tools/tui/` is the console over it, and the repository's only model-driven
+entry point: `kepler`. The `tools/runner.py` shim and its
+`kepler-astro-query` script were deleted once the console replaced them.
+
+`run_session()` also takes three optional callables for an interactive caller,
+and behaves exactly as before without them: `on_delta` (receives `TextDelta`
+and `ThinkingDelta` live **instead of** their being emitted afterwards — a
+delta is delivered exactly once either way), `pending_input` (drained each turn
+and merged into the trailing user message, so a note typed mid-run arrives with
+the tool results), and `should_stop` (ends the session with outcome
+`interrupted`, refusing any pending tool call with a `tool_result` rather than
+leaving a `tool_use` unanswered).
 
 `tools/llm/` owns the provider-neutral **model port** and nothing else:
 neutral types, the `ModelBackend` protocol (`complete()` is the only required
@@ -236,6 +249,13 @@ the four adapters. Its rules:
 - The integer/number-or-null union is never downgraded to a plain scalar to
   make a weak model's life easier (`schema.py`); the string `"None"` is never
   coerced to `None` (`validation.py`).
+- **Revealed reasoning is never merged into assistant text.** `ThinkingBlock`
+  is a neutral block and `on_thinking` is its streaming hook, parallel to
+  `on_text`. Anthropic's is signed and must be replayed on the turn whose tool
+  calls are being answered — hence for the **last** assistant message only, and
+  never unsigned. Asking for a thinking budget costs `temperature`, which the
+  provider refuses alongside it, so thinking is **off by default** everywhere
+  but the console (`docs/working/model-backends.md` 4.8).
 
 `tools/bench/` owns the model benchmark harness and nothing else: the tool
 plane (`plane.py`), the fixture store (`fixtures.py`), the task loader
@@ -383,8 +403,11 @@ were removed. Ownership is likewise strict and cross-cutting:
   there is deliberately no `data/` pattern in `.gitignore`, and adding one back
   would ignore every fixture. The untracked part is `data/fits_downloads/`,
   matched by the depth-independent `fits_downloads/` pattern.
-- ADS-backed tools require `ADS_DEV_KEY`; the optional `tools.runner` agent loop
-  requires a model backend — `ANTHROPIC_API_KEY` by default, or
-  `KEPLER_MODEL_BACKEND=provider/model` plus that provider's key. Remote
+- ADS-backed tools require `ADS_DEV_KEY`; the optional agent loop — the
+  `kepler` console and `tools/agent/` under it — requires a model backend.
+  `ANTHROPIC_API_KEY` by default, or `KEPLER_MODEL_BACKEND=provider/model`
+  plus that provider's key, or a local Ollama daemon, which needs none. The
+  backend is selectable inside the session with `/backend`, so an unset
+  variable is a question of which one it opens on, not whether it runs. Remote
   astronomy service calls stay out of default checks and should return bounded
   previews plus artifact paths for complete results.

@@ -2,16 +2,14 @@
 
 Thin `tools/`-convention wrappers (plain functions, Pydantic-model return
 values) over the already-working, already-tested photometry pipeline in
-``tools.claude_photometry_haiku_tool`` -- target resolution, source
-extraction, zero-point resolution (CLI override / FITS header / live
+``tools.photometry_pipeline`` -- target resolution, source extraction,
+zero-point resolution (an explicit override / FITS header / live
 field-calibration), and the two plots (photometry, zero-point fit). This
-module does not reimplement any of that; it imports and reuses it directly,
-so a prompt run through ``tools.runner`` produces exactly what the standalone
-CLI script produces.
+module does not reimplement any of that; it imports and reuses it directly.
 
 There is no live image archive behind photometry -- see
 ``list_photometry_targets``. That fixed, local library is the reason a
-caller (human or Claude, via ``tools.runner``) should always check what's
+caller (human or Claude, via ``tools.agent``) should always check what's
 bundled before claiming to have analyzed something that isn't.
 
 Not the same job as ``tools.hr_diagram``, despite both running source
@@ -38,7 +36,7 @@ from pathlib import Path
 import pandas as pd
 
 from tools.artifacts import describe_file
-from tools.claude_photometry_haiku_tool import (
+from tools.photometry_pipeline import (
     compute_photometry,
     list_bundled_targets,
     load_fits_image,

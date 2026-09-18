@@ -46,8 +46,16 @@ def build_backend(
     api_key: str | None = None,
     base_url: str | None = None,
     transport: Any = None,
+    thinking_budget: int | None = None,
 ) -> ModelBackend:
-    """Construct the backend named by ``spec`` (or ``KEPLER_MODEL_BACKEND``)."""
+    """Construct the backend named by ``spec`` (or ``KEPLER_MODEL_BACKEND``).
+
+    ``thinking_budget`` asks the provider to reveal its reasoning and bounds
+    what it may spend on it. Only Anthropic takes a budget: the others either
+    reveal reasoning without being asked or not at all, so the argument is
+    accepted and ignored rather than made an error -- a caller should not have
+    to know which provider it landed on to ask for the same thing.
+    """
 
     spec = spec or os.environ.get("KEPLER_MODEL_BACKEND")
     if not spec:
@@ -59,7 +67,9 @@ def build_backend(
     if provider == "anthropic":
         from tools.llm.anthropic_backend import AnthropicBackend
 
-        return AnthropicBackend(model=model, api_key=api_key)
+        return AnthropicBackend(
+            model=model, api_key=api_key, thinking_budget=thinking_budget
+        )
 
     if provider == "openai":
         return _build_openai(model, api_key, base_url, transport)

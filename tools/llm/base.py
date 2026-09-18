@@ -27,6 +27,7 @@ __all__ = [
     "Capabilities",
     "BackendUnavailableError",
     "OnText",
+    "OnThinking",
     "ModelBackend",
     "BaseHTTPBackend",
     "truncation_fault",
@@ -48,6 +49,11 @@ SchemaDialect = Literal["json_schema", "openai_function", "gemini_openapi"]
 #: streams into it; every other adapter calls it once with the finished text.
 OnText = Callable[[str], object]
 
+#: Called with reasoning text as it becomes available, on the same terms. A
+#: backend that declares no ``thinking`` capability never calls it; one that
+#: reveals reasoning only when the turn is over calls it once at the end.
+OnThinking = Callable[[str], object]
+
 
 @dataclass(frozen=True)
 class Capabilities:
@@ -59,6 +65,10 @@ class Capabilities:
     schema_dialect: SchemaDialect
     supports_union_types: bool
     max_output_tokens: int
+    #: Whether this backend can reveal the model's reasoning. Declared
+    #: ``False`` by a provider that hides it *and* by one this port has not
+    #: taught to read it -- the flag describes the adapter, not the model.
+    thinking: bool = False
 
 
 class BackendUnavailableError(RuntimeError):
@@ -128,12 +138,21 @@ class BaseHTTPBackend:
         #: Tests pass an ``httpx.MockTransport`` here; production never does.
         self._transport = transport
 
-    def _client(self) -> Any:
+    def _client(self, *, timeout_s: float | None = None) -> Any:
+        """The shared HTTP client, optionally bounded tighter than a turn is.
+
+        ``timeout_s`` is for the questions that are not generation -- is the
+        daemon up, what does it hold -- which a host answers at once or not at
+        all. It never relaxes the bound, only tightens it.
+        """
+
         import httpx
 
         return httpx.Client(
             # S3: an explicit timeout, always -- never an unbounded request.
-            timeout=httpx.Timeout(self._timeout_s),
+            timeout=httpx.Timeout(
+                self._timeout_s if timeout_s is None else min(timeout_s, self._timeout_s)
+            ),
             # S3: never follow redirects. This is also httpx's default; it is
             # set explicitly so a future reader cannot delete it as
             # "redundant" -- a redirect must never carry an auth header to
@@ -186,4 +205,5 @@ class ModelBackend(Protocol):
         max_tokens: int,
         temperature: float = 0.0,
         on_text: OnText | None = None,
+        on_thinking: OnThinking | None = None,
     ) -> ModelResponse: ...

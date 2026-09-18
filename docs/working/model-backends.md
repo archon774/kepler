@@ -8,14 +8,14 @@ remain deferred.
 **Date:** 2026-09-04, consolidated 2026-09-07, implemented 2026-09-09
 **Prerequisites:** None.
 **Unblocks:** The headless agent engine every phase of
-[tui-harness.md](tui-harness.md) depends on (now built), and the benchmark
+the Kepler console depends on (now built), and the benchmark
 harness of phases 4–5 (now built, under [benchmark.md](benchmark.md)).
 **Branch:** implemented on `agent/model-backends-impl`, off `dev` — the
 maintainer redirected the base from `main` to `dev` at implementation time
 (`dev` carries the current plan doc and the 49-tool registry the design
 describes). The original `agent/model-backends` branch carried PR #46
 (docs only) and is superseded.
-**Consumed by:** [tui-harness.md](tui-harness.md), the Kepler console, which
+**Consumed by:** the Kepler console (`docs/tool-architecture.md` 10.2), which
 drives this port through the headless engine in `tools/agent/`.
 
 Kepler's agent loop is hardwired to one vendor. This document specifies a
@@ -190,13 +190,14 @@ stores tuples.
 | Type | Fields | Notes |
 | --- | --- | --- |
 | `TextBlock` | `text` | |
+| `ThinkingBlock` | `text`, `signature` (default empty) | One run of revealed reasoning. `signature` is the provider's opaque attestation — see 4.8. |
 | `ToolCallBlock` | `call_id`, `name`, `arguments` | `arguments` is a parsed mapping, never a JSON string. |
 | `ToolResultBlock` | `call_id`, `name`, `content`, `is_error` (default false) | |
-| `Block` | union of the three above | |
+| `Block` | union of the four above | |
 | `Message` | `role` (`user` or `assistant`), `blocks` | **No `system` role.** |
 | `Usage` | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens` | All optional; absent means `None`, never `0`. |
 | `ProtocolFault` | `type`, `detail`, `tool_name`, `call_id` | `type` is the `FaultType` literal of section 4.6. |
-| `ModelResponse` | `text`, `tool_calls`, `stop_reason`, `usage`, `latency_ms`, `raw_stop_reason`, `faults` | `faults` defaults to empty, `raw_stop_reason` to `None`. |
+| `ModelResponse` | `text`, `thinking`, `tool_calls`, `stop_reason`, `usage`, `latency_ms`, `raw_stop_reason`, `faults` | `thinking` and `faults` default to empty, `raw_stop_reason` to `None`. |
 
 `StopReason` is the closed set `end_turn`, `tool_use`, `max_tokens`, `refusal`,
 `other`. `raw_stop_reason` preserves the provider's own string verbatim so
@@ -209,6 +210,12 @@ force every adapter to special-case index 0. There is no `role="system"`.
 
 **Nothing in this module imports `anthropic`, `httpx`, `openai`, or `google`.**
 That is testable and is tested.
+
+**Reasoning is never merged into `text`.** A model's working is a different
+kind of claim from its answer — it may contradict the answer — and a consumer
+that could not tell them apart would read a discarded hypothesis as a finding.
+`ThinkingBlock` is a `Block` and travels in `Message.blocks`, because a
+provider that signed its reasoning requires it back (4.8).
 
 ### 4.2 The protocol
 
@@ -280,6 +287,15 @@ ids can themselves contain slashes (`openai/meta-llama/Llama-3-8b` is provider
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI and compatible endpoints. |
 | `GEMINI_API_KEY` | Gemini. Header only — never a query parameter (S4). |
 | `OLLAMA_BASE_URL` | Defaults to loopback port 11434. No auth. |
+| `OLLAMA_TIMEOUT_S` | Per-request timeout, default 600 s — a local turn is bounded by the host's hardware, not a provider's SLA. |
+
+**A question about the daemon is not timed like a turn.** `is_available()` and
+`installed_models()` use `OLLAMA_PROBE_TIMEOUT_S` (5 s) rather than the 600 s
+generation timeout: a daemon answers `/api/tags` at once or it is not
+answering, and both are asked from a console with a person waiting at it.
+`_client(timeout_s=...)` only ever tightens the bound, never relaxes it, so an
+explicitly lower timeout still wins and S3's "an explicit timeout, always"
+holds either way.
 
 Resolution order in `build_backend()`, and no other: an explicit argument beats
 the environment, which beats the class defaults. Credential and endpoint are
@@ -418,13 +434,56 @@ it. The gate above is unchanged and still meaningful — it is now the shim's
 contract. `SYSTEM_PROMPT` moves verbatim to `tools/agent/prompt.py` and is
 re-exported from `tools/runner.py`, so both `runner.SYSTEM_PROMPT` and the
 default argument keep resolving. `tools/runner.py` is deleted later, by
-[tui-harness.md](tui-harness.md) Phase G, together with the workflow change that
+the TUI track's phase G, together with the workflow change that
 retires the CI assertion — not here.
 
 The engine contract itself — the ten-event union, the approver callable, the
-consumers — is specified in [tui-harness.md](tui-harness.md) section 4, because
+consumers — is described in `docs/tool-architecture.md` section 10, because
 that is the document whose interface depends on it. Phase 0c below states what
 this port must build against it.
+
+### 4.8 Revealed reasoning
+
+`complete()` takes a second streaming hook, `on_thinking`, on exactly the terms
+of `on_text`: a streaming provider calls it per chunk, a one-shot provider once
+at the end, and a provider that reveals nothing never calls it. `Capabilities`
+gains `thinking`, which describes **the adapter, not the model** — `False`
+means this port cannot read that provider's reasoning, not that the model did
+not reason.
+
+| Adapter | Where reasoning comes from |
+| --- | --- |
+| Anthropic | Extended thinking, asked for with `thinking_budget` and streamed as its own event type. Signed. |
+| OpenAI-compatible (incl. Ollama) | Whatever the server put in `reasoning_content` or `reasoning`. There is no standard field, so both are read. Unsigned. |
+| Gemini | Not read yet. Accepts the hook and never calls it. |
+
+Three consequences worth stating, because each one is a trade rather than a
+detail:
+
+**A thinking budget costs `temperature`.** The provider refuses extended
+thinking and an explicit temperature together. The adapter drops the
+temperature when a budget is set, and `temperature_supported` then reports
+`False` — so a benchmark run cannot claim the determinism of 6.5 while asking
+for reasoning. Thinking is therefore **off by default** everywhere except the
+console, which sets it deliberately.
+
+**A budget that will not fit is not sent.** The provider requires
+`max_tokens` to exceed the budget and the budget to clear its own floor
+(1024). A caller with a small output ceiling gets no reasoning instead of a
+rejected request: reasoning is an improvement on the answer, never a
+precondition for one.
+
+**Signed reasoning has to be replayed, and only where it is required.** When
+thinking is on, the provider demands the thinking blocks of the turn whose tool
+calls are being answered, signature intact, and discards them from every
+earlier turn. So the Anthropic renderer emits them for the **last** assistant
+message only — sending the rest would put a session's whole reasoning history
+on the wire each turn to be thrown away at the other end. A block with no
+signature is dropped rather than sent, since an unsigned one is refused. And if
+the turn being continued has no signed blocks at all — a session resumed from a
+manifest that lost them, or one that began with thinking off — the request is
+made **without** thinking rather than failing: a turn with no visible reasoning
+is a smaller loss than a turn that errors.
 
 ---
 
@@ -877,7 +936,7 @@ Every phase's requirements implicitly include this section.
 - **`tools/runner.py` must keep its path for the duration of this rollout.** CI's
   `repository-shape` job asserts `README.md`, `pyproject.toml`, `uv.lock`,
   `tools/registry.py`, `tools/runner.py`, and `docs/tool-architecture.md` all
-  exist. It is deleted later by [tui-harness.md](tui-harness.md) Phase G,
+  exist. It was deleted by the TUI track's phase G,
   together with the workflow change that retires the assertion.
 - **No changes to `algorithms/`.** The extraction contract is untouched by this
   work. Do not edit any file carrying an `# EXTRACTED:` or `# PORTED:` marker.
@@ -930,7 +989,7 @@ git diff --check                          # whitespace
 **Deliberately not touched:** `tools/registry.py` — the schemas are the input to
 translation, not a subject of it; `tools/claude_photometry_haiku_tool.py` —
 deferred by section 10, and renamed with its Anthropic path deleted by
-[tui-harness.md](tui-harness.md) Phase C; anything under `algorithms/`.
+the TUI track's phase C; anything under `algorithms/`.
 
 ### Phase -1 — Fix the stale gitleaks allowlist (S9)
 
@@ -1022,14 +1081,14 @@ regression here means an import-time side effect.
       and the source of all eight benchmark seed tasks (section 11, question 4).
       Move it; do not reword it while moving it.
 - [ ] Build `tools/agent/events.py` — the ten frozen event dataclasses and their
-      union, defined in [tui-harness.md](tui-harness.md) section 4.1. The fault
+      union, now described in `docs/tool-architecture.md` section 10. The fault
       event carries this port's `FaultType`, so there is one taxonomy, not two.
 - [ ] Build `tools/agent/engine.py` — `run_session()`, which takes the user
       message plus a backend, system prompt, turn ceiling, an approver callable,
       and an optional session, and **returns an iterator of events**.
 - [ ] The approver parameter gets a module-level default that allows everything.
       `tools/agent/policy.py` — where the real policy lives — is built by
-      [tui-harness.md](tui-harness.md) Phase B. Giving the parameter a default
+      the TUI track's phase B. Giving the parameter a default
       now means that phase supplies a policy rather than changing a contract.
 - [ ] Reduce `tools/runner.py` to a shim: same signature, plus the optional
       `backend` keyword; it consumes `run_session()`, prints, and returns the
@@ -1217,7 +1276,7 @@ and behavior changes."* Docs land last and alone.
       fact that `complete()` is the only required method.
 - [ ] `README.md`: the `KEPLER_MODEL_BACKEND` variable and a one-line example.
       Write it against the entry point that exists **now**; the console that
-      replaces it is retired into place by [tui-harness.md](tui-harness.md)
+      replaces it is retired into place by the TUI track's
       Phase G, which updates this line rather than documenting a script that does
       not exist yet.
 - [ ] `CLAUDE.md`: extend *Python domain boundaries* with `tools/llm/` — it owns
@@ -1265,7 +1324,7 @@ visible in all four dialects.
 * **`tools/claude_photometry_haiku_tool.py` is not migrated *by this document*.**
   It is a separate raw-HTTP Anthropic caller with its own prompt and its own
   result contract, and folding it in would mix a behaviour change into an
-  architecture change. **Resolved 2026-09-07:** [tui-harness.md](tui-harness.md)
+  architecture change. **Resolved 2026-09-07:** the TUI track
   Phase C renames it to `tools/photometry_pipeline.py` and deletes its Anthropic
   path and CLI outright rather than migrating them, since the console supersedes
   the entry point. The ~1,000-line photometry and plotting pipeline it wraps is
@@ -1363,5 +1422,5 @@ model strategies change.
 * `tools/artifacts.py` — existing path controls and the two gaps S7 keeps
   unreachable.
 * `.gitleaks.toml` — the stale allowlist paths fixed in Phase -1.
-* [tui-harness.md](tui-harness.md) — the console that consumes this port, and the
+* `docs/tool-architecture.md` 10.2 — the console that consumes this port, and the
   owner of the engine contract Phase 0c builds against.

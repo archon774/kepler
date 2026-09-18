@@ -15,17 +15,18 @@ NOT_TOOL_MODULES = {
     "tools.config",
     "tools.models",
     "tools.registry",
-    "tools.runner",
     "tools.sessions",
-    # A CLI entry point; its library halves are re-exported through
+    # A reusable pipeline; its public surface is re-exported through
     # tools.optical and tools.photometry instead.
-    "tools.claude_photometry_haiku_tool",
+    "tools.photometry_pipeline",
     # The provider-neutral model port -- a backend interface for the agent
     # loop, not a callable tool. pkgutil.iter_modules yields it as a package.
     "tools.llm",
     # The headless agent loop (run_session, events, the moved SYSTEM_PROMPT).
     # Infrastructure the runner shim and the console consume, not a tool.
     "tools.agent",
+    # The Textual research console consumes the agent loop; it is not a tool.
+    "tools.tui",
     # The model benchmark harness. It *reads* the registry and substitutes
     # run_session's tool_functions mapping; it owns no tool and adds nothing
     # to the tool surface. pkgutil.iter_modules yields it as a package.
