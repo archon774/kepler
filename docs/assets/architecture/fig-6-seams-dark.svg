@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="446" viewBox="0 0 900 446" role="img" aria-label="run_session in the centre with three parameter seams: backend, approver and tool_functions. The console fills them with a live switchable backend, a policy approver backed by a modal a person answers, and all 55 tools live. The benchmark fills them with the model under test or a replay backend, auto-approve, and a tool plane of 26 live, 22 replayed and 7 decided per call.">
+  <title>run_session in the centre with three parameter seams: backend, approver and tool_functions. The console fills them with a live switchable backend, a policy approver backed by a modal a person answers, and all 55 tools live. The benchmark fills them with the model under test or a replay backend, auto-approve, and a tool plane of 26 live, 22 replayed and 7 decided per call.</title>
+  <style>
+  svg { color: #E7EDEB; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #E7EDEB; }
+  .d-box { fill: #151F24; stroke: #25343B; stroke-width: 1.4; }
+  .d-boxA { fill: #0E3238; stroke: #4FBECA; stroke-width: 1.4; }
+  .d-boxW { fill: #38281A; stroke: #DE9A52; stroke-width: 1.4; }
+  .d-frame { fill: none; stroke: #25343B; stroke-width: 1.4; opacity: .6; }
+  .d-panel { fill: none; stroke: #25343B; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .d-plane { fill: #0E3238; stroke: none; opacity: .5; }
+  .d-line { stroke: #E7EDEB; stroke-width: 1.4; fill: none; opacity: .55; }
+  .d-lineA { stroke: #4FBECA; stroke-width: 1.6; fill: none; }
+  .d-lineW { stroke: #DE9A52; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .d-lineW.solid { stroke-dasharray: 0; }
+  .d-rule { stroke: #E7EDEB; stroke-width: 1; fill: none; opacity: .25; }
+  .mk { fill: #E7EDEB; opacity: .55; }
+  .mkA { fill: #4FBECA; }
+  .t { font-size: 13px; font-weight: 500; }
+  .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #7E9097; }
+  .tm { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; font-weight: 500; }
+  .tl { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #7E9097; }
+  .tla { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #4FBECA; }
+  .tlw { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #DE9A52; }
+  .tn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #7E9097; }
+  .tn.ink { fill: #E7EDEB; }
+  .tn.ink2 { fill: #B3C2C7; }
+  .tn.accent { fill: #4FBECA; }
+  .tn.warn { fill: #DE9A52; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+  </defs>
+  <rect width="900" height="446" fill="#0D1117"/>
+
+  <text class="tl" x="30" y="52">KEPLER &#8212; THE CONSOLE</text>
+  <text class="tn" x="30" y="72">a human in the loop</text>
+
+  <text class="tl end" x="870" y="52">KEPLER-BENCH</text>
+  <text class="tn end" x="870" y="72">a recorder in the loop</text>
+
+  <rect class="d-boxA" x="330" y="90" width="240" height="252"/>
+  <text class="tm mid" x="450" y="120">run_session()</text>
+  <text class="ts mid" x="450" y="136">unchanged in both</text>
+
+  <rect class="d-box" x="346" y="148" width="208" height="40"/>
+  <text class="tn ink mid" x="450" y="173">backend =</text>
+  <rect class="d-box" x="346" y="200" width="208" height="40"/>
+  <text class="tn ink mid" x="450" y="225">approver =</text>
+  <rect class="d-box" x="346" y="252" width="208" height="40"/>
+  <text class="tn ink mid" x="450" y="277">tool_functions =</text>
+  <text class="ts mid" x="450" y="318">+ on_delta &#183; pending_input</text>
+  <text class="ts mid" x="450" y="333">&#183; should_stop</text>
+
+  <rect class="d-box" x="30" y="148" width="270" height="40"/>
+  <text class="tn ink" x="42" y="165">build_backend(spec)</text>
+  <text class="ts" x="42" y="180">live; switchable mid-session with /backend</text>
+  <rect class="d-box" x="30" y="200" width="270" height="40"/>
+  <text class="tn ink" x="42" y="217">policy_approver(SessionPolicy)</text>
+  <text class="ts" x="42" y="232">a modal &#8212; a person answers it</text>
+  <rect class="d-box" x="30" y="252" width="270" height="40"/>
+  <text class="tn ink" x="42" y="269">the default 55</text>
+  <text class="ts" x="42" y="284">every tool runs live, against the real thing</text>
+
+  <rect class="d-box" x="600" y="148" width="270" height="40"/>
+  <text class="tn ink" x="612" y="165">the model under test</text>
+  <text class="ts" x="612" y="180">or ReplayBackend, for a recorded transcript</text>
+  <rect class="d-box" x="600" y="200" width="270" height="40"/>
+  <text class="tn ink" x="612" y="217">auto_approve</text>
+  <text class="ts" x="612" y="232">no human is present to ask</text>
+  <rect class="d-box" x="600" y="252" width="270" height="40"/>
+  <text class="tn ink" x="612" y="269">build_tool_plane(...)</text>
+  <text class="ts" x="612" y="284">26 live &#183; 22 replayed &#183; 7 decided per call</text>
+
+  <line class="d-lineA" x1="300" y1="168" x2="342" y2="168" marker-end="url(#aa)"/>
+  <line class="d-lineA" x1="300" y1="220" x2="342" y2="220" marker-end="url(#aa)"/>
+  <line class="d-lineA" x1="300" y1="272" x2="342" y2="272" marker-end="url(#aa)"/>
+  <line class="d-lineA" x1="600" y1="168" x2="558" y2="168" marker-end="url(#aa)"/>
+  <line class="d-lineA" x1="600" y1="220" x2="558" y2="220" marker-end="url(#aa)"/>
+  <line class="d-lineA" x1="600" y1="272" x2="558" y2="272" marker-end="url(#aa)"/>
+
+  <text class="tn ink2 mid" x="165" y="366">renders events; blocks the worker on a modal;</text>
+  <text class="tn ink2 mid" x="165" y="382">queues mid-run notes; escape stops the turn</text>
+  <text class="tn ink2 mid" x="735" y="366">writes events.jsonl, answer.txt, run.json;</text>
+  <text class="tn ink2 mid" x="735" y="382">grades afterwards, separately from running</text>
+
+  <text class="tn accent mid" x="450" y="418">Same function. Same 547 lines. The loop cannot tell which one called it.</text>
+</svg>

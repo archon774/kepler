@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="548" viewBox="0 0 900 548" role="img" aria-label="Five layers: two harnesses -- the kepler console and kepler-bench -- drive run_session, which branches left into the model port and its four adapters and right into the tool registry, the tool modules and the algorithms. The right branch runs with no model, no key and no socket. The adapters never import the registry.">
+  <title>Five layers: two harnesses -- the kepler console and kepler-bench -- drive run_session, which branches left into the model port and its four adapters and right into the tool registry, the tool modules and the algorithms. The right branch runs with no model, no key and no socket. The adapters never import the registry.</title>
+  <style>
+  svg { color: #E7EDEB; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #E7EDEB; }
+  .d-box { fill: #151F24; stroke: #25343B; stroke-width: 1.4; }
+  .d-boxA { fill: #0E3238; stroke: #4FBECA; stroke-width: 1.4; }
+  .d-boxW { fill: #38281A; stroke: #DE9A52; stroke-width: 1.4; }
+  .d-frame { fill: none; stroke: #25343B; stroke-width: 1.4; opacity: .6; }
+  .d-panel { fill: none; stroke: #25343B; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .d-plane { fill: #0E3238; stroke: none; opacity: .5; }
+  .d-line { stroke: #E7EDEB; stroke-width: 1.4; fill: none; opacity: .55; }
+  .d-lineA { stroke: #4FBECA; stroke-width: 1.6; fill: none; }
+  .d-lineW { stroke: #DE9A52; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .d-lineW.solid { stroke-dasharray: 0; }
+  .d-rule { stroke: #E7EDEB; stroke-width: 1; fill: none; opacity: .25; }
+  .mk { fill: #E7EDEB; opacity: .55; }
+  .mkA { fill: #4FBECA; }
+  .t { font-size: 13px; font-weight: 500; }
+  .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #7E9097; }
+  .tm { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; font-weight: 500; }
+  .tl { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #7E9097; }
+  .tla { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #4FBECA; }
+  .tlw { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #DE9A52; }
+  .tn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #7E9097; }
+  .tn.ink { fill: #E7EDEB; }
+  .tn.ink2 { fill: #B3C2C7; }
+  .tn.accent { fill: #4FBECA; }
+  .tn.warn { fill: #DE9A52; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+  </defs>
+  <rect width="900" height="548" fill="#0D1117"/>
+
+  <rect class="d-plane" x="514" y="230" width="336" height="282"/>
+
+  <text class="tl mid" x="450" y="16">THE HARNESSES &#8212; TWO CONSUMERS, ONE LOOP</text>
+
+  <rect class="d-box" x="70" y="28" width="300" height="62"/>
+  <text class="t" x="86" y="52">kepler &#8212; the console</text>
+  <text class="ts" x="86" y="72">tools/tui/ &#183; 2,944 lines &#183; Textual</text>
+
+  <rect class="d-box" x="530" y="28" width="300" height="62"/>
+  <text class="t" x="546" y="52">kepler-bench &#8212; the benchmark</text>
+  <text class="ts" x="546" y="72">tools/bench/ &#183; 7,383 lines</text>
+
+  <line class="d-line" x1="220" y1="90" x2="320" y2="140" marker-end="url(#a)"/>
+  <line class="d-line" x1="680" y1="90" x2="580" y2="140" marker-end="url(#a)"/>
+  <text class="tn mid" x="200" y="124">a human in the loop</text>
+  <text class="tn mid" x="700" y="124">a recorder in the loop</text>
+
+  <text class="tla mid" x="450" y="132">THE TURN-TAKING LAYER</text>
+  <rect class="d-boxA" x="270" y="142" width="360" height="62"/>
+  <text class="tm mid" x="450" y="170">run_session()</text>
+  <text class="ts mid" x="450" y="189">tools/agent/ &#183; 1,206 lines &#8212; engine.py is 547 of them</text>
+
+  <line class="d-line" x1="350" y1="204" x2="240" y2="244" marker-end="url(#a)"/>
+  <line class="d-line" x1="550" y1="204" x2="660" y2="244" marker-end="url(#a)"/>
+  <text class="tn end" x="330" y="234">complete()</text>
+  <text class="tn" x="572" y="234">schemas + callables</text>
+
+  <rect class="d-box" x="70" y="246" width="300" height="62"/>
+  <text class="t" x="86" y="270">tools/llm/ &#8212; the model port</text>
+  <text class="ts" x="86" y="290">2,568 lines &#183; provider-neutral</text>
+
+  <rect class="d-box" x="530" y="246" width="300" height="62"/>
+  <text class="t" x="546" y="270">tools/registry.py &#8212; the tool surface</text>
+  <text class="ts" x="546" y="290">1,623 lines &#183; 55 schemas &#8596; 55 callables</text>
+
+  <line class="d-lineW" x1="374" y1="277" x2="526" y2="277"/>
+  <line class="d-lineW solid" x1="442" y1="269" x2="458" y2="285"/>
+  <line class="d-lineW solid" x1="458" y1="269" x2="442" y2="285"/>
+  <text class="tn warn mid" x="450" y="301">never imports</text>
+
+  <line class="d-line" x1="220" y1="308" x2="220" y2="342" marker-end="url(#a)"/>
+  <rect class="d-box" x="70" y="344" width="300" height="52"/>
+  <text class="t" x="86" y="366">anthropic &#183; openai &#183; ollama &#183; gemini</text>
+  <text class="ts" x="86" y="384">+ replay, test-only &#183; raw httpx, zero new deps</text>
+
+  <line class="d-line" x1="680" y1="308" x2="680" y2="342" marker-end="url(#a)"/>
+  <rect class="d-box" x="530" y="344" width="300" height="52"/>
+  <text class="t" x="546" y="366">tools/*.py &#8212; 21 tool modules</text>
+  <text class="ts" x="546" y="384">10,606 lines &#183; thin, typed, stateless</text>
+
+  <line class="d-line" x1="680" y1="396" x2="680" y2="426" marker-end="url(#a)"/>
+  <rect class="d-box" x="530" y="428" width="300" height="62"/>
+  <text class="t" x="546" y="452">algorithms/ &#8212; the science</text>
+  <text class="ts" x="546" y="472">26,891 lines &#183; 20,578 Python + 6,313 TypeScript</text>
+
+  <text class="tla mid" x="682" y="506">NO MODEL &#183; NO KEY &#183; NO SOCKET</text>
+</svg>

@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="304" viewBox="0 0 880 304" role="img" aria-label="The 55 registered tools split into 26 local, 22 remote and 7 mixed. Local tools run live because replaying a periodogram would let the task author rather than the data decide what the model got wrong. Remote tools are always replayed because every one opens a socket. Mixed tools are decided per call from the arguments. The classification is closed: an unclassified tool raises.">
+  <title>The 55 registered tools split into 26 local, 22 remote and 7 mixed. Local tools run live because replaying a periodogram would let the task author rather than the data decide what the model got wrong. Remote tools are always replayed because every one opens a socket. Mixed tools are decided per call from the arguments. The classification is closed: an unclassified tool raises.</title>
+  <style>
+  svg { color: #0F1619; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #0F1619; }
+  .d-box { fill: #F5F8F7; stroke: #CBD5D3; stroke-width: 1.4; }
+  .d-boxA { fill: #D9EDEF; stroke: #0C6B78; stroke-width: 1.4; }
+  .d-boxW { fill: #F6E6D7; stroke: #A8500C; stroke-width: 1.4; }
+  .d-frame { fill: none; stroke: #CBD5D3; stroke-width: 1.4; opacity: .6; }
+  .d-panel { fill: none; stroke: #CBD5D3; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .d-plane { fill: #D9EDEF; stroke: none; opacity: .5; }
+  .d-line { stroke: #0F1619; stroke-width: 1.4; fill: none; opacity: .55; }
+  .d-lineA { stroke: #0C6B78; stroke-width: 1.6; fill: none; }
+  .d-lineW { stroke: #A8500C; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .d-lineW.solid { stroke-dasharray: 0; }
+  .d-rule { stroke: #0F1619; stroke-width: 1; fill: none; opacity: .25; }
+  .mk { fill: #0F1619; opacity: .55; }
+  .mkA { fill: #0C6B78; }
+  .t { font-size: 13px; font-weight: 500; }
+  .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #6B7C84; }
+  .tm { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; font-weight: 500; }
+  .tl { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #6B7C84; }
+  .tla { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #0C6B78; }
+  .tlw { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #A8500C; }
+  .tn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #6B7C84; }
+  .tn.ink { fill: #0F1619; }
+  .tn.ink2 { fill: #38474E; }
+  .tn.accent { fill: #0C6B78; }
+  .tn.warn { fill: #A8500C; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+  </defs>
+  <rect width="880" height="304" fill="#FFFFFF"/>
+
+  <text class="tl" x="40" y="34">55 REGISTERED TOOLS, OVER 21 MODULES</text>
+
+  <rect class="d-box" x="40" y="46" width="378" height="46"/>
+  <text class="t mid" x="229" y="75">26 local</text>
+  <rect class="d-boxA" x="418" y="46" width="320" height="46"/>
+  <text class="t mid" x="578" y="75">22 remote</text>
+  <rect class="d-boxW" x="738" y="46" width="102" height="46"/>
+  <text class="t mid" x="789" y="75">7</text>
+
+  <line class="d-line" x1="229" y1="92" x2="165" y2="118" marker-end="url(#a)"/>
+  <line class="d-line" x1="578" y1="92" x2="440" y2="118" marker-end="url(#a)"/>
+  <line class="d-line" x1="789" y1="92" x2="715" y2="118" marker-end="url(#a)"/>
+
+  <text class="tl" x="40" y="140">CLASS L &#8212; RUN LIVE</text>
+  <text class="tn ink2" x="40" y="162">Local and deterministic: they read the</text>
+  <text class="tn ink2" x="40" y="178">bundled fixture tree and compute.</text>
+  <text class="tn ink2" x="40" y="200">Replaying a periodogram would let the</text>
+  <text class="tn ink2" x="40" y="216">task author, not the data, decide</text>
+  <text class="tn ink2" x="40" y="232">whether a model's mistake is visible.</text>
+
+  <text class="tla" x="315" y="140">CLASS R &#8212; ALWAYS REPLAYED</text>
+  <text class="tn ink2" x="315" y="162">Every one opens a socket, so none is</text>
+  <text class="tn ink2" x="315" y="178">ever executed inside a benchmark run;</text>
+  <text class="tn ink2" x="315" y="200">each is replayed from a recorded</text>
+  <text class="tn ink2" x="315" y="216">fixture. Includes one that merely looks</text>
+  <text class="tn ink2" x="315" y="232">local: get_literature_cluster_params.</text>
+
+  <text class="tlw" x="590" y="140">CLASS M &#8212; DECIDED PER CALL</text>
+  <text class="tn ink2" x="590" y="162">Local code behind a network-capable</text>
+  <text class="tn ink2" x="590" y="178">argument. A task must pin the offline</text>
+  <text class="tn ink2" x="590" y="200">path in the call's own arguments</text>
+  <text class="tn ink2" x="590" y="216">(use_field_cal=false; catalog_fixture</text>
+  <text class="tn ink2" x="590" y="232">with compare_to) or it is replayed.</text>
+
+  <line class="d-rule" x1="40" y1="256" x2="840" y2="256"/>
+  <text class="tn ink2" x="40" y="278">The plane is closed: an unclassified tool raises rather than defaulting, and a test asserts it covers the whole registry.</text>
+  <text class="tn ink2" x="40" y="294">A new registry tool must be classified in the same commit that adds it &#8212; otherwise the first new remote tool runs live, inside a run that believes it is offline.</text>
+</svg>

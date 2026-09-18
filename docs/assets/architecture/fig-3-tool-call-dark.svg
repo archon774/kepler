@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="472" viewBox="0 0 880 472" role="img" aria-label="One tool call descends through five layers: the model emits JSON, the loop validates approves and caches it, the registry maps the name to a callable, the tool module normalises inputs, and the algorithm computes. The result climbs back as a typed model, a dict, JSON text and a tool_result block. Nothing survives the call.">
+  <title>One tool call descends through five layers: the model emits JSON, the loop validates approves and caches it, the registry maps the name to a callable, the tool module normalises inputs, and the algorithm computes. The result climbs back as a typed model, a dict, JSON text and a tool_result block. Nothing survives the call.</title>
+  <style>
+  svg { color: #E7EDEB; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; fill: #E7EDEB; }
+  .d-box { fill: #151F24; stroke: #25343B; stroke-width: 1.4; }
+  .d-boxA { fill: #0E3238; stroke: #4FBECA; stroke-width: 1.4; }
+  .d-boxW { fill: #38281A; stroke: #DE9A52; stroke-width: 1.4; }
+  .d-frame { fill: none; stroke: #25343B; stroke-width: 1.4; opacity: .6; }
+  .d-panel { fill: none; stroke: #25343B; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .d-plane { fill: #0E3238; stroke: none; opacity: .5; }
+  .d-line { stroke: #E7EDEB; stroke-width: 1.4; fill: none; opacity: .55; }
+  .d-lineA { stroke: #4FBECA; stroke-width: 1.6; fill: none; }
+  .d-lineW { stroke: #DE9A52; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .d-lineW.solid { stroke-dasharray: 0; }
+  .d-rule { stroke: #E7EDEB; stroke-width: 1; fill: none; opacity: .25; }
+  .mk { fill: #E7EDEB; opacity: .55; }
+  .mkA { fill: #4FBECA; }
+  .t { font-size: 13px; font-weight: 500; }
+  .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #7E9097; }
+  .tm { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; font-weight: 500; }
+  .tl { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #7E9097; }
+  .tla { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #4FBECA; }
+  .tlw { font-size: 10px; font-weight: 600; letter-spacing: .1em; fill: #DE9A52; }
+  .tn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 10.5px; fill: #7E9097; }
+  .tn.ink { fill: #E7EDEB; }
+  .tn.ink2 { fill: #B3C2C7; }
+  .tn.accent { fill: #4FBECA; }
+  .tn.warn { fill: #DE9A52; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkA" d="M 0 1 L 9 5 L 0 9 z"/></marker>
+  </defs>
+  <rect width="880" height="472" fill="#0D1117"/>
+
+  <text class="tl end" x="138" y="62">THE MODEL</text>
+  <rect class="d-box" x="150" y="30" width="580" height="54"/>
+  <text class="tn ink" x="166" y="54">{"name": "compute_pulsar_periodogram",</text>
+  <text class="tn ink" x="166" y="70"> "arguments": {"path": "...", "start": 0.2, "stop": 3.0, "steps": 20000}}</text>
+
+  <text class="tl end" x="138" y="146">THE LOOP</text>
+  <rect class="d-boxA" x="150" y="114" width="580" height="54"/>
+  <text class="t" x="166" y="138">validate &#183; approve &#183; cache &#183; dispatch</text>
+  <text class="ts" x="166" y="156">tools/agent/engine.py &#8212; nothing below runs if any gate refuses</text>
+
+  <text class="tl end" x="138" y="230">THE REGISTRY</text>
+  <rect class="d-box" x="150" y="198" width="580" height="54"/>
+  <text class="tm" x="166" y="222">TOOL_FUNCTIONS[name]</text>
+  <text class="ts" x="166" y="240">a dict of 55 names to 55 plain callables &#8212; no framework in between</text>
+
+  <text class="tl end" x="138" y="314">THE TOOL</text>
+  <rect class="d-box" x="150" y="282" width="580" height="54"/>
+  <text class="t" x="166" y="306">tools/pulsar.py</text>
+  <text class="ts" x="166" y="324">resolve the scan path, bound the frequency grid, build settings objects</text>
+
+  <text class="tl end" x="138" y="398">THE ALGORITHM</text>
+  <rect class="d-box" x="150" y="366" width="580" height="54"/>
+  <text class="t" x="166" y="390">algorithms/pulsar/periodogram.py</text>
+  <text class="ts" x="166" y="408">Lomb&#8211;Scargle over the scan &#8212; numpy, scipy, astropy</text>
+
+  <line class="d-line" x1="250" y1="84" x2="250" y2="112" marker-end="url(#a)"/>
+  <text class="tn" x="262" y="103">JSON arguments</text>
+  <line class="d-line" x1="250" y1="168" x2="250" y2="196" marker-end="url(#a)"/>
+  <text class="tn" x="262" y="187">a validated dict</text>
+  <line class="d-line" x1="250" y1="252" x2="250" y2="280" marker-end="url(#a)"/>
+  <text class="tn" x="262" y="271">**kwargs</text>
+  <line class="d-line" x1="250" y1="336" x2="250" y2="364" marker-end="url(#a)"/>
+  <text class="tn" x="262" y="355">ndarray, settings</text>
+
+  <line class="d-lineA" x1="640" y1="364" x2="640" y2="338" marker-end="url(#aa)"/>
+  <text class="tn accent end" x="626" y="355">peaks, snr, warnings</text>
+  <line class="d-lineA" x1="640" y1="280" x2="640" y2="254" marker-end="url(#aa)"/>
+  <text class="tn accent end" x="626" y="271">PeriodogramResult</text>
+  <line class="d-lineA" x1="640" y1="196" x2="640" y2="170" marker-end="url(#aa)"/>
+  <text class="tn accent end" x="626" y="187">model_dump() &#8594; dict</text>
+  <line class="d-lineA" x1="640" y1="112" x2="640" y2="86" marker-end="url(#aa)"/>
+  <text class="tn accent end" x="626" y="103">a tool_result block</text>
+
+  <text class="tn warn mid" x="440" y="452">Nothing survives the call. The next one re-opens the file.</text>
+</svg>
