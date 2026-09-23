@@ -21,7 +21,8 @@ entries:
       preview:
         - {source_id: "J2323+5848", ra_deg: 350.85, dec_deg: 58.815, flux_jy: 1420.0, catalog: "VIII/65"}
       warnings:
-        - >-
-          2 detected sources matched no catalogue entry and were skipped; the
-          count above is catalogued sources only.
+        - code: sources_skipped
+          message: >-
+            2 detected sources matched no catalogue entry and were skipped;
+            the count above is catalogued sources only.
       artifact: {format: ecsv, row_count: 4, columns: [source_id, ra_deg, dec_deg, flux_jy, catalog]}

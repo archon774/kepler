@@ -21,10 +21,11 @@ entries:
         - {bibcode: "2017MNRAS.469.1299T", title: "The secular decline of Cassiopeia A at 1.4 GHz", year: 2017}
         - {bibcode: "1977A&AS...28..211B", title: "The flux density of Cassiopeia A at metre wavelengths", year: 1977}
       warnings:
-        - >-
-          This returns bibcodes, titles and years only -- never a finding, a
-          number or a rate from inside a paper. Fetch the abstract before
-          attributing a figure to any of these.
+        - code: metadata_only
+          message: >-
+            This returns bibcodes, titles and years only -- never a finding, a
+            number or a rate from inside a paper. Fetch the abstract before
+            attributing a figure to any of these.
       artifact: {format: ecsv, row_count: 6, columns: [bibcode, title, year]}
   - id: default
     match: {}

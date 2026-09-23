@@ -12,6 +12,9 @@ from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
 #: Modules that are infrastructure, not a public tool surface.
 NOT_TOOL_MODULES = {
     "tools.artifacts",
+    # The declared ToolError/ToolWarning code vocabulary. Two dicts and a
+    # docstring; tests/test_tool_codes.py is what keeps it honest.
+    "tools.codes",
     "tools.config",
     "tools.models",
     "tools.registry",

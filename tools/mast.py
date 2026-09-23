@@ -30,7 +30,7 @@ from astroquery.mast import Observations
 from tools import artifacts
 from tools import config
 from tools.config import DEFAULT_MAX_OBSERVATIONS, PREVIEW_ROWS
-from tools.models import ToolResult, coerce_optional_int
+from tools.models import ToolResult, ToolWarning, coerce_optional_int
 
 __all__ = ["search_mast"]
 
@@ -93,14 +93,17 @@ def search_mast(
 
     obs_artifact = artifacts.write_table(obs_table, f"mast_{name}_observations", subdir="mast")
 
-    warnings: list[str] = []
+    warnings: list[ToolWarning] = []
     obs_for_products = obs_table
     if max_observations is not None and len(obs_table) > max_observations:
         obs_for_products = obs_table[:max_observations]
         warnings.append(
-            f"matched {len(obs_table)} observations, fetched products for "
-            f"{max_observations}; raise max_observations, or set it to JSON "
-            "null for no cap, for the rest"
+            ToolWarning(
+                code="observations_capped",
+                message=f"matched {len(obs_table)} observations, fetched products "
+                f"for {max_observations}; raise max_observations, or set it to "
+                "JSON null for no cap, for the rest",
+            )
         )
 
     try:
@@ -121,7 +124,13 @@ def search_mast(
             preview=artifacts.preview_rows(obs_table, PREVIEW_ROWS),
             columns=[str(c) for c in obs_table.colnames],
             artifacts=[obs_artifact],
-            warnings=warnings + ["no data products found for the fetched observations"],
+            warnings=warnings
+            + [
+                ToolWarning(
+                    code="no_products_for_observations",
+                    message="no data products found for the fetched observations",
+                )
+            ],
         )
     except Exception as exc:
         return ToolResult(
@@ -143,7 +152,12 @@ def search_mast(
 
     if download:
         if len(products) == 0:
-            warnings.append("no products matched the given filters; nothing downloaded")
+            warnings.append(
+                ToolWarning(
+                    code="no_products_matched",
+                    message="no products matched the given filters; nothing downloaded",
+                )
+            )
         else:
             # Read through the module, not a from-import bound at import
             # time: tools.optical resolves its download root the same way, and
@@ -167,13 +181,16 @@ def search_mast(
                 f" (+{len(leaves) - 5} more)" if len(leaves) > 5 else ""
             )
             warnings.append(
-                f"downloaded {len(local_paths)} file(s) to {download_dir}"
-                + (f" under: {shown}" if leaves else "")
-                + "; they now resolve through the local frame registry -- call "
-                "list_optical_frames or resolve_optical_frame to pick one up, "
-                "then the image tools take it by path. A listing reads a bounded "
-                "number of frames, so after a large download pass directory= "
-                "naming one of the directories above"
+                ToolWarning(
+                    code="products_downloaded",
+                    message=f"downloaded {len(local_paths)} file(s) to {download_dir}"
+                    + (f" under: {shown}" if leaves else "")
+                    + "; they now resolve through the local frame registry -- call "
+                    "list_optical_frames or resolve_optical_frame to pick one up, "
+                    "then the image tools take it by path. A listing reads a bounded "
+                    "number of frames, so after a large download pass directory= "
+                    "naming one of the directories above",
+                )
             )
 
     return ToolResult(

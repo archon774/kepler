@@ -26,10 +26,11 @@ entries:
     response:
       status: not_found
       count: 0
-      # ToolResult declares `warnings: list[str]` upstream, so a class-R
-      # warning carries its identifier in the text rather than in a `code`
-      # field. must_disclose matches either.
+      # ToolResult carries `list[ToolWarning]` since C2, so this warning's
+      # identifier lives in `code` rather than smuggled into the message
+      # prefix it used to carry. must_disclose matches either.
       warnings:
-        - >-
-          no_match: no pulsar matched that name. The ATNF catalogue is indexed
-          by formal designation only and performs no name resolution.
+        - code: no_match
+          message: >-
+            no pulsar matched that name. The ATNF catalogue is indexed by
+            formal designation only and performs no name resolution.

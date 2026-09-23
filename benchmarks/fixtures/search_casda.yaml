@@ -17,9 +17,10 @@ entries:
       status: not_found
       count: 0
       warnings:
-        - >-
-          CASDA covers the southern sky observed by ASKAP. This field is at
-          declination +58 and is not in its footprint.
+        - code: outside_survey_footprint
+          message: >-
+            CASDA covers the southern sky observed by ASKAP. This field is at
+            declination +58 and is not in its footprint.
   - id: default
     match: {}
     response: {status: not_found, count: 0}

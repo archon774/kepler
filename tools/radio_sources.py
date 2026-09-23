@@ -55,7 +55,7 @@ from algorithms.radio import spectral_fitting
 from algorithms.radio.matching import match_sources_to_catalog
 from tools import artifacts
 from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
-from tools.models import ArtifactRef, ToolResult
+from tools.models import ArtifactRef, ToolResult, ToolWarning
 from tools.ned import search_ned
 from tools.vizier import search_vizier
 
@@ -314,15 +314,22 @@ def identify_radio_sources(
     warnings = list(catalog_result.warnings)
     if field_capped:
         warnings.append(
-            f"the detected sources span roughly {2 * radius_deg:.1f} degrees, wider than the "
-            f"{max_field_radius_arcmin / 60.0:.1f}-degree search cap -- catalog coverage is "
-            "centred on the field but limited to the cap, and may miss real matches for "
-            "sources far from the centre. Pass max_field_radius_arcmin=None to search the "
-            "full extent instead (much slower for a field this wide)."
+            ToolWarning(
+                code="field_radius_capped",
+                message=f"the detected sources span roughly {2 * radius_deg:.1f} "
+                f"degrees, wider than the {max_field_radius_arcmin / 60.0:.1f}-degree "
+                "search cap -- catalog coverage is centred on the field but limited "
+                "to the cap, and may miss real matches for sources far from the "
+                "centre. Pass max_field_radius_arcmin=None to search the full extent "
+                "instead (much slower for a field this wide).",
+            )
         )
     warnings.append(
-        f"{matched_count} / {len(sources)} detected sources matched at least one "
-        f"catalog within {radius_arcsec:.1f}\""
+        ToolWarning(
+            code="catalog_match_rate",
+            message=f"{matched_count} / {len(sources)} detected sources matched at "
+            f"least one catalog within {radius_arcsec:.1f}\"",
+        )
     )
 
     return ToolResult(
@@ -579,7 +586,13 @@ def plot_field_sed(
     preview = [{"source_name": name, **fit} for name, fit in fits_by_source.items()]
     warnings = list(id_result.warnings)
     if skipped:
-        warnings.append(f"{len(skipped)} identified source(s) skipped: " + "; ".join(skipped))
+        warnings.append(
+            ToolWarning(
+                code="sources_skipped",
+                message=f"{len(skipped)} identified source(s) skipped: "
+                + "; ".join(skipped),
+            )
+        )
 
     return ToolResult(
         status="ok",

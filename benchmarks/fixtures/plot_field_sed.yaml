@@ -21,7 +21,8 @@ entries:
       preview:
         - {source_id: "J2323+5848", n_points: 12, spectral_index: -0.77}
       warnings:
-        - >-
-          radius_arcsec was not given; the field radius defaulted and is capped
-          at 60 arcmin.
+        - code: field_radius_capped
+          message: >-
+            radius_arcsec was not given; the field radius defaulted and is
+            capped at 60 arcmin.
       artifact: {format: png, row_count: null, columns: []}
