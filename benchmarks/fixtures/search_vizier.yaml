@@ -25,9 +25,10 @@ entries:
         - {catalog: "VIII/38", frequency_ghz: 0.081, flux_jy: 8900.0}
         - {catalog: "J/A+A/598/A104", frequency_ghz: 1.4, flux_jy: 1420.0}
       warnings:
-        - >-
-          preview_truncated: the preview is the first 10 of 4127 rows. The
-          complete table is in the artifact.
+        - code: preview_truncated
+          message: >-
+            the preview is the first 10 of 4127 rows. The complete table is in
+            the artifact.
       artifact:
         format: ecsv
         row_count: 4127
@@ -46,11 +47,13 @@ entries:
         - {catalog: "VIII/65", frequency_ghz: 0.022, flux_jy: 22000.0}
         - {catalog: "VIII/38", frequency_ghz: 0.081, flux_jy: 8900.0}
       warnings:
-        - >-
-          catalog_cap_applied: 47 catalogs matched and 20 were written out.
-          Pass max_catalogs=null for no cap.
-        - >-
-          preview_truncated: the preview is the first 10 of 1908 written rows.
+        - code: catalog_cap_applied
+          message: >-
+            47 catalogs matched and 20 were written out. Pass
+            max_catalogs=null for no cap.
+        - code: preview_truncated
+          message: >-
+            the preview is the first 10 of 1908 written rows.
       artifact:
         format: ecsv
         row_count: 1908
@@ -81,7 +84,8 @@ entries:
       preview:
         - {catalog: "VIII/65", frequency_ghz: 0.022, flux_jy: 22000.0}
       warnings:
-        - >-
-          catalog_cap_applied: this search was not restricted to a waveband and
-          20 of the matched catalogs were written out.
+        - code: catalog_cap_applied
+          message: >-
+            this search was not restricted to a waveband and 20 of the matched
+            catalogs were written out.
       artifact: {format: ecsv, row_count: 612, columns: [catalog, frequency_ghz, flux_jy]}

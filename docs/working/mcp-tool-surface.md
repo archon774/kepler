@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0 complete (§5). C1 is next.
+**Status:** In progress. C0 and C2 complete (§5). C1 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -589,11 +589,17 @@ its output is what the rest of this document is written against. Measured on
       *"exactly three values in use (`invalid_input`, `provider_unavailable`,
       `dependency_missing`)"*, and that `ToolResult.warnings` was populated in
       exactly one place. An AST scan of `tools/` and `algorithms/` on
-      2026-09-23 finds **36 distinct `ToolError` codes and 34 distinct
-      `ToolWarning` codes**, plus six sites that construct a code from a
-      variable. Neither `provider_unavailable` nor `dependency_missing` appears
-      at all. C2 is rewritten around the real vocabulary; see it for what that
-      changes.
+      2026-09-23 finds **41 distinct `ToolError` codes and 34 distinct
+      `ToolWarning` codes**, and fifteen `ToolResult.warnings` call sites across
+      seven modules. The three §3 names are real but are exactly the codes built
+      as `{"code": ..., "message": ...}` **dict literals** in the class-R
+      database tools; the other 38 are constructed through `ToolError(code=…)`
+      and were not in that grep's view, six of them from a variable rather than
+      a literal. Counting one construction form and not the others is how a
+      vocabulary of 41 reads as a vocabulary of 3, and it is why C2's scan
+      collects all three forms. C2 is rewritten around the real vocabulary, and
+      a dated correction is filed against `../analysis/applicable-designs.md`
+      §3 itself so the next reader of that document does not act on it.
 
 **Gate:** met. Counts, payload, resolved roots and data inventory recorded
 above; §3.5 added and §3.6's table confirmed rather than corrected.
@@ -628,7 +634,7 @@ correctly** — measured versus curated — on both a scan where the blind searc
 succeeds and one where it does not. Transcript in the PR description. A run
 that folds at `curated_period_s` and calls it a detection fails this gate.
 
-### Phase C2 — Close the warning and error contract
+### Phase C2 — Close the warning and error contract — **complete, 2026-09-23**
 
 The stated precondition of C3
 ([`../analysis/applicable-designs.md`](../analysis/applicable-designs.md) §5:
@@ -636,33 +642,52 @@ The stated precondition of C3
 inconsistency on day one"*).
 
 **C0 changed this phase's shape.** §3's premise — three codes, therefore a
-closed `Literal` — does not survive contact with the code: there are 36 error
-codes, 34 warning codes, and six sites that build a code from a variable
+closed `Literal` — does not survive contact with the code: there are **41**
+error codes, 34 warning codes, and six sites that build a code from a variable
 (`tools/pulsar.py` re-raising `_LoadError.code` at five call sites, and
-`tools/variable_star.py::_error`). A `Literal` over 36 values would be a wide,
+`tools/variable_star.py::_error`). A `Literal` over 41 values would be a wide,
 brittle edit across a dozen modules that the dynamic sites could not satisfy
 anyway, and it would buy a guarantee no caller has asked for. What the MCP
 surface actually needs is that the vocabulary be **declared, stable and
 non-duplicating**, and that warnings be structured like everything else.
 
-- [ ] Change `ToolResult.warnings` from `list[str]` to `list[ToolWarning]`,
-      matching every other model in `tools/models.py`. §3 says one call site;
-      re-grep before believing it.
-- [ ] Declare the vocabulary in one place rather than constraining the type:
-      a module listing the known `ToolError` and `ToolWarning` codes with a
-      one-line meaning each, and a test that AST-scans `tools/` and
-      `algorithms/` and fails on a constructed code that is not declared. The
-      scan must collect **every** construction form, including the
-      `{"code": ..., "message": ...}` dict literal — counting one form and not
-      the others is how §3's finding went wrong.
-- [ ] Record the real counts and the full code lists in the PR, and correct
-      `../analysis/applicable-designs.md` §3's "exactly three values" claim.
-- [ ] Do not invent codes speculatively, and do not merge two codes because
-      they look similar. A code is added when a caller would act on it
-      differently.
+- [x] `ToolResult.warnings` is `list[ToolWarning]`, matching every other model
+      in `tools/models.py`. §3 said one call site; there were **fifteen**,
+      across `tools/ads.py`, `casda.py`, `mast.py`, `ned.py`,
+      `radio_sources.py`, `simbad.py` and `vizier.py`. Each string warning
+      gained a code naming what it already said, and no message text changed
+      except to rewrap.
+- [x] The vocabulary is **declared, not typed**: `tools/codes.py` holds
+      `TOOL_ERROR_CODES` (41) and `TOOL_WARNING_CODES` (49, up from 34 as the
+      fifteen above became coded), each a one-line meaning.
+      `tests/test_tool_codes.py` AST-scans `tools/` and `algorithms/` and fails
+      in **both** directions — a code constructed but not declared, and a code
+      declared but never raised. It collects all three construction forms
+      (direct, dict-literal, and the two module-local helpers that take a code
+      positionally), and a fourth assertion fails if a *new* dynamic site
+      appears that `_INDIRECT` does not name.
+- [x] `tools.codes` added to `NOT_TOOL_MODULES` in the same commit.
+- [x] The recorded bench fixtures migrated with it. They carried warnings as
+      bare strings with the identifier smuggled into the message prefix —
+      `search_atnf.yaml` said so in a comment — because `ToolResult` had
+      nowhere to put a code. Fourteen fixture warnings across eleven files now
+      carry `{code, message}`, the message text preserved. Grading is
+      unaffected: `raised_signal` matched such a prefix as a message substring
+      and now matches it as a code, so `report.json`'s 144 sessions stay
+      comparable. Three grader docstrings that asserted the old asymmetry were
+      corrected; no `tools/bench/` behaviour changed.
+- [x] A dated correction filed against `../analysis/applicable-designs.md` §3
+      rather than a rewrite of a dated analysis. Recommendation 1 there —
+      promote `code` to a `Literal` over three values — was **not** taken:
+      41 values, six of them dynamic, is not a closed literal, and the
+      reasoning is recorded in `tools/codes.py`'s docstring.
+- [x] No code invented speculatively and none merged. Every code added names a
+      warning that already existed in prose.
 
-**Gate:** `uv run pytest` green; the declared vocabulary matches the AST scan
-exactly in both directions, and the scan is a test rather than a note.
+**Gate:** met. `uv run pytest` is green — **2,579 passed, 44 skipped**, still
+socket-free — `python3 -m compileall tools algorithms tests` clean, and
+`git diff --check` clean. The declared vocabulary matches the AST scan exactly
+in both directions, and the scan is a test.
 
 ### Phase C3 — The server, generated from the registry, from a checkout
 
@@ -818,7 +843,6 @@ the server with their own console, and completes a pulsar run.
 
 | Path | Phase |
 | --- | --- |
-| A declared error/warning vocabulary module + its AST-scan test | C2 |
 | The skill source + `skills/kepler-tools/` rendered copy | C1 |
 | `.claude/skills/kepler-tools` (symlink) | C1 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
@@ -829,8 +853,12 @@ the server with their own console, and completes a pulsar run.
 | Path | Change |
 | --- | --- |
 | `AGENTS.md`, `CLAUDE.md` | C1: one pointer line each. C9: dependency direction and bundle layout. |
-| `tools/models.py`, and the modules raising `ToolResult` warnings | C2: `ToolResult.warnings` becomes `list[ToolWarning]`. |
-| `tests/test_tool_registry_coverage.py` | C3: `tools.mcp` in `NOT_TOOL_MODULES`. |
+| `tools/models.py` + `ads`/`casda`/`mast`/`ned`/`radio_sources`/`simbad`/`vizier` | C2: `ToolResult.warnings` becomes `list[ToolWarning]`; fifteen call sites coded. |
+| `tools/codes.py`, `tests/test_tool_codes.py` | C2: the declared vocabulary and its drift scan. |
+| `benchmarks/fixtures/*.yaml` | C2: fourteen recorded warnings migrated to `{code, message}`. |
+| `tools/bench/graders/__init__.py` | C2: three docstrings correcting the old `list[str]` asymmetry. No behaviour change. |
+| `docs/analysis/applicable-designs.md` | C2: a dated correction to §3's "exactly three values". |
+| `tests/test_tool_registry_coverage.py` | C2: `tools.codes` in `NOT_TOOL_MODULES`. C3: `tools.mcp`. |
 | `pyproject.toml` | C3: optional-dependency group and the `kepler-mcp` entry. C7: package data. |
 | `tools/config.py`, `tools/wcs.py` | C7: re-anchor the download root and the fixture-write guard for an installed layout. |
 | `docs/tool-architecture.md`, `docs/repository-folders.md`, `README.md` | C9. |

@@ -76,6 +76,12 @@ class ToolResult(KeplerToolModel):
 
     ``preview`` is a small inline sample only. Full data goes to ``artifact``
     or ``artifacts`` when a tool writes files.
+
+    ``warnings`` carries :class:`ToolWarning`, like every other model in this
+    module. It was ``list[str]`` until C2 of the MCP surface track: the one
+    model a caller reaches through a *served* schema was also the one whose
+    warnings had nowhere to put a code, so a client could not act on a warning
+    without matching its prose. See ``tools/codes.py`` for the vocabulary.
     """
 
     status: Literal["ok", "partial", "not_found", "error"]
@@ -84,7 +90,7 @@ class ToolResult(KeplerToolModel):
     columns: list[str] = Field(default_factory=list)
     artifact: Optional[ArtifactRef] = None
     artifacts: list[ArtifactRef] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[ToolWarning] = Field(default_factory=list)
     errors: list[ToolError] = Field(default_factory=list)
 
 

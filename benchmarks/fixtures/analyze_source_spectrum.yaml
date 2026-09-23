@@ -21,9 +21,10 @@ entries:
       preview:
         - {spectral_index: -0.77, spectral_index_error: 0.03, n_points: 12}
       warnings:
-        - >-
-          spectral_index follows S_nu ~ nu**alpha. A bare number without that
-          convention is meaningless out of context.
+        - code: spectral_index_convention
+          message: >-
+            spectral_index follows S_nu ~ nu**alpha. A bare number without
+            that convention is meaningless out of context.
       artifact: {format: ecsv, row_count: 12, columns: [frequency_ghz, flux_jy]}
   - id: default
     match: {}
