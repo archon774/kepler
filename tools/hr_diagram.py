@@ -177,10 +177,10 @@ def _fetch_gaia_for_position(ra_deg: float, dec_deg: float, radius_arcmin: float
 
 
 def _fetch_literature_params(cluster_name: str) -> dict[str, Any]:
-    # search_vizier's target= path calls astroquery's query_object(), which has
-    # no radius_arcmin parameter of its own -- passing one here would be a
-    # silent no-op, so it's omitted. The cone radius is VizieR's own
-    # query_object default.
+    # radius_arcmin is left at search_vizier's default, 2', which is also
+    # VizieR's own query_object default -- the cone this lookup has always
+    # used. (search_vizier once ignored radius_arcmin on its target= path; it
+    # no longer does, so a radius passed here would now take effect.)
     result = search_vizier(
         target=cluster_name,
         catalog=literature.CLUSTER_CATALOG,
