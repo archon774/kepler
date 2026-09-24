@@ -172,7 +172,15 @@ def search_vizier(
 
     try:
         if target is not None and ra_hours is None:
-            result = vizier.query_object(target, catalog=catalog)
+            # radius= must be passed explicitly. It was once omitted, so every
+            # target search was VizieR's own 2' cone whatever radius_arcmin
+            # said -- a 1' Gaia DR3 search around M31 returned 2,936 rows out
+            # to 1.99' instead of 1,008. 2' is also this tool's default, so a
+            # call that leaves radius_arcmin alone queries exactly the cone it
+            # always did.
+            result = vizier.query_object(
+                target, catalog=catalog, radius=radius_arcmin * u.arcmin
+            )
         else:
             coord = SkyCoord(ra=ra_hours * u.hourangle, dec=dec_degs * u.deg)
             result = vizier.query_region(
