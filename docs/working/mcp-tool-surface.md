@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0 and C2 complete (§5). C1 is next.
+**Status:** In progress. C0, C1 and C2 complete (§5). C3 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -612,27 +612,71 @@ when a model reads it as instructions rather than receives it as a system
 prompt?** If the answer is no, the served-instructions design of C5 has a
 different shape, and it is much better to learn that now.
 
-- [ ] Author the skill source: an entry document plus per-domain references
-      (databases, pulsar, optical, HR, radio). One source, per §3.4.
-- [ ] Carry the cross-tool rules in full: the pulsar stage order, PERIOD
+- [x] Author the skill source: an entry document plus per-domain references
+      (databases, pulsar, optical, HR, radio). One source, per §3.4. It lives
+      at **`tools/skill/source/`** — inside the `tools` package, because the
+      source has to ship with an installed Kepler for C5 to serve it, and
+      `skills/` at the repository root is in no distribution.
+      `pyproject.toml` gains one `package-data` line for it; a wheel built
+      from this branch carries all seven documents. A sixth reference,
+      `checkout.md`, says how to call the tools as Python functions from a
+      checkout; it is the one document C5 will not serve.
+- [x] Carry the cross-tool rules in full: the pulsar stage order, PERIOD
       SOURCING, the identifier-form table, the sourcing discipline for
-      literature claims, and `null`-not-`"None"`.
-- [ ] Cite `tools/agent/prompt.py` as the authority for every rule restated, by
-      section name.
-- [ ] Render the repository copy to `skills/kepler-tools/`;
+      literature claims, and `null`-not-`"None"`. They are in the **entry
+      document**, because that is what C5 always delivers; the references
+      carry per-domain workflow. The pulsar reference adds a reporting
+      template — measured period, reference period and its source,
+      agreement, which one the fold used — so provenance has a place to go.
+- [x] Cite `tools/agent/prompt.py` as the authority for every rule restated, by
+      section name, in a `> Authority:` block. Rules the prompt does not cover
+      — the variable-star chain, the recorded zero-point references — cite the
+      registry description instead, and say so.
+- [x] Render the repository copy to `skills/kepler-tools/`;
       `.claude/skills/kepler-tools` → symlink; one pointer line each in
-      `AGENTS.md` and `CLAUDE.md`.
-- [ ] Add a test asserting the load-bearing invariants appear in **both**
+      `AGENTS.md` and `CLAUDE.md`. `python -m tools.skill` renders and
+      `--check` reports drift. The rendered copy differs from the source only
+      by the `SKILL.md` frontmatter a skill loader reads and a
+      do-not-edit banner.
+- [x] Add a test asserting the load-bearing invariants appear in **both**
       `SYSTEM_PROMPT` and the skill source: measure-before-compare,
       `peak_fold_snr` over `peak_confidence`, NED's formal-designation
       requirement, MPC's and ATNF's zero name resolution, `null` over `"None"`.
       Drift must fail a test, not wait for a reader.
+      `tests/test_skill_invariants.py` pins thirteen invariants as exact
+      phrases in both texts (after normalising case, whitespace and Markdown),
+      checks the pulsar stages appear in dependency order in both, and fails
+      if a cited section is not in the text it cites, if a registered tool is
+      named nowhere in the skill, if a named call is not registered, if a
+      relative link is dead, or if `skills/kepler-tools/` is stale.
+      `tools.skill` is in `NOT_TOOL_MODULES`.
 
 **Gate:** a fresh agent session, given only the skill and this checkout,
 completes a pulsar run end to end and **reports the period's provenance
 correctly** — measured versus curated — on both a scan where the blind search
 succeeds and one where it does not. Transcript in the PR description. A run
 that folds at `curated_period_s` and calls it a detection fails this gate.
+
+**Gate: met, 2026-09-24.** A headless Claude Code session (Opus 5.5) launched
+from a directory **outside** the checkout — so `CLAUDE.md`, which restates
+PERIOD SOURCING, was not loaded — with only the rendered skill linked in, and
+told not to read `docs/` or the shared vault. Asked for the period, a fold and
+a sonification of B0329+54 and B1133+16, and never told about provenance, it:
+
+- loaded the skill and the checkout and pulsar references, then measured
+  before comparing on both scans;
+- **B0329+54:** blind search 0.71479 s, `peak_fold_snr` clean, fold 204σ,
+  0.04% from the curated 0.7145197 s, reported as a detection at the
+  measured period, and its `top_peaks` read as harmonics;
+- **B1133+16:** named the 0.016665 s peak as mains, retuned (`back_scale` 1, 3
+  and 6; `start=0.05`; 4,000 steps; each channel), found a stable ~1.191 s
+  candidate that still warned `peak_does_not_fold` at ~6σ, **then** folded at
+  the curated 1.187913066 s (16.1σ) and reported that *"because that period
+  came from outside the data, the 16.1 is not an independent detection"*.
+
+The one friction was a first call that guessed the artifact field name; the
+checkout reference now says `result.artifact.path`. The run's transcript
+(`stream-json`) belongs in the PR description.
 
 ### Phase C2 — Close the warning and error contract — **complete, 2026-09-23**
 
@@ -843,7 +887,7 @@ the server with their own console, and completes a pulsar run.
 
 | Path | Phase |
 | --- | --- |
-| The skill source + `skills/kepler-tools/` rendered copy | C1 |
+| `tools/skill/` (source + renderer) + `skills/kepler-tools/` rendered copy | C1 |
 | `.claude/skills/kepler-tools` (symlink) | C1 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
 | `tools/mcp/` | C3, extended C4–C7 |
@@ -858,8 +902,8 @@ the server with their own console, and completes a pulsar run.
 | `benchmarks/fixtures/*.yaml` | C2: fourteen recorded warnings migrated to `{code, message}`. |
 | `tools/bench/graders/__init__.py` | C2: three docstrings correcting the old `list[str]` asymmetry. No behaviour change. |
 | `docs/analysis/applicable-designs.md` | C2: a dated correction to §3's "exactly three values". |
-| `tests/test_tool_registry_coverage.py` | C2: `tools.codes` in `NOT_TOOL_MODULES`. C3: `tools.mcp`. |
-| `pyproject.toml` | C3: optional-dependency group and the `kepler-mcp` entry. C7: package data. |
+| `tests/test_tool_registry_coverage.py` | C2: `tools.codes` in `NOT_TOOL_MODULES`. C1: `tools.skill`. C3: `tools.mcp`. |
+| `pyproject.toml` | C1: package data for `tools/skill/source/`. C3: optional-dependency group and the `kepler-mcp` entry. C7: the core data. |
 | `tools/config.py`, `tools/wcs.py` | C7: re-anchor the download root and the fixture-write guard for an installed layout. |
 | `docs/tool-architecture.md`, `docs/repository-folders.md`, `README.md` | C9. |
 

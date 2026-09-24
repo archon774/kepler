@@ -96,6 +96,7 @@ include = ["tools*", "algorithms*"]
 
 [tool.setuptools.package-data]
 "algorithms.skylib_lite.astrometry.anet" = ["ngc2000.dat"]
+"tools.skill" = ["source/*.md", "source/references/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

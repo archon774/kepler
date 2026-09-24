@@ -20,6 +20,10 @@ The top-level `tools/` and `algorithms/` folders are intentionally separate.
 code that tool wrappers may call. `README.md`, `docs/repository-folders.md`, and
 `docs/tool-architecture.md` describe the current architecture.
 
+Using the tools, as opposed to working on this repository, is taught by the agent
+skill in `skills/kepler-tools/`, rendered from its one source in `tools/skill/source/`:
+edit the source, then run `uv run python -m tools.skill`.
+
 ## The extraction contract (most important thing to know)
 
 The Python folders were extracted from Skynet (`/home/claude/skynet`) and the TypeScript

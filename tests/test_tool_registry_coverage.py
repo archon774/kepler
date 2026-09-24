@@ -34,6 +34,9 @@ NOT_TOOL_MODULES = {
     # run_session's tool_functions mapping; it owns no tool and adds nothing
     # to the tool surface. pkgutil.iter_modules yields it as a package.
     "tools.bench",
+    # The agent skill's single source and its renderer: Markdown plus the code
+    # that renders skills/kepler-tools/ from it. Guidance, not a tool.
+    "tools.skill",
 }
 
 
