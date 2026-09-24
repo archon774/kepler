@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0–C4 complete (§5). C5 is next.
+**Status:** In progress. C0–C5 complete (§5). C6 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -230,10 +230,12 @@ disk and nothing will ever read it.
 the client at connection time, and exposes further documents as resources. So:
 
 - The server's **instructions** carry the cross-tool rules that have no
-  per-tool home: the pulsar stage order and PERIOD SOURCING in full, the
+  per-tool home: the pulsar stage order and PERIOD SOURCING, the
   identifier-form table, the sourcing discipline for literature claims, the
   `null`-not-`"None"` rule for uncapping, and where artifacts are written
-  (§3.1).
+  (§3.1). **Corrected in C5:** not "in full" — a host may deliver only the
+  first ~2,000 characters (Claude Code does), so the instructions are a brief
+  of those rules and the full text is a resource. See phase C5.
 - Longer per-domain references are **resources** the client can read on
   demand, so the always-delivered instructions stay small. This is the one
   place the track uses resources, and it is content the model needs rather
@@ -884,22 +886,70 @@ radius, so every target search is astroquery's default 2′. Reproduced directly
 against the tool, outside the server, at radii 1′ and 0.5′ (2,936 rows each,
 out to 1.99′). A pre-existing tool bug for its own narrow PR.
 
-### Phase C5 — The skill served with the server
+### Phase C5 — The skill served with the server — **complete, 2026-09-24**
 
-- [ ] Render the server's instructions from the C1 skill source; the
-      always-delivered text stays small.
-- [ ] Publish the per-domain references as resources the client reads on
-      demand.
-- [ ] A test asserting the served text and the `skills/kepler-tools/` copy are
-      rendered from the same source and agree.
-- [ ] The instructions state the install's reality: which data bundles are
+**C5 measured a host limit that reshaped §3.4.** §3.4 planned for the
+server's instructions to carry the cross-tool rules "in full". Probed with a
+throwaway server whose instructions were numbered 100-character lines,
+**Claude Code delivers about the first 2,000 characters of a server's
+instructions** and marks the cut `… [truncated]`; the rest never reaches the
+model. `SKILL.md` is ~12 KB, so served as instructions it would have lost
+PERIOD SOURCING entirely, silently. The served skill is therefore two-tier:
+
+- [x] Render the server's instructions from the C1 skill source; the
+      always-delivered text stays small. The instructions are **`BRIEF.md`**,
+      a new, hand-written document in the one skill source (~1 KB): the six
+      rules that must survive truncation — no invented paths, the pulsar stage
+      order and measure-first, `peak_fold_snr` over `peak_confidence`, the
+      retune-then-say-so fallback and the two recurring artifacts, NED/ATNF/MPC
+      identifier forms, `null` not `"None"`, abstract-before-attribution,
+      preview-is-a-sample — plus a pointer to `SKILL.md` and each reference by
+      resource URI. The install facts follow it. A test holds brief plus facts
+      under `tools.skill.BRIEF_LIMIT` (1,900) **in the worst case** (every
+      bundle missing, a 120-character artifact path); served today it is 1,438
+      characters. The pulsar tools' own descriptions carry measure-first too,
+      so that rule depends on neither tier.
+- [x] Publish the per-domain references as resources the client reads on
+      demand. `kepler://skill/SKILL.md` and `kepler://skill/references/
+      {databases,pulsar,optical,hr,radio}.md`, `text/markdown`, with relative
+      links rewritten to those URIs. `references/checkout.md` is not served —
+      it is how to call the tools as Python functions from a checkout. An
+      unknown URI is a protocol error, not an empty document.
+- [x] A test asserting the served text and the `skills/kepler-tools/` copy are
+      rendered from the same source and agree. Undoing each surface's
+      rendering gives back the source exactly: the served documents with the
+      URI prefix removed (and the checkout row restored), the repository copy
+      with its frontmatter and banner removed. Every brief rule is also pinned
+      as a phrase in **both** the brief and `SYSTEM_PROMPT`, and the brief must
+      name exactly the served documents.
+- [x] The instructions state the install's reality: which data bundles are
       present, that artifact paths are local to this machine, and that the
-      credentials in use are the user's own.
+      credentials in use are the user's own. `tools/mcp/install.py`: the
+      artifact root; pulsar scans, field-cal replay, the optical frame library
+      and the isochrone grid, each present or absent with what absence means;
+      whether plate solving is configured; and whether `ADS_DEV_KEY` is set —
+      never its value (tested).
 
 **Gate:** a fresh agent session against the server alone — **no checkout, no
 skill file on the client** — passes C1's gate: a pulsar run end to end with the
 period's provenance reported correctly on both a scan where blind search
 succeeds and one where it does not.
+
+**Gate: met, 2026-09-24.** A headless Claude Code session (Opus 5.5) from a
+scratch directory, with only this server configured, its MCP resource tools
+allowed, and **Bash, Read, Glob, Grep, Write and Edit denied** — no way to reach
+the checkout or a skill file — and never told about provenance:
+
+- read `kepler://skill/references/pulsar.md` **first**, as the brief directs;
+- **B0329+54:** blind search, refined to 0.714459 s, fold 265σ, compared to the
+  curated 0.7145197 s only after measuring, reported as an independent
+  detection;
+- **B1133+16:** named the 0.016665 s mains and ~2.18 s baseline peaks, retuned
+  (`start=0.05`; `back_scale` 1 and 6, noting the candidate did not move while
+  red noise does), found 1.19119 s at ~6σ, then folded at the curated
+  1.187913066 s (16σ) and reported that fold *"doesn't count as an independent
+  detection"* — and labelled the reference-period sonification
+  `..._REFERENCE_period.wav` so the file itself says so.
 
 ### Phase C6 — Tool groups and annotations
 
@@ -993,6 +1043,7 @@ the server with their own console, and completes a pulsar run.
 | --- | --- |
 | `tools/skill/` (source + renderer) + `skills/kepler-tools/` rendered copy | C1 |
 | `.claude/skills/kepler-tools` (symlink) | C1 |
+| `tools/skill/source/BRIEF.md`, `tools/mcp/install.py` | C5 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
 | `tools/mcp/` (`roots`, `surface`, `server`, `__main__`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
 | `tests/test_mcp_surface.py` | C3, extended C4/C6 |
