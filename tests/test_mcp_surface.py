@@ -10,6 +10,7 @@ installed (``uv sync --extra mcp``).
 
 from __future__ import annotations
 
+import base64
 import json
 import math
 import subprocess
@@ -34,8 +35,17 @@ def test_the_served_tool_list_is_the_registry():
     assert [tool["name"] for tool in served] == [s["name"] for s in TOOL_SCHEMAS]
     assert {tool["name"] for tool in served} == set(TOOL_FUNCTIONS)
     for tool, schema in zip(served, TOOL_SCHEMAS):
-        assert tool["description"] == schema["description"]
+        if schema["name"] not in surface._SERVED_CORRECTIONS:
+            assert tool["description"] == schema["description"]
         assert tool["input_schema"] is schema["input_schema"]
+
+
+def test_a_served_correction_replaces_a_sentence_the_registry_still_has():
+    served = {t["name"]: t["description"] for t in surface.served_tools()}
+    registry = {s["name"]: s["description"] for s in TOOL_SCHEMAS}
+    for name, (old, new) in surface._SERVED_CORRECTIONS.items():
+        assert old in registry[name], f"{name}: the registry moved {old!r}"
+        assert old not in served[name] and new in served[name]
 
 
 @pytest.mark.parametrize(
@@ -94,6 +104,79 @@ def test_a_local_tool_round_trips_through_the_surface():
     assert not surface.result_is_error(payload)
     assert len(payload["scans"]) == 5
     json.dumps(payload, allow_nan=False)
+
+
+def test_the_workspace_tools_name_the_pinned_root_and_nothing_else_changes(tmp_path):
+    served = {t["name"]: t for t in surface.served_tools(artifact_root=tmp_path)}
+    registry = {s["name"]: s for s in TOOL_SCHEMAS}
+    for name in ("list_artifacts", "describe_artifact"):
+        assert served[name]["description"].startswith(registry[name]["description"])
+        assert str(tmp_path) in served[name]["description"]
+    assert "subdirectories" in served["list_artifacts"]["description"]
+    for name in set(registry) - {"list_artifacts", "describe_artifact"} - set(surface._SERVED_CORRECTIONS):
+        assert served[name]["description"] == registry[name]["description"]
+
+
+# --- media (C4) ---------------------------------------------------------------
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
+_WAV = b"RIFF" + b"\0" * 40
+
+
+def _media_payload(*refs):
+    return {"status": "ok", "artifact": refs[0], "artifacts": list(refs[1:])}
+
+
+def test_png_and_wav_artifacts_come_back_inline(tmp_path):
+    (tmp_path / "pulsar").mkdir()
+    png, wav = tmp_path / "pulsar" / "p.png", tmp_path / "pulsar" / "s.wav"
+    png.write_bytes(_PNG)
+    wav.write_bytes(_WAV)
+    payload = _media_payload(
+        {"path": str(png), "format": "png"},
+        {"path": str(wav), "format": "wav"},
+        {"path": str(png), "format": "png"},
+        {"path": str(tmp_path / "rows.ecsv"), "format": "ecsv"},
+    )
+
+    blocks = surface.inline_media(payload, tmp_path)
+
+    assert [(b["type"], b["mime_type"]) for b in blocks] == [
+        ("image", "image/png"),
+        ("audio", "audio/wav"),
+    ]
+    assert base64.b64decode(blocks[0]["data"]) == _PNG
+    assert base64.b64decode(blocks[1]["data"]) == _WAV
+
+
+def test_media_outside_the_artifact_root_is_named_not_read(tmp_path):
+    root = tmp_path / "artifacts"
+    root.mkdir()
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(_PNG)
+    (root / "link.png").symlink_to(outside)
+
+    for path in (outside, root / "link.png", root / "missing.png"):
+        blocks = surface.inline_media(_media_payload({"path": str(path), "format": "png"}), root)
+        assert blocks == [
+            {"type": "text", "text": f"Not inlined: {path} is not a file under the artifact directory."}
+        ]
+
+
+def test_media_over_its_limit_is_named_with_its_size(tmp_path, monkeypatch):
+    monkeypatch.setitem(surface.MEDIA_FORMATS, "wav", ("audio", "audio/wav", 10))
+    wav = tmp_path / "s.wav"
+    wav.write_bytes(_WAV)
+
+    (block,) = surface.inline_media(_media_payload({"path": str(wav), "format": "wav"}), tmp_path)
+
+    assert block["type"] == "text"
+    assert "44 bytes, over the 10-byte audio limit" in block["text"]
+
+
+def test_the_default_sonification_fits_the_audio_limit():
+    """60 s of 44.1 kHz 16-bit stereo, sonify_pulsar's default, is inlined."""
+    assert 60 * 44_100 * 2 * 2 + 44 <= surface.MEDIA_FORMATS["wav"][2]
 
 
 # --- the roots ----------------------------------------------------------------
@@ -231,3 +314,35 @@ def test_a_bad_call_is_an_error_result_before_any_dispatch(name, arguments, expe
     error = result.structured_content["errors"][0]
     assert error["code"] in {"invalid_input", "unknown_tool"}
     assert expected in error["message"]
+
+
+def test_a_media_result_carries_the_image_and_audio_after_the_json(tmp_path):
+    pytest.importorskip("mcp")
+    import anyio
+    from mcp.client.client import Client
+
+    from tools.mcp.server import build_server
+    from tools.models import ArtifactRef
+
+    png, wav = tmp_path / "p.png", tmp_path / "s.wav"
+    png.write_bytes(_PNG)
+    wav.write_bytes(_WAV)
+
+    def render():
+        return ToolResult(
+            status="ok",
+            artifacts=[ArtifactRef(path=str(png), format="png"), ArtifactRef(path=str(wav), format="wav")],
+        )
+
+    schemas = [{"name": "render", "description": "d", "input_schema": {"type": "object", "properties": {}}}]
+    server = build_server(schemas, {"render": render}, artifact_root=tmp_path)
+
+    async def run():
+        async with Client(server) as client:
+            return await client.call_tool("render", {})
+
+    result = anyio.run(run)
+    assert [block.type for block in result.content] == ["text", "image", "audio"]
+    assert base64.b64decode(result.content[1].data) == _PNG
+    assert result.content[2].mime_type == "audio/wav"
+    assert result.structured_content["artifacts"][0]["path"] == str(png)

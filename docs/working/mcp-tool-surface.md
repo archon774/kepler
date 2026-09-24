@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0–C3 complete (§5). C4 is next.
+**Status:** In progress. C0–C4 complete (§5). C5 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -807,32 +807,82 @@ the server launched as `uv run --project <checkout> --extra mcp kepler-mcp`:
   both, and answered from the structured results — including the artifact
   path under the per-user root.
 
-**Found in passing, for C4:** the artifact writer does not overwrite, so the
+**Found in passing, for C4** (addressed there: the workspace descriptions and
+the skill say so): the artifact writer does not overwrite, so the
 second M31 lookup wrote `simbad_M31_1.ecsv`. With a per-user root shared
 across every session this directory only grows; C4's discoverability work
 should say so.
 
-### Phase C4 — Media inline, and the artifact directory made discoverable
+### Phase C4 — Media inline, and the artifact directory made discoverable — **complete, 2026-09-24**
 
 §3.1, reduced to what the local caller actually needs.
 
-- [ ] Return media inline for the eight tools C0 identified — the pulsar plot
+- [x] Return media inline for the eight tools C0 identified — the pulsar plot
       and sonification above all. A model handed a path to audio it cannot open
-      has not heard anything.
-- [ ] Leave the `ArtifactRef` contract otherwise as it is: the path works,
+      has not heard anything. All eight already return an ordinary
+      `ArtifactRef` with `format` `png` or `wav`, so there is no per-tool code:
+      `surface.inline_media` walks the payload and each such artifact follows
+      the JSON as an image or audio block. Only a regular file **inside the
+      pinned artifact root** is read — a result naming a path elsewhere is not
+      a way to pull arbitrary files into a model's context — and each path is
+      inlined once. Limits: 5 MB per image, 12 MB per audio file, which admits
+      the default 60 s stereo sonification (10.6 MB); over a limit, a text note
+      names the file and its size. The pulsar plot is ~80 KB.
+- [x] Leave the `ArtifactRef` contract otherwise as it is: the path works,
       because the caller shares the filesystem. Do not add resource URIs
-      speculatively (§4.3).
-- [ ] Keep row-oriented artifacts fetch-on-demand. `PREVIEW_ROWS` and the
+      speculatively (§4.3). `structuredContent` is unchanged; media is
+      additional content, never a replacement for the path.
+- [x] Keep row-oriented artifacts fetch-on-demand. `PREVIEW_ROWS` and the
       `KEPLER_MAX_*` caps are **not** relaxed to compensate.
-- [ ] Promote `describe_artifact` and `list_artifacts` and say in their
+- [x] Promote `describe_artifact` and `list_artifacts` and say in their
       descriptions which directory they enumerate and that the server pinned
-      it at startup.
-- [ ] Extend the skill source: where artifacts are written, that a preview is a
-      sample and never the answer, and how to read the full table.
+      it at startup. The registry is read-only here, so the server **appends**
+      what only it knows to those two descriptions: the pinned root, that it is
+      shared by every session, that nothing is overwritten (a repeat gets a
+      numeric suffix, so use the path a result named), and — found while doing
+      this — that `list_artifacts` lists **only direct children**, while every
+      tool writes into a per-tool subdirectory, so listing the root shows
+      nothing; pass the subdirectory. The tool's behaviour is unchanged.
+      One registry sentence became false once served — `sonify_pulsar`'s
+      *"the audio is never inlined"* — and is **replaced** at serve time rather
+      than contradicted; a test asserts the registry still carries the
+      original, so moving it fails loudly.
+- [x] Extend the skill source: where artifacts are written, that a preview is a
+      sample and never the answer, and how to read the full table. `SKILL.md`
+      §8: served and checkout locations, the per-tool subdirectories and the
+      direct-children listing, no overwrites, the ECSV layout, and that media
+      also arrives inline.
 
 **Gate:** a host connected to a server launched outside this repository
 receives a sonification it can play and a plot it can see, and reads a full
 VizieR result set off the artifact path. Transcript in the PR.
+
+**Gate: met, 2026-09-24, with one finding about audio.** From a scratch
+directory outside the checkout:
+
+- **The SDK's stdio client** received `plot_pulsar` as `text` + `image/png`
+  (79,435 bytes) and `sonify_pulsar` as `text` + `audio/wav` (10,584,044
+  bytes), and `search_vizier(M31, I/355/gaiadr3)` as a 10-row preview of
+  `count` 2,936 with the artifact's `row_count` 2,936.
+- **Claude Code as the host** (Opus 5.5): the model **saw** the periodogram
+  plot and described it accurately — the 0.71479 s fundamental, the harmonic
+  comb at P/2…P/6, the false-alarm lines near power 8–13. It read the full
+  VizieR artifact with astropy: 2,936 rows, brightest Gmag 14.267 against the
+  preview's 19.364.
+- **Audio: received, playable, not heard.** Claude Code accepted the 10.6 MB
+  audio block, saved it to a `.wav` under its own tool-results directory, and
+  handed the model a notice with that path. The model said plainly it could not
+  perceive it. So the host has a sonification it can play — the gate's
+  wording — but a Claude model hears nothing either way. Inline audio is for
+  hosts and models that take audio; for the rest, the WAV path remains the
+  deliverable, and the skill should never let a model describe audio it has
+  not heard.
+
+**Found in passing, not fixed here:** `search_vizier` with `target=` ignores
+`radius_arcmin`. It calls astroquery's `query_object`, which is never given the
+radius, so every target search is astroquery's default 2′. Reproduced directly
+against the tool, outside the server, at radii 1′ and 0.5′ (2,936 rows each,
+out to 1.99′). A pre-existing tool bug for its own narrow PR.
 
 ### Phase C5 — The skill served with the server
 
@@ -944,7 +994,7 @@ the server with their own console, and completes a pulsar run.
 | `tools/skill/` (source + renderer) + `skills/kepler-tools/` rendered copy | C1 |
 | `.claude/skills/kepler-tools` (symlink) | C1 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
-| `tools/mcp/` (`roots`, `surface`, `server`, `__main__`) | C3, extended C4–C7 |
+| `tools/mcp/` (`roots`, `surface`, `server`, `__main__`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
 | `tests/test_mcp_surface.py` | C3, extended C4/C6 |
 | `.github/workflows/release.yml` | C8 |
 

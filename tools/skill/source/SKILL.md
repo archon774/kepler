@@ -183,3 +183,35 @@ and give the artifact path; do not present the preview as the whole answer.
 
 > Authority: `tools/agent/prompt.py`, "Other guidance from observed failure
 > modes", "PHOTOMETRY".
+
+## 8. The preview is a sample; the artifact is the answer
+
+A result's inline `preview` holds a few rows (ten by default). Its `count`, and
+the `row_count` on each `artifact`, say how many exist. When the question is
+about the whole set, read the file.
+
+- **Where they are.** Served by `kepler-mcp`, every artifact is under the
+  artifact directory the server pinned at startup — a per-user directory
+  unless `KEPLER_ARTIFACT_DIR` says otherwise — and `list_artifacts`' own
+  description names it. From a checkout it is `KEPLER_ARTIFACT_DIR`, or
+  `artifacts/` in the directory Python started in. Either way the paths are
+  local files you can read directly.
+- **How they are laid out.** Each tool writes into its own subdirectory
+  (`pulsar/`, `vizier/`, `simbad/`, ...). `list_artifacts` lists one
+  directory's files, not subdirectories: pass the subdirectory as `directory`.
+  Nothing is overwritten — a repeated call writes a new file with a numeric
+  suffix — so use the path the result gave, not the newest-looking file.
+- **How to read a table.** An `.ecsv` is plain text: `#` lines describe the
+  columns (name, unit, datatype), then one header row and one row per record,
+  space-separated, with strings quoted. Read it with your file tools, or with
+  `astropy.table.Table.read(path)` where Python is available. A `.csv` is
+  ordinary CSV.
+- **Plots and audio.** Served, a PNG or WAV artifact also comes back inline, as
+  an image or audio block after the result. A file too large to inline is
+  named in a note instead; its path still works.
+
+When you uncapped a search, or the preview is shorter than `count`, say that
+the complete data was saved and give the path.
+
+> Authority: `tools/agent/prompt.py`, "When the user's request implies
+> exhaustive data".
