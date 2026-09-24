@@ -19,7 +19,9 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 import pydantic_core
 
 from tools import skill
+from tools.bench.plane import TOOL_CLASSES
 from tools.config import within
+from tools.mcp.groups import annotations_for
 from tools.mcp.install import install_facts
 from tools.models import ToolError, ToolResult
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
@@ -90,12 +92,14 @@ def served_tools(
     *,
     artifact_root: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """One ``{name, description, input_schema}`` per registered tool, in order.
+    """One ``{name, description, input_schema, annotations}`` per tool, in order.
 
     With ``artifact_root``, ``list_artifacts`` and ``describe_artifact`` say
     which directory they enumerate (C4); every other description is the
     registry's, unchanged -- except where :data:`_SERVED_CORRECTIONS` replaces
-    a sentence the server makes false.
+    a sentence the server makes false. ``annotations`` come from
+    :func:`tools.mcp.groups.annotations_for` (C6) and are ``None`` for a name
+    the tool plane does not classify, which only a test's own schema can be.
     """
 
     served = []
@@ -112,6 +116,9 @@ def served_tools(
                 "name": schema["name"],
                 "description": description,
                 "input_schema": schema["input_schema"],
+                "annotations": (
+                    annotations_for(schema) if schema["name"] in TOOL_CLASSES else None
+                ),
             }
         )
     return served

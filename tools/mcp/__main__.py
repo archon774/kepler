@@ -31,7 +31,16 @@ def main(argv: list[str] | None = None) -> int:
             "stderr at startup."
         ),
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--tools",
+        metavar="GROUPS",
+        help=(
+            "Serve only these comma-separated tool groups (default: all 55 tools; "
+            "also KEPLER_MCP_TOOLS). Groups: databases, optical, timeseries, hr, "
+            "radio."
+        ),
+    )
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         stream=sys.stderr, level=logging.INFO, format="kepler-mcp: %(message)s"
@@ -40,6 +49,20 @@ def main(argv: list[str] | None = None) -> int:
     if "tools.config" in sys.modules:
         raise RuntimeError("tools.config was imported before the roots were pinned")
     roots = pin_roots()
+
+    # The group filter is checked before the SDK is imported, so a typo in a
+    # host's configuration is reported as itself wherever it happens.
+    from tools.mcp import groups
+
+    try:
+        selected = (
+            groups.parse_groups(args.tools)
+            if args.tools is not None
+            else groups.groups_from_environment()
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    schemas = groups.tools_in_groups(selected)
 
     try:
         import anyio
@@ -53,7 +76,6 @@ def main(argv: list[str] | None = None) -> int:
 
     from tools import config
     from tools.mcp import surface
-    from tools.registry import TOOL_SCHEMAS
 
     loaded = config.load_dotenv()
     log.info("artifact root: %s (%s)", config.ARTIFACT_DIR, roots.artifact_source)
@@ -65,10 +87,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     if loaded:
         log.info("read from %s: %s", config.DOTENV_PATH, ", ".join(loaded))
-    server = build_server()
+    for group in groups.GROUPS:
+        if selected is None or group.name in selected:
+            log.info("group %s: %s", group.name, group.description)
+    server = build_server(schemas)
     log.info(
         "serving %d tools and %d skill resources over stdio; instructions %d characters",
-        len(TOOL_SCHEMAS),
+        len(schemas),
         len(surface.served_resources()),
         len(server.instructions or ""),
     )
