@@ -9,6 +9,9 @@ its own beyond two things the SDK's low-level server leaves to its caller:
   property first, with a message that says to send JSON ``null``, then the
   schema itself. A failure is the call's error result, never a raised
   exception, the same as a fault in the agent loop.
+- **The skill** (C5): the instructions are ``surface.served_instructions()``
+  -- the skill brief and this install's facts -- and the skill's documents are
+  resources, ``kepler://skill/...``, read on demand.
 - **One call at a time.** Tool calls are dispatched to a worker thread, so the
   event loop keeps answering the host, but under a lock: every Kepler tool was
   written and tested to be called sequentially, and the stdio transport has
@@ -34,6 +37,7 @@ import anyio
 import jsonschema
 import mcp_types as types
 from mcp.server import Server
+from mcp.shared.exceptions import MCPError
 from mcp.server.stdio import stdio_server
 
 from tools import config
@@ -88,10 +92,24 @@ def build_server(
     ``artifact_root`` defaults to ``tools.config.ARTIFACT_DIR`` as it stands
     when the server is built -- after ``kepler-mcp`` has pinned it. It is what
     the workspace tools' descriptions name and the only directory media is
-    inlined from.
+    inlined from. ``instructions`` defaults to the served skill brief plus the
+    install facts.
     """
 
     root = config.ARTIFACT_DIR if artifact_root is None else artifact_root
+    if instructions is None:
+        instructions = surface.served_instructions(root)
+    documents = {doc["uri"]: doc for doc in surface.served_resources()}
+    resources = [
+        types.Resource(
+            uri=doc["uri"],
+            name=doc["name"],
+            title=doc["title"],
+            mime_type="text/markdown",
+            size=len(doc["text"].encode("utf-8")),
+        )
+        for doc in documents.values()
+    ]
     served = surface.served_tools(schemas, artifact_root=root)
     tools = [
         types.Tool(
@@ -109,6 +127,23 @@ def build_server(
 
     async def on_list_tools(ctx: Any, params: Any) -> types.ListToolsResult:
         return types.ListToolsResult(tools=tools)
+
+    async def on_list_resources(ctx: Any, params: Any) -> types.ListResourcesResult:
+        return types.ListResourcesResult(resources=resources)
+
+    async def on_read_resource(
+        ctx: Any, params: types.ReadResourceRequestParams
+    ) -> types.ReadResourceResult:
+        doc = documents.get(str(params.uri))
+        if doc is None:
+            raise MCPError(types.INVALID_PARAMS, f"No resource {params.uri!s} is served.")
+        return types.ReadResourceResult(
+            contents=[
+                types.TextResourceContents(
+                    uri=doc["uri"], mime_type="text/markdown", text=doc["text"]
+                )
+            ]
+        )
 
     async def on_call_tool(
         ctx: Any, params: types.CallToolRequestParams
@@ -142,6 +177,8 @@ def build_server(
         instructions=instructions,
         on_list_tools=on_list_tools,
         on_call_tool=on_call_tool,
+        on_list_resources=on_list_resources,
+        on_read_resource=on_read_resource,
     )
 
 

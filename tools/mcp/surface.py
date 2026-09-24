@@ -18,7 +18,9 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 import pydantic_core
 
+from tools import skill
 from tools.config import within
+from tools.mcp.install import install_facts
 from tools.models import ToolError, ToolResult
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
 
@@ -30,6 +32,8 @@ __all__ = [
     "inline_media",
     "normalize_result",
     "result_is_error",
+    "served_instructions",
+    "served_resources",
     "served_tools",
     "stringified_nulls",
     "to_json_text",
@@ -111,6 +115,37 @@ def served_tools(
             }
         )
     return served
+
+
+def served_instructions(artifact_root: Path | None = None) -> str:
+    """The skill brief, then what this install has (C5).
+
+    Short on purpose: a host may deliver only the first ~2,000 characters
+    (``tools.skill.BRIEF_LIMIT``). The brief points at the resources for
+    everything else.
+    """
+
+    return skill.served_brief() + "\n\n" + install_facts(artifact_root)
+
+
+def served_resources() -> list[dict[str, str]]:
+    """One ``{uri, name, title, text}`` per published skill document."""
+
+    resources = []
+    for name, text in skill.served_documents().items():
+        heading = next(
+            (line.lstrip("# ").strip() for line in text.splitlines() if line.startswith("# ")),
+            name,
+        )
+        resources.append(
+            {
+                "uri": skill.SERVED_URI_PREFIX + name,
+                "name": name,
+                "title": heading,
+                "text": text,
+            }
+        )
+    return resources
 
 
 def stringified_nulls(

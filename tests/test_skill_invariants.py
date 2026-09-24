@@ -24,10 +24,14 @@ import yaml
 from tools.agent.prompt import SYSTEM_PROMPT
 from tools.registry import TOOL_SCHEMAS
 from tools.skill import (
+    BRIEF_LIMIT,
     REPOSITORY_COPY,
+    SERVED_URI_PREFIX,
     SKILL_NAME,
     check_repository_copy,
     render_repository_copy,
+    served_brief,
+    served_documents,
     source_documents,
 )
 
@@ -219,3 +223,54 @@ def test_the_working_on_the_repository_files_point_at_the_skill():
     for doc in ("AGENTS.md", "CLAUDE.md"):
         text = (_REPO_ROOT / doc).read_text(encoding="utf-8")
         assert "skills/kepler-tools/" in text, doc
+
+
+# --- the served skill (C5) ------------------------------------------------------
+
+#: What the always-delivered brief must still say. Each phrase is also in
+#: SYSTEM_PROMPT, so the brief cannot drift from the authority either.
+BRIEF_INVARIANTS = (
+    "never invent a path",
+    "measure first, compare second",
+    "peak_fold_snr, not peak_confidence",
+    "not an independent detection",
+    "0.016665 s",
+    "2.1-2.2 s",
+    "formal designation",
+    "zero name resolution",
+    'the text "none"',
+)
+
+
+@pytest.mark.parametrize("phrase", BRIEF_INVARIANTS)
+def test_the_brief_keeps_the_rules_the_prompt_states(phrase):
+    assert phrase in _normalise(served_brief()), phrase
+    assert phrase in _PROMPT_NORMALISED, phrase
+
+
+def test_the_brief_points_at_every_served_document_and_nothing_else():
+    named = set(re.findall(r"kepler://skill/[\w/.-]+\.md", served_brief()))
+    assert named == {SERVED_URI_PREFIX + name for name in served_documents()}
+
+
+def test_the_brief_leaves_room_for_the_install_facts():
+    """Measured in C5: Claude Code delivers ~2,000 characters of instructions."""
+    assert BRIEF_LIMIT <= 2_000
+    assert len(served_brief()) <= BRIEF_LIMIT - 800
+
+
+def test_the_served_documents_and_the_repository_copy_share_one_source():
+    """Undo each surface's rendering and both give back the source, exactly."""
+    served = served_documents()
+    repository = render_repository_copy()
+    assert set(served) == set(_SOURCES) - {"BRIEF.md", "references/checkout.md"}
+    for name, text in served.items():
+        source = _SOURCES[name]
+        kept = "".join(
+            line
+            for line in source.splitlines(keepends=True)
+            if not (line.startswith("|") and "references/checkout.md" in line)
+        )
+        assert text.replace(SERVED_URI_PREFIX, "") == kept, name
+        assert repository[name].endswith(source), name
+    assert "kepler://" not in "".join(repository.values())

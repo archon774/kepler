@@ -179,6 +179,48 @@ def test_the_default_sonification_fits_the_audio_limit():
     assert 60 * 44_100 * 2 * 2 + 44 <= surface.MEDIA_FORMATS["wav"][2]
 
 
+# --- the served skill and install facts (C5) -----------------------------------
+
+
+def test_the_instructions_are_the_brief_then_the_install(tmp_path):
+    from tools.skill import served_brief
+
+    text = surface.served_instructions(tmp_path)
+    assert text.startswith(served_brief())
+    assert f"Artifacts are local files under {tmp_path}" in text
+
+
+def test_the_instructions_fit_the_budget_in_the_worst_case(tmp_path, monkeypatch):
+    """Every bundle missing and a long artifact path: still inside BRIEF_LIMIT."""
+    from tools.mcp import install
+    from tools.skill import BRIEF_LIMIT
+
+    monkeypatch.setattr(install, "_has_files", lambda directory, pattern: False)
+    for name in ("ANET_INDEX_PATH", "ATLAS_CATALOG_ROOT", "ADS_DEV_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    long_root = tmp_path / ("a" * 60) / ("b" * 60)
+    assert len(surface.served_instructions(long_root)) <= BRIEF_LIMIT
+
+
+def test_install_facts_say_whether_a_key_is_set_never_what_it_is(tmp_path):
+    from tools.mcp.install import install_facts
+
+    with_key = install_facts(tmp_path, {"ADS_DEV_KEY": "sekrit-value"})
+    without = install_facts(tmp_path, {})
+    assert "ADS_DEV_KEY is set." in with_key and "sekrit" not in with_key
+    assert "ADS_DEV_KEY is not set" in without
+    assert "plate solving not configured" in without
+    assert "plate solving configured" in install_facts(tmp_path, {"ANET_INDEX_PATH": "/x"})
+
+
+def test_served_resources_are_the_skill_documents():
+    from tools.skill import SERVED_URI_PREFIX, served_documents
+
+    resources = surface.served_resources()
+    assert [r["uri"] for r in resources] == [SERVED_URI_PREFIX + n for n in served_documents()]
+    assert {r["title"] for r in resources} >= {"Kepler astronomy tools"}
+
+
 # --- the roots ----------------------------------------------------------------
 
 
@@ -346,3 +388,43 @@ def test_a_media_result_carries_the_image_and_audio_after_the_json(tmp_path):
     assert base64.b64decode(result.content[1].data) == _PNG
     assert result.content[2].mime_type == "audio/wav"
     assert result.structured_content["artifacts"][0]["path"] == str(png)
+
+
+def test_the_server_delivers_the_instructions_and_the_skill_resources():
+    from tools.skill import SERVED_URI_PREFIX, served_documents
+
+    async def session(client):
+        listed = [str(r.uri) for r in (await client.list_resources()).resources]
+        pulsar = await client.read_resource(SERVED_URI_PREFIX + "references/pulsar.md")
+        return client.instructions, listed, pulsar.contents[0].text
+
+    instructions, listed, pulsar = _client_session(session)
+    assert instructions.startswith("Kepler: astronomy tools.")
+    assert "This install:" in instructions
+    assert listed == [SERVED_URI_PREFIX + name for name in served_documents()]
+    assert pulsar == served_documents()["references/pulsar.md"]
+
+
+def test_an_unknown_resource_is_a_protocol_error():
+    pytest.importorskip("mcp")
+    from mcp.shared.exceptions import MCPError
+
+    async def session(client):
+        return await client.read_resource("kepler://skill/references/checkout.md")
+
+    # In process, the SDK re-raises the handler's error, possibly inside an
+    # exception group; over a transport the client receives it as a JSON-RPC
+    # error. Either way it is an MCPError naming the URI, not a result.
+    with pytest.raises(BaseException) as raised:
+        _client_session(session)
+
+    def leaves(exc):
+        if isinstance(exc, BaseExceptionGroup):
+            for inner in exc.exceptions:
+                yield from leaves(inner)
+        else:
+            yield exc
+
+    assert any(
+        isinstance(exc, MCPError) and "No resource" in str(exc) for exc in leaves(raised.value)
+    )

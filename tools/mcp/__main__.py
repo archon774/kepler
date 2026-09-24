@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         raise
 
     from tools import config
+    from tools.mcp import surface
     from tools.registry import TOOL_SCHEMAS
 
     loaded = config.load_dotenv()
@@ -64,9 +65,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     if loaded:
         log.info("read from %s: %s", config.DOTENV_PATH, ", ".join(loaded))
-    log.info("serving %d tools over stdio", len(TOOL_SCHEMAS))
+    server = build_server()
+    log.info(
+        "serving %d tools and %d skill resources over stdio; instructions %d characters",
+        len(TOOL_SCHEMAS),
+        len(surface.served_resources()),
+        len(server.instructions or ""),
+    )
 
-    anyio.run(serve_stdio, build_server())
+    anyio.run(serve_stdio, server)
     return 0
 
 
