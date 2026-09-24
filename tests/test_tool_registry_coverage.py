@@ -37,6 +37,9 @@ NOT_TOOL_MODULES = {
     # The agent skill's single source and its renderer: Markdown plus the code
     # that renders skills/kepler-tools/ from it. Guidance, not a tool.
     "tools.skill",
+    # The MCP server: a fourth consumer of the registry, serving it over stdio.
+    # It reads TOOL_SCHEMAS/TOOL_FUNCTIONS and owns no tool of its own.
+    "tools.mcp",
 }
 
 

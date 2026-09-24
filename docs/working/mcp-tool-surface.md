@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0, C1 and C2 complete (§5). C3 is next.
+**Status:** In progress. C0–C4 complete (§5). C5 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -733,24 +733,59 @@ socket-free — `python3 -m compileall tools algorithms tests` clean, and
 `git diff --check` clean. The declared vocabulary matches the AST scan exactly
 in both directions, and the scan is a test.
 
-### Phase C3 — The server, generated from the registry, from a checkout
+### Phase C3 — The server, generated from the registry, from a checkout — **complete, 2026-09-24**
 
-- [ ] `tools/mcp/` — one server, constructed from
+- [x] `tools/mcp/` — one server, constructed from
       `TOOL_SCHEMAS`/`TOOL_FUNCTIONS`. Add `tools.mcp` to `NOT_TOOL_MODULES`
-      in the same commit.
-- [ ] Pick and justify the dependency option from §3.8 in the PR. If the SDK:
-      a new `[project.optional-dependencies]` group, and demonstrate that a
-      plain `uv sync` + `uv run --locked pytest` is unchanged.
-- [ ] Results serialise through the Pydantic models already returned; prefer
-      structured output where the protocol supports it. C2 is what makes the
-      warning and error shapes worth serialising.
-- [ ] **Resolve and pin `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` at
+      in the same commit. Four modules: `roots` (pins the roots, imports
+      nothing from `tools`), `surface` (what is served — tool list, the
+      stringified-null pre-check, result shape — with **no SDK import**, so a
+      plain `uv run pytest` tests it), `server` (the only SDK import) and
+      `__main__` (`kepler-mcp`). Nothing under `tools/agent/` or `tools/llm/` is
+      imported; `surface.normalize_result` mirrors the engine's
+      `_normalize_result` rather than importing it.
+- [x] Pick and justify the dependency option from §3.8 in the PR. **Option
+      (1), the SDK**: `mcp==2.2.0` plus `jsonschema==4.26.0` (already its
+      dependency; pinned because the server imports it) in a new `[mcp]`
+      optional group. `uv.lock` gains 19 packages and changes the version of
+      none. A plain `uv sync --locked` installs none of them, and
+      `uv run --locked pytest` on it is green — **2,639 passed, 51 skipped**,
+      the seven new skips being the SDK tests.
+- [x] Results serialise through the Pydantic models already returned; prefer
+      structured output where the protocol supports it. Every result is
+      `structuredContent` plus the same JSON as text, serialised through
+      `pydantic_core.to_json` so NaN becomes `null`; `isError` follows the
+      agent loop's `status == "error"`. **No `outputSchema` yet**: clients
+      validate against a declared one, and a NaN-as-`null` in a `number` field
+      would fail on a host rather than in a test. Arguments are validated
+      against the registry schema before dispatch (Draft 2020-12), and a
+      stringified `"None"` on a null-accepting property gets its own message.
+      A failed validation, an unknown tool (`unknown_tool`) or a raising tool
+      (`tool_exception`) is the call's error result, never a dead session;
+      both new codes are declared in `tools/codes.py`. Calls run in a worker
+      thread under a lock: one at a time, as every tool was written for.
+- [x] **Resolve and pin `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` at
       startup** (§3.2), and state in the PR which root the artifact directory
       was pinned to and why. Log both at startup; a user must be able to see
-      where artifacts are going without reading code.
-- [ ] A test asserting the served tool list equals the registry's, so a
-      registry addition cannot silently miss the surface.
-- [ ] `kepler-mcp` in `[project.scripts]`, alongside `kepler` and
+      where artifacts are going without reading code. **Pinned to a per-user
+      directory** — `$XDG_DATA_HOME/kepler/artifacts` (default
+      `~/.local/share`), `~/Library/Application Support/kepler/artifacts` on
+      macOS, `%LOCALAPPDATA%\kepler\artifacts` on Windows — not the launch
+      directory. A host launches a server wherever it likes; the launch
+      directory default would put an untracked `artifacts/` into the user's
+      repository unasked, or fail on a directory they cannot write.
+      `KEPLER_ARTIFACT_DIR` still wins. Both roots are written into the
+      environment **before** `tools.config` is imported — several modules copy
+      `ARTIFACT_DIR` at import, so reassigning it later would move nothing —
+      and a test asserts importing the entry point does not import
+      `tools.config`. The startup log names the artifact, data and download
+      roots, the isochrone grid (or that it is unset), and any keys read from a
+      checkout's `.env`, by name only.
+- [x] A test asserting the served tool list equals the registry's, so a
+      registry addition cannot silently miss the surface. Twice:
+      `surface.served_tools()` against the registry in every run, and the
+      in-process SDK client's `tools/list` when the extra is installed.
+- [x] `kepler-mcp` in `[project.scripts]`, alongside `kepler` and
       `kepler-bench`.
 
 **Gate:** a host connects over stdio **from a working directory outside this
@@ -758,27 +793,96 @@ repository**, lists tools, and completes one local call (`list_pulsar_scans`)
 and one remote call against a real service. Transcript and resolved roots in
 the PR. `uv run pytest` green and still socket-free.
 
-### Phase C4 — Media inline, and the artifact directory made discoverable
+**Gate: met, 2026-09-24.** From a scratch directory outside the checkout, with
+the server launched as `uv run --project <checkout> --extra mcp kepler-mcp`:
+
+- **The SDK's stdio client** listed 55 tools, ran `list_pulsar_scans` (5
+  scans) and `search_simbad(name="M31")` against live SIMBAD (1 row,
+  artifact written under the per-user root). The server's stderr:
+  `artifact root: ~/.local/share/kepler/artifacts (per-user default)`,
+  `data root: <checkout>/data (package default)`,
+  `download root: <checkout>/data/fits_downloads`, isochrone grid unset.
+- **Claude Code as the host** (`--mcp-config`, `--strict-mcp-config`, Opus
+  5.5) reported the server connected with 55 `mcp__kepler__*` tools, called
+  both, and answered from the structured results — including the artifact
+  path under the per-user root.
+
+**Found in passing, for C4** (addressed there: the workspace descriptions and
+the skill say so): the artifact writer does not overwrite, so the
+second M31 lookup wrote `simbad_M31_1.ecsv`. With a per-user root shared
+across every session this directory only grows; C4's discoverability work
+should say so.
+
+### Phase C4 — Media inline, and the artifact directory made discoverable — **complete, 2026-09-24**
 
 §3.1, reduced to what the local caller actually needs.
 
-- [ ] Return media inline for the eight tools C0 identified — the pulsar plot
+- [x] Return media inline for the eight tools C0 identified — the pulsar plot
       and sonification above all. A model handed a path to audio it cannot open
-      has not heard anything.
-- [ ] Leave the `ArtifactRef` contract otherwise as it is: the path works,
+      has not heard anything. All eight already return an ordinary
+      `ArtifactRef` with `format` `png` or `wav`, so there is no per-tool code:
+      `surface.inline_media` walks the payload and each such artifact follows
+      the JSON as an image or audio block. Only a regular file **inside the
+      pinned artifact root** is read — a result naming a path elsewhere is not
+      a way to pull arbitrary files into a model's context — and each path is
+      inlined once. Limits: 5 MB per image, 12 MB per audio file, which admits
+      the default 60 s stereo sonification (10.6 MB); over a limit, a text note
+      names the file and its size. The pulsar plot is ~80 KB.
+- [x] Leave the `ArtifactRef` contract otherwise as it is: the path works,
       because the caller shares the filesystem. Do not add resource URIs
-      speculatively (§4.3).
-- [ ] Keep row-oriented artifacts fetch-on-demand. `PREVIEW_ROWS` and the
+      speculatively (§4.3). `structuredContent` is unchanged; media is
+      additional content, never a replacement for the path.
+- [x] Keep row-oriented artifacts fetch-on-demand. `PREVIEW_ROWS` and the
       `KEPLER_MAX_*` caps are **not** relaxed to compensate.
-- [ ] Promote `describe_artifact` and `list_artifacts` and say in their
+- [x] Promote `describe_artifact` and `list_artifacts` and say in their
       descriptions which directory they enumerate and that the server pinned
-      it at startup.
-- [ ] Extend the skill source: where artifacts are written, that a preview is a
-      sample and never the answer, and how to read the full table.
+      it at startup. The registry is read-only here, so the server **appends**
+      what only it knows to those two descriptions: the pinned root, that it is
+      shared by every session, that nothing is overwritten (a repeat gets a
+      numeric suffix, so use the path a result named), and — found while doing
+      this — that `list_artifacts` lists **only direct children**, while every
+      tool writes into a per-tool subdirectory, so listing the root shows
+      nothing; pass the subdirectory. The tool's behaviour is unchanged.
+      One registry sentence became false once served — `sonify_pulsar`'s
+      *"the audio is never inlined"* — and is **replaced** at serve time rather
+      than contradicted; a test asserts the registry still carries the
+      original, so moving it fails loudly.
+- [x] Extend the skill source: where artifacts are written, that a preview is a
+      sample and never the answer, and how to read the full table. `SKILL.md`
+      §8: served and checkout locations, the per-tool subdirectories and the
+      direct-children listing, no overwrites, the ECSV layout, and that media
+      also arrives inline.
 
 **Gate:** a host connected to a server launched outside this repository
 receives a sonification it can play and a plot it can see, and reads a full
 VizieR result set off the artifact path. Transcript in the PR.
+
+**Gate: met, 2026-09-24, with one finding about audio.** From a scratch
+directory outside the checkout:
+
+- **The SDK's stdio client** received `plot_pulsar` as `text` + `image/png`
+  (79,435 bytes) and `sonify_pulsar` as `text` + `audio/wav` (10,584,044
+  bytes), and `search_vizier(M31, I/355/gaiadr3)` as a 10-row preview of
+  `count` 2,936 with the artifact's `row_count` 2,936.
+- **Claude Code as the host** (Opus 5.5): the model **saw** the periodogram
+  plot and described it accurately — the 0.71479 s fundamental, the harmonic
+  comb at P/2…P/6, the false-alarm lines near power 8–13. It read the full
+  VizieR artifact with astropy: 2,936 rows, brightest Gmag 14.267 against the
+  preview's 19.364.
+- **Audio: received, playable, not heard.** Claude Code accepted the 10.6 MB
+  audio block, saved it to a `.wav` under its own tool-results directory, and
+  handed the model a notice with that path. The model said plainly it could not
+  perceive it. So the host has a sonification it can play — the gate's
+  wording — but a Claude model hears nothing either way. Inline audio is for
+  hosts and models that take audio; for the rest, the WAV path remains the
+  deliverable, and the skill should never let a model describe audio it has
+  not heard.
+
+**Found in passing, not fixed here:** `search_vizier` with `target=` ignores
+`radius_arcmin`. It calls astroquery's `query_object`, which is never given the
+radius, so every target search is astroquery's default 2′. Reproduced directly
+against the tool, outside the server, at radii 1′ and 0.5′ (2,936 rows each,
+out to 1.99′). A pre-existing tool bug for its own narrow PR.
 
 ### Phase C5 — The skill served with the server
 
@@ -890,7 +994,7 @@ the server with their own console, and completes a pulsar run.
 | `tools/skill/` (source + renderer) + `skills/kepler-tools/` rendered copy | C1 |
 | `.claude/skills/kepler-tools` (symlink) | C1 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
-| `tools/mcp/` | C3, extended C4–C7 |
+| `tools/mcp/` (`roots`, `surface`, `server`, `__main__`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
 | `tests/test_mcp_surface.py` | C3, extended C4/C6 |
 | `.github/workflows/release.yml` | C8 |
 
@@ -898,12 +1002,12 @@ the server with their own console, and completes a pulsar run.
 | --- | --- |
 | `AGENTS.md`, `CLAUDE.md` | C1: one pointer line each. C9: dependency direction and bundle layout. |
 | `tools/models.py` + `ads`/`casda`/`mast`/`ned`/`radio_sources`/`simbad`/`vizier` | C2: `ToolResult.warnings` becomes `list[ToolWarning]`; fifteen call sites coded. |
-| `tools/codes.py`, `tests/test_tool_codes.py` | C2: the declared vocabulary and its drift scan. |
+| `tools/codes.py`, `tests/test_tool_codes.py` | C2: the declared vocabulary and its drift scan. C3: `unknown_tool`, `tool_exception`. |
 | `benchmarks/fixtures/*.yaml` | C2: fourteen recorded warnings migrated to `{code, message}`. |
 | `tools/bench/graders/__init__.py` | C2: three docstrings correcting the old `list[str]` asymmetry. No behaviour change. |
 | `docs/analysis/applicable-designs.md` | C2: a dated correction to §3's "exactly three values". |
 | `tests/test_tool_registry_coverage.py` | C2: `tools.codes` in `NOT_TOOL_MODULES`. C1: `tools.skill`. C3: `tools.mcp`. |
-| `pyproject.toml` | C1: package data for `tools/skill/source/`. C3: optional-dependency group and the `kepler-mcp` entry. C7: the core data. |
+| `pyproject.toml`, `uv.lock` | C1: package data for `tools/skill/source/`. C3: the `[mcp]` optional group (`mcp`, `jsonschema`) and the `kepler-mcp` entry. C7: the core data. |
 | `tools/config.py`, `tools/wcs.py` | C7: re-anchor the download root and the fixture-write guard for an installed layout. |
 | `docs/tool-architecture.md`, `docs/repository-folders.md`, `README.md` | C9. |
 
@@ -936,11 +1040,9 @@ the phase list are written against; they are not open.
 
 ### Still to decide, inside a phase rather than ahead of it
 
-- **C3:** which root the artifact directory pins to — the host's launch
-  directory (artifacts land in the user's project, where their agent already
-  looks) or a fixed per-user directory (stable, but somewhere they have to be
-  told about). Decided in the PR, stated in the server's startup log either way.
-- **C3:** the §3.8 dependency choice, recommendation recorded.
+- ~~**C3:** which root the artifact directory pins to.~~ **Decided in C3:** a
+  fixed per-user directory, logged at startup; `KEPLER_ARTIFACT_DIR` overrides.
+- ~~**C3:** the §3.8 dependency choice.~~ **Decided in C3:** the SDK, option (1).
 - **C7:** whether the optical frame library ships as one 257 MB bundle or is
   split further. Three 30 MB `ngc5286_globular_b` frames are a third of
   `data/optical/` between them.

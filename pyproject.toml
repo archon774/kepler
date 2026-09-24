@@ -87,6 +87,13 @@ dependencies = [
 [project.scripts]
 kepler = "tools.tui.__main__:main"
 kepler-bench = "tools.bench.cli:main"
+kepler-mcp = "tools.mcp.__main__:main"
+
+[project.optional-dependencies]
+mcp = [
+    "jsonschema==4.26.0",
+    "mcp==2.2.0",
+]
 
 [tool.setuptools]
 include-package-data = true
