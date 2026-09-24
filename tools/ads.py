@@ -55,7 +55,7 @@ from algorithms.catalogs.ads import (
 )
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
-from tools.models import ToolResult
+from tools.models import ToolResult, ToolWarning
 
 __all__ = [
     "search_ads",
@@ -218,11 +218,14 @@ def _flatten_rows(table: Table) -> list[dict]:
     ]
 
 
-def _ceiling_warning(max_results: int) -> list[str]:
+def _ceiling_warning(max_results: int) -> list[ToolWarning]:
     if max_results > _MAX_RESULTS_CEILING:
         return [
-            f"max_results capped at {_MAX_RESULTS_CEILING} -- a Kepler-side "
-            "safety limit, not a confirmed ADS server-side limit"
+            ToolWarning(
+                code="max_results_capped",
+                message=f"max_results capped at {_MAX_RESULTS_CEILING} -- a "
+                "Kepler-side safety limit, not a confirmed ADS server-side limit",
+            )
         ]
     return []
 

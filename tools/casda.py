@@ -30,7 +30,7 @@ from astroquery.casda import Casda
 from tools import artifacts
 from tools import config
 from tools.config import CASDA_OPAL_USERNAME, PREVIEW_ROWS
-from tools.models import ToolResult
+from tools.models import ToolResult, ToolWarning
 from tools.resolve import resolve_target_coords
 
 __all__ = ["search_casda"]
@@ -100,7 +100,7 @@ def search_casda(
     artifact = artifacts.write_table(
         table, f"casda_{target or f'{ra_deg}_{dec_deg}'}", subdir="casda"
     )
-    warnings: list[str] = []
+    warnings: list[ToolWarning] = []
 
     if download:
         if not CASDA_OPAL_USERNAME:
@@ -130,10 +130,13 @@ def search_casda(
         download_dir.mkdir(parents=True, exist_ok=True)
         casda.download_files(url_list, savedir=str(download_dir))
         warnings.append(
-            f"staged and downloaded {len(url_list)} file(s) to {download_dir}; "
-            "they now resolve through the local frame registry -- call "
-            "list_optical_frames or resolve_optical_frame to pick one up, "
-            "then the image tools take it by path"
+            ToolWarning(
+                code="products_downloaded",
+                message=f"staged and downloaded {len(url_list)} file(s) to "
+                f"{download_dir}; they now resolve through the local frame "
+                "registry -- call list_optical_frames or resolve_optical_frame "
+                "to pick one up, then the image tools take it by path",
+            )
         )
 
     return ToolResult(

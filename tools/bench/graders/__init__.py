@@ -158,13 +158,12 @@ class Evidence:
     def warnings(self) -> list[Mapping[str, Any]]:
         """Every warning any tool raised this session, as the manifest wrote it.
 
-        The manifest normalizes to ``{code, message}``, but only the half of
-        the surface that raises a coded warning gets a ``code``: ``ToolResult``
-        -- what every class-R tool returns -- declares ``warnings: list[str]``
-        upstream, while ``OpticalFrameList``, ``PulsarScanList`` and the other
-        local models declare ``list[ToolWarning]``. That asymmetry is
-        extraction-preserved and not ours to fix here, so
-        :meth:`raised_warning` matches on either.
+        The manifest normalizes to ``{code, message}``. Every warning now
+        carries a ``code``: ``ToolResult`` -- what every class-R tool returns --
+        declared ``warnings: list[str]`` until C2 of the MCP surface track and
+        was the one model with nowhere to put one. Recorded fixtures written
+        before that smuggled the identifier into the message prefix, so
+        :meth:`raised_signal` still matches on either.
         """
 
         raised: list[Mapping[str, Any]] = []
@@ -175,8 +174,8 @@ class Evidence:
         return raised
 
     def warning_codes(self) -> set[str]:
-        """The coded warnings only. See :meth:`warnings` for why that is not
-        all of them."""
+        """The coded warnings. See :meth:`warnings` for why a recorded one may
+        still arrive without a ``code``."""
 
         return {
             str(warning["code"])
@@ -208,9 +207,9 @@ class Evidence:
         the model's.
 
         Matched against the ``code`` where there is one, and otherwise
-        case-folded against the message -- ``ToolResult``, what every class-R
-        tool returns, declares ``warnings: list[str]`` upstream and has nowhere
-        to put a code.
+        case-folded against the message -- a recorded response predating C2 of
+        the MCP surface track carries its identifier in the message text
+        rather than in a ``code``.
         """
 
         folded = name.casefold()

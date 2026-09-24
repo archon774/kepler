@@ -221,8 +221,12 @@ def test_identify_radio_sources_scales_the_default_cross_match_radius_with_pixel
         fine_result = identify_radio_sources(str(fine_path))
         coarse_result = identify_radio_sources(str(coarse_path))
 
-    fine_radius = float(fine_result.warnings[-1].split("within ")[-1].rstrip('"'))
-    coarse_radius = float(coarse_result.warnings[-1].split("within ")[-1].rstrip('"'))
+    fine_radius = float(
+        fine_result.warnings[-1].message.split("within ")[-1].rstrip('"')
+    )
+    coarse_radius = float(
+        coarse_result.warnings[-1].message.split("within ")[-1].rstrip('"')
+    )
     assert fine_radius == pytest.approx(15.0)  # the 15" floor wins at a fine pixel scale
     assert coarse_radius == pytest.approx(1.5 * 120.0)  # the pixel-scale term wins once coarse
 
@@ -245,7 +249,7 @@ def test_identify_radio_sources_caps_a_wide_field_and_warns(tmp_path: Path):
         result = identify_radio_sources(str(fits_path), max_field_radius_arcmin=60.0)
 
     assert captured["radius_arcmin"] == pytest.approx(60.0)
-    assert any("search cap" in w for w in result.warnings)
+    assert [w.code for w in result.warnings].count("field_radius_capped") == 1
 
 
 def test_identify_radio_sources_field_cap_can_be_disabled(tmp_path: Path):
@@ -262,7 +266,7 @@ def test_identify_radio_sources_field_cap_can_be_disabled(tmp_path: Path):
         result = identify_radio_sources(str(fits_path), max_field_radius_arcmin=None)
 
     assert captured["radius_arcmin"] > 60.0
-    assert not any("search cap" in w for w in result.warnings)
+    assert "field_radius_capped" not in [w.code for w in result.warnings]
 
 
 def test_registry_exposes_radio_tools():

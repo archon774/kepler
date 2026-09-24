@@ -31,7 +31,7 @@ from astroquery.vizier import Vizier
 
 from tools import artifacts
 from tools.config import DEFAULT_MAX_CATALOGS, PREVIEW_ROWS
-from tools.models import ArtifactRef, ToolResult, coerce_optional_int
+from tools.models import ArtifactRef, ToolResult, ToolWarning, coerce_optional_int
 
 __all__ = ["list_vizier_catalogs", "search_vizier"]
 
@@ -130,11 +130,14 @@ def search_vizier(
             errors=[{"code": "invalid_input", "message": f"max_catalogs: {exc}"}],
         )
 
-    warnings: list[str] = []
+    warnings: list[ToolWarning] = []
     if target is not None and ra_hours is not None:
         warnings.append(
-            f"both target={target!r} and ra_hours/dec_degs were given; "
-            "coordinates were used for the query and target was ignored"
+            ToolWarning(
+                code="conflicting_position_inputs",
+                message=f"both target={target!r} and ra_hours/dec_degs were given; "
+                "coordinates were used for the query and target was ignored",
+            )
         )
     if category is not None:
         # Confirmed live: category tags whole catalogs, not individual rows --
@@ -142,11 +145,14 @@ def search_vizier(
         # V/138, "A catalogue of cross-matched radio/infrared/X-ray sources")
         # where only some columns are radio-derived.
         warnings.append(
-            f"category={category!r} matches catalogs tagged with that spectrum "
-            "as a whole, which can include multi-wavelength cross-match catalogs "
-            "where only some columns are in that band -- check each artifact's "
-            "columns and the catalog's own name before treating every matched "
-            "row as a pure measurement in that spectrum"
+            ToolWarning(
+                code="category_tags_whole_catalog",
+                message=f"category={category!r} matches catalogs tagged with that "
+                "spectrum as a whole, which can include multi-wavelength "
+                "cross-match catalogs where only some columns are in that band -- "
+                "check each artifact's columns and the catalog's own name before "
+                "treating every matched row as a pure measurement in that spectrum",
+            )
         )
 
     # astroquery's VizierKeyword setter does `list(values)` when given a bare
@@ -185,9 +191,12 @@ def search_vizier(
     to_write = matched if max_catalogs is None else matched[:max_catalogs]
     if max_catalogs is not None and len(matched) > max_catalogs:
         warnings.append(
-            f"matched {len(matched)} catalogs, wrote {len(to_write)}; raise "
-            "max_catalogs, set it to JSON null for no cap, or narrow with "
-            "catalog=/category= to reach the rest"
+            ToolWarning(
+                code="catalogs_capped",
+                message=f"matched {len(matched)} catalogs, wrote {len(to_write)}; "
+                "raise max_catalogs, set it to JSON null for no cap, or narrow "
+                "with catalog=/category= to reach the rest",
+            )
         )
 
     written: list[ArtifactRef] = []
@@ -215,5 +224,11 @@ def search_vizier(
         preview=preview,
         artifacts=written,
         warnings=warnings
-        + ["columns vary per catalog -- see each artifact's own columns list"],
+        + [
+            ToolWarning(
+                code="columns_vary_per_catalog",
+                message="columns vary per catalog -- see each artifact's own "
+                "columns list",
+            )
+        ],
     )
