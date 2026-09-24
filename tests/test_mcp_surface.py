@@ -406,12 +406,12 @@ def test_the_server_delivers_the_instructions_and_the_skill_resources():
 
 
 def test_an_unknown_resource_is_a_protocol_error():
+    pytest.importorskip("mcp")
     from mcp.shared.exceptions import MCPError
 
     async def session(client):
         return await client.read_resource("kepler://skill/references/checkout.md")
 
-    pytest.importorskip("mcp")
     # In process, the SDK re-raises the handler's error, possibly inside an
     # exception group; over a transport the client receives it as a JSON-RPC
     # error. Either way it is an MCPError naming the URI, not a result.
