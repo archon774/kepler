@@ -16,7 +16,9 @@ its own beyond two things the SDK's low-level server leaves to its caller:
 
 Each result carries the payload twice, as the protocol recommends: as
 ``structuredContent`` and as the same JSON in a text block, for a host that
-reads only text. No ``outputSchema`` is declared yet. A declared schema is
+reads only text. After the text come the PNG and WAV artifacts the result
+names, as image and audio content (C4) -- :func:`surface.inline_media` decides
+which, and the ``ArtifactRef`` paths stay in the payload either way. No ``outputSchema`` is declared yet. A declared schema is
 validated against by clients, and a result whose NaN serialised to ``null``
 against a ``number`` field would then fail on a host rather than in a test.
 """
@@ -25,6 +27,7 @@ from __future__ import annotations
 
 import functools
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 import anyio
@@ -33,6 +36,7 @@ import mcp_types as types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
+from tools import config
 from tools.models import ToolError
 from tools.mcp import surface
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
@@ -47,9 +51,22 @@ def _package_version() -> str:
         return "0+unknown"
 
 
-def _result(payload: Mapping[str, Any]) -> types.CallToolResult:
+def _content_block(block: Mapping[str, Any]) -> types.ContentBlock:
+    if block["type"] == "image":
+        return types.ImageContent(type="image", data=block["data"], mime_type=block["mime_type"])
+    if block["type"] == "audio":
+        return types.AudioContent(type="audio", data=block["data"], mime_type=block["mime_type"])
+    return types.TextContent(type="text", text=block["text"])
+
+
+def _result(
+    payload: Mapping[str, Any], media: Sequence[Mapping[str, Any]] = ()
+) -> types.CallToolResult:
     return types.CallToolResult(
-        content=[types.TextContent(type="text", text=surface.to_json_text(payload))],
+        content=[
+            types.TextContent(type="text", text=surface.to_json_text(payload)),
+            *(_content_block(block) for block in media),
+        ],
         structured_content=dict(payload),
         is_error=surface.result_is_error(payload),
     )
@@ -64,10 +81,18 @@ def build_server(
     functions: Mapping[str, Callable[..., Any]] = TOOL_FUNCTIONS,
     *,
     instructions: str | None = None,
+    artifact_root: Path | None = None,
 ) -> Server[Any]:
-    """One server over every tool in ``schemas``, dispatching to ``functions``."""
+    """One server over every tool in ``schemas``, dispatching to ``functions``.
 
-    served = surface.served_tools(schemas)
+    ``artifact_root`` defaults to ``tools.config.ARTIFACT_DIR`` as it stands
+    when the server is built -- after ``kepler-mcp`` has pinned it. It is what
+    the workspace tools' descriptions name and the only directory media is
+    inlined from.
+    """
+
+    root = config.ARTIFACT_DIR if artifact_root is None else artifact_root
+    served = surface.served_tools(schemas, artifact_root=root)
     tools = [
         types.Tool(
             name=tool["name"],
@@ -108,7 +133,8 @@ def build_server(
             payload = await anyio.to_thread.run_sync(
                 functools.partial(surface.call_tool, name, arguments, functions)
             )
-        return _result(payload)
+            media = await anyio.to_thread.run_sync(surface.inline_media, payload, root)
+        return _result(payload, media)
 
     return Server(
         surface.SERVER_NAME,
