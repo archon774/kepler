@@ -78,7 +78,9 @@ a fresh checkout and `tsc` is not on `PATH` without it. Nothing installs it for
 you: the typecheck is not a CI job, so this is the only thing that runs it
 (BL-12).
 
-CI (`.github/workflows/ci.yml`) runs on **Python 3.14**; `pyproject.toml` keeps
+CI (`.github/workflows/ci.yml`) runs on **Python 3.13** -- the newest Python
+every dependency ships wheels for (`sep` has none for 3.14; see
+`docs/installing.md`); `pyproject.toml` keeps
 3.12 as the floor, so code still has to work there (`Path.resolve()` raises
 `RuntimeError` rather than `OSError` on a symlink loop under 3.12 — use
 `tools.config.within`/`safe_resolve`). It gates three jobs: `compileall` over
