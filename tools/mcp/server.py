@@ -89,6 +89,10 @@ def build_server(
 ) -> Server[Any]:
     """One server over every tool in ``schemas``, dispatching to ``functions``.
 
+    ``schemas`` is the registry, or the part of it a ``--tools`` filter chose
+    (:func:`tools.mcp.groups.tools_in_groups`); a tool not in it is neither
+    listed nor callable.
+
     ``artifact_root`` defaults to ``tools.config.ARTIFACT_DIR`` as it stands
     when the server is built -- after ``kepler-mcp`` has pinned it. It is what
     the workspace tools' descriptions name and the only directory media is
@@ -116,9 +120,14 @@ def build_server(
             name=tool["name"],
             description=tool["description"],
             input_schema=tool["input_schema"],
+            annotations=(
+                types.ToolAnnotations(**tool["annotations"]) if tool["annotations"] else None
+            ),
         )
         for tool in served
     ]
+    # Only what is listed can be called: a group filter (C6) narrows both.
+    functions = {tool["name"]: functions[tool["name"]] for tool in served if tool["name"] in functions}
     validators = {
         tool["name"]: jsonschema.Draft202012Validator(tool["input_schema"])
         for tool in served

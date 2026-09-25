@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0–C5 complete (§5). C6 is next.
+**Status:** In progress. C0–C6 complete (§5). C7 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -371,7 +371,8 @@ exactly the metadata an MCP surface needs, already test-enforced.
 - `readOnlyHint` ← false for tools that write outside the artifact directory —
   `solve_astrometry` writes a solved header back into a FITS file,
   `search_mast(download=true)` fetches products into the download root — true
-  otherwise.
+  otherwise. (C6: `search_casda(download=true)` does too; the hint is derived
+  from the `download`/`write_header` arguments, not from this list.)
 - The seven `"mixed"` entries carry `OFFLINE_PREDICATES`, which are
   per-argument and have no MCP equivalent. §4.1.
 
@@ -951,21 +952,60 @@ the checkout or a skill file — and never told about provenance:
   detection"* — and labelled the reference-period sonification
   `..._REFERENCE_period.wav` so the file itself says so.
 
-### Phase C6 — Tool groups and annotations
+### Phase C6 — Tool groups and annotations — **complete, 2026-09-24**
 
-- [ ] Declare the five groups of §3.6 in one module, with a test asserting they
+- [x] Declare the five groups of §3.6 in one module, with a test asserting they
       partition the registry exactly — every tool in exactly one group.
-- [ ] `--tools` / `KEPLER_MCP_TOOLS` filters the served surface to named
-      groups; the default is all 55.
-- [ ] Generate `openWorldHint` and `readOnlyHint` from `TOOL_CLASSES` — read the
-      mapping, never restate it.
-- [ ] Each group's documented description states whether it runs with no data
-      bundle present (§3.6, right column).
-- [ ] Record each group's measured schema payload in the PR against C0's
+      `tools/mcp/groups.py` declares each group by the **tool modules** it
+      covers, not by tool names: a tool added to an existing module joins its
+      group with no edit, and a tool in a new module belongs to none until a
+      group names it — which the partition test catches.
+- [x] `--tools` / `KEPLER_MCP_TOOLS` filters the served surface to named
+      groups; the default is all 55. The filter narrows what is **callable**
+      as well as what is listed (a filtered-out tool is `unknown_tool`). An
+      unknown group name fails at startup, naming the valid ones, before the
+      SDK is even imported.
+- [x] Generate `openWorldHint` and `readOnlyHint` from `TOOL_CLASSES` — read the
+      mapping, never restate it. `openWorldHint` is `TOOL_CLASSES[name] !=
+      "local"` (29 tools: 22 remote, 7 mixed). `readOnlyHint` is derived from
+      the **schemas**, not a list: false for a tool with a `download` or
+      `write_header` argument, the two that write outside the artifact
+      directory — `search_mast`, `search_casda` (which §3.7 missed) and
+      `solve_astrometry`. `destructiveHint` is given only for those three, true
+      only for `write_header`, which modifies an existing file.
+      `tools.bench.plane` imports nothing from `tools/agent/` or `tools/llm/`,
+      so reading it keeps the dependency direction.
+- [x] Each group's documented description states whether it runs with no data
+      bundle present (§3.6, right column). In `groups.py`, in `--help`'s
+      reach, and logged at startup for each served group.
+- [x] Record each group's measured schema payload in the PR against C0's
       numbers.
+
+| Group | Tools | Registry schemas, bytes | = C0 + list punctuation | Served `tools/list`, bytes | ≈ tokens served |
+| --- | ---: | ---: | --- | ---: | ---: |
+| `databases` | 16 | 15,429 | 15,397 + 32 | 16,459 | 4,115 |
+| `optical` | 16 | 15,274 | 15,242 + 32 | 17,088 | 4,272 |
+| `timeseries` | 12 | 12,959 | 12,935 + 24 | 13,849 | 3,462 |
+| `hr` | 8 | 9,824 | 9,808 + 16 | 10,313 | 2,578 |
+| `radio` | 3 | 5,794 | 5,788 + 6 | 5,977 | 1,494 |
+| **All** | **55** | **59,280** | C0's 59,280 | **63,686** | |
+
+The registry payload is **byte-identical to C0**: each group is C0's per-tool
+sum plus its own `[`, `]` and `, ` separators, and the five per-tool sums add
+to C0's 59,170. The served payload adds, per tool, the annotations (~60–90
+bytes), and C4's appended workspace notes (~1.2 KB, in `optical`).
 
 **Gate:** the five payloads sum to C0's 59,170 (plus the list separators), no
 group exceeds ~4,000 tokens, and `--tools databases` serves exactly 16 tools.
+
+**Gate: met, 2026-09-24, with the served margin stated.** Over stdio from
+outside the checkout: the default serves 55 tools, `--tools databases`
+**exactly 16**, `KEPLER_MCP_TOOLS=timeseries,radio` 15, with the annotations
+arriving as derived (`search_mast`: read-only false, destructive false, open
+world true). The schema payloads sum as required and none exceeds ~3,860
+tokens. **On the wire**, `databases` (~4,115) and `optical` (~4,272) sit 3–7%
+over the ~4,000 mark, entirely from annotations and C4's notes; a test holds
+each group's schema payload at 16 KB so growth there fails loudly.
 
 ### Phase C7 — Packaging, and the data bundles
 
@@ -1045,7 +1085,7 @@ the server with their own console, and completes a pulsar run.
 | `.claude/skills/kepler-tools` (symlink) | C1 |
 | `tools/skill/source/BRIEF.md`, `tools/mcp/install.py` | C5 |
 | `tests/test_skill_invariants.py` | C1, extended C5 |
-| `tools/mcp/` (`roots`, `surface`, `server`, `__main__`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
+| `tools/mcp/` (`roots`, `surface`, `server`, `__main__`; C5 `install`, C6 `groups`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
 | `tests/test_mcp_surface.py` | C3, extended C4/C6 |
 | `.github/workflows/release.yml` | C8 |
 

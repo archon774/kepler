@@ -221,6 +221,71 @@ def test_served_resources_are_the_skill_documents():
     assert {r["title"] for r in resources} >= {"Kepler astronomy tools"}
 
 
+# --- groups and annotations (C6) ------------------------------------------------
+
+from tools.bench.plane import TOOL_CLASSES  # noqa: E402
+from tools.mcp import groups  # noqa: E402
+
+
+def test_the_groups_partition_the_registry_exactly():
+    """Every tool in exactly one group; every group module is a real tool module."""
+    membership = {name: groups.group_of(name) for name in TOOL_FUNCTIONS}
+    assert [name for name, group in membership.items() if group is None] == []
+    modules = [module for group in groups.GROUPS for module in group.modules]
+    assert len(modules) == len(set(modules))
+    assert set(modules) == {fn.__module__ for fn in TOOL_FUNCTIONS.values()}
+
+
+def test_group_sizes_are_those_measured_at_c0():
+    sizes = {g.name: len(groups.tools_in_groups((g.name,))) for g in groups.GROUPS}
+    assert sizes == {"databases": 16, "optical": 16, "timeseries": 12, "hr": 8, "radio": 3}
+
+
+def test_no_group_schema_payload_exceeds_about_four_thousand_tokens():
+    """The reason the groups exist (C6 gate): each is at most ~16 KB of schema."""
+    for group in groups.GROUPS:
+        payload = len(json.dumps(groups.tools_in_groups((group.name,))))
+        assert payload <= 16_000, (group.name, payload)
+
+
+def test_every_group_says_whether_it_runs_without_a_data_bundle():
+    for group in groups.GROUPS:
+        assert "without a bundle" in group.description or "with no data bundle" in group.description
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, None), ("", None), ("  ", None), ("hr", ("hr",)), (" databases , hr,hr ", ("databases", "hr"))],
+)
+def test_parse_groups(value, expected):
+    assert groups.parse_groups(value) == expected
+
+
+def test_an_unknown_group_names_the_valid_ones():
+    with pytest.raises(ValueError, match="databses.*choose from databases, optical"):
+        groups.parse_groups("databses")
+
+
+def test_the_environment_selects_groups():
+    assert groups.groups_from_environment({"KEPLER_MCP_TOOLS": "radio"}) == ("radio",)
+    assert groups.groups_from_environment({}) is None
+
+
+def test_annotations_are_derived_from_the_plane_and_the_schemas():
+    hints = {s["name"]: groups.annotations_for(s) for s in TOOL_SCHEMAS}
+    writers = {name for name, h in hints.items() if not h["read_only_hint"]}
+    assert writers == {"search_mast", "search_casda", "solve_astrometry"}
+    assert {name for name, h in hints.items() if h.get("destructive_hint")} == {"solve_astrometry"}
+    assert all("destructive_hint" not in h for name, h in hints.items() if name not in writers)
+    for name, h in hints.items():
+        assert h["open_world_hint"] is (TOOL_CLASSES[name] != "local"), name
+    assert sum(h["open_world_hint"] for h in hints.values()) == 29
+
+
+def test_every_served_registry_tool_carries_annotations():
+    assert all(tool["annotations"] for tool in surface.served_tools())
+
+
 # --- the roots ----------------------------------------------------------------
 
 
@@ -428,3 +493,25 @@ def test_an_unknown_resource_is_a_protocol_error():
     assert any(
         isinstance(exc, MCPError) and "No resource" in str(exc) for exc in leaves(raised.value)
     )
+
+
+def test_a_group_filter_narrows_what_is_listed_and_what_is_callable():
+    pytest.importorskip("mcp")
+    import anyio
+    from mcp.client.client import Client
+
+    from tools.mcp.server import build_server
+
+    async def run():
+        async with Client(build_server(groups.tools_in_groups(("databases",)))) as client:
+            listed = (await client.list_tools()).tools
+            refused = await client.call_tool("list_pulsar_scans", {})
+            return listed, refused
+
+    listed, refused = anyio.run(run)
+    assert len(listed) == 16
+    mast = next(tool for tool in listed if tool.name == "search_mast")
+    assert mast.annotations.read_only_hint is False
+    assert mast.annotations.destructive_hint is False
+    assert mast.annotations.open_world_hint is True
+    assert refused.is_error and refused.structured_content["errors"][0]["code"] == "unknown_tool"
