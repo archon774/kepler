@@ -5,7 +5,7 @@
     "wheel cannot pair itself with a bundle built for another release.",
     "Each archive is content-addressed and published as an asset of this",
     "repository's standing 'data' GitHub release (phase C8 of",
-    "docs/working/mcp-tool-surface.md). Rebuild an entry with",
+    "docs/archive/mcp-tool-surface.md). Rebuild an entry with",
     "`python -m tools.mcp.bundles NAME SOURCE OUT`; builds are deterministic."
   ],
   "bundles": {

@@ -17,6 +17,7 @@ overturned a guess.
 
 | Document | Track | Finished | Durable outcome |
 | --- | --- | --- | --- |
+| [mcp-tool-surface.md](mcp-tool-surface.md) | Kepler's tools served over MCP to a coding agent's own console on a machine with no checkout: the agent skill, the stdio server, inline media, tool groups and annotations, packaging with checksum-pinned data bundles, and the GitHub release track. Phases C0–C9. | 2026-09-25 | `../tool-architecture.md` section 10.3; `../installing.md`; `../releasing.md`; `CLAUDE.md`'s `tools/mcp/` rules |
 | [optical-tools.md](optical-tools.md) | Thirteen broken links between the tool surface and the bundled data, and the stateless architecture underneath them. Baseline 1–4, stateless S0–S6, closure P1–P9. | 2026-09-16 | `../tool-architecture.md`; `../extraction.md`; `CLAUDE.md`'s *Python domain boundaries* |
 | [model-backends.md](model-backends.md) | The provider-neutral model port: `tools/llm/`, the four adapters, schema translation, argument validation, and the headless engine in `tools/agent/`. Phases −1–3. | 2026-09-09 | `../tool-architecture.md` section 10 |
 

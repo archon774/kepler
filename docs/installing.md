@@ -2,7 +2,7 @@
 
 How to put Kepler on a machine that has **no checkout** of this repository,
 serve its tools to a coding agent's console over MCP, and add the optional
-data. The design behind it is `working/mcp-tool-surface.md` §3.5 and phases
+data. The design behind it is `archive/mcp-tool-surface.md` §3.5 and phases
 C3–C7.
 
 ## What a wheel contains

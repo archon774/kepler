@@ -47,7 +47,7 @@ from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
 #: directories actually present, so a new fixture subtree cannot be added
 #: without being listed here.
 #:
-#: Re-anchored in C7 (docs/working/mcp-tool-surface.md), not relaxed: the root
+#: Re-anchored in C7 (docs/archive/mcp-tool-surface.md), not relaxed: the root
 #: is ``tools/_data`` resolved -- the repository's ``data/`` in a checkout,
 #: exactly as before, and the shipped core in an installed wheel, where the old
 #: ``parents[1] / "data"`` named a directory that does not exist and the guard

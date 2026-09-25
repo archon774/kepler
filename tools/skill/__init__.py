@@ -7,7 +7,7 @@ skill cites that prompt by section name, and
 ``tests/test_skill_invariants.py`` fails if the load-bearing rules drift
 between the two.
 
-``source/`` is the **only** hand-edited copy (``docs/working/mcp-tool-surface.md``
+``source/`` is the **only** hand-edited copy (``docs/archive/mcp-tool-surface.md``
 §3.4: copies are forbidden). It lives inside the ``tools`` package so that it
 ships with an installed Kepler, where there is no checkout to read it from.
 Every other surface is rendered from it:

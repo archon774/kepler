@@ -2,7 +2,7 @@
 
 A wheel ships the core data -- the five pulsar scans, the field-calibration
 references, the Afterglow parity fixtures -- and nothing else
-(``docs/working/mcp-tool-surface.md`` §3.5). Two bundles are too large for it
+(``docs/archive/mcp-tool-surface.md`` §3.5). Two bundles are too large for it
 and are published separately, as GitHub release assets (C8):
 
 - ``optical`` -- the bundled frame library, ``data/optical/`` (~257 MB);
