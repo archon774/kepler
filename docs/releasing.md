@@ -28,7 +28,8 @@ On a `v*` tag push (or `workflow_dispatch`, which runs everything except
    - rebuilds `data/optical/` and fails unless it matches `tools/mcp/bundles.json`;
    - builds the wheel and the sdist, and writes `SHA256SUMS`.
 2. **verify** runs on a clean runner **with no checkout**, on Python 3.12 (the
-   floor) and 3.14. It installs the wheel with `[mcp]` and runs
+   floor) and 3.13, the newest Python every dependency ships wheels for. It
+   installs the wheel with `[mcp]` and runs
    `kepler-mcp self-test`. That launches the installed server over stdio and
    detects B0329+54 from a measured period through the protocol.
 3. **data** checks that the `data` release holds every archive
@@ -84,10 +85,11 @@ outside the repository, so run it by hand.
 
 ## Testing a release
 
-On a machine with no checkout:
+On a machine with no checkout (and a C compiler unless it is Python 3.12 or
+3.13 on x86_64 Linux, macOS or Windows; see `installing.md`):
 
 ```bash
-python -m venv kepler-env
+python3.13 -m venv kepler-env
 kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/kepler/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
 kepler-env/bin/kepler-mcp self-test
 kepler-env/bin/kepler-mcp fetch-data optical      # optional

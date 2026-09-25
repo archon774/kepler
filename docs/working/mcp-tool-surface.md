@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0–C7 complete (§5). C8 is next.
+**Status:** In progress. C0–C8 complete (§5); `v0.1.0rc1` published. C9 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -1108,7 +1108,7 @@ import path or data path was in it.
   `solve_astrometry(write_header=true, force=true)` on
   `m15_globular_lum_000.fits` → `refusing_to_modify_fixture`.
 
-### Phase C8 — The GitHub release track
+### Phase C8 — The GitHub release track — **complete, 2026-09-25**
 
 Testing distribution, per the maintainer's answer to §7.4. **The repository
 was made public on 2026-09-25** at the maintainer's decision, so release
@@ -1152,11 +1152,44 @@ that, the releases API answered 404 without a token.
       **Bundle matching needs no negotiation:** C7's `bundles.json` ships in the
       wheel and pins each archive's name, size and SHA-256. The version moves
       to **`0.1.0rc1`** for the first pre-release.
-- [ ] Install from the release on a machine that is not the development host
-      and repeat C7's gate there.
+- [x] Install from the release on a machine that is not the development host
+      and repeat C7's gate there. A clean `python:3.14-slim` container
+      (aarch64; nothing from the development host, not even its home
+      directory), installing anonymously from the public release URL with
+      `SHA256SUMS` verified: `kepler-mcp self-test` passed, and
+      `kepler-mcp fetch-data optical` fetched 269 MB from the `data` release
+      and verified it. **This found an install prerequisite no earlier step
+      could:** `sep` 1.4.1 ships no Python 3.14 wheels on any platform, and
+      `photutils` 3.0.0 no Linux aarch64 wheel, so pip compiles them and a
+      host without a C compiler fails (`command 'gcc' failed`). The release
+      workflow's x86_64 runners compiled `sep` silently (Ubuntu ships gcc),
+      and the development host had built both. A compiler is needed except on
+      Python 3.12/3.13 on x86_64 Linux, macOS or Windows;
+      `docs/installing.md` now says so, with the table. The environment is 844
+      MB on aarch64 with the compiled builds.
 
 **Gate:** a tagged pre-release from which a tester installs Kepler, registers
 the server with their own console, and completes a pulsar run.
+
+**Gate: met, 2026-09-25.** `v0.1.0rc1` was tagged at `fa9bdd1`, and the release
+workflow passed all five jobs (build; `data` against the live release; verify
+on Python 3.12 and 3.14 on clean runners; publish). It published a
+pre-release with the wheel, the sdist and `SHA256SUMS`. The tester container
+above was committed as an image and registered with Claude Code as the MCP
+server (`docker run -i … /opt/kepler/bin/kepler-mcp`). A fresh session with
+**only** that server — no checkout, no skill file, Bash/Read/Glob/Grep/Write/
+Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
+
+- read `kepler://skill/references/pulsar.md` first;
+- ran the chain on the scan in the container's `site-packages/tools/_data`,
+  named the 0.016665 s peak as 60 Hz mains, excluded it (`start=0.05`),
+  retuned `back_scale` 1.5/3/6, and found a stable 1.1912 s candidate at
+  5.1–6.1σ, reporting the tool's `peak_does_not_fold`;
+- folded at the curated 1.187913 s (16.1σ) and said it *"doesn't count as an
+  independent detection, because the period came from outside the data"*, and
+  named the two sonifications by the period each used;
+- listed **42 frames** from the container's fetched bundle,
+  `/root/.local/share/kepler/bundles/optical`.
 
 ### Phase C9 — Documentation outcome
 
