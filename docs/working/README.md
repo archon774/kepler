@@ -12,7 +12,15 @@ writes the code.
 
 ## Index
 
-No track is in flight. Add a plan here when one starts.
+| Track | Document | Status |
+| --- | --- | --- |
+| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | Proposal, 2026-09-25. All decisions made; the distribution and repository are `skynet-mars`. No phase started; R4 waits for the logo files. |
+
+**Renaming Kepler to MARS** (MCP Astronomy Research Suite): the distribution
+becomes `skynet-mars`, the commands `mars`, `mars-mcp` and `mars-bench`, and
+the environment variables `MARS_*`. It covers the logo, the repository rename
+and what it means for the published `v0.1.0rc1`. Recorded evidence — the
+archive, the benchmark report — is deliberately left as it was written.
 
 ## Landed
 
