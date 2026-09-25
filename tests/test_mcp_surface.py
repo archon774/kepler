@@ -515,3 +515,17 @@ def test_a_group_filter_narrows_what_is_listed_and_what_is_callable():
     assert mast.annotations.destructive_hint is False
     assert mast.annotations.open_world_hint is True
     assert refused.is_error and refused.structured_content["errors"][0]["code"] == "unknown_tool"
+
+
+def test_self_test_passes_against_this_checkout(capfd):
+    """``kepler-mcp self-test`` launches the server over stdio and runs the chain.
+
+    ``capfd``, not ``capsys``: the SDK hands ``sys.stderr`` to the server
+    subprocess, which needs a real file descriptor.
+    """
+    pytest.importorskip("mcp")
+    from tools.mcp.selftest import main
+
+    assert main([]) == 0
+    out = capfd.readouterr().out
+    assert "blind search folds at" in out and out.rstrip().endswith("passed")

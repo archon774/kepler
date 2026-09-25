@@ -1,0 +1,154 @@
+name: Release
+
+# Builds, verifies and publishes a Kepler release from a `v<version>` tag, and
+# checks that the optional data bundles it pins are published. The policy --
+# what a tag, a pre-release and a data bundle version mean -- is
+# docs/releasing.md. workflow_dispatch runs everything but `publish`, as a
+# dry run.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      # lfs: true -- the manifest check below rebuilds data/optical/, and three
+      # of its frames are Git LFS objects. The build refuses LFS pointers, so a
+      # pointer-only checkout would fail here rather than ship a wrong checksum.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          lfs: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python -m pip install uv
+
+      - name: Check the tag names the package version
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match pyproject.toml version $version (expected v$version)"
+            exit 1
+          fi
+
+      - name: Check the optical bundle builds to the shipped manifest
+        run: uv run --locked python -m tools.mcp.bundles optical data/optical "$RUNNER_TEMP/bundles" --check
+
+      - name: Build the wheel and the source distribution
+        run: |
+          uv build --out-dir dist
+          cd dist && sha256sum -- *.whl *.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  verify:
+    name: verify install (python ${{ matrix.python }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is pyproject.toml's floor; 3.14 is what CI runs.
+        python: ["3.12", "3.14"]
+    steps:
+      # No checkout: the wheel must work on a machine that has none.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+
+      - name: Install the wheel into a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/kepler"
+          wheel=$(ls dist/*.whl)
+          "$RUNNER_TEMP/kepler/bin/pip" install --quiet "${wheel}[mcp]"
+
+      - name: Self-test through the protocol
+        env:
+          MPLBACKEND: Agg
+          KEPLER_HOME: ${{ runner.temp }}/kepler-home
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/kepler/bin/kepler-mcp" self-test
+          "$RUNNER_TEMP/kepler/bin/kepler-mcp" fetch-data --list
+
+  data:
+    name: data bundles published
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/mcp/bundles.json
+          sparse-checkout-cone-mode: false
+
+      - name: Check the data release holds exactly the pinned archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          assets=$(gh release view data --repo "$REPO" --json assets --jq '.assets')
+          jq -c '.bundles | to_entries[]' tools/mcp/bundles.json | while read -r entry; do
+            archive=$(jq -r '.value.archive' <<<"$entry")
+            size=$(jq -r '.value.size' <<<"$entry")
+            sha=$(jq -r '.value.sha256' <<<"$entry")
+            found=$(jq -r --arg a "$archive" '.[] | select(.name == $a) | "\(.size) \(.digest)"' <<<"$assets")
+            if [ "$found" != "$size sha256:$sha" ]; then
+              echo "::error::the data release does not hold $archive as pinned (want: $size sha256:$sha; found: ${found:-nothing}). See docs/releasing.md."
+              exit 1
+            fi
+            echo "ok $archive"
+          done
+
+  publish:
+    name: publish
+    if: github.event_name == 'push'
+    needs: [verify, data]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # A PEP 440 pre-release (a, b, rc, dev) is published as a GitHub
+          # pre-release; anything else is a release. docs/releasing.md.
+          if grep -Eq '(a|b|rc|\.dev)[0-9]+$' <<<"$TAG"; then flag=--prerelease; else flag=--latest; fi
+          gh release create "$TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
+            --repo "$REPO" --verify-tag "$flag" --title "Kepler $TAG" \
+            --notes "Install and register: docs/installing.md. Check the install: \`kepler-mcp self-test\`. Data bundles: \`kepler-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."
