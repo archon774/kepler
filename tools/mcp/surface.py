@@ -245,7 +245,7 @@ def inline_media(payload: Mapping[str, Any], artifact_root: Path) -> list[dict[s
     """Content blocks for the PNG and WAV artifacts a result names.
 
     A model handed a path to audio has not heard anything, and a path to a plot
-    has not seen it (``docs/working/mcp-tool-surface.md`` §3.1). Each media
+    has not seen it (``docs/archive/mcp-tool-surface.md`` §3.1). Each media
     artifact becomes ``{type: image|audio, mime_type, data}`` with base64 data,
     once per path. Only a regular file inside ``artifact_root`` is read -- a
     result naming a path elsewhere is not a way to pull arbitrary files into a

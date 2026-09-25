@@ -529,3 +529,32 @@ def test_self_test_passes_against_this_checkout(capfd):
     assert main([]) == 0
     out = capfd.readouterr().out
     assert "blind search folds at" in out and out.rstrip().endswith("passed")
+
+
+def _imported_modules(path: Path) -> set[str]:
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            names.add(node.module)
+    return names
+
+
+def test_the_server_sits_beside_the_agent_loop_not_on_it():
+    """``tools/mcp -> tools/registry``; never through ``tools/agent`` or ``tools/llm``.
+
+    ``docs/tool-architecture.md`` 10.3 and ``CLAUDE.md``: the server is a
+    sibling consumer of the registry. And nothing under ``algorithms/``
+    reaches up into it.
+    """
+    forbidden = ("tools.agent", "tools.llm", "tools.tui")
+    for path in sorted((_REPO_ROOT / "tools" / "mcp").glob("*.py")):
+        bad = {m for m in _imported_modules(path) if m.startswith(forbidden)}
+        assert bad == set(), f"{path.name} imports {sorted(bad)}"
+    for path in sorted((_REPO_ROOT / "algorithms").rglob("*.py")):
+        bad = {m for m in _imported_modules(path) if m.startswith("tools.mcp")}
+        assert bad == set(), f"{path} imports {sorted(bad)}"

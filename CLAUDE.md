@@ -289,9 +289,49 @@ the `kepler-bench` CLI. Its rules:
 - Zero new dependencies; nothing here opens a socket under a plain
   `uv run pytest`, and that is a test (B2), not a convention.
 
+`tools/mcp/` owns the MCP server (`kepler-mcp`) and nothing else: a fourth
+consumer of the registry, served over stdio to a coding agent's console on a
+machine with no checkout. Its rules:
+
+- **The dependency runs `tools/mcp → tools/registry`**, plus `tools/mcp/groups
+  → tools/bench/plane` (import-light by design, for `TOOL_CLASSES`).
+  **`tools/mcp/` imports nothing from `tools/agent/` or `tools/llm/`**, and
+  nothing under `algorithms/` imports it. `tests/test_mcp_surface.py` asserts
+  both.
+- **The `mcp` SDK is optional** (`uv sync --extra mcp`), and only
+  `tools/mcp/server.py` imports it. **CI does not install it**, so every test
+  that drives the SDK must call `pytest.importorskip("mcp")` *before* any SDK
+  import, or CI fails.
+- **The registry is read, never edited, to serve it.** What only the server
+  knows (the pinned artifact root, a sentence the server makes false) is
+  added or replaced at serve time in `tools/mcp/surface.py`, and a test pins
+  each registry original.
+- **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
+  worst case, tested). Claude Code truncates a server's instructions at
+  about 2,000. Everything longer is a `kepler://skill/...` resource.
+- **The skill has one source**, `tools/skill/source/`. Edit it and run
+  `uv run python -m tools.skill`; `skills/kepler-tools/` is generated.
+
+**Bundled data and the Kepler home.** Tools read bundled fixtures only through
+`config.BUNDLED_DATA_DIR`, which is `tools/_data`: a committed symlink to
+`data/` in a checkout, and in a wheel the core data (`pulsar/`, `fieldcal/`,
+`afterglow/`) that package-data ships. Never add a path of the form
+`Path(__file__).parents[1] / "data"`: under a wheel it names a directory that
+does not exist. An installed Kepler writes only under the per-user Kepler
+home (`tools/paths.py`; `KEPLER_HOME`):
+
+- `artifacts/`, the MCP default;
+- `fits_downloads/`;
+- `bundles/<name>/`, the optional `optical` and `isochrones` bundles that
+  `kepler-mcp fetch-data` installs, pinned by size and SHA-256 in
+  `tools/mcp/bundles.json`.
+
+A changed bundle is a new, content-addressed asset on the standing `data`
+release, never a replaced one (`docs/releasing.md`).
+
 `docs/archive/model-backends.md` is the port's full design and
 `docs/benchmarking/harness.md` the harness's; `docs/tool-architecture.md`
-sections 10 and 10.1 are the summaries.
+sections 10 and 10.1 are the summaries, and 10.3 is the MCP server's.
 
 ### Vendored `skylib` is consolidated
 

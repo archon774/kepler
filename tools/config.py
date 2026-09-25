@@ -256,7 +256,7 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 # tests/conftest.py does. Setting the environment variables is the supported
 # way to move them together.
 #
-# Re-anchored for an installed wheel (C7 of docs/working/mcp-tool-surface.md):
+# Re-anchored for an installed wheel (C7 of docs/archive/mcp-tool-surface.md):
 # there DATA_DIR is the shipped core inside site-packages, which a download
 # must never write into -- it may be read-only, and it is replaced wholesale
 # by the next upgrade. An install downloads into the per-user Kepler home

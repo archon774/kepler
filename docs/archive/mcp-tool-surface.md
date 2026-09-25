@@ -1,6 +1,48 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0–C8 complete (§5); `v0.1.0rc1` published. C9 is next.
+> [!NOTE] Archived 2026-09-25
+> This track is complete and this document is a record, not a plan. Phases
+> C0–C9 landed on the `mcp-support` integration branch between 2026-09-23 and
+> 2026-09-25. Kepler's 55 tools are served over MCP by `kepler-mcp` to a
+> coding agent's console on a machine with no checkout, with the agent skill
+> as instructions and resources. A wheel carries the core data, and
+> `kepler-mcp fetch-data` installs checksum-pinned optional bundles.
+> **`v0.1.0rc1` is published** as a GitHub pre-release, and the repository was
+> made public for it.
+>
+> **Completion audit, 2026-09-25**, re-verified against the code rather than
+> taken from the record:
+> - the registry is still 55 tools and 59,280 schema bytes, C0's figures to
+>   the byte;
+> - `TOOL_CLASSES` is 26 local, 22 remote and 7 mixed, and the groups are
+>   16/16/12/8/3;
+> - the served instructions are 1,456 characters, under the 1,900 limit, with
+>   6 resources;
+> - `v0.1.0rc1` carries its wheel, sdist and `SHA256SUMS`, and the `data`
+>   release's GitHub digests equal `tools/mcp/bundles.json` for both bundles;
+> - `git diff 4e99222 HEAD` shows `tools/registry.py`, `tools/agent/`
+>   (`prompt.py` included), `tools/llm/`, `tools/tui/` and all of
+>   `algorithms/` untouched;
+> - the default suite is green on Python 3.13.
+>
+> The durable outcome is `../tool-architecture.md` section 10.3, with
+> `../installing.md`, `../releasing.md`, and `CLAUDE.md`'s `tools/mcp/` rules.
+>
+> **Corrections applied at archive**, each marked inline where it sits:
+> - the status line (this block replaces it);
+> - the branch named in the global constraints;
+> - the §3.2 artifact-root question, and the §7 bundle-split question, both
+>   decided;
+> - "deliberately not touched" and `tools/bench/`, which C2 did touch (three
+>   docstrings);
+> - the C8 verify matrix, which #83 moved to Python 3.12 and 3.13.
+>
+> Earlier phases already corrected §3.4's "in full" (C5), and §3.5's and
+> §3.6's field-calibration replay (C7), in place. Everything else is left as
+> written.
+
+**Status:** Complete; see the block above. *(Superseded at archive. It read:
+"In progress. C0–C8 complete (§5); `v0.1.0rc1` published. C9 is next.")*
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -182,7 +224,8 @@ reasoning applies with more force here. **The server resolves and pins
 pinned value should be the launch cwd (artifacts land in the user's project,
 where their agent is already looking) or a fixed per-user directory is C3's
 call; what is not optional is that the server states the answer, logs it, and
-reports it through `describe_artifact`/`list_artifacts`.
+reports it through `describe_artifact`/`list_artifacts`. *(Archive note:
+decided in C3 — a fixed per-user directory, the Kepler home's `artifacts/`.)*
 
 Two related notes:
 
@@ -504,6 +547,9 @@ Phases are **C0–C9**. C1 is deliberately first and deliberately cheap.
 Every phase's requirements implicitly include this section.
 
 - **Branch:** off `dev`, per `CLAUDE.md`. One PR per phase, narrow.
+  *(Archive note: the track ran on the `mcp-support` integration branch, off
+  which each phase branched and into which each PR merged, at the
+  maintainer's direction.)*
 - **No changes to `algorithms/`.** Do not edit any file carrying an
   `# EXTRACTED:` or `# PORTED:` marker.
 - **Nothing in `tools/agent/`, `tools/tui/` or `tools/bench/` is retired or
@@ -1124,7 +1170,8 @@ that, the releases API answered 404 without a token.
         and fails unless it matches `bundles.json` (new `--check`), builds both
         distributions and writes `SHA256SUMS`;
       - **verify** installs the wheel with `[mcp]` on a clean runner with **no
-        checkout**, on Python **3.12** (the floor) and 3.14, and runs the new
+        checkout**, on Python **3.12** (the floor) and 3.14 *(3.13 since #83 —
+        archive note)*, and runs the new
         **`kepler-mcp self-test`**: it launches the installed server over
         stdio and detects B0329+54 from a measured period through the protocol;
       - **data** checks the standing `data` release holds every pinned archive
@@ -1191,22 +1238,32 @@ Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
 - listed **42 frames** from the container's fetched bundle,
   `/root/.local/share/kepler/bundles/optical`.
 
-### Phase C9 — Documentation outcome
+### Phase C9 — Documentation outcome — **complete, 2026-09-25**
 
-- [ ] `../tool-architecture.md` gains a section for the MCP surface beside §10
+- [x] `../tool-architecture.md` gains a section for the MCP surface beside §10
       (agent loop), §10.1 (benchmark) and §10.2 (console) — a fourth consumer
       of one registry, with §7's "serving is optional" sentence cited as what
-      authorised it.
-- [ ] `../repository-folders.md` gains `tools/mcp/` and `skills/`.
-- [ ] `CLAUDE.md` gains the dependency direction — `tools/mcp → tools/registry`,
+      authorised it. **§10.3**, and §7's sentence now points to it.
+- [x] `../repository-folders.md` gains `tools/mcp/` and `skills/`, as well as
+      `tools/skill/`, `tools/paths.py`, `tools/_data`, `release.yml`,
+      `installing.md` and `releasing.md`.
+- [x] `CLAUDE.md` gains the dependency direction — `tools/mcp → tools/registry`,
       and **`tools/mcp/` imports nothing from `tools/agent/` or `tools/llm/`** —
       beside the existing one-way rules, plus the data-bundle layout of §3.5.
-- [ ] `README.md` documents installing the package, fetching the bundles, and
-      registering the server with a host.
-- [ ] Archive this document per `README.md`'s lifecycle.
+      It also records the `tools/bench/plane` edge, the CI-skips-the-SDK rule
+      that #79's first run taught, and the instruction budget. **A new test
+      enforces the direction**: an AST scan of `tools/mcp/` for `tools.agent`,
+      `tools.llm` and `tools.tui`, and of `algorithms/` for `tools.mcp`.
+- [x] `README.md` documents installing the package, fetching the bundles, and
+      registering the server with a host: "Using Kepler from Your Own Coding
+      Agent", and the new folders in its tree. `technical-summary.md`'s
+      "a proposal, not a delivered capability" paragraph is rewritten.
+- [x] Archive this document per `README.md`'s lifecycle. Every reference to
+      its working path — eleven module docstrings and manifests under `tools/`,
+      `installing.md`, and an analysis note — now names `docs/archive/`.
 
 **Gate:** `docs/` describes the shipped shape; this document carries its
-`Archived` block and moves to `../archive/`.
+`Archived` block and moves to `../archive/`. **Met, 2026-09-25.**
 
 ---
 
@@ -1238,7 +1295,10 @@ Edit denied — was asked for B1133+16's period, a fold and a sonification. It:
 
 **Deliberately not touched:** anything under `algorithms/`; `tools/tui/`;
 `tools/bench/`; `tools/llm/`; `tools/agent/` — including `prompt.py` and
-`tools/registry.py`, which this track reads and does not edit.
+`tools/registry.py`, which this track reads and does not edit. *(Archive
+note: true except `tools/bench/graders/__init__.py`, where C2 corrected three
+docstrings with no behaviour change, recorded in the table above. `tools/mcp/`
+reads `tools/bench/plane.py` without editing it.)*
 The CI `repository-shape` job's seven asserted paths all survive; nothing here
 deletes `tools/registry.py`, `tools/agent/engine.py` or `tools/tui/app.py`.
 
@@ -1268,6 +1328,8 @@ the phase list are written against; they are not open.
 - ~~**C3:** which root the artifact directory pins to.~~ **Decided in C3:** a
   fixed per-user directory, logged at startup; `KEPLER_ARTIFACT_DIR` overrides.
 - ~~**C3:** the §3.8 dependency choice.~~ **Decided in C3:** the SDK, option (1).
-- **C7:** whether the optical frame library ships as one 257 MB bundle or is
+- ~~**C7:** whether the optical frame library ships as one 257 MB bundle or is
   split further. Three 30 MB `ngc5286_globular_b` frames are a third of
-  `data/optical/` between them.
+  `data/optical/` between them.~~ **Decided in C7:** one bundle,
+  `kepler-optical-0472c67e2f46.tar`. Resumable downloads made a split
+  unnecessary.

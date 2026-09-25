@@ -16,11 +16,24 @@ Repository automation and ownership policy.
 - `workflows/ci.yml` runs the current lightweight Python/repository-shape checks.
 - `workflows/secret-scan.yml` runs gitleaks against the tree and history.
 - `workflows/workflow-safety.yml` runs actionlint and zizmor against workflows.
+- `workflows/release.yml` builds, verifies (a clean install on Python 3.12
+  and 3.13 running `kepler-mcp self-test`) and publishes a release from a
+  `v<version>` tag, and checks the standing `data` release holds the pinned
+  bundles. Policy: [releasing.md](releasing.md).
 
 Keep workflow changes narrow and security-conscious. The current checks are
 deliberately small because the extracted science code still needs native
 dependencies, external catalog data, and reference FITS fixtures for full
 end-to-end validation.
+
+## `skills/`
+
+`skills/kepler-tools/` is the rendered repository copy of the agent skill:
+how to use Kepler's tools correctly (stage orders, identifier forms, period
+provenance, silently wrong results). It is **generated** from
+`tools/skill/source/` by `uv run python -m tools.skill`; edit the source, never
+this copy. `.claude/skills/kepler-tools` links to it, so a coding agent in a
+checkout loads it as a skill. A test fails if the copy is stale.
 
 ## `tools/`
 
@@ -28,7 +41,13 @@ Important files and subfolders:
 
 - `models.py`: small shared result, warning/error, WCS, catalog, zero-point,
   remote query, and artifact summary models.
-- `config.py`: small environment-backed settings helpers for the tool layer.
+- `config.py`: small environment-backed settings helpers for the tool layer,
+  including `BUNDLED_DATA_DIR` -- the one way tools read bundled data.
+- `paths.py`: the per-user Kepler home (`~/.local/share/kepler`, or
+  `KEPLER_HOME`) and `tools/_data`. Resolves nothing at import.
+- `_data`: in a checkout, a committed symlink to `data/`; in a wheel, the
+  core data (`pulsar/`, `fieldcal/`, `afterglow/`) that `pyproject.toml`'s
+  package-data ships.
 - `artifacts.py`: local artifact description and listing helpers.
 - `astrometry.py`, `calibration.py`, `catalogs.py`, `fieldcal_reference.py`,
   `optical.py`, `pulsar.py`, `photometry.py`, `variable_star.py`,
@@ -56,6 +75,21 @@ Important files and subfolders:
   slash commands and their completion, backend and model selection,
   transcript, artifact and session browsers.
 - `bench/`: the model benchmark harness (`kepler-bench`). It owns no tool.
+- `mcp/`: the MCP server (`kepler-mcp`) -- a fourth consumer of the registry,
+  served over stdio to a coding agent's console on a machine with no
+  checkout. `roots` pins the artifact and data roots before `tools.config`
+  loads; `surface` decides what is served with no SDK import; `server` is the
+  only `mcp` SDK import (optional `[mcp]` group); `groups` holds the five
+  tool groups and the derived annotations; `install` states the install's
+  data and credentials; `bundles` (with `bundles.json`) builds and fetches the
+  optional data bundles; `selftest` is `kepler-mcp self-test`. Imports
+  nothing from `agent/` or `llm/`. See
+  [tool-architecture.md](tool-architecture.md) section 10.3 and
+  [installing.md](installing.md).
+- `skill/`: the agent skill's one source, `source/` (`SKILL.md`, `BRIEF.md`,
+  and per-domain references), and the renderer (`python -m tools.skill`)
+  that writes the repository copy `skills/kepler-tools/`. The MCP server
+  serves the brief as its instructions and the rest as resources.
 - `sessions.py`: `AgentSession` and `make_cache_key` -- per-run manifest
   recording (tool calls, cache hits, artifacts, turns) plus the shared cache
   key used both by the loop's in-memory repeat-call cache and by the
@@ -178,6 +212,10 @@ map and the document lifecycle.
 - `repository-folders.md` — this current-state folder guide.
 - `pulsar-tool-pipeline.md` — the four-stage pulsar tool chain and the extracted
   Astromancer code behind each stage.
+- `installing.md` — installing Kepler with no checkout, registering
+  `kepler-mcp` with a host, and the optional data bundles.
+- `releasing.md` — version and tag policy, the release workflow, and the
+  standing `data` release.
 - `analysis/` — point-in-time review and external-research output (dated).
 - `benchmarking/` — the model benchmark: harness design, sweep results, the
   generated report, and the figures.

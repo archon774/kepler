@@ -10,7 +10,7 @@ resolves nothing at import) and repeats the two variable names rather than
 reading them from ``tools.config``. A test asserts they match.
 
 **The artifact root defaults to a per-user directory, not the launch
-directory** (``docs/working/mcp-tool-surface.md`` §3.2, decided in C3).
+directory** (``docs/archive/mcp-tool-surface.md`` §3.2, decided in C3).
 ``tools.config``'s own default is ``artifacts/`` beside the process's working
 directory, and a host launches a server wherever it likes: the user's project,
 their home directory, or a directory they cannot write. Defaulting there would

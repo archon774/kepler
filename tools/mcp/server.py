@@ -15,7 +15,7 @@ its own beyond two things the SDK's low-level server leaves to its caller:
 - **One call at a time.** Tool calls are dispatched to a worker thread, so the
   event loop keeps answering the host, but under a lock: every Kepler tool was
   written and tested to be called sequentially, and the stdio transport has
-  one client (``docs/working/mcp-tool-surface.md`` §3.2).
+  one client (``docs/archive/mcp-tool-surface.md`` §3.2).
 
 Each result carries the payload twice, as the protocol recommends: as
 ``structuredContent`` and as the same JSON in a text block, for a host that

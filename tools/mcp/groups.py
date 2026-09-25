@@ -1,7 +1,7 @@
 """The five tool groups, and the annotations every served tool carries (C6).
 
 **Groups** are a launch-time filter on one server, not five servers
-(``docs/working/mcp-tool-surface.md`` §3.6). All 55 tools' schemas are ~14,800
+(``docs/archive/mcp-tool-surface.md`` §3.6). All 55 tools' schemas are ~14,800
 tokens; a user who wants a quarter of that in their context serves one group.
 A group is declared by the **tool modules** it covers, never by tool names:
 a tool added to an existing module joins its group with no edit here, and a

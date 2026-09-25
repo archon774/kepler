@@ -104,7 +104,7 @@ verifying it) fails on.
 
 This is the highest-leverage, lowest-risk item in this document: it costs a few hours, touches no algorithm code, and is the direct precondition for §4 below.
 
-> **Correction, 2026-09-23 (phase C2 of `docs/working/mcp-tool-surface.md`).** The
+> **Correction, 2026-09-23 (phase C2 of `docs/archive/mcp-tool-surface.md`).** The
 > two counts above are wrong as of `dev`, and recommendation 1 was not taken as
 > written. An AST scan of `tools/` and `algorithms/` finds **41** distinct
 > `ToolError` codes, not three: the three named here are the ones built as

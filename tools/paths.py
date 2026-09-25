@@ -8,7 +8,7 @@ and that code on both sides of the import-time boundary needs:
   ``~/Library/Application Support/kepler`` on macOS, ``%LOCALAPPDATA%\\kepler``
   on Windows, or ``KEPLER_HOME`` when set. The MCP server's artifacts, an
   installed Kepler's archive downloads, and fetched data bundles live under it
-  (``docs/working/mcp-tool-surface.md`` §3.2, §3.5).
+  (``docs/archive/mcp-tool-surface.md`` §3.2, §3.5).
 - :data:`BUNDLED_DATA_LINK` -- ``tools/_data``. In a checkout it is a symlink to
   the repository's ``data/``; in a wheel it is a real directory holding the
   core data (``pulsar/``, ``fieldcal/``, ``afterglow/``) that
