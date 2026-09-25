@@ -133,10 +133,14 @@ def list_photometry_targets() -> PhotometryTargetLibrary:
     guessing or hitting a bare "not found" for a target that was never
     bundled.
     """
+    from tools.optical import optical_bundle_warning
+
     categories = list_bundled_targets()
+    absent = optical_bundle_warning()
     return PhotometryTargetLibrary(
         categories=categories,
         total_count=sum(len(stems) for stems in categories.values()),
+        warnings=[absent] if absent is not None else [],
     )
 
 

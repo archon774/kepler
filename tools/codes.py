@@ -88,6 +88,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "back_scale_too_narrow": "The background window is too narrow for the sample spacing; the running median degenerates.",
     "background_not_subtracted": "No baseline subtraction, so the receiver's drifting continuum dominates long periods.",
     "blank_filter": "No image filter was supplied, so no reference band could be matched to one.",
+    "bundle_not_installed": "An optional data bundle this tool reads is not installed; `kepler-mcp fetch-data` fetches it.",
     "catalog_match_rate": "How many detected sources matched at least one catalog, and within what radius.",
     "catalogs_capped": "More catalogs matched than max_catalogs allowed to be written.",
     "category_tags_whole_catalog": "A category tags a whole catalog, so matched rows are not all in that band.",

@@ -37,9 +37,9 @@ than a distant one for the same physical dispersion.
 - The literature parameters are **one catalog's numbers**, not a literature
   review. If the user wants citations or context, pair the pipeline with
   `build_literature_review`.
-- The isochrone fit needs the Girardi grid at `KEPLER_ISOCHRONE_DIR`, which is
-  not bundled. Without it the fit stage cannot run; say that rather than
-  reporting a partial run as a fit.
+- The isochrone fit needs the Girardi grid: `KEPLER_ISOCHRONE_DIR`, or the
+  optional bundle `kepler-mcp fetch-data isochrones` installs. Without it the
+  fit stage cannot run; say that rather than reporting a partial run as a fit.
 - A fit's `parameter_uncertainty` is always null: the Nelder-Mead optimizer has
   no covariance. Report "no uncertainty reported", and do not infer a
   precision from `reduced_cost`.

@@ -158,9 +158,9 @@ def _fieldcal_data_dir(directory: str | Path | None = None) -> Path:
     if directory is not None:
         return Path(directory).expanduser()
 
-    from tools.config import env_path
+    from tools.config import BUNDLED_DATA_DIR, env_path
 
-    default = _REPO_ROOT / "data" / "fieldcal"
+    default = BUNDLED_DATA_DIR / "fieldcal"
     return env_path(FIELDCAL_DATA_DIR_ENV, default) or default
 
 
@@ -229,7 +229,9 @@ def _catalog_name(summary: dict) -> str | None:
 
 def _web_table_zero_point(frame_filename: str) -> float | None:
     """Afterglow's published web-table zero point for a bundled frame, if recorded."""
-    path = _REPO_ROOT / "data" / "afterglow" / "afterglow_web_values_master.csv"
+    from tools.config import BUNDLED_DATA_DIR
+
+    path = BUNDLED_DATA_DIR / "afterglow" / "afterglow_web_values_master.csv"
     if not path.is_file():
         return None
     with path.open(newline="") as handle:
@@ -259,7 +261,11 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
             )
         ]
 
-    candidate = _REPO_ROOT / "data" / "optical" / bundled
+    # The frame library, not a fixed path: in an installed wheel the frames
+    # arrive only with the fetched optical bundle.
+    from tools.optical import optical_bundle_warning, primary_optical_data_dir
+
+    candidate = primary_optical_data_dir() / bundled
     if candidate.is_file():
         if is_lfs_pointer(candidate):
             return None, [
@@ -271,10 +277,13 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
                 )
             ]
         return str(candidate), []
+    absent = optical_bundle_warning()
+    if absent is not None:
+        return None, [absent]
     return None, [
         ToolWarning(
             code="frame_not_bundled",
-            message=f"{bundled} is not present in data/optical/.",
+            message=f"{bundled} is not present in {primary_optical_data_dir()}.",
         )
     ]
 
@@ -412,7 +421,9 @@ def load_ocl_reference(frame_stem: str) -> dict:
     Reads the bundled fixtures directly; ``KEPLER_FIELDCAL_DATA_DIR`` does not
     relocate them.
     """
-    data_root = _REPO_ROOT / "data"
+    from tools.config import BUNDLED_DATA_DIR
+
+    data_root = BUNDLED_DATA_DIR
     provenance_path = data_root / "frame_provenance.json"
     report_path = data_root / "fieldcal" / "ocl_filter_report.json"
 

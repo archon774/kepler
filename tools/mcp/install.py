@@ -45,7 +45,7 @@ def install_facts(
     data = config.DATA_DIR
 
     pulsar = _has_files(data / "pulsar", "*.txt")
-    fieldcal = _has_files(data / "fieldcal", "*.json")
+    references = _has_files(data / "fieldcal", "*.json")
     optical = _has_files(primary_optical_data_dir(), "*.fits")
     isochrones = _has_files(config.ISOCHRONE_DIR, "*.npy")
     solver = bool(environ.get("ANET_INDEX_PATH") or environ.get("ATLAS_CATALOG_ROOT"))
@@ -55,10 +55,10 @@ def install_facts(
         [
             "This install:",
             f"- Artifacts are local files under {root}; read them directly.",
-            f"- Pulsar scans {_mark(pulsar, 'MISSING')}; field-cal replay "
-            f"{_mark(fieldcal, 'MISSING')}; optical frame library "
-            f"{_mark(optical, 'absent (frame tools list nothing)')}; isochrone grid "
-            f"{_mark(isochrones, 'absent (HR isochrone fit unavailable)')}; plate "
+            f"- Pulsar scans {_mark(pulsar, 'MISSING')}; zero-point references "
+            f"{_mark(references, 'MISSING')}; optical frame library "
+            f"{_mark(optical, 'absent (kepler-mcp fetch-data optical)')}; isochrone grid "
+            f"{_mark(isochrones, 'absent (HR fit unavailable; fetch-data isochrones)')}; plate "
             f"solving {'configured' if solver else 'not configured (solve_astrometry reports unavailable)'}.",
             "- Keys are the user's own, from this server's environment. ADS_DEV_KEY "
             + ("is set." if ads else "is not set: the ADS tools will report it missing."),

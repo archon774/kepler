@@ -91,8 +91,9 @@ GROUPS: tuple[Group, ...] = (
             "tools.fieldcal_reference",
         ),
         "Optical frames, WCS and plate solving, photometry, zero points, catalogs, "
-        "artifacts. Partly without a bundle: the field-calibration replay is core; "
-        "the frame library is an optional bundle.",
+        "artifacts. Partly without a bundle: the recorded zero-point references are "
+        "core; the frame library, and so photometry and the end-to-end calibration "
+        "replay, is the optional optical bundle.",
     ),
     Group(
         "timeseries",
