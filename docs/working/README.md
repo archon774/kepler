@@ -15,7 +15,7 @@ writes the code.
 | Track | Document | Status |
 | --- | --- | --- |
 | MCP tool surface | [mcp-tool-surface.md](mcp-tool-surface.md) | Proposal, 2026-09-18. No phase started. |
-| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | Proposal, 2026-09-25. All decisions made; the repository is renamed to `mars-suite`. Parked until `mcp-support` merges; R4 waits for the logo files. |
+| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | Proposal, 2026-09-25. All decisions made; the distribution and repository are `skynet-mars`. Parked until `mcp-support` merges; R4 waits for the logo files. |
 
 **The MCP servers and the agent skill.** A fourth consumer of
 `tools/registry.py`, so a coding agent in its own console — Claude Code,
@@ -30,7 +30,7 @@ for a caller who *does* have this checkout — a human at the tools, and a
 measurement of models on them — and both stay as they are.
 
 **Renaming Kepler to MARS** (MCP Astronomy Research Suite): the distribution
-becomes `mars-suite`, the commands `mars`, `mars-mcp` and `mars-bench`, and
+becomes `skynet-mars`, the commands `mars`, `mars-mcp` and `mars-bench`, and
 the environment variables `MARS_*`. It covers the logo, the repository rename
 and what it means for the published `v0.1.0rc1`. Recorded evidence — the
 archive, the benchmark report — is deliberately left as it was written.

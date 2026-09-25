@@ -1,8 +1,9 @@
 # Renaming Kepler to MARS
 
-**Status:** Proposal, 2026-09-25. Names decided by the maintainer. The repository
-was renamed to `mars-suite` the same day (§3, verified). All four questions in
-§6 are decided. No phase started; R4 waits for the logo files.
+**Status:** Proposal, 2026-09-25. Names decided by the maintainer: the
+distribution and repository are **`skynet-mars`** (§1). The repository was
+first renamed to `mars-suite` and needs one more rename (§3, R5). All
+questions in §6 are decided. No phase started; R4 waits for the logo files.
 **Prerequisites:** The MCP tool-surface track, complete and archived
 (`../archive/mcp-tool-surface.md`), and the maintainer's logo files (§4).
 **Unblocks:** Every public surface — package, commands, repository, releases,
@@ -28,8 +29,8 @@ code.
 | Surface | Name | Why this form |
 | --- | --- | --- |
 | Brand: prose, titles, README, logo | **MARS**; spelled out once per document as *MCP Astronomy Research Suite* | An acronym. The capitals are what separate it from the planet, which matters in an astronomy tool. |
-| Distribution (`pyproject.toml` `name`; the future PyPI release) | **`mars-suite`** | `mars` is taken on PyPI (an unrelated "Agentic TUI"), and Alibaba's `pymars` imports as `mars`. `mars-astro` reads as planetary science. `mars-suite` names the product and says "software". |
-| Repository | **`archon774/mars-suite`** — renamed by the maintainer on 2026-09-25 | Matching the distribution gives one name to search and an obvious install URL. |
+| Distribution (`pyproject.toml` `name`; the future PyPI release) | **`skynet-mars`** | `mars` is taken on PyPI (an unrelated "Agentic TUI"), and Alibaba's `pymars` imports as `mars`, so the distribution needs a qualifier. The qualifier must add something the acronym does not already say, and `skynet-` adds provenance: the algorithms are extracted from the Skynet Robotic Telescope Network. Rejected: `mars-suite` ("…Research Suite suite", briefly chosen and then dropped), `mars-mcp`, `mars-astro` and `mars-research`, which restate the acronym; `mars-sky` and `mars-observatory`, which read as the planet's sky; `mars-ai`, `unc-mars` and `mars-core`, the runners-up. |
+| Repository | **`archon774/skynet-mars`** | Matching the distribution gives one name to search and an obvious install URL. The repository is currently `mars-suite` (§3); the second rename is the maintainer's (R5). |
 | Commands | **`mars`** (the console), **`mars-mcp`**, **`mars-bench`** | Lowercase, per convention. |
 | MCP server name (`Implementation.name`, the host's `mcpServers` key) | **`mars`** | |
 | Agent skill | **`mars-tools`** | |
@@ -67,13 +68,15 @@ Two generated artefacts change by regeneration, not by hand:
 
 ## 3. Things that already exist outside this repository
 
-- **The repository was renamed to `archon774/mars-suite` on 2026-09-25**,
-  and the redirects were verified the same day. `github.com/archon774/kepler`
-  redirects to the new repository. The `v0.1.0rc1` wheel and the `data`
-  bundle, requested by their old `…/kepler/releases/download/…` URLs, both
-  redirect to GitHub's asset host and answer a Range request with `206`, so
-  existing installs still fetch and resume. This checkout's `origin` points at
-  the new URL.
+- **The repository was renamed from `kepler` to `archon774/mars-suite` on
+  2026-09-25**, before `skynet-mars` was chosen, and the redirects were
+  verified the same day. `github.com/archon774/kepler` redirects to the new
+  repository. The `v0.1.0rc1` wheel and the `data` bundle, requested by their
+  old `…/kepler/releases/download/…` URLs, both redirect to GitHub's asset
+  host and answer a Range request with `206`, so existing installs still
+  fetch and resume. The next rename, to `skynet-mars`, keeps both earlier
+  names redirecting **as long as neither `kepler` nor `mars-suite` is ever
+  reused**. R5 re-verifies the redirects after it.
 - **`v0.1.0rc1` is published** under the distribution name `kepler`, and its
   `bundles.json` pins `https://github.com/archon774/kepler/releases/download/data/…`.
   GitHub redirects a renamed repository's URLs — git remotes, pages and
@@ -118,15 +121,15 @@ default suite green on Python 3.13, with and without `[mcp]`.
 
 ### R1 — Identity: the distribution, commands, server and skill
 
-- `pyproject.toml`: `name = "mars-suite"`, version **`0.1.0rc2`** (§6.4).
+- `pyproject.toml`: `name = "skynet-mars"`, version **`0.1.0rc2`** (§6.4).
   Scripts `mars`, `mars-mcp` and `mars-bench`, with `kepler`, `kepler-mcp`
   and `kepler-bench` kept as deprecated aliases (§6.3). `uv lock`.
 - MCP server name `mars`; resources `mars://skill/...`; skill `mars-tools`
   (source unchanged, rendered copy and `.claude/skills/` link renamed).
 - The version comes from package metadata, which changes with the
-  distribution name. `_package_version()` reads `mars-suite`.
+  distribution name. `_package_version()` reads `skynet-mars`.
 
-**Gate:** a wheel named `mars_suite-…` installs, and `mars-mcp self-test`
+**Gate:** a wheel named `skynet_mars-…` installs, and `mars-mcp self-test`
 passes on it.
 
 ### R2 — Environment and paths
@@ -174,14 +177,16 @@ server's icon (or the PR records which hosts ignore `icons`).
 
 ### R5 — Repository and release
 
-- ~~**Maintainer action:** rename the repository. Confirm the old URLs
-  redirect, including a `data` asset and the `v0.1.0rc1` wheel.~~ **Done
-  2026-09-25** (§3).
+- **Maintainer action:** rename the repository from `mars-suite` to
+  `skynet-mars`. Then confirm that both earlier names redirect, `kepler` and
+  `mars-suite`, including a `data` asset and the `v0.1.0rc1` wheel, and point
+  the checkout's `origin` at the new URL. (The first rename, to `mars-suite`,
+  was done and verified on 2026-09-25; §3.)
 - `bundles.json` URLs and every `archon774/kepler` reference move to the new
   repository. The assets stay as they are (§3).
-- Tag the first MARS pre-release. The workflow publishes `mars-suite`.
+- Tag the first MARS pre-release. The workflow publishes `skynet-mars`.
 
-**Gate:** from a clean container, `pip install "mars-suite[mcp] @ <release
+**Gate:** from a clean container, `pip install "skynet-mars[mcp] @ <release
 URL>"`, then `mars-mcp self-test` and `mars-mcp fetch-data optical`.
 Separately, `v0.1.0rc1` (`kepler`) still installs and fetches through the
 redirect.
@@ -200,8 +205,10 @@ redirect.
 
 All decided by the maintainer on 2026-09-25.
 
-1. **Repository name: `mars-suite`**, matching the distribution. Renamed and
-   verified the same day (§3).
+1. **Distribution and repository: `skynet-mars`.** `mars-suite` was chosen
+   first, and the repository renamed to it, but it restates the acronym
+   ("…Research Suite suite"). `skynet-mars` replaced it the same day. The
+   repository's second rename is part of R5.
 2. **The import namespace moves later, in its own track.** `tools` and
    `algorithms` stay top-level packages through this rebrand. They are
    generic enough that another installed project's `tools` package collides
@@ -222,5 +229,5 @@ All decided by the maintainer on 2026-09-25.
    removal version.
 4. **The first MARS version is `0.1.0rc2`**, continuing the series: the next
    candidate of the same software, under its new name. Testers compare it
-   directly with `0.1.0rc1`. On PyPI, `mars-suite` and `kepler` are different
+   directly with `0.1.0rc1`. On PyPI, `skynet-mars` and `kepler` are different
    projects, so nothing clashes.
