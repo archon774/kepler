@@ -84,7 +84,8 @@ outside the repository, so run it by hand.
 
 ## Testing a release
 
-On a machine with no checkout:
+On a machine with no checkout (and a C compiler unless it is Python 3.12 or
+3.13 on x86_64 Linux, macOS or Windows; see `installing.md`):
 
 ```bash
 python -m venv kepler-env

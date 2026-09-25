@@ -22,6 +22,22 @@ about 4.5 s the first time (bytecode compilation) and 1.3 s after that.
 
 ## Install
 
+**You may need a C compiler.** Two dependencies do not publish pre-built
+wheels for every platform, and pip compiles them from source where they are
+missing:
+
+| Dependency | Pre-built wheels | Compiles from source on |
+| --- | --- | --- |
+| `sep` 1.4.1 | Python 3.9–3.13: Linux (x86_64, aarch64), macOS, Windows | **Python 3.14, every platform** |
+| `photutils` 3.0.0 | Linux x86_64, macOS, Windows | **Linux aarch64** (ARM servers, Raspberry Pi, Docker on Apple Silicon) |
+
+Python 3.12 or 3.13 on x86_64 Linux, macOS or Windows needs no compiler.
+Anywhere else, install one first: `apt-get install gcc` on Debian or Ubuntu, `dnf
+install gcc` on Fedora, or the Xcode command-line tools on macOS. Without one,
+pip fails with `Failed building wheel for sep` (or `photutils`) and
+`command 'gcc' failed`. Measured on the `v0.1.0rc1` release in a clean
+`python:3.14-slim` container on aarch64.
+
 ```bash
 python -m venv kepler-env
 kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/kepler/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
