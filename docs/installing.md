@@ -24,11 +24,15 @@ about 4.5 s the first time (bytecode compilation) and 1.3 s after that.
 
 ```bash
 python -m venv kepler-env
-kepler-env/bin/pip install 'kepler-<version>-py3-none-any.whl[mcp]'   # [mcp] brings the server
+kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/kepler/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
+kepler-env/bin/kepler-mcp self-test
 ```
 
-The wheel comes from a GitHub release (phase C8) or from `uv build` in a
-checkout. Kepler is not on PyPI.
+`[mcp]` brings the server. Releases are listed at
+<https://github.com/archon774/kepler/releases>; Kepler is not on PyPI. A wheel
+built with `uv build` in a checkout installs the same way. `kepler-mcp
+self-test` launches the installed server as a host would and checks it end to
+end; `releasing.md` describes what a release is.
 
 ## Register the server with a host
 

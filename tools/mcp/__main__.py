@@ -28,6 +28,11 @@ def main(argv: list[str] | None = None) -> int:
         from tools.mcp.bundles import fetch_main
 
         return fetch_main(argv[1:])
+    if argv[:1] == ["self-test"]:
+        # Launches this install's own server over stdio and checks it end to end.
+        from tools.mcp.selftest import main as self_test
+
+        return self_test(argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="kepler-mcp",
@@ -36,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
             "this; it is not run by hand. Artifacts go to KEPLER_ARTIFACT_DIR, "
             "default a per-user directory, and the resolved roots are logged to "
             "stderr at startup. `kepler-mcp fetch-data` installs the optional "
-            "data bundles instead."
+            "data bundles; `kepler-mcp self-test` checks this install."
         ),
     )
     parser.add_argument(

@@ -388,7 +388,10 @@ def build_main(argv: Iterable[str] | None = None) -> int:
     """``python -m tools.mcp.bundles NAME SOURCE OUT``: build one bundle archive.
 
     For maintainers and the release workflow. Prints the manifest entry to
-    paste into ``bundles.json``; the archive is what C8 uploads.
+    paste into ``bundles.json``; the archive is what goes on the ``data``
+    release. ``--check`` fails unless the build is exactly the shipped entry --
+    what the release workflow runs, so a wheel never ships a manifest its own
+    source tree does not build to.
     """
 
     parser = argparse.ArgumentParser(prog="python -m tools.mcp.bundles")
@@ -397,6 +400,11 @@ def build_main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("out", type=Path, help="Directory to write the archive into.")
     parser.add_argument(
         "--include", default="*", help="Only files matching this glob (default: all)."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit 1 unless the build matches this bundle's entry in bundles.json.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -408,6 +416,16 @@ def build_main(argv: Iterable[str] | None = None) -> int:
     building.replace(archive)
     print(json.dumps({args.name: {"archive": archive.name, "size": size, "sha256": digest,
                                   "files": files}}, indent=2))
+    if args.check:
+        spec = load_manifest().get(args.name)
+        built = (archive.name, size, digest, files)
+        if spec is None or built != (spec.archive, spec.size, spec.sha256, spec.files):
+            print(
+                f"{args.name}: the build does not match bundles.json -- rebuild the "
+                "entry, publish the new archive, and ship them together",
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 

@@ -1110,18 +1110,48 @@ import path or data path was in it.
 
 ### Phase C8 — The GitHub release track
 
-Testing distribution, per the maintainer's answer to §7.4.
+Testing distribution, per the maintainer's answer to §7.4. **The repository
+was made public on 2026-09-25** at the maintainer's decision, so release
+assets download anonymously and `fetch-data` needs no credentials; before
+that, the releases API answered 404 without a token.
 
-- [ ] A release workflow that builds the wheel and the source distribution,
+- [x] A release workflow that builds the wheel and the source distribution,
       publishes the optional data bundles as **release assets** with their
       checksums, and attaches both to a tagged pre-release.
-- [ ] `secret-scan.yml` and `workflow-safety.yml` cover the new workflow;
+      `.github/workflows/release.yml`, on a `v*` tag (or `workflow_dispatch`
+      as a dry run without `publish`):
+      - **build** checks the tag equals `v<version>`, rebuilds `data/optical/`
+        and fails unless it matches `bundles.json` (new `--check`), builds both
+        distributions and writes `SHA256SUMS`;
+      - **verify** installs the wheel with `[mcp]` on a clean runner with **no
+        checkout**, on Python **3.12** (the floor) and 3.14, and runs the new
+        **`kepler-mcp self-test`**: it launches the installed server over
+        stdio and detects B0329+54 from a measured period through the protocol;
+      - **data** checks the standing `data` release holds every pinned archive
+        at the pinned size and SHA-256, reading GitHub's own asset `digest`;
+      - **publish** — the only job with `contents: write`, only on a tag, only
+        after verify and data — creates the release.
+      The bundles are **not** rebuilt per release: they live on one standing
+      `data` release (created 2026-09-25, marked pre-release and not latest),
+      content-addressed and never replaced, so every wheel ever released can
+      still fetch the bundle it pins. The isochrone grid is built from outside
+      the repository, so it could not be built in CI regardless.
+- [x] `secret-scan.yml` and `workflow-safety.yml` cover the new workflow;
       actionlint and zizmor stay green, and the workflow takes the narrowest
-      permissions that work.
-- [ ] Version and tag policy: what a pre-release means here, and how
+      permissions that work. Both scan every pull request, so the one adding
+      `release.yml` is covered. Run locally: actionlint clean (after one
+      shellcheck fix), zizmor "No findings". Top-level `contents: read`;
+      `contents: write` on `publish` alone; `persist-credentials: false`
+      everywhere; every `${{ }}` reaches a script through `env:`.
+- [x] Version and tag policy: what a pre-release means here, and how
       `fetch-data` resolves which bundle version matches an installed Kepler.
       A wheel fetching a mismatched bundle is a silent-wrong-answer bug of
-      exactly the kind this track exists to prevent.
+      exactly the kind this track exists to prevent. `docs/releasing.md`: the
+      tag is `v<pyproject version>`, enforced; a PEP 440 pre-release (`a`, `b`,
+      `rc`, `.dev`) publishes as a GitHub pre-release, anything else as latest.
+      **Bundle matching needs no negotiation:** C7's `bundles.json` ships in the
+      wheel and pins each archive's name, size and SHA-256. The version moves
+      to **`0.1.0rc1`** for the first pre-release.
 - [ ] Install from the release on a machine that is not the development host
       and repeat C7's gate there.
 
@@ -1157,7 +1187,7 @@ the server with their own console, and completes a pulsar run.
 | `tests/test_skill_invariants.py` | C1, extended C5 |
 | `tools/mcp/` (`roots`, `surface`, `server`, `__main__`; C5 `install`, C6 `groups`) | C3; C4: media inline, served workspace notes, the `sonify_pulsar` correction; extended C5–C7 |
 | `tests/test_mcp_surface.py` | C3, extended C4/C6 |
-| `.github/workflows/release.yml` | C8 |
+| `.github/workflows/release.yml`, `tools/mcp/selftest.py`, `docs/releasing.md` | C8 |
 
 | Path | Change |
 | --- | --- |
