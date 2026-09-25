@@ -345,11 +345,14 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 
   `tools/wcs.py` refuses to write a solved header back into a bundled fixture.
   That guard names the four tracked fixture subtrees (`afterglow/`,
-  `fieldcal/`, `optical/`, `pulsar/`) — pinned to this repository, reading no
+  `fieldcal/`, `optical/`, `pulsar/`) — pinned to the package's own bundled
+  data (`tools/_data`, a symlink to `data/` in a checkout), reading no
   setting — so a downloaded product under `data/fits_downloads/` stays
-  writable and no environment variable can switch the guard off. A new
-  fixture subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the
-  tuple matches the directories present.
+  writable and no environment variable can switch the guard off. It also
+  covers fetched data bundles (`<kepler home>/bundles/`). A new fixture
+  subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the tuple
+  matches the directories present. An installed wheel re-anchors the data
+  and download roots; see `docs/installing.md`.
 
 ### Runtime dependencies that are not optional
 

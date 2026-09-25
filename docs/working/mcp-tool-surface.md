@@ -1,6 +1,6 @@
 # The MCP Tool Surface and the Agent Skill
 
-**Status:** In progress. C0–C6 complete (§5). C7 is next.
+**Status:** In progress. C0–C7 complete (§5). C8 is next.
 **Date:** 2026-09-18, reconciled 2026-09-23 against the maintainer's answers to §7.
 **Prerequisites:** None architectural. Phase C2 is a stated precondition of
 phase C3, from [`../analysis/applicable-designs.md`](../analysis/applicable-designs.md)
@@ -295,6 +295,8 @@ what belongs in a wheel and past PyPI's per-file limit, but the user's ask —
 - **Core, inside the distribution (~7 MB):** `data/pulsar/`, `data/fieldcal/`,
   `data/afterglow/`. The whole pulsar chain, the field-calibration replay and
   the parity fixtures work on a bare install, with no download and no network.
+  **Corrected in C7:** not the replay. It needs the NGC 5128 frame, which is in
+  the optical bundle; the zero-point references themselves are core.
 - **Optional bundles, fetched on demand:** the optical frame library (257 MB)
   and the isochrone grid (364 MB), published as **GitHub release assets** —
   which is also what C8 is for — fetched by a `kepler-mcp fetch-data` command
@@ -342,7 +344,7 @@ separators, not a miscount:
 | Group | Tools | Schema bytes | ≈ tokens | Runs with no data bundle? |
 | --- | ---: | ---: | ---: | --- |
 | `databases` — SIMBAD, NED, VizieR, ATNF, MAST, MPC, CASDA, ADS, resolve | 16 | 15,397 | 3,850 | **Yes** — remote services and `httpx`. |
-| `optical` — frames, WCS, photometry, field calibration, catalogs, workspace | 16 | 15,242 | 3,810 | Partly — field-calibration replay is core; the frame library is an optional bundle. |
+| `optical` — frames, WCS, photometry, field calibration, catalogs, workspace | 16 | 15,242 | 3,810 | Partly — the zero-point references are core; the frame library, and with it photometry and the calibration replay, is an optional bundle (corrected in C7). |
 | `timeseries` — the pulsar chain and the variable-star chain | 12 | 12,935 | 3,230 | **Yes** — the five scans are core. |
 | `hr` — both HR-diagram entry points | 8 | 9,808 | 2,450 | Partly — the catalog-only path needs no local data; the isochrone fit needs the bundle. |
 | `radio` — SED fitting and source identification | 3 | 5,788 | 1,450 | Partly. |
@@ -1007,36 +1009,104 @@ tokens. **On the wire**, `databases` (~4,115) and `optical` (~4,272) sit 3–7%
 over the ~4,000 mark, entirely from annotations and C4's notes; a test holds
 each group's schema payload at 16 KB so growth there fails loudly.
 
-### Phase C7 — Packaging, and the data bundles
+### Phase C7 — Packaging, and the data bundles — **complete, 2026-09-25**
 
 The phase the hosting decision created. §3.5 is its specification.
 
-- [ ] Ship the core data inside the distribution: `data/pulsar/`,
+- [x] Ship the core data inside the distribution: `data/pulsar/`,
       `data/fieldcal/`, `data/afterglow/` (~7 MB). A bare install must run the
       whole pulsar chain and the field-calibration replay with no download and
-      no network.
-- [ ] **Re-anchor the two guards** (§4.2, §3.5) so the fixture-write refusal
+      no network. **How:** `tools/_data` is a committed symlink to `data/`, and
+      `package-data` ships only the core subtrees through it, so the bundled
+      data sits at `tools/_data` in **both** layouts. `config.BUNDLED_DATA_DIR`
+      replaces the four hard-coded `<repo>/data` paths (`fieldcal_reference`,
+      `optical`, `pulsar`, `wcs`); a checkout resolves to exactly the directory
+      it did before. The sdist carries the data as real files, and a wheel
+      built from it is identical. **Corrected here:** the field-calibration
+      *replay* is **not** core. It clips the recorded catalog to the NGC 5128
+      frame's footprint and reads that frame's WCS, epoch and filter, and the
+      frame arrives with the optical bundle. On a bare install the reference
+      tools (`list_`/`load_`/`compare_zeropoint_to_reference`) work and the
+      replay reports `bundle_not_installed`; with the bundle it reproduces the
+      recorded solve (35 matched, m0 = 21.1477). §3.5 and §3.6's table
+      overstated this.
+- [x] **Re-anchor the two guards** (§4.2, §3.5) so the fixture-write refusal
       protects the *installed* fixture tree and `FITS_DOWNLOAD_DIR` defaults to
       a user-writable directory rather than the install tree. State in the PR
       that this re-anchored rather than weakened them, and extend the existing
-      tests to an installed layout.
-- [ ] `kepler-mcp fetch-data` for the optional bundles — the optical frame
+      tests to an installed layout. **Re-anchored, not weakened:**
+      - the fixture guard's root is `BUNDLED_DATA_DIR` (the same directory in a
+        checkout; the shipped core in a wheel, where `parents[1] / "data"`
+        matched nothing), and it now also covers fetched bundles, which are
+        copies of those fixtures. Still reads no setting;
+      - on an install `FITS_DOWNLOAD_DIR` defaults to `<kepler home>/
+        fits_downloads` — `tools/paths.py`'s per-user Kepler home, shared with
+        C3's artifact default. A checkout is unchanged;
+      - `tools.optical`'s recursion boundary — a third guard §4.2 missed —
+        gains exactly one directory, that Kepler-owned download tree. Without
+        it an installed Kepler searched its own downloads flat and never saw a
+        nested MAST product. Anywhere else outside the data directory is still
+        searched flat.
+- [x] `kepler-mcp fetch-data` for the optional bundles — the optical frame
       library and the isochrone grid — into a user-writable directory,
       checksum-verified, idempotent, resumable enough to survive a dropped
       connection. It must never write into the installed package.
-- [ ] A tool whose bundle is absent **says so**: a declared warning code, not
-      an empty listing that reads like a real answer.
-- [ ] Verify a clean install end to end: a fresh virtual environment, `pip
+      `tools/mcp/bundles.py`. Bundles are **deterministic plain `.tar`**
+      (sorted, fixed mode/owner/mtime; not gzipped, whose output varies by zlib
+      version), content-addressed (`kepler-optical-0472c67e2f46.tar`, 268.8
+      MB, 42 files; `kepler-isochrones-12f8359efc78.tar`, 282.2 MB, 4,307
+      `.npy` — the 93 MB source zip excluded). `tools/mcp/bundles.json` **ships
+      in the wheel** and pins each archive's size and SHA-256, so a wheel
+      accepts only its own bundles — C8's version-matching concern, settled
+      here. Resume is an HTTP Range request; extraction goes through
+      tarfile's `data` filter; a checksum or member-count mismatch discards the
+      download; the completion marker is written last and is what
+      `config.fetched_bundle` checks. A build refuses Git LFS pointers and
+      symlinks. A test rebuilds `data/optical/` and asserts it matches the
+      shipped checksum.
+- [x] A tool whose bundle is absent **says so**: a declared warning code, not
+      an empty listing that reads like a real answer. `bundle_not_installed`,
+      from `list_optical_frames`, `resolve_optical_frame`,
+      `list_photometry_targets` (which returned an empty library with no
+      signal at all) and `replay_field_calibration`, each naming
+      `kepler-mcp fetch-data optical`. The isochrone fit already errors
+      clearly from `algorithms/`, which this track does not touch.
+- [x] Verify a clean install end to end: a fresh virtual environment, `pip
       install` the built wheel, launch the server, list tools, run
       `list_pulsar_scans` and one full pulsar chain. **Record installed size
-      and cold-import time** (§4.5).
-- [ ] Document the setup: which environment variables, which bundle each tool
-      needs, what stays operator-supplied and therefore unavailable
-      (astrometry.net indexes, ATLAS UCAC5) and what that looks like when it is.
+      and cold-import time** (§4.5). Python 3.14 venv, `uv pip install
+      'kepler-0.1.0-py3-none-any.whl[mcp]'`: Kepler ~10 MB (`tools` 8.1 MB
+      including the core data, `algorithms` 2.3 MB); the environment **639
+      MB**, `llvmlite` alone 168 MB, then scipy 88, pandas 43, astropy 41.
+      `import tools.registry`: **4.5 s cold** (bytecode compile), 1.3 s warm,
+      ~260 MB RSS; importing the server 2.3 s.
+- [x] Document the setup: which environment variables, which bundle each tool
+      needs, what stays operator-supplied (astrometry.net indexes, ATLAS
+      UCAC5) and what that looks like when it is. `docs/installing.md`, added
+      to `docs/README.md`'s map.
 
 **Gate:** a wheel installed into a clean environment on a machine with no
 checkout serves the tools, runs the pulsar chain offline, refuses a write into
 its own installed fixture tree, and fetches the optical bundle on request.
+
+**Gate: met, 2026-09-25**, from a scratch directory with a scratch
+`KEPLER_HOME`, on the installed wheel (`tools` imported from the venv,
+`is_checkout()` false). This machine has a checkout; nothing on the server's
+import path or data path was in it.
+
+- **Serves, and runs the pulsar chain offline:** 55 tools; the five scans from
+  `site-packages/tools/_data/pulsar`; B0329+54 to 0.71479 s, `peak_fold_snr`
+  204.4, fold 204.4σ, the sonification inline. Artifacts in the Kepler home.
+  Before any fetch, `list_optical_frames` and `list_photometry_targets` warn
+  `bundle_not_installed`.
+- **Fetches the optical bundle on request, and resumes:** against a local
+  server that honours Range as GitHub does, a download truncated at 100 MB
+  resumed with `Range: bytes=100000000-` → 206, verified, and installed 42
+  frames with the marker; a second `fetch-data optical` said
+  `already installed`.
+- **Refuses a write into its own fixture tree:** after the fetch,
+  `solve_astrometry(write_header=true, force=true)` on
+  `m15_globular_lum_000.fits` → `refusing_to_modify_fixture`.
 
 ### Phase C8 — The GitHub release track
 
@@ -1099,7 +1169,8 @@ the server with their own console, and completes a pulsar run.
 | `docs/analysis/applicable-designs.md` | C2: a dated correction to §3's "exactly three values". |
 | `tests/test_tool_registry_coverage.py` | C2: `tools.codes` in `NOT_TOOL_MODULES`. C1: `tools.skill`. C3: `tools.mcp`. |
 | `pyproject.toml`, `uv.lock` | C1: package data for `tools/skill/source/`. C3: the `[mcp]` optional group (`mcp`, `jsonschema`) and the `kepler-mcp` entry. C7: the core data. |
-| `tools/config.py`, `tools/wcs.py` | C7: re-anchor the download root and the fixture-write guard for an installed layout. |
+| `tools/config.py`, `tools/wcs.py`, `tools/optical.py`, `tools/pulsar.py`, `tools/fieldcal_reference.py`, `tools/photometry.py`, `tools/models.py` | C7: `BUNDLED_DATA_DIR` for the four hard-coded data paths; re-anchor the download root, the fixture-write guard and the recursion boundary; `bundle_not_installed`. |
+| `tools/_data` (symlink), `tools/paths.py`, `tools/mcp/bundles.py`, `tools/mcp/bundles.json`, `docs/installing.md` | C7 |
 | `docs/tool-architecture.md`, `docs/repository-folders.md`, `README.md` | C9. |
 
 **Deliberately not touched:** anything under `algorithms/`; `tools/tui/`;

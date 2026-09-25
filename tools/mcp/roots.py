@@ -5,9 +5,9 @@ several tool modules copy the value out at their own import
 (``from tools.config import ARTIFACT_DIR``). Reassigning either afterwards
 moves nothing. So the server decides both roots first, writes them into the
 environment as absolute paths, and only then imports the registry -- which is
-why this module imports nothing from ``tools`` and repeats the two variable
-names rather than reading them from ``tools.config``. A test asserts they
-match.
+why this module imports nothing from ``tools`` but :mod:`tools.paths` (which
+resolves nothing at import) and repeats the two variable names rather than
+reading them from ``tools.config``. A test asserts they match.
 
 **The artifact root defaults to a per-user directory, not the launch
 directory** (``docs/working/mcp-tool-surface.md`` §3.2, decided in C3).
@@ -26,10 +26,11 @@ only makes the resolved value explicit in the environment and in the log.
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import MutableMapping
+
+from tools.paths import BUNDLED_DATA_LINK, kepler_home
 
 __all__ = [
     "ARTIFACT_DIR_ENV",
@@ -60,33 +61,25 @@ def user_artifact_dir(
     platform: str | None = None,
     home: Path | None = None,
 ) -> Path:
-    """The per-user artifact directory for this platform.
+    """The per-user artifact directory: ``<kepler home>/artifacts``.
 
+    ``~/.local/share/kepler/artifacts`` on Linux (``$XDG_DATA_HOME`` honoured),
     ``~/Library/Application Support/kepler/artifacts`` on macOS,
-    ``%LOCALAPPDATA%\\kepler\\artifacts`` on Windows, and
-    ``$XDG_DATA_HOME/kepler/artifacts`` (default ``~/.local/share``) elsewhere.
-    A relative ``XDG_DATA_HOME`` is ignored, as the XDG specification requires.
+    ``%LOCALAPPDATA%\\kepler\\artifacts`` on Windows; ``KEPLER_HOME`` moves
+    all of them. See :func:`tools.paths.kepler_home`.
     """
 
-    environ = os.environ if environ is None else environ
-    platform = sys.platform if platform is None else platform
-    home = Path.home() if home is None else home
-
-    if platform == "darwin":
-        base = home / "Library" / "Application Support"
-    elif platform == "win32":
-        local = environ.get("LOCALAPPDATA", "")
-        base = Path(local) if local else home / "AppData" / "Local"
-    else:
-        xdg = environ.get("XDG_DATA_HOME", "")
-        base = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".local" / "share"
-    return base / "kepler" / "artifacts"
+    return kepler_home(environ, platform=platform, home=home) / "artifacts"
 
 
 def default_data_dir() -> Path:
-    """``tools.config``'s own ``DATA_DIR`` default: ``data/`` beside ``tools/``."""
+    """``tools.config``'s own ``DATA_DIR`` default: the bundled data root.
 
-    return Path(__file__).resolve().parents[2] / "data"
+    The repository's ``data/`` in a checkout, the shipped core data in an
+    installed wheel (:data:`tools.paths.BUNDLED_DATA_LINK`).
+    """
+
+    return BUNDLED_DATA_LINK.resolve()
 
 
 def _from_environment(environ: MutableMapping[str, str], name: str) -> Path | None:

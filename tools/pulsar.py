@@ -943,15 +943,11 @@ def sonify_pulsar(
 #: does not have to move files into the repo.
 PULSAR_DATA_DIR_ENV = "KEPLER_PULSAR_DATA_DIR"
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
 def _pulsar_data_dir() -> Path:
-    from tools.config import env_path
+    from tools.config import BUNDLED_DATA_DIR, env_path
 
-    return env_path(PULSAR_DATA_DIR_ENV, _REPO_ROOT / "data" / "pulsar") or (
-        _REPO_ROOT / "data" / "pulsar"
-    )
+    default = BUNDLED_DATA_DIR / "pulsar"
+    return env_path(PULSAR_DATA_DIR_ENV, default) or default
 
 
 #: The curated literature periods, read from beside the scans they describe.

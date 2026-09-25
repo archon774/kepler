@@ -22,13 +22,21 @@ _MISSING_SDK = (
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["fetch-data"]:
+        # Installs optional data bundles; serves nothing, needs no SDK.
+        from tools.mcp.bundles import fetch_main
+
+        return fetch_main(argv[1:])
+
     parser = argparse.ArgumentParser(
         prog="kepler-mcp",
         description=(
             "Serve Kepler's astronomy tools over MCP on stdio. A host launches "
             "this; it is not run by hand. Artifacts go to KEPLER_ARTIFACT_DIR, "
             "default a per-user directory, and the resolved roots are logged to "
-            "stderr at startup."
+            "stderr at startup. `kepler-mcp fetch-data` installs the optional "
+            "data bundles instead."
         ),
     )
     parser.add_argument(

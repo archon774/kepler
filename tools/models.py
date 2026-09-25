@@ -372,6 +372,7 @@ class PhotometryTargetLibrary(KeplerToolModel):
 
     categories: dict[str, list[str]] = Field(default_factory=dict)
     total_count: int = 0
+    warnings: list[ToolWarning] = Field(default_factory=list)
 
 
 class SourceSummary(KeplerToolModel):

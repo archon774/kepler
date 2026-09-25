@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tools.paths import BUNDLED_DATA_LINK, is_checkout, kepler_home
+
 ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
 DATA_DIR_ENV = "KEPLER_DATA_DIR"
 FITS_DOWNLOAD_DIR_ENV = "KEPLER_FITS_DOWNLOAD_DIR"
@@ -198,6 +200,29 @@ def is_lfs_pointer(path: Path) -> bool:
         return False
 
 
+# The bundled data root: the repository's data/ in a checkout (tools/_data is a
+# symlink to it), the shipped core data -- pulsar/, fieldcal/, afterglow/ -- in
+# an installed wheel. Every tool reads bundled fixtures through this, never
+# through a path of its own relative to the source tree.
+BUNDLED_DATA_DIR = BUNDLED_DATA_LINK.resolve()
+
+# The per-user directory Kepler owns (tools.paths.kepler_home). Holds the MCP
+# server's default artifact root, an installed Kepler's archive downloads, and
+# fetched data bundles under bundles/<name>/.
+KEPLER_HOME = kepler_home().resolve()
+BUNDLES_DIR = KEPLER_HOME / "bundles"
+
+#: Written into a fetched bundle's directory only after its archive verified.
+BUNDLE_MARKER = ".kepler-bundle.json"
+
+
+def fetched_bundle(name: str) -> Path | None:
+    """``BUNDLES_DIR/<name>`` if a verified fetch completed there, else ``None``."""
+
+    directory = BUNDLES_DIR / name
+    return directory if (directory / BUNDLE_MARKER).is_file() else None
+
+
 # Resolved to an absolute path at import. Artifact paths are handed back to
 # callers who may write files, change directory, or pass the path to another
 # process, and a bare "artifacts/..." silently means something different in
@@ -217,7 +242,7 @@ ARTIFACT_DIR = (env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")).re
 # Overriding this moves the download root and the recursion boundary. It does
 # *not* move the frame library, which has its own override
 # (KEPLER_OPTICAL_DATA_DIR); by default both live under this directory.
-DATA_DIR = env_path(DATA_DIR_ENV, _REPO_ROOT / "data").resolve()
+DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 
 # Defaults inside DATA_DIR rather than beside the working directory. A bare
 # relative "fits_downloads" meant the download root moved with whatever
@@ -230,11 +255,25 @@ DATA_DIR = env_path(DATA_DIR_ENV, _REPO_ROOT / "data").resolve()
 # move this; a caller that reassigns one must reassign both, as
 # tests/conftest.py does. Setting the environment variables is the supported
 # way to move them together.
-FITS_DOWNLOAD_DIR = env_path(FITS_DOWNLOAD_DIR_ENV, DATA_DIR / "fits_downloads").resolve()
+#
+# Re-anchored for an installed wheel (C7 of docs/working/mcp-tool-surface.md):
+# there DATA_DIR is the shipped core inside site-packages, which a download
+# must never write into -- it may be read-only, and it is replaced wholesale
+# by the next upgrade. An install downloads into the per-user Kepler home
+# instead. A checkout is unchanged.
+FITS_DOWNLOAD_DIR = env_path(
+    FITS_DOWNLOAD_DIR_ENV,
+    DATA_DIR / "fits_downloads" if is_checkout() else KEPLER_HOME / "fits_downloads",
+).resolve()
 # The legacy Girardi model is a substantial operator dependency, not Kepler
 # data.  Deliberately no default: silently looking in a repository-relative
 # directory would make a missing model look bundled and conceal setup errors.
-ISOCHRONE_DIR = env_path(ISOCHRONE_DIR_ENV)
+#
+# The one exception is a bundle the user fetched on purpose (``kepler-mcp
+# fetch-data isochrones``): it is used only once its completion marker, written
+# after the archive's checksum verified, is present. A partial or unverified
+# fetch is never mistaken for an installed grid.
+ISOCHRONE_DIR = env_path(ISOCHRONE_DIR_ENV) or fetched_bundle("isochrones")
 PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
 # How many frames one list_optical_frames call reads headers for and returns.
 # Not a tool parameter: the cap exists so a bulk archive download cannot make a

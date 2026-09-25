@@ -32,12 +32,13 @@ from tools.astrometry import (
     _rotation_deg,
     describe_image_wcs,
 )
+from tools.config import BUNDLED_DATA_DIR
 from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
 
 
-_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 #: The committed fixture tree, and the subtrees under it that hold fixtures.
-#: Pinned to this repository rather than read from ``config.DATA_DIR``: an
+#: Pinned to the package's own bundled data rather than read from
+#: ``config.DATA_DIR``: an
 #: operator who points KEPLER_DATA_DIR at their own archive has neither made
 #: these frames writable nor made that archive a tree of fixtures. The guard
 #: names the subtrees rather than the whole of ``data/`` because the archive
@@ -45,7 +46,14 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 #: writable. tests/test_wcs_solve_tool.py asserts this tuple matches the
 #: directories actually present, so a new fixture subtree cannot be added
 #: without being listed here.
-_FIXTURE_ROOT = (_REPOSITORY_ROOT / "data").resolve()
+#:
+#: Re-anchored in C7 (docs/working/mcp-tool-surface.md), not relaxed: the root
+#: is ``tools/_data`` resolved -- the repository's ``data/`` in a checkout,
+#: exactly as before, and the shipped core in an installed wheel, where the old
+#: ``parents[1] / "data"`` named a directory that does not exist and the guard
+#: matched nothing. A fetched data bundle (``config.BUNDLES_DIR``) is a copy of
+#: these fixtures and is guarded the same way; see :func:`_under_fixture_root`.
+_FIXTURE_ROOT = BUNDLED_DATA_DIR
 _FIXTURE_SUBTREES = ("afterglow", "fieldcal", "optical", "pulsar")
 
 
@@ -238,10 +246,16 @@ def _under_fixture_root(path: Path) -> bool:
     <repo>/data`` -- a plausible misconfiguration -- silently disabled the guard
     for every fixture. A safety net that a single environment variable can
     switch off is not one.
-    """
-    from tools.config import within
 
-    return any(within(path, _FIXTURE_ROOT / subtree) for subtree in _FIXTURE_SUBTREES)
+    Fetched bundles are fixtures too: ``kepler-mcp fetch-data optical`` puts
+    the same frames under ``config.BUNDLES_DIR``, checksum-verified, and a
+    header written into one would silently break that verification.
+    """
+    from tools.config import BUNDLES_DIR, within
+
+    return within(path, BUNDLES_DIR) or any(
+        within(path, _FIXTURE_ROOT / subtree) for subtree in _FIXTURE_SUBTREES
+    )
 
 
 def _file_version(path: Path) -> tuple[int, int, int, int, int]:
@@ -408,7 +422,8 @@ def solve_astrometry(
                     ToolError(
                         code="refusing_to_modify_fixture",
                         message="Refusing to rewrite a bundled FITS fixture "
-                        "under data/. Frames under the archive download root "
+                        "(the bundled data, or a fetched data bundle). Frames "
+                        "under the archive download root "
                         "are not fixtures and can be written.",
                     ),
                 ]

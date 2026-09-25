@@ -12,7 +12,10 @@ Three calls can reach the network: `run_photometry_on_target` with
 - `list_optical_frames` — every frame in the bundled library and the archive
   download directory, with object, filter, telescope, geometry and whether it
   carries a WCS. It reads a bounded number of frames per root; over the bound
-  it warns `listing_truncated`.
+  it warns `listing_truncated`. On an installed Kepler the frame library is an
+  optional bundle; without it the frame tools warn `bundle_not_installed`, and
+  an empty listing is that, not an empty sky — say so, and name
+  `kepler-mcp fetch-data optical`.
 - `resolve_optical_frame` — one frame by object name, stem or path. A field
   observed in more than one band returns an `ambiguous` error with the
   candidates: pick a band, do not guess.

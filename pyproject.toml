@@ -104,6 +104,19 @@ include = ["tools*", "algorithms*"]
 [tool.setuptools.package-data]
 "algorithms.skylib_lite.astrometry.anet" = ["ngc2000.dat"]
 "tools.skill" = ["source/*.md", "source/references/*.md"]
+"tools.mcp" = ["bundles.json"]
+# The core data (docs/working/mcp-tool-surface.md §3.5). tools/_data is a
+# symlink to data/ in a checkout; these globs ship its core subtrees -- never
+# data/optical/, which is the fetched optical bundle -- inside the wheel.
+"tools" = [
+    "_data/README.md",
+    "_data/frame_provenance.json",
+    "_data/pulsar/*",
+    "_data/fieldcal/*.json",
+    "_data/fieldcal/zp_solutions/*/*",
+    "_data/afterglow/*",
+    "_data/afterglow/*/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
