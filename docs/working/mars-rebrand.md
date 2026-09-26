@@ -112,6 +112,28 @@ The only branding in the repository today is the README banner:
 Master files — SVG or design source — for the wordmark and the mark, with a
 transparent background, let every other size be exported rather than redrawn.
 
+### Official Skynet color palette
+
+The MARS assets remain visibly part of Skynet. Use the exact Skynet palette
+recorded by the Skynet/UNC proposal template in
+`beamer/beamercolorthemeskynet.sty`; do not sample approximate colors from a
+raster logo.
+
+| Color | Hex | RGB |
+| --- | --- | --- |
+| Brand Navy | `#2B3345` | `43, 51, 69` |
+| Navy (banner) | `#1F2633` | `31, 38, 51` |
+| Deep Night Blue | `#35556E` | `53, 85, 110` |
+| Slate Sky Blue | `#5E86A4` | `94, 134, 164` |
+| Mist Blue | `#B8D2E1` | `184, 210, 225` |
+| Warm Gold | `#D99633` | `217, 150, 51` |
+| Soft Apricot | `#EFC48A` | `239, 196, 138` |
+| Off White | `#F7F6F2` | `247, 246, 242` |
+
+The template also defines `#353E52`, `#414B60` and `#A9B4C4` as derived
+dark-mode interface surfaces. They are not additional Skynet palette colors.
+Its UNC-Chapel Hill palette is likewise separate from the Skynet palette.
+
 ---
 
 ## 5. Rollout
@@ -167,8 +189,9 @@ paths.
 
 - README (banner, title, the MCP section's install lines), `docs/*.md`,
   `CLAUDE.md`, `AGENTS.md`, `docs/installing.md`, `docs/releasing.md`.
-- The logo assets of §4 committed under `docs/assets/`, and the square mark
-  wired into the server's `Implementation.icons`.
+- The logo assets and exact Skynet color palette of §4 committed under
+  `docs/assets/`, and the square mark wired into the server's
+  `Implementation.icons`.
 - A dated one-line note at the top of each record in §2 that names the old
   project, saying it was renamed MARS on the date.
 
