@@ -172,7 +172,7 @@ def test_media_over_its_limit_is_named_with_its_size(tmp_path, monkeypatch):
     (block,) = surface.inline_media(_media_payload({"path": str(wav), "format": "wav"}), tmp_path)
 
     assert block["type"] == "text"
-    assert "44 bytes, over the 10-byte audio limit" in block["text"]
+    assert "44 bytes (60 encoded), over the 10-byte audio limit" in block["text"]
 
 
 def test_the_default_sonification_fits_the_audio_limit():
@@ -191,29 +191,57 @@ def test_the_instructions_are_the_brief_then_the_install(tmp_path):
     assert f"Artifacts are local files under {tmp_path}" in text
 
 
-def test_the_instructions_fit_the_budget_in_the_worst_case(tmp_path, monkeypatch):
-    """Every bundle missing and a long artifact path: still inside BRIEF_LIMIT."""
+@pytest.mark.parametrize("outcome", ["missing", "failed"])
+def test_the_instructions_fit_the_budget_in_the_worst_case(tmp_path, monkeypatch, outcome):
+    """Every bundle missing -- or every check failing -- and a long artifact
+    path: still inside BRIEF_LIMIT."""
     from tools.mcp import install
     from tools.skill import BRIEF_LIMIT
 
+    def probe(*_args):
+        if outcome == "failed":
+            raise OSError("unreadable")
+        return False
+
     for check in ("_pulsar_scans_present", "_references_present", "_frames_present",
-                  "_isochrones_present"):
-        monkeypatch.setattr(install, check, lambda: False)
-    monkeypatch.setattr(install, "_plate_solving_available", lambda environ: False)
-    for name in ("ANET_INDEX_PATH", "ATLAS_CATALOG_ROOT", "ADS_DEV_KEY"):
-        monkeypatch.delenv(name, raising=False)
+                  "_isochrones_present", "_plate_solving_available", "_ads_token_available"):
+        monkeypatch.setattr(install, check, probe)
     long_root = tmp_path / ("a" * 60) / ("b" * 60)
     assert len(surface.served_instructions(long_root)) <= BRIEF_LIMIT
 
 
-def test_install_facts_say_whether_a_key_is_set_never_what_it_is(tmp_path):
+def test_install_facts_say_whether_a_key_is_set_never_what_it_is(tmp_path, monkeypatch):
     from tools.mcp.install import install_facts
 
+    monkeypatch.setenv("HOME", str(tmp_path))
     with_key = install_facts(tmp_path, {"ADS_DEV_KEY": "sekrit-value"})
     without = install_facts(tmp_path, {})
-    assert "ADS_DEV_KEY is set." in with_key and "sekrit" not in with_key
-    assert "ADS_DEV_KEY is not set" in without
+    assert "ADS token is set." in with_key and "sekrit" not in with_key
+    assert "ADS token is not set" in without
     assert "plate solving not configured" in without
+
+
+def test_install_facts_find_the_ads_token_file_astroquery_reads(tmp_path, monkeypatch):
+    """Second review, finding 13: astroquery also reads ~/.ads/dev_key."""
+    from tools.mcp.install import install_facts
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".ads").mkdir()
+    (tmp_path / ".ads" / "dev_key").write_text("sekrit-file-value\n", encoding="utf-8")
+    facts = install_facts(tmp_path, {})
+    assert "ADS token is set." in facts and "sekrit" not in facts
+
+
+def test_a_failing_fact_does_not_stop_the_server(tmp_path, monkeypatch):
+    """Second review, finding 6: a probe that raised made startup raise."""
+    from tools.mcp import install
+
+    def broken():
+        raise PermissionError("data directory unreadable")
+
+    monkeypatch.setattr(install, "_pulsar_scans_present", broken)
+    facts = install.install_facts(tmp_path, {})
+    assert "Pulsar scans unknown (check failed)" in facts
 
 
 def test_install_facts_are_the_tools_own_answers(tmp_path, monkeypatch):
@@ -745,8 +773,20 @@ def test_self_test_ignores_the_callers_tool_filter(monkeypatch):
     monkeypatch.setenv("KEPLER_MCP_TOOLS", "databases")
     monkeypatch.setenv("KEPLER_PULSAR_DATA_DIR", "/nowhere")
     env = selftest._server_environment("/tmp/artifacts")
-    assert "KEPLER_MCP_TOOLS" not in env and "KEPLER_PULSAR_DATA_DIR" not in env
+    assert "KEPLER_MCP_TOOLS" not in env
     assert env["PYTHONPATH"].split(os.pathsep)[0] == str(_REPO_ROOT)
+
+
+def test_self_test_pins_what_a_dotenv_could_set_again():
+    """Second review, finding 11: the child loads .env, which re-set the
+    variables the parent stripped. Both are pinned where .env cannot reach."""
+    from tools.mcp import selftest
+
+    env = selftest._server_environment("/tmp/artifacts")
+    assert env["KEPLER_PULSAR_DATA_DIR"] == str(config.BUNDLED_DATA_DIR / "pulsar")
+    arguments = selftest._server_arguments()
+    assert arguments[:3] == ["-m", "tools.mcp", "--tools"]
+    assert set(arguments[3].split(",")) == {group.name for group in groups.GROUPS}
 
 
 def test_a_served_artifact_listing_is_bounded_and_newest_first(tmp_path):
@@ -770,3 +810,116 @@ def test_a_served_artifact_listing_is_bounded_and_newest_first(tmp_path):
     newest = payload["results"][0]["file"]["path"]
     assert newest.endswith(f"vizier_{surface.ARTIFACT_LISTING_CAP + 19}.ecsv")
     assert [w["code"] for w in payload["warnings"]] == ["listing_truncated"]
+
+
+# --- the second review ---------------------------------------------------------------
+
+
+def test_a_relative_artifact_directory_is_inside_the_artifact_root(tmp_path, monkeypatch):
+    """Finding 3: `directory="pulsar"` -- what the served description tells a
+    model to pass -- named a directory beside the server's working directory."""
+    from tools.workspace import describe_artifact, list_artifacts
+
+    (tmp_path / "pulsar").mkdir()
+    (tmp_path / "pulsar" / "scan_lightcurve.ecsv").write_text("x")
+    monkeypatch.setattr(config, "ARTIFACT_DIR", tmp_path)
+    monkeypatch.chdir(tmp_path.parent)
+    functions = {"list_artifacts": list_artifacts, "describe_artifact": describe_artifact}
+
+    listing = surface.call_tool("list_artifacts", {"directory": "pulsar"}, functions)
+    described = surface.call_tool(
+        "describe_artifact", {"path": "pulsar/scan_lightcurve.ecsv"}, functions
+    )
+
+    assert listing["count"] == 1
+    assert listing["results"][0]["file"]["path"] == str(tmp_path / "pulsar" / "scan_lightcurve.ecsv")
+    assert described["file"]["exists"] is True
+
+
+def test_a_served_listing_describes_only_what_it_returns(tmp_path, monkeypatch):
+    """Efficiency: bounding afterwards described every file on the root."""
+    import tools.artifacts
+
+    for i in range(surface.ARTIFACT_LISTING_CAP + 5):
+        (tmp_path / f"f_{i}.txt").write_text("x")
+    described = []
+    original = tools.artifacts.describe_artifact_file
+    monkeypatch.setattr(
+        tools.artifacts, "describe_artifact_file",
+        lambda path: described.append(path) or original(path),
+    )
+
+    payload = surface.call_tool("list_artifacts", {"directory": str(tmp_path)})
+
+    assert payload["count"] == surface.ARTIFACT_LISTING_CAP + 5
+    assert len(described) == surface.ARTIFACT_LISTING_CAP
+
+
+def test_bytes_that_are_not_utf8_do_not_turn_a_result_into_an_error():
+    payload = surface.normalize_result(
+        "search_x", ToolResult(status="ok", preview=[{"flag": b"\xff\x00"}])
+    )
+    assert payload["status"] == "ok" and isinstance(payload["preview"][0]["flag"], str)
+    text = surface.normalize_result("search_x", ToolResult(status="ok", preview=[{"f": b"ok"}]))
+    assert text["preview"][0]["f"] == "ok"
+
+
+def test_the_media_limit_is_measured_after_base64(tmp_path, monkeypatch):
+    """A 3.75-5 MB PNG went out as a 5-6.7 MB block, over the image limit."""
+    monkeypatch.setitem(surface.MEDIA_FORMATS, "png", ("image", "image/png", 64))
+    png = tmp_path / "p.png"
+    png.write_bytes(b"\0" * 60)  # 60 raw bytes, 80 encoded
+
+    (block,) = surface.inline_media(_media_payload({"path": str(png), "format": "png"}), tmp_path)
+
+    assert block["type"] == "text" and "80 encoded" in block["text"]
+
+
+_PRINTING_SERVER = """
+import anyio
+from tools.models import ToolResult
+from tools.mcp.server import build_server, serve_stdio
+
+def noisy():
+    print("[source_extraction] total_flux=1.0 num_sources=3")
+    return ToolResult(status="ok", count=0)
+
+schema = {"name": "noisy", "description": "prints",
+          "input_schema": {"type": "object", "properties": {}}}
+anyio.run(serve_stdio, build_server([schema], {"noisy": noisy}, instructions="x"))
+"""
+
+
+def test_a_tool_that_prints_never_writes_to_the_protocol_stream(tmp_path):
+    """source_extraction prints a flux line on every extraction; buffered in
+    sys.stdout, it reached the wire once the SDK restored fd 1."""
+    pytest.importorskip("mcp")
+    import anyio
+    from mcp.client.client import Client
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+
+    script = tmp_path / "server.py"
+    script.write_text(_PRINTING_SERVER)
+    errlog_path = tmp_path / "stderr.txt"
+    env = {**os.environ, "PYTHONPATH": str(_REPO_ROOT)}
+
+    async def run():
+        params = StdioServerParameters(command=sys.executable, args=[str(script)], env=env)
+        with errlog_path.open("w") as errlog:
+            async with Client(stdio_client(params, errlog=errlog)) as client:
+                result = await client.call_tool("noisy", {})
+                assert not result.is_error
+
+    anyio.run(run)
+    assert "[source_extraction] total_flux=1.0" in errlog_path.read_text()
+
+
+def test_self_test_without_the_sdk_gives_the_servers_advice(monkeypatch, capsys):
+    """It pointed at docs/, which a wheel does not ship, and not at the pip
+    command that avoids the unrelated PyPI project."""
+    from tools.mcp import selftest
+
+    monkeypatch.setitem(sys.modules, "mcp", None)  # import mcp -> ImportError
+    assert selftest.main([]) == 2
+    err = capsys.readouterr().err
+    assert "uv sync --extra mcp" in err and "-m pip install" in err

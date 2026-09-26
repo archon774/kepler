@@ -55,7 +55,7 @@ def test_the_manifest_names_content_addressed_archives():
     for spec in manifest.values():
         assert spec.archive == f"kepler-{spec.name}-{spec.sha256[:12]}.tar"
         assert spec.url.endswith("/" + spec.archive)
-        assert spec.url.startswith("https://github.com/archon774/kepler/releases/download/")
+        assert spec.url.startswith(bundles.RELEASE_DOWNLOADS + "/data/")
 
 
 def test_the_optical_manifest_entry_is_a_build_of_data_optical(tmp_path):
@@ -64,8 +64,14 @@ def test_the_optical_manifest_entry_is_a_build_of_data_optical(tmp_path):
     source = _REPO_ROOT / "data" / "optical"
     if any(config.is_lfs_pointer(p) for p in source.glob("*.fits")):
         pytest.skip("data/optical has Git LFS pointers; run `git lfs pull`")
-    size, digest, files = build_archive(source, tmp_path / "optical.tar")
-    assert (size, digest, files) == (spec.size, spec.sha256, spec.files)
+    # Hashed as a stream: building the 268 MB archive to disk on every run is
+    # what archive_digest exists to avoid.
+    assert bundles.archive_digest(source) == (spec.size, spec.sha256, spec.files)
+
+
+def test_the_streamed_digest_is_the_built_archive_exactly(tmp_path):
+    source = _tree(tmp_path / "src")
+    assert bundles.archive_digest(source) == build_archive(source, tmp_path / "x.tar")
 
 
 # --- building --------------------------------------------------------------------
@@ -401,3 +407,166 @@ def test_a_checkout_never_defaults_to_a_fetched_isochrone_grid(tmp_path):
         capture_output=True, text=True, check=True,
     )
     assert result.stdout.strip() == "None"
+
+
+# --- the second review: an installed layout, with the roots pinned -----------------
+
+_INSTALLED_PROBE = """
+import json, pathlib, sys
+core = pathlib.Path(sys.argv[1])
+import tools.paths as paths
+paths.is_checkout = lambda link=paths.BUNDLED_DATA_LINK: False
+paths.bundled_data_dir = lambda link=paths.BUNDLED_DATA_LINK: core
+if sys.argv[2] == "pin":
+    from tools.mcp.roots import pin_roots
+    pin_roots()
+from tools import config
+print(json.dumps({
+    "downloads": str(config.FITS_DOWNLOAD_DIR),
+    "artifacts": str(config.ARTIFACT_DIR),
+    "data": str(config.DATA_DIR),
+    "home": str(config.KEPLER_HOME),
+}))
+"""
+
+
+def _installed(tmp_path, mode, **environ):
+    """tools.config as an installed wheel resolves it: no checkout, the core
+    data in its own directory, a private Kepler home."""
+    import os
+    import subprocess
+    import sys
+
+    core = tmp_path / "site-packages" / "tools" / "_data"
+    core.mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("KEPLER_")}
+    env.update(KEPLER_HOME=str(tmp_path / "home"), **environ)
+    result = subprocess.run(
+        [sys.executable, "-c", _INSTALLED_PROBE, str(core), mode],
+        cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
+    )
+    return json.loads(result.stdout), core.resolve()
+
+
+def test_an_installed_server_downloads_into_the_kepler_home(tmp_path):
+    """Finding 1: pin_roots exports KEPLER_DATA_DIR, and config took any value
+    of it as the user's choice -- so every installed kepler-mcp downloaded into
+    site-packages."""
+    paths, core = _installed(tmp_path, "pin")
+    home = (tmp_path / "home").resolve()
+
+    assert paths["data"] == str(core)
+    assert paths["downloads"] == str(home / "fits_downloads")
+    assert paths["artifacts"] == str(home / "artifacts")
+
+
+def test_an_installed_data_dir_the_user_chose_still_moves_downloads(tmp_path):
+    chosen = tmp_path / "survey"
+    paths, _ = _installed(tmp_path, "pin", KEPLER_DATA_DIR=str(chosen))
+    assert paths["downloads"] == str(chosen.resolve() / "fits_downloads")
+
+
+def test_an_installed_console_writes_artifacts_into_the_kepler_home(tmp_path):
+    """Without pin_roots, as the console runs: not ./artifacts."""
+    paths, _ = _installed(tmp_path, "console")
+    assert paths["artifacts"] == str((tmp_path / "home").resolve() / "artifacts")
+    assert not (tmp_path / "artifacts").exists()
+
+
+def test_is_checkout_by_what_a_checkout_has(tmp_path):
+    """Finding 8: a wheel shipping no tools/_data was called a checkout."""
+    import os
+
+    from tools.paths import is_checkout
+
+    wheel = tmp_path / "wheel" / "tools"
+    wheel.mkdir(parents=True)
+    assert not is_checkout(wheel / "_data")  # data-less wheel
+    (wheel / "_data").mkdir()
+    assert not is_checkout(wheel / "_data")  # the ordinary wheel
+
+    repo = tmp_path / "repo"
+    (repo / "tools").mkdir(parents=True)
+    (repo / "data").mkdir()
+    (repo / "tools" / "_data").write_text("../data")  # a clone without symlinks
+    assert is_checkout(repo / "tools" / "_data")
+    (repo / "tools" / "_data").unlink()
+    os.symlink("../data", repo / "tools" / "_data")
+    assert is_checkout(repo / "tools" / "_data")
+    (repo / "tools" / "_data").unlink()
+    (repo / "pyproject.toml").write_text("")
+    assert is_checkout(repo / "tools" / "_data")  # link lost, repository kept
+
+
+def test_the_kepler_home_itself_is_not_walked(tmp_path, monkeypatch):
+    """Finding 14: bounding by the whole home walked artifacts/ and bundles/."""
+    from tools.optical import _optical_data_roots
+
+    home = tmp_path / "kepler"
+    (home / "bundles").mkdir(parents=True)
+    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", home)
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
+
+    roots, warnings = _optical_data_roots()
+
+    assert (home, False) in roots
+    assert "download_root_outside_data_dir" in [w.code for w in warnings]
+
+
+def test_a_symlinked_home_download_root_is_not_walked(tmp_path, monkeypatch):
+    import os
+
+    from tools.optical import _optical_data_roots
+
+    home = tmp_path / "kepler"
+    home.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    os.symlink(elsewhere, home / "fits_downloads")
+    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", home / "fits_downloads")
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
+
+    roots, _ = _optical_data_roots()
+
+    assert (home / "fits_downloads", False) in roots
+
+
+@pytest.mark.parametrize("marker", ["{", "[]", '"sha"'])
+def test_a_corrupt_marker_reads_as_not_installed_and_is_replaced(tmp_path, published, marker):
+    """Finding 15: the one command that repairs a bundle raised on it instead."""
+    release, spec = published
+    target = tmp_path / "home" / "optical"
+    target.mkdir(parents=True)
+    (target / config.BUNDLE_MARKER).write_text(marker)
+
+    _, fetched = fetch_bundle(
+        "optical", source=str(release), bundles_dir=tmp_path / "home", manifest={"optical": spec}
+    )
+
+    assert fetched
+    assert json.loads((target / config.BUNDLE_MARKER).read_text())["sha256"] == spec.sha256
+
+
+def test_a_checkout_is_told_a_fetched_grid_needs_its_setting(tmp_path, monkeypatch, capsys):
+    """In a checkout the grid is an operator setting; "installed" alone misled."""
+    monkeypatch.setattr(bundles, "fetch_bundle", lambda name, **kwargs: (tmp_path / name, True))
+
+    assert bundles.fetch_main(["isochrones"]) == 0
+    assert f"KEPLER_ISOCHRONE_DIR={tmp_path / 'isochrones'}" in capsys.readouterr().out
+
+
+def test_numba_caches_into_the_kepler_home_only_on_an_install(tmp_path, monkeypatch):
+    from tools import paths
+
+    environ = {"KEPLER_HOME": str(tmp_path)}
+    paths.pin_numba_cache(environ)
+    assert "NUMBA_CACHE_DIR" not in environ  # a checkout: numba's own default
+
+    monkeypatch.setattr(paths, "is_checkout", lambda link=paths.BUNDLED_DATA_LINK: False)
+    paths.pin_numba_cache(environ)
+    assert environ["NUMBA_CACHE_DIR"] == str(tmp_path / "numba-cache")
+    mine = {"KEPLER_HOME": str(tmp_path), "NUMBA_CACHE_DIR": "/cache"}
+    paths.pin_numba_cache(mine)
+    assert mine["NUMBA_CACHE_DIR"] == "/cache"

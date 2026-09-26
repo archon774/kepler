@@ -51,7 +51,10 @@ async def _run(env: dict[str, str]) -> None:
     from tools.skill import served_documents
 
     params = StdioServerParameters(
-        command=sys.executable, args=["-m", "tools.mcp"], env=env, cwd=env["KEPLER_ARTIFACT_DIR"]
+        command=sys.executable,
+        args=_server_arguments(),
+        env=env,
+        cwd=env["KEPLER_ARTIFACT_DIR"],
     )
     # The transport is built here rather than by `Client(params)`, which uses
     # stdio_client's default `errlog` -- `sys.stderr` as it was when the SDK was
@@ -95,7 +98,21 @@ async def _run(env: dict[str, str]) -> None:
 #: Settings that would test the caller's configuration rather than the install:
 #: a group filter hides tools the check counts, and a relocated scan directory
 #: replaces the five bundled scans the check expects.
+#:
+#: Removing them from the child's environment is not enough on its own: the
+#: child loads a checkout's ``.env``, which sets any variable that is absent.
+#: So each is also *pinned* -- the group filter by ``--tools`` naming every
+#: group (a flag beats both the variable and the file), the scan directory by
+#: setting it to the bundled scans (the real environment beats the file).
 _NOT_INHERITED = ("KEPLER_MCP_TOOLS", "KEPLER_PULSAR_DATA_DIR")
+
+
+def _server_arguments() -> list[str]:
+    """``-m tools.mcp --tools <every group>``: the whole surface, whatever .env says."""
+
+    from tools.mcp.groups import GROUPS
+
+    return ["-m", "tools.mcp", "--tools", ",".join(group.name for group in GROUPS)]
 
 
 def _server_environment(artifacts: str) -> dict[str, str]:
@@ -107,6 +124,7 @@ def _server_environment(artifacts: str) -> dict[str, str]:
     """
 
     import tools
+    from tools.paths import bundled_data_dir
 
     env = {k: v for k, v in os.environ.items() if k not in _NOT_INHERITED}
     package_root = str(Path(tools.__file__).resolve().parent.parent)
@@ -114,6 +132,7 @@ def _server_environment(artifacts: str) -> dict[str, str]:
         [package_root, *filter(None, [env.get("PYTHONPATH")])]
     )
     env["KEPLER_ARTIFACT_DIR"] = artifacts
+    env["KEPLER_PULSAR_DATA_DIR"] = str(bundled_data_dir() / "pulsar")
     return env
 
 
@@ -125,7 +144,11 @@ def main(argv: list[str] | None = None) -> int:
         import anyio
         import mcp  # noqa: F401
     except ImportError:
-        print("self-test needs Kepler's [mcp] extra; see docs/installing.md", file=sys.stderr)
+        # The server's own advice, which names this interpreter's pip and the
+        # wheel -- a bare pointer at the docs left the PyPI `kepler` trap open.
+        from tools.mcp.__main__ import _missing_sdk_message
+
+        print(_missing_sdk_message(), file=sys.stderr)
         return 2
 
     from tools import config

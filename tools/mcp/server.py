@@ -29,6 +29,7 @@ against a ``number`` field would then fail on a host rather than in a test.
 from __future__ import annotations
 
 import functools
+import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -219,4 +220,14 @@ async def serve_stdio(server: Server[Any]) -> None:
     """Serve one host over this process's stdin and stdout until it disconnects."""
 
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+        # The SDK points fd 1 at stderr while it serves, but a tool's print()
+        # (algorithms/*/source_extraction.py prints a flux line on every
+        # extraction, and is extracted code this repository does not edit)
+        # goes into sys.stdout's own buffer first. That buffer was flushed once
+        # the SDK had restored fd 1 -- onto the protocol stream, where the host
+        # read a line that is not JSON-RPC. Stray output goes to stderr instead.
+        protocol_stdout, sys.stdout = sys.stdout, sys.stderr
+        try:
+            await server.run(read_stream, write_stream, server.create_initialization_options())
+        finally:
+            sys.stdout = protocol_stdout

@@ -1025,7 +1025,7 @@ def test_the_kepler_console_script_launches_this_module():
         )
     )
 
-    assert pyproject["project"]["scripts"]["kepler"] == "tools.tui.__main__:main"
+    assert pyproject["project"]["scripts"]["kepler"] == "tools.tui:launch"
 
 
 def test_a_bare_invocation_needs_no_arguments_to_reach_the_app(monkeypatch):
@@ -1482,3 +1482,27 @@ def test_an_unreadable_manifest_still_leaves_the_answer_in_the_history(monkeypat
             ]
 
     _run(scenario())
+
+
+def test_the_console_script_loads_dotenv_before_tools_config():
+    """Second review, finding 12: `kepler` imported tools.config, which fixes
+    its settings at import, before main() loaded .env -- so a setting kept in
+    .env was read and then ignored."""
+    import subprocess
+
+    probe = (
+        "import sys, types\n"
+        "import tools.dotenv as d\n"
+        "seen = []\n"
+        "d.load_dotenv = lambda *a, **k: seen.append('tools.config' in sys.modules) or ()\n"
+        "fake = types.ModuleType('tools.tui.__main__'); fake.main = lambda: 0\n"
+        "sys.modules['tools.tui.__main__'] = fake\n"
+        "import tools.tui\n"
+        "assert tools.tui.launch() == 0\n"
+        "print(seen)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], cwd=Path(__file__).resolve().parents[1],
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "[False]"

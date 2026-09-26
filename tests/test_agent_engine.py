@@ -57,7 +57,7 @@ def _drain(backend, *, session=None, approver=None, **kwargs):
             "hi",
             backend=backend,
             session=session,
-            tool_schemas=[{"name": "lookup", "input_schema": {"type": "object", "properties": {}}}],
+            tool_schemas=[{"name": "lookup", "input_schema": {"type": "object", "properties": {"target": {"type": "string"}}}}],
             tool_functions=kwargs.get("tool_functions", {}),
             max_turns=kwargs.get("max_turns", 5),
             **extra,
@@ -405,7 +405,7 @@ def test_an_error_tool_result_is_flagged_is_error_in_the_neutral_history(monkeyp
             "hi",
             backend=backend,
             session=session,
-            tool_schemas=[{"name": "lookup", "input_schema": {"type": "object", "properties": {}}}],
+            tool_schemas=[{"name": "lookup", "input_schema": {"type": "object", "properties": {"target": {"type": "string"}}}}],
             tool_functions={"lookup": failing},
         )
     )
@@ -726,7 +726,7 @@ def _run(backend, *, session=None, **kwargs):
             backend=backend,
             session=session,
             tool_schemas=[
-                {"name": "lookup", "input_schema": {"type": "object", "properties": {}}}
+                {"name": "lookup", "input_schema": {"type": "object", "properties": {"target": {"type": "string"}}}}
             ],
             tool_functions=kwargs.pop("tool_functions", {}),
             max_turns=kwargs.pop("max_turns", 5),

@@ -42,12 +42,12 @@ pip fails with `Failed building wheel for sep` (or `photutils`) and
 
 ```bash
 python3.13 -m venv kepler-env
-kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/kepler/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
+kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
 kepler-env/bin/kepler-mcp self-test
 ```
 
 `[mcp]` brings the server. Releases are listed at
-<https://github.com/archon774/kepler/releases>; Kepler is not on PyPI. A wheel
+<https://github.com/archon774/skynet-mars/releases>; Kepler is not on PyPI. A wheel
 built with `uv build` in a checkout installs the same way. `kepler-mcp
 self-test` launches the installed server as a host would and checks it end to
 end; `releasing.md` describes what a release is.
@@ -79,12 +79,14 @@ package.
 | `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `KEPLER_ARTIFACT_DIR` |
 | `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `KEPLER_FITS_DOWNLOAD_DIR`, or `KEPLER_DATA_DIR` (downloads then go to its `fits_downloads/`) |
 | `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `KEPLER_OPTICAL_DATA_DIR`, `KEPLER_ISOCHRONE_DIR` |
+| `<home>/numba-cache/` | numba's compiled-function cache, which numba would otherwise write into the installed package | `NUMBA_CACHE_DIR` |
 
 Artifacts are never overwritten, even by two servers sharing the directory:
 each name is claimed atomically, and a repeated call writes a new file with a
 numeric suffix. So the directory grows; clear it yourself when you want to.
 `list_artifacts` over MCP returns the newest 100 entries of a directory, and
-says how many there are.
+says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
+inside the artifact directory.
 
 After `kepler-mcp fetch-data`, restart any running `kepler-mcp`: the server
 reads its data locations when it starts.

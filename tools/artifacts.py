@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import re
+import tempfile
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -190,9 +191,28 @@ def _reserve_path(directory: Path, stem: str, suffix: str) -> Path:
         try:
             os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
         except FileExistsError:
-            counter += 1
+            # Jump past the highest suffix already taken, once, rather than
+            # probing _1, _2, ... one open at a time: on a shared root that is
+            # never cleaned, that cost grew with every earlier file of this
+            # stem. A name claimed meanwhile is still caught by O_EXCL.
+            counter = max(counter, _highest_suffix(directory, stem, suffix)) + 1
             continue
         return path
+
+
+def _highest_suffix(directory: Path, stem: str, suffix: str) -> int:
+    """The largest ``n`` of an existing ``<stem>_<n><suffix>`` in ``directory``."""
+
+    pattern = re.compile(re.escape(stem) + r"_(\d+)" + re.escape(suffix) + r"\Z")
+    highest = 0
+    try:
+        for entry in os.scandir(directory):
+            match = pattern.match(entry.name)
+            if match:
+                highest = max(highest, int(match.group(1)))
+    except OSError:
+        pass
+    return highest
 
 
 def reserve_path_in(directory: str | Path, name: str, ext: str) -> Path:
@@ -203,6 +223,26 @@ def reserve_path_in(directory: str | Path, name: str, ext: str) -> Path:
     :func:`reserve_artifact_path`.
     """
     return _reserve_path(Path(directory), _safe_stem(name), f".{ext.lstrip('.')}")
+
+
+def discard_placeholder(path: str | Path | None) -> None:
+    """Remove a reserved path that was never written, and nothing else.
+
+    A reservation is an empty file (:func:`_reserve_path`). A writer that
+    fails -- or, like a plot that finds nothing to draw, decides not to
+    write -- would otherwise leave a 0-byte file that ``list_artifacts``
+    reports as a result. Only an empty regular file is removed, so a path
+    that did receive its content is never touched.
+    """
+
+    if path is None:
+        return
+    path = Path(path)
+    try:
+        if path.is_file() and not path.is_symlink() and path.stat().st_size == 0:
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _write_directory(subdir: Optional[str]) -> Path:
@@ -244,10 +284,25 @@ def write_table(
     directory = _write_directory(subdir)
     path = _reserve_path(directory, _safe_stem(name), _WRITE_SUFFIXES[fmt])
 
-    if fmt == "csv":
-        table.write(path, format="ascii.csv", overwrite=True)
-    else:
-        table.write(path, format=fmt, overwrite=True)
+    # Written beside the reservation, then moved onto it. Writing the reserved
+    # path itself with overwrite=True let astropy's FITS writer delete the
+    # placeholder first, releasing the claimed name to another writer for the
+    # length of the write; os.replace keeps it claimed throughout, and a write
+    # that fails leaves no half-written file behind.
+    handle, staging = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".part", dir=directory
+    )
+    os.close(handle)
+    try:
+        if fmt == "csv":
+            table.write(staging, format="ascii.csv", overwrite=True)
+        else:
+            table.write(staging, format=fmt, overwrite=True)
+        os.replace(staging, path)
+    except BaseException:
+        Path(staging).unlink(missing_ok=True)
+        discard_placeholder(path)
+        raise
 
     return ArtifactRef(
         path=str(path),
@@ -264,7 +319,11 @@ def write_text(
 
     directory = _write_directory(subdir)
     path = _reserve_path(directory, _safe_stem(name), f".{ext.lstrip('.')}")
-    path.write_text(text, encoding="utf-8")
+    try:
+        path.write_text(text, encoding="utf-8")
+    except BaseException:
+        discard_placeholder(path)
+        raise
     return ArtifactRef(path=str(path), format=ext.lstrip("."), row_count=None)
 
 

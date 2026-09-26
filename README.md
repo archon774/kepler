@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/archon774/kepler/actions/workflows/ci.yml"><img src="https://github.com/archon774/kepler/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/archon774/skynet-mars/actions/workflows/ci.yml"><img src="https://github.com/archon774/skynet-mars/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+">
 </p>
 
@@ -309,7 +309,7 @@ its server:
 
 ```bash
 python3.13 -m venv kepler-env
-kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/kepler/releases/download/v0.1.0rc1/kepler-0.1.0rc1-py3-none-any.whl"
+kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v0.1.0rc1/kepler-0.1.0rc1-py3-none-any.whl"
 kepler-env/bin/kepler-mcp self-test          # launches the server as a host would, runs a pulsar detection
 ```
 

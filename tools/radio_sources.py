@@ -424,7 +424,12 @@ def analyze_source_spectrum(
 
     stem = _safe_stem(source_label or "spectrum")
     plot_path = _output_path(f"{stem}_spectrum", ".png", output_dir)
-    _plot_spectrum(freq, flux, fit, plot_path, title=source_label)
+    try:
+        _plot_spectrum(freq, flux, fit, plot_path, title=source_label)
+    except BaseException:
+        # The reservation is an empty file; a failed plot must not leave it.
+        artifacts.discard_placeholder(plot_path)
+        raise
 
     fit["source_name"] = source_label
     fit["n_points"] = fit["power_law"]["n_points"]
@@ -582,7 +587,12 @@ def plot_field_sed(
 
     stem = Path(fits_path).stem
     plot_path = _output_path(f"{stem}_field_sed", ".png", output_dir)
-    _plot_field_sed(spectra, fits_by_source, plot_path, title=f"SED -- {stem}")
+    try:
+        _plot_field_sed(spectra, fits_by_source, plot_path, title=f"SED -- {stem}")
+    except BaseException:
+        # The reservation is an empty file; a failed plot must not leave it.
+        artifacts.discard_placeholder(plot_path)
+        raise
 
     preview = [{"source_name": name, **fit} for name, fit in fits_by_source.items()]
     warnings = list(id_result.warnings)

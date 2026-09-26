@@ -744,3 +744,25 @@ def test_the_replay_ignores_an_operator_frame_library(tmp_path, monkeypatch):
 
     assert path is not None and not path.startswith(str(tmp_path))
     assert warnings == [] or all(w.code == "frame_not_checked_out" for w in warnings)
+
+
+def test_the_web_table_zero_point_does_not_need_the_optical_library(tmp_path, monkeypatch):
+    """Second review, finding 9: an install without the optional optical
+    bundle lost the web-table value, which ships in the core data."""
+    from tools import config
+
+    core = tmp_path / "_data"
+    core.mkdir()
+    for name in ("afterglow", "fieldcal"):
+        (core / name).symlink_to(config.BUNDLED_DATA_DIR / name)
+    monkeypatch.setattr(config, "BUNDLED_DATA_DIR", core)
+    monkeypatch.setattr(config, "fetched_bundle", lambda name, **kwargs: None)
+    # Set, and irrelevant: the replay's frames never come from this override,
+    # so the fetch advice must not be withheld because of it.
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path / "my-archive"))
+
+    reference = load_zeropoint_reference("ngc5128_b_002")
+
+    assert reference.frame_path is None
+    assert reference.web_table_zero_point is not None
+    assert "bundle_not_installed" in [w.code for w in reference.warnings]

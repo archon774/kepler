@@ -77,17 +77,23 @@ def primary_optical_data_dir() -> Path:
     return env_path(OPTICAL_DATA_DIR_ENV, default) or default
 
 
-def optical_bundle_warning() -> ToolWarning | None:
+def optical_bundle_warning(*, ignore_override: bool = False) -> ToolWarning | None:
     """Say so when the frame library is an optional bundle that is not here.
 
     Only for the default location: with ``KEPLER_OPTICAL_DATA_DIR`` set, a
     missing directory is that setting's problem and ``directory_not_found``
     already names it. An installed wheel ships no frames, so without this an
     empty listing would read like a real answer (C7, §3.5).
+
+    ``ignore_override`` is for a caller that needs the bundled frames
+    themselves, which the override never supplies: it always gets the
+    warning, and must only ask once it has found the library absent.
     """
     from tools.config import env_value
 
-    if env_value(OPTICAL_DATA_DIR_ENV) or primary_optical_data_dir().is_dir():
+    if not ignore_override and (
+        env_value(OPTICAL_DATA_DIR_ENV) or primary_optical_data_dir().is_dir()
+    ):
         return None
     return ToolWarning(
         code="bundle_not_installed",
@@ -162,13 +168,16 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     if download_dir is not None:
         download_root = Path(download_dir).expanduser()
         data_dir = Path(config.DATA_DIR).expanduser()
-        # The second bound is the Kepler home, never the download root itself:
-        # `within` resolves both sides, so bounding the root by its own path
-        # let a symlinked root (~/.local/share/kepler/fits_downloads -> /)
-        # resolve to itself and earn a walk of whatever it points at.
-        recursive = config.within(download_root, data_dir) or config.within(
-            download_root, config.KEPLER_HOME
-        )
+        # The second bound is the Kepler home's own download tree, taken
+        # literally: `within` resolves both sides, so a bound resolved in its
+        # last component let a symlinked root (<home>/fits_downloads -> /)
+        # resolve to itself and earn a walk of whatever it points at. Not the
+        # whole home either: that admitted a download root of the home itself,
+        # whose walk reads the artifacts and every fetched bundle.
+        home_downloads = config.KEPLER_HOME / "fits_downloads"
+        recursive = config.within(download_root, data_dir) or config.safe_resolve(
+            download_root
+        ).is_relative_to(home_downloads)
         # Only a root that exists earns the warning: an absent download root is
         # skipped by the lister without comment, and telling a caller that a
         # directory which is not searched at all "is searched flat" is wrong.

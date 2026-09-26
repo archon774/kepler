@@ -82,7 +82,7 @@ python -m tools.mcp.bundles isochrones /path/to/girardi dist/bundles --include '
 Each prints its manifest entry. Then:
 
 1. Paste the entry into `bundles.json`, with `url` set to
-   `https://github.com/archon774/kepler/releases/download/data/<archive>`.
+   `https://github.com/archon774/skynet-mars/releases/download/data/<archive>`.
 2. Upload the archive: `gh release upload data dist/bundles/<archive>`.
 3. Ship the manifest change in the next release.
 
@@ -98,7 +98,7 @@ On a machine with no checkout (and a C compiler unless it is Python 3.12 or
 
 ```bash
 python3.13 -m venv kepler-env
-kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/kepler/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
+kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v<version>/kepler-<version>-py3-none-any.whl"
 kepler-env/bin/kepler-mcp self-test
 kepler-env/bin/kepler-mcp fetch-data optical      # optional
 ```

@@ -84,7 +84,8 @@ every dependency ships wheels for (`sep` has none for 3.14; see
 3.12 as the floor, so code still has to work there (`Path.resolve()` raises
 `RuntimeError` rather than `OSError` on a symlink loop under 3.12 — use
 `tools.config.within`/`safe_resolve`). It gates three jobs: `compileall` over
-`tools algorithms tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
+`tools algorithms tests`, `uv run --locked --extra mcp pytest` (after the MCP
+tests alone without the extra), and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
 `tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
 exist. **The TypeScript typecheck is not a CI job** — run it
@@ -300,9 +301,10 @@ machine with no checkout. Its rules:
   both.
 - **The `mcp` SDK is optional** (`uv sync --extra mcp`). Only
   `tools/mcp/server.py` imports it to serve, and `tools/mcp/selftest.py` to
-  act as a client of that server; nothing else under `tools/mcp/` may. **CI does not install it**, so every test
-  that drives the SDK must call `pytest.importorskip("mcp")` *before* any SDK
-  import, or CI fails.
+  act as a client of that server; nothing else under `tools/mcp/` may. CI
+  runs the MCP tests **first without it**, then the whole suite with it
+  (`--extra mcp`), so every test that drives the SDK must call
+  `pytest.importorskip("mcp")` *before* any SDK import, or CI fails.
 - **The registry is read, never edited, to serve it.** What only the server
   knows (the pinned artifact root, a sentence the server makes false) is
   added or replaced at serve time in `tools/mcp/surface.py`, and a test pins
@@ -311,10 +313,13 @@ machine with no checkout. Its rules:
   against a copy of the registry schema with `additionalProperties: false`,
   and with `integer` excluding floats, matching the agent loop's validator.
   Several tools take keywords their schema omits on purpose (`subdir`,
-  `output_dir`, …), and a model must not reach them.
+  `output_dir`, …), and a model must not reach them. The agent loop agrees:
+  a schema whose `properties` is declared empty takes no arguments, whatever
+  the function's signature accepts.
 - **`.env` is loaded first.** `tools/dotenv.py` resolves nothing at import;
   `kepler-mcp` loads `.env` before pinning roots or importing `tools.config`,
-  whose settings are fixed at import. `tools.config` re-exports the loader.
+  whose settings are fixed at import, and so does the `kepler` console
+  (`tools.tui:launch`). `tools.config` re-exports the loader.
 - **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
   worst case, tested). Claude Code truncates a server's instructions at
   about 2,000. Everything longer is a `kepler://skill/...` resource.
@@ -331,8 +336,10 @@ package-data ships. Never add a path of the form
 does not exist. An installed Kepler writes only under the per-user Kepler
 home (`tools/paths.py`; `KEPLER_HOME`):
 
-- `artifacts/`, the MCP default;
+- `artifacts/`, the default for the MCP server and an installed console;
 - `fits_downloads/`;
+- `numba-cache/`, numba's compiled-function cache (`NUMBA_CACHE_DIR`,
+  set by both entry points on an install);
 - `bundles/<name>/`, the optional `optical` and `isochrones` bundles that
   `kepler-mcp fetch-data` installs, pinned by size and SHA-256 in
   `tools/mcp/bundles.json`.

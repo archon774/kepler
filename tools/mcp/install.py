@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 from tools import config
 
@@ -61,7 +61,42 @@ def _plate_solving_available(environ: Mapping[str, str]) -> bool:
     return bool(available)
 
 
-def _mark(present: bool, missing: str) -> str:
+def _ads_token_available(environ: Mapping[str, str], home: Path | None = None) -> bool:
+    """astroquery's own lookup: ``ADS_DEV_KEY``, then ``~/.ads/dev_key``.
+
+    Reporting only the variable told a user whose token is in the file -- the
+    place astroquery documents -- that the ADS tools would fail, when they
+    work.
+    """
+
+    if environ.get("ADS_DEV_KEY"):
+        return True
+    try:
+        token_file = (Path.home() if home is None else home) / ".ads" / "dev_key"
+        return token_file.is_file() and bool(token_file.read_text(encoding="utf-8").strip())
+    except (OSError, RuntimeError, KeyError, UnicodeDecodeError):
+        return False
+
+
+def _checked(probe: Callable[[], bool]) -> bool | None:
+    """A probe's answer, or ``None`` when the probe itself failed.
+
+    These facts are read at server startup. A probe that raised -- an
+    unreadable data directory, a malformed setting -- used to stop the server
+    from starting at all, with a traceback on a stderr the user may never see;
+    the fact is reported as unknown instead, and the tool concerned reports
+    the real error when it is called.
+    """
+
+    try:
+        return probe()
+    except Exception:  # noqa: BLE001 -- a startup fact must never stop the server
+        return None
+
+
+def _mark(present: bool | None, missing: str) -> str:
+    if present is None:
+        return "unknown (check failed)"
     return "present" if present else missing
 
 
@@ -80,19 +115,31 @@ def install_facts(
 
     environ = os.environ if environ is None else environ
     root = config.ARTIFACT_DIR if artifact_root is None else artifact_root
-    ads = bool(environ.get("ADS_DEV_KEY"))
-    solver = _plate_solving_available(environ)
+    ads = _checked(lambda: _ads_token_available(environ))
+    solver = _checked(lambda: _plate_solving_available(environ))
+    pulsar = _checked(_pulsar_scans_present)
+    references = _checked(_references_present)
+    frames = _checked(_frames_present)
+    isochrones = _checked(_isochrones_present)
+    if solver is None:
+        solving = "unknown (check failed)"
+    else:
+        solving = "configured" if solver else "not configured (solve_astrometry reports unavailable)"
 
     return "\n".join(
         [
             "This install:",
             f"- Artifacts are local files under {root}; read them directly.",
-            f"- Pulsar scans {_mark(_pulsar_scans_present(), 'MISSING')}; zero-point "
-            f"references {_mark(_references_present(), 'MISSING')}; optical frame library "
-            f"{_mark(_frames_present(), 'absent (kepler-mcp fetch-data optical)')}; isochrone grid "
-            f"{_mark(_isochrones_present(), 'absent (HR fit unavailable; fetch-data isochrones)')}; plate "
-            f"solving {'configured' if solver else 'not configured (solve_astrometry reports unavailable)'}.",
-            "- Keys are the user's own, from this server's environment. ADS_DEV_KEY "
-            + ("is set." if ads else "is not set: the ADS tools will report it missing."),
+            f"- Pulsar scans {_mark(pulsar, 'MISSING')}; zero-point "
+            f"references {_mark(references, 'MISSING')}; optical frame library "
+            f"{_mark(frames, 'absent (kepler-mcp fetch-data optical)')}; isochrone grid "
+            f"{_mark(isochrones, 'absent (HR fit unavailable; fetch-data isochrones)')}; plate "
+            f"solving {solving}.",
+            "- Keys are the user's own, from this server's environment. An ADS token "
+            + (
+                "is set."
+                if ads
+                else "is not set (ADS_DEV_KEY or ~/.ads/dev_key): the ADS tools will report it missing."
+            ),
         ]
     )

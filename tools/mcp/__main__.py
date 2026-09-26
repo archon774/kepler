@@ -15,8 +15,10 @@ import os
 import sys
 
 from tools.mcp.roots import pin_roots
+from tools.paths import pin_numba_cache
 
 log = logging.getLogger("kepler-mcp")
+
 
 def _missing_sdk_message() -> str:
     """How to add the SDK -- never by package name alone.
@@ -81,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     from tools.dotenv import DOTENV_PATH, load_dotenv
 
     loaded = load_dotenv()
+    pin_numba_cache()
     # Every tool call runs on a worker thread, and on macOS matplotlib's
     # automatic backend refuses to create a figure off the main thread. The
     # server draws only to files, so it never needs a GUI backend. A user's own

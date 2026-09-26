@@ -287,9 +287,11 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
             ]
         return str(candidate), []
     if not library.is_dir():
-        absent = optical_bundle_warning()
-        if absent is not None:
-            return None, [absent]
+        # Always the fetch advice here, even with KEPLER_OPTICAL_DATA_DIR set:
+        # these frames come only from the bundled library, never from that
+        # override, so the listing's "the setting names it" reasoning does
+        # not apply to them.
+        return None, [optical_bundle_warning(ignore_override=True)]
     return None, [
         ToolWarning(
             code="frame_not_bundled",
@@ -319,7 +321,11 @@ def _load_reference(field: str, field_dir: Path) -> ZeropointReference:
     rows, row_warnings = _calibration_rows(field_dir)
     warnings = warnings + row_warnings
 
-    web_zp = _web_table_zero_point(Path(frame_path).name) if frame_path else None
+    # Keyed by the recorded frame's name, not by whether that frame is on disk:
+    # the web table ships in the core data, and an install without the
+    # optional optical bundle used to lose a ground-truth value it had.
+    recorded_frame = _BUNDLED_FRAME_BY_FIELD.get(field)
+    web_zp = _web_table_zero_point(recorded_frame) if recorded_frame else None
 
     return ZeropointReference(
         field=field,

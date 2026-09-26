@@ -36,6 +36,28 @@ from tools.resolve import resolve_target_coords
 __all__ = ["search_casda"]
 
 
+#: The keyring service astroquery's CASDA login stores the OPAL password under.
+_CASDA_KEYRING_SERVICE = "astroquery:casda.csiro.au"
+
+
+def _opal_password_stored(username: str) -> bool:
+    """Whether ``casda.login`` will find a password without prompting.
+
+    astroquery prompts with ``getpass`` when the keyring has no password.
+    Under ``kepler-mcp`` there is no terminal -- stdin is the protocol
+    stream -- so the prompt either fails or blocks the server, holding the
+    lock every other call waits on. The username check alone did not prevent
+    that. A keyring that cannot be read counts as holding nothing.
+    """
+
+    try:
+        import keyring
+
+        return keyring.get_password(_CASDA_KEYRING_SERVICE, username) is not None
+    except Exception:  # noqa: BLE001 -- any keyring failure means "would prompt"
+        return False
+
+
 def search_casda(
     target: Optional[str] = None,
     *,
@@ -116,6 +138,26 @@ def search_casda(
                         "message": "download=True requires CASDA_OPAL_USERNAME to be set; "
                         "staging needs OPAL credentials and this tool will not "
                         "prompt interactively for a password",
+                    }
+                ],
+            )
+        if not _opal_password_stored(CASDA_OPAL_USERNAME):
+            return ToolResult(
+                status="partial",
+                count=len(table),
+                preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+                columns=[str(c) for c in table.colnames],
+                artifact=artifact,
+                errors=[
+                    {
+                        "code": "provider_unavailable",
+                        "message": "download=True needs the OPAL password for "
+                        f"{CASDA_OPAL_USERNAME} stored in the system keyring, and "
+                        "none is. Store it once, outside this tool, with "
+                        "`python -c \"from astroquery.casda import Casda; "
+                        f"Casda.login(username='{CASDA_OPAL_USERNAME}', "
+                        "store_password=True)\"`; this tool will not prompt "
+                        "interactively for a password",
                     }
                 ],
             )

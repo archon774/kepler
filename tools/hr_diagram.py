@@ -99,6 +99,29 @@ def _output_path(stem: str, suffix: str) -> Path:
     return artifacts.reserve_path_in(ARTIFACT_DIR / _SUBDIR, stem, suffix)
 
 
+def _fit_and_compare(members, params, cluster_name: str, stem: str, **kwargs) -> dict:
+    """``isochrones.fit_and_compare`` into two freshly reserved paths.
+
+    A reservation is an empty file, and a fit that raises (no grid, no
+    members) never fills it; without the cleanup every failed call left a
+    0-byte CSV and PNG that ``list_artifacts`` reported as results.
+    """
+    members_csv_path = _output_path(f"{stem}_members", ".csv")
+    try:
+        out_png = _output_path(f"hr_{stem}", ".png")
+    except BaseException:
+        artifacts.discard_placeholder(members_csv_path)
+        raise
+    try:
+        return isochrones.fit_and_compare(
+            members, params, cluster_name,
+            members_csv_path=members_csv_path, out_png=out_png, **kwargs,
+        )
+    finally:
+        artifacts.discard_placeholder(members_csv_path)
+        artifacts.discard_placeholder(out_png)
+
+
 def _read_table_artifact(path: str) -> pd.DataFrame:
     return Table.read(path).to_pandas()
 
@@ -387,10 +410,8 @@ def fit_and_compare_hr_diagram(
     stem = _safe_stem(cluster_name)
     try:
         params = _fetch_literature_params(cluster_name)
-        report = isochrones.fit_and_compare(
-            members, params, cluster_name,
-            members_csv_path=_output_path(f"{stem}_members", ".csv"),
-            out_png=_output_path(f"hr_{stem}", ".png"),
+        report = _fit_and_compare(
+            members, params, cluster_name, stem,
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
         )
     except _NotFound as exc:
@@ -441,11 +462,7 @@ def run_full_hr_pipeline(
             matched, params, plx_sigma=plx_sigma, pm_sigma=pm_sigma,
             pm_dispersion_km_s=pm_dispersion_km_s,
         )
-        report = isochrones.fit_and_compare(
-            members, params, cluster_name,
-            members_csv_path=_output_path(f"{stem}_members", ".csv"),
-            out_png=_output_path(f"hr_{stem}", ".png"),
-        )
+        report = _fit_and_compare(members, params, cluster_name, stem)
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
     except (ValueError, RuntimeError) as exc:
@@ -503,10 +520,8 @@ def run_full_hr_pipeline_from_catalog(
             gaia, params, plx_sigma=plx_sigma, pm_sigma=pm_sigma,
             pm_dispersion_km_s=pm_dispersion_km_s,
         )
-        report = isochrones.fit_and_compare(
-            members, params, cluster_name,
-            members_csv_path=_output_path(f"{stem}_members", ".csv"),
-            out_png=_output_path(f"hr_{stem}", ".png"),
+        report = _fit_and_compare(
+            members, params, cluster_name, stem,
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
         )
     except _NotFound as exc:

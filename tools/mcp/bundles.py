@@ -42,27 +42,36 @@ import json
 import shutil
 import sys
 import tarfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Mapping
+from typing import Callable, Iterable, Iterator, Mapping
 
 import httpx
 
 from tools import config
-from tools.paths import BUNDLED_DATA_LINK
+from tools.paths import BUNDLED_DATA_LINK, is_checkout
 
 __all__ = [
+    "RELEASE_DOWNLOADS",
     "BUNDLE_URL_ENV",
     "MANIFEST_PATH",
     "BundleError",
     "BundleSpec",
+    "archive_digest",
     "build_archive",
     "fetch_bundle",
     "build_main",
     "fetch_main",
     "load_manifest",
 ]
+
+#: Where release assets download from: the repository's canonical name. The
+#: earlier names (``archon774/kepler``, ``archon774/mars-suite``) redirect only
+#: until someone creates a repository under them, so nothing new points there.
+#: ``build_main`` prints entries against this, and a test holds the manifest to it.
+RELEASE_DOWNLOADS = "https://github.com/archon774/skynet-mars/releases/download"
 
 #: Overrides where bundles are fetched from: a URL prefix, or a local directory
 #: holding the archives (for testing, and for an offline mirror).
@@ -135,7 +144,45 @@ def build_archive(source: Path, archive: Path, pattern: str = "*") -> tuple[int,
     if not files:
         raise BundleError(f"{source} holds no files to bundle")
     archive.parent.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive, "w", format=tarfile.PAX_FORMAT) as tar:
+    with archive.open("wb") as handle:
+        _write_tar(source, files, handle)
+    return archive.stat().st_size, _sha256(archive), len(files)
+
+
+def archive_digest(source: Path, pattern: str = "*") -> tuple[int, str, int]:
+    """What :func:`build_archive` would return, without writing the archive.
+
+    The same bytes, streamed through a hash. For checking a manifest entry
+    against a tree: the optical bundle is 268 MB, and building it to a file
+    on every test run cost that much disk each time.
+    """
+
+    files = _members(source, pattern)
+    if not files:
+        raise BundleError(f"{source} holds no files to bundle")
+    sink = _HashingSink()
+    _write_tar(source, files, sink)
+    return sink.size, sink.digest.hexdigest(), len(files)
+
+
+class _HashingSink:
+    """A write-only file object that keeps only a length and a SHA-256."""
+
+    def __init__(self) -> None:
+        self.digest = hashlib.sha256()
+        self.size = 0
+
+    def write(self, data: bytes) -> int:
+        self.digest.update(data)
+        self.size += len(data)
+        return len(data)
+
+    def tell(self) -> int:
+        return self.size
+
+
+def _write_tar(source: Path, files: list[Path], fileobj) -> None:
+    with tarfile.open(fileobj=fileobj, mode="w", format=tarfile.PAX_FORMAT) as tar:
         for path in files:
             info = tarfile.TarInfo(path.relative_to(source).as_posix())
             info.size = path.stat().st_size
@@ -145,7 +192,6 @@ def build_archive(source: Path, archive: Path, pattern: str = "*") -> tuple[int,
             info.uname = info.gname = ""
             with path.open("rb") as handle:
                 tar.addfile(info, handle)
-    return archive.stat().st_size, _sha256(archive), len(files)
 
 
 def _sha256(path: Path) -> str:
@@ -257,12 +303,63 @@ def fetch_bundle(
     spec = manifest[name]
     root = (config.BUNDLES_DIR if bundles_dir is None else bundles_dir).resolve()
     _refuse_inside_package(root)
-    target = root / name
-    marker = target / config.BUNDLE_MARKER
-    if marker.is_file():
+    root.mkdir(parents=True, exist_ok=True)
+    with _install_lock(root / f".{name}.lock"):
+        return _install_locked(name, spec, root, source, client, progress)
+
+
+@contextmanager
+def _install_lock(path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on ``path`` while one bundle installs.
+
+    Two ``fetch-data`` runs for one bundle -- two terminals, or a retry
+    started before the first gave up -- shared the ``.part`` file and the
+    staging directory, so one could delete the other's staging mid-extract or
+    append to its download. The second now waits, then finds the bundle
+    installed. Advisory, and POSIX only: where ``fcntl`` is missing
+    (Windows) installs are not serialised.
+    """
+
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    with open(path, "a+b") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _recorded_sha256(marker: Path) -> str | None:
+    """The checksum a bundle marker records; ``None`` for anything unreadable.
+
+    A marker truncated by a full disk, edited by hand, or holding JSON that is
+    not an object means "not installed", and the fetch replaces the bundle --
+    it used to raise out of ``fetch_bundle`` instead, so the one command that
+    repairs an install could not run.
+    """
+
+    try:
         recorded = json.loads(marker.read_text(encoding="utf-8"))
-        if recorded.get("sha256") == spec.sha256:
-            return target, False
+    except (OSError, ValueError):
+        return None
+    return recorded.get("sha256") if isinstance(recorded, dict) else None
+
+
+def _install_locked(
+    name: str,
+    spec: BundleSpec,
+    root: Path,
+    source: str | None,
+    client: httpx.Client | None,
+    progress: Callable[[int, int], None],
+) -> tuple[Path, bool]:
+    target = root / name
+    if _recorded_sha256(target / config.BUNDLE_MARKER) == spec.sha256:
+        return target, False
 
     downloads = root / ".downloads"
     downloads.mkdir(parents=True, exist_ok=True)
@@ -333,6 +430,21 @@ def _progress_printer(label: str) -> Callable[[int, int], None]:
     return show
 
 
+#: What a checkout does with a fetched bundle: nothing, unless told. A checkout
+#: reads its own data/ and treats the isochrone grid as an operator setting
+#: (tools.config.ISOCHRONE_DIR), so a fetch there that said only "installed"
+#: left a developer believing the HR fit would now work.
+_CHECKOUT_NOTES = {
+    "isochrones": (
+        "This is a checkout, which never reads fetched bundles on its own: set "
+        "KEPLER_ISOCHRONE_DIR={target} to fit against this grid."
+    ),
+    "default": (
+        "This is a checkout: it reads its own data/, not this fetched copy."
+    ),
+}
+
+
 def fetch_main(argv: Iterable[str] | None = None) -> int:
     """``kepler-mcp fetch-data``: install optional data bundles."""
 
@@ -384,6 +496,8 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
             status = 1
             continue
         print(f"{name}: {'installed' if fetched else 'already installed'} at {target}")
+        if is_checkout():
+            print(f"  {_CHECKOUT_NOTES.get(name, _CHECKOUT_NOTES['default']).format(target=target)}")
     if status == 0:
         print(
             "Restart any running kepler-mcp to use newly fetched bundles: the "
@@ -427,7 +541,7 @@ def build_main(argv: Iterable[str] | None = None) -> int:
         "size": size,
         "sha256": digest,
         "files": files,
-        "url": f"https://github.com/archon774/skynet-mars/releases/download/data/{archive.name}",
+        "url": f"{RELEASE_DOWNLOADS}/data/{archive.name}",
         "description": "TODO: one line on what this bundle is for.",
     }
     # Complete, so pasting it into bundles.json loads; replace the description.

@@ -183,7 +183,15 @@ def fetched_bundle(
 # process, and a bare "artifacts/..." silently means something different in
 # each of those. This also keeps ArtifactRef.path consistent with
 # FileMetadata.path, which describe_file() has always resolved.
-ARTIFACT_DIR = (env_path(ARTIFACT_DIR_ENV, "artifacts") or Path("artifacts")).resolve()
+#
+# The default is artifacts/ beside the working directory only in a checkout,
+# where that is the repository. An installed Kepler writes only under the
+# Kepler home (docs/installing.md): an installed `kepler` console used to drop
+# an untracked artifacts/ into whatever directory it was started from.
+ARTIFACT_DIR = (
+    env_path(ARTIFACT_DIR_ENV)
+    or (Path("artifacts") if is_checkout() else KEPLER_HOME / "artifacts")
+).resolve()
 # The repository's data root: where general data for this repo lives -- the
 # bundled fixture frames and recorded reference solves, and now the archive
 # download root too.
@@ -217,12 +225,15 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 # by the next upgrade. An install downloads into the per-user Kepler home
 # instead. A checkout is unchanged.
 #
-# An explicit KEPLER_DATA_DIR still moves it on an install, as documented: that
-# is a directory the user chose, not the package.
+# A KEPLER_DATA_DIR naming somewhere other than the package still moves it on
+# an install, as documented: that is a directory the user chose. Decided by the
+# value, not by whether the variable is set: kepler-mcp pins KEPLER_DATA_DIR to
+# its resolved default before this module is imported, and testing for the
+# variable made every installed server download into site-packages.
 FITS_DOWNLOAD_DIR = env_path(
     FITS_DOWNLOAD_DIR_ENV,
     DATA_DIR / "fits_downloads"
-    if is_checkout() or env_value(DATA_DIR_ENV)
+    if is_checkout() or DATA_DIR != BUNDLED_DATA_DIR
     else KEPLER_HOME / "fits_downloads",
 ).resolve()
 # The legacy Girardi model is a substantial operator dependency, not Kepler

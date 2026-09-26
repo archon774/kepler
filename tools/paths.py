@@ -32,6 +32,7 @@ __all__ = [
     "bundled_data_dir",
     "is_checkout",
     "kepler_home",
+    "pin_numba_cache",
 ]
 
 KEPLER_HOME_ENV = "KEPLER_HOME"
@@ -49,9 +50,20 @@ def is_checkout(link: Path = BUNDLED_DATA_LINK) -> bool:
     without symlink support (Git for Windows' default ``core.symlinks=false``,
     or an archive that drops links) writes the link as a small text file, and
     that is a checkout too. An editable install is a checkout.
+
+    Decided by what a checkout *has*, not by what a wheel lacks: the link
+    itself (a symlink or its text-file stand-in), or the repository's
+    ``pyproject.toml`` beside the package. The earlier negative test ("not a
+    real directory") called a wheel that shipped no ``tools/_data`` -- a
+    broken build, or a package-data glob that matched nothing -- a checkout,
+    and so sent its downloads into site-packages and hid the fetched bundles.
     """
 
-    return not (link.is_dir() and not link.is_symlink())
+    if link.is_symlink():
+        return True
+    if link.is_dir():
+        return False
+    return link.is_file() or (link.parent.parent / "pyproject.toml").is_file()
 
 
 def bundled_data_dir(link: Path = BUNDLED_DATA_LINK) -> Path:
@@ -112,3 +124,20 @@ def kepler_home(
         xdg = environ.get("XDG_DATA_HOME", "")
         base = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".local" / "share"
     return base / "kepler"
+
+
+def pin_numba_cache(environ: dict[str, str] | None = None) -> None:
+    """On an install, point numba's on-disk cache into the Kepler home.
+
+    ``algorithms/skylib_lite`` compiles with ``@njit(cache=True)``, and numba
+    writes that cache beside the source -- into ``site-packages`` for an
+    installed wheel, the directory an installed Kepler otherwise never writes
+    (and which the next upgrade replaces). numba reads ``NUMBA_CACHE_DIR`` when
+    it is imported, so an entry point calls this before importing any tool. A
+    checkout, or a user's own setting, is left alone.
+    """
+
+    environ = os.environ if environ is None else environ
+    if is_checkout() or environ.get("NUMBA_CACHE_DIR"):
+        return
+    environ["NUMBA_CACHE_DIR"] = str(kepler_home(environ) / "numba-cache")

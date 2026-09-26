@@ -48,11 +48,12 @@ def validate_tool_call(
 ) -> ProtocolFault | None:
     """Return the first :class:`ProtocolFault` a call trips, or ``None``.
 
-    The checks run in the S8 order. An empty (or absent) ``properties`` object
-    means the schema does not constrain the shape; when the tool's callable is
-    supplied as ``func``, its signature is the fallback constraint, so a no-arg
-    tool called with junk arguments still faults cleanly instead of raising a
-    ``TypeError`` at dispatch. ``func=None`` (as opposed to omitted) means the
+    The checks run in the S8 order. A declared but empty ``properties``
+    object means the tool takes no arguments, whatever its callable accepts.
+    An absent one means the schema does not constrain the shape; when the
+    tool's callable is supplied as ``func``, its signature is the fallback
+    constraint, so a call with junk arguments still faults cleanly instead of
+    raising a ``TypeError`` at dispatch. ``func=None`` (as opposed to omitted) means the
     name has a schema but no registered function -- an ``unknown_tool`` fault.
     """
 
@@ -79,6 +80,17 @@ def validate_tool_call(
             return fault(
                 "schema_violation", f"missing required property {required!r}"
             )
+
+    if "properties" in schema and not properties and arguments:
+        # Declared empty: the tool takes no arguments from a model. The
+        # function's signature is no licence -- several of these listers take
+        # a `directory` keyword their schema leaves out on purpose, and the
+        # signature fallback let a model reach it. The MCP server refuses the
+        # same call (additionalProperties: false); the two surfaces agree.
+        return fault(
+            "schema_violation",
+            f"{name!r} takes no arguments; got {sorted(arguments)}",
+        )
 
     if not properties:
         if func not in (_UNSET, None) and arguments:

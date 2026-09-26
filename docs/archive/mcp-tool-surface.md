@@ -54,6 +54,19 @@
 >
 > All were fixed on `mcp/review-fixes`, each with a test for the case CI
 > missed. `CLAUDE.md`'s `tools/mcp/` rules record the lessons.
+>
+> **Correction, 2026-09-26 — second review, after those fixes.** It confirmed
+> 15 more, several introduced by the first round. The most serious:
+> - `pin_roots` exports `KEPLER_DATA_DIR`, which the first round's download
+>   rule took as the user's choice, so every installed server downloaded into
+>   `site-packages`;
+> - a tool's `print()` reached the protocol stream;
+> - CI ran none of the server's validation tests, because it never installed
+>   the `[mcp]` extra.
+>
+> Every server validation test is now run by CI (with the extra, after the MCP
+> tests alone without it). Installed-layout tests now exercise `pin_roots`
+> together with `tools.config`, not each on its own.
 
 **Status:** Complete; see the block above. *(Superseded at archive. It read:
 "In progress. C0–C8 complete (§5); `v0.1.0rc1` published. C9 is next.")*

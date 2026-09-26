@@ -85,7 +85,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kepler = "tools.tui.__main__:main"
+kepler = "tools.tui:launch"
 kepler-bench = "tools.bench.cli:main"
 kepler-mcp = "tools.mcp.__main__:main"
 

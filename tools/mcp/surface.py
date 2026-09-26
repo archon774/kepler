@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -20,6 +21,7 @@ import pydantic_core
 
 from tools import skill
 from tools.bench.plane import TOOL_CLASSES
+from tools import config
 from tools.config import within
 from tools.mcp.groups import annotations_for
 from tools.mcp.install import install_facts
@@ -83,6 +85,14 @@ _SERVED_CORRECTIONS = {
         "served by kepler-mcp, the WAV also comes back inline as an audio block "
         "when it is under the server's audio limit -- a host that cannot play "
         "it may save it to a file instead.",
+    ),
+    "run_photometry_on_target": (
+        "report their "
+        "paths, do not describe their contents as if you had visually inspected "
+        "them.",
+        "report their paths. Served by kepler-mcp, each plot under the server's "
+        "image limit also comes back inline as an image: describe only what an "
+        "inlined image shows, and never the contents of one that was not inlined.",
     ),
 }
 
@@ -196,6 +206,34 @@ def _jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _to_jsonable(value: Any) -> Any:
+    """``value`` as plain JSON, bytes that are not UTF-8 included.
+
+    pydantic writes ``bytes`` as UTF-8 text and raises on anything else, so a
+    preview cell holding raw bytes (a FITS header card, a catalogue flag
+    column) turned a successful result into a ``tool_exception``. Such a
+    result is serialised again with bytes as base64 -- only then, so a result
+    whose bytes are text keeps them readable.
+    """
+
+    try:
+        return json.loads(pydantic_core.to_json(value, fallback=_jsonable))
+    except pydantic_core.PydanticSerializationError:
+        # A model serialises its fields by its own config, which ignores
+        # bytes_mode; dumped to plain Python first, the setting applies.
+        plain = (
+            [_plain(item) for item in value] if isinstance(value, list) else _plain(value)
+        )
+        return json.loads(
+            pydantic_core.to_json(plain, fallback=_jsonable, bytes_mode="base64")
+        )
+
+
+def _plain(value: Any) -> Any:
+    dump = getattr(value, "model_dump", None)
+    return dump() if callable(dump) else value
+
+
 def normalize_result(name: str, value: Any) -> dict[str, Any]:
     """Serialize one tool's return value into a JSON object.
 
@@ -209,10 +247,10 @@ def normalize_result(name: str, value: Any) -> dict[str, Any]:
     """
 
     if isinstance(value, (list, tuple)):
-        items = json.loads(pydantic_core.to_json(list(value), fallback=_jsonable))
+        items = _to_jsonable(list(value))
         return {"status": "ok", "count": len(items), "results": items}
     if callable(getattr(value, "model_dump", None)):
-        return json.loads(pydantic_core.to_json(value, fallback=_jsonable))
+        return _to_jsonable(value)
     raise TypeError(
         f"tool {name!r} returned {type(value).__name__}; a registered tool must "
         "return a Kepler model or a list of them"
@@ -236,13 +274,14 @@ def error_payload(error: ToolError) -> dict[str, Any]:
     return normalize_result("", ToolResult(status="error", errors=[error]))
 
 
-#: ``ArtifactRef.format`` -> (content type, MIME type, largest file inlined).
-#: A default 60-second stereo sonification is ~10.6 MB, so the audio limit
-#: admits it; 5 MB is the image size model APIs commonly refuse above. Over a
-#: limit the file is named in a note instead -- the path still works.
+#: ``ArtifactRef.format`` -> (content type, MIME type, largest block inlined,
+#: measured base64-encoded). A default 60-second stereo sonification is
+#: ~10.6 MB, ~14.1 MB encoded, so the audio limit admits it; 5 MB is the image
+#: size model APIs commonly refuse above. Over a limit the file is named in a
+#: note instead -- the path still works.
 MEDIA_FORMATS: dict[str, tuple[str, str, int]] = {
     "png": ("image", "image/png", 5_000_000),
-    "wav": ("audio", "audio/wav", 12_000_000),
+    "wav": ("audio", "audio/wav", 16_000_000),
 }
 
 
@@ -286,13 +325,17 @@ def inline_media(payload: Mapping[str, Any], artifact_root: Path) -> list[dict[s
             )
             continue
         size = path.stat().st_size
-        if size > limit:
+        # The limit is on what is sent, and that is base64: four bytes for
+        # every three. Comparing the file's own size let a 3.75-5 MB PNG
+        # through as a 5-6.7 MB block, over the size model APIs accept.
+        encoded = 4 * -(-size // 3)
+        if encoded > limit:
             blocks.append(
                 {
                     "type": "text",
                     "text": (
-                        f"Not inlined: {path} is {size:,} bytes, over the "
-                        f"{limit:,}-byte {kind} limit. Read it from the path."
+                        f"Not inlined: {path} is {size:,} bytes ({encoded:,} encoded), "
+                        f"over the {limit:,}-byte {kind} limit. Read it from the path."
                     ),
                 }
             )
@@ -314,19 +357,35 @@ def to_json_text(payload: Mapping[str, Any]) -> str:
 ARTIFACT_LISTING_CAP = 100
 
 
-def _bound_artifact_listing(payload: dict[str, Any]) -> dict[str, Any]:
-    """Newest first, at most :data:`ARTIFACT_LISTING_CAP`, and say so when cut."""
+def _served_artifact_listing(directory: str | None = None) -> dict[str, Any]:
+    """``list_artifacts``, served: newest first, at most :data:`ARTIFACT_LISTING_CAP`.
 
-    results = payload.get("results")
-    if not isinstance(results, list):
-        return payload
-    results = sorted(
-        results,
-        key=lambda item: ((item.get("file") or {}).get("modified_time") or ""),
-        reverse=True,
-    )
-    total = len(results)
-    bounded = {**payload, "count": total, "results": results[:ARTIFACT_LISTING_CAP]}
+    Ranked by a plain ``stat`` of each entry, and only the files returned are
+    described. Bounding the registry tool's full answer afterwards described
+    -- and serialised -- every file on a root that is never cleaned, to return
+    a hundred of them. Same payload shape and same errors as the registry
+    tool, which ``tools.workspace.list_artifacts`` still is for the agent loop.
+    """
+
+    from tools.artifacts import describe_artifact_file
+
+    root = config.artifact_directory(directory)
+    if not root.exists():
+        return normalize_result("list_artifacts", [])
+    if not root.is_dir():
+        raise NotADirectoryError(str(root))
+    ranked = []
+    for entry in os.scandir(root):
+        try:
+            if entry.is_file():
+                ranked.append((entry.stat().st_mtime, entry.path))
+        except OSError:
+            continue
+    ranked.sort(reverse=True)
+    total = len(ranked)
+    listed = [describe_artifact_file(path) for _mtime, path in ranked[:ARTIFACT_LISTING_CAP]]
+    payload = normalize_result("list_artifacts", listed)
+    payload["count"] = total
     if total > ARTIFACT_LISTING_CAP:
         warning = ToolWarning(
             code="listing_truncated",
@@ -336,8 +395,26 @@ def _bound_artifact_listing(payload: dict[str, Any]) -> dict[str, Any]:
                 "tool result named directly."
             ),
         )
-        bounded["warnings"] = [warning.model_dump()]
-    return bounded
+        payload["warnings"] = [warning.model_dump()]
+    return payload
+
+
+#: Tools whose path argument is a location inside the artifact root. Served,
+#: a relative one is taken relative to that root, which is what the served
+#: descriptions tell a model to pass (``directory="pulsar"``). Resolved as it
+#: stood, it named a directory beside wherever the host launched the server.
+_ARTIFACT_PATH_ARGUMENTS = {"list_artifacts": "directory", "describe_artifact": "path"}
+
+
+def _anchor_artifact_path(name: str, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+    key = _ARTIFACT_PATH_ARGUMENTS.get(name)
+    value = arguments.get(key) if key else None
+    if not isinstance(value, str) or not value:
+        return arguments
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return arguments
+    return {**arguments, key: str(Path(config.ARTIFACT_DIR) / path)}
 
 
 def call_tool(
@@ -358,10 +435,10 @@ def call_tool(
             ToolError(code="unknown_tool", message=f"No tool named {name!r} is served.")
         )
     try:
-        payload = normalize_result(name, function(**arguments))
+        arguments = _anchor_artifact_path(name, arguments)
         if name == "list_artifacts":
-            payload = _bound_artifact_listing(payload)
-        return payload
+            return _served_artifact_listing(**arguments)
+        return normalize_result(name, function(**arguments))
     except Exception as exc:  # noqa: BLE001 -- reported to the caller, not swallowed
         return error_payload(
             ToolError(code="tool_exception", message=f"{type(exc).__name__}: {exc}")

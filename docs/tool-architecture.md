@@ -710,7 +710,7 @@ serialised so NaN becomes `null`. `isError` follows the loop's
 (`unknown_tool`) or a raising tool (`tool_exception`) is that call's error
 result, never a dead session. The artifact path contract stands unchanged,
 because the caller shares the filesystem. On top of it, a PNG or WAV artifact
-also comes back **inline** as an image or audio block (5 MB and 12 MB limits),
+also comes back **inline** as an image or audio block (5 MB and 16 MB limits, measured base64-encoded),
 read only from inside the pinned artifact root. No `outputSchema` is declared:
 clients validate against one, and a NaN-as-`null` in a `number` field would
 then fail on a user's machine.
