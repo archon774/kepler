@@ -377,7 +377,7 @@ def _served_artifact_listing(directory: str | None = None) -> dict[str, Any]:
     ranked = []
     for entry in os.scandir(root):
         try:
-            if entry.is_file():
+            if entry.is_file() and not entry.name.startswith("."):
                 ranked.append((entry.stat().st_mtime, entry.path))
         except OSError:
             continue

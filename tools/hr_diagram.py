@@ -63,7 +63,7 @@ from astropy.table import Table
 
 from algorithms.hrdiagram_py import isochrones, literature, matching, membership, observations
 from tools import artifacts, config
-from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
+from tools.config import PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult
 from tools.vizier import search_vizier
 
@@ -96,7 +96,9 @@ def _safe_stem(label: str) -> str:
 def _output_path(stem: str, suffix: str) -> Path:
     # Reserved, not fixed: a fixed name let a repeated run replace the plot an
     # earlier result still names.
-    return artifacts.reserve_path_in(ARTIFACT_DIR / _SUBDIR, stem, suffix)
+    # Through reserve_artifact_path, so an active scoped_artifacts session
+    # holds these files too, as it does every other tool's.
+    return artifacts.reserve_artifact_path(stem, subdir=_SUBDIR, ext=suffix)
 
 
 def _fit_and_compare(members, params, cluster_name: str, stem: str, **kwargs) -> dict:

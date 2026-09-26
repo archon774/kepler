@@ -51,13 +51,52 @@ def test_a_repeated_name_skips_past_the_highest_suffix_in_one_step(tmp_path):
     assert artifacts.reserve_path_in(tmp_path, "plot", "png") == tmp_path / "plot_8.png"
 
 
-def test_a_fits_table_keeps_its_claimed_name_and_leaves_no_staging_file(artifact_dir):
-    """astropy's FITS writer deleted the placeholder before writing to it."""
+def test_a_table_is_written_beside_its_claimed_name_never_onto_it(artifact_dir, monkeypatch):
+    """astropy's FITS writer, pointed at the reserved path with overwrite=True,
+    deleted the placeholder before writing -- releasing the claimed name to
+    another writer for the length of the write. The claimed path must exist,
+    and not be the write's target, for the whole write."""
+    real_write = Table.__dict__["write"]  # a descriptor; bound per instance below
+    seen = []
+
+    def watching(self, target, *args, **kwargs):
+        claimed = artifact_dir / "s" / "t.fits"
+        seen.append((Path(target) != claimed, claimed.is_file()))
+        return real_write.__get__(self, Table)(target, *args, **kwargs)
+
+    monkeypatch.setattr(Table, "write", watching)
     ref = artifacts.write_table(Table({"a": [1, 2]}), "t", subdir="s", fmt="fits")
 
+    assert seen == [(True, True)]
     assert Path(ref.path) == artifact_dir / "s" / "t.fits"
     assert len(Table.read(ref.path)) == 2
     assert _files(artifact_dir) == [Path(ref.path)]
+
+
+@pytest.mark.parametrize("fmt", ["ecsv", "csv", "fits"])
+def test_a_table_gets_the_mode_every_other_artifact_gets(artifact_dir, fmt):
+    """Third review: staged through mkstemp, tables came out 0600."""
+    import os
+    import stat
+
+    umask = os.umask(0o022)
+    try:
+        ref = artifacts.write_table(Table({"a": [1]}), "t", fmt=fmt)
+        text = artifacts.write_text("x", "note")
+    finally:
+        os.umask(umask)
+
+    assert stat.S_IMODE(Path(ref.path).stat().st_mode) == 0o644
+    assert stat.S_IMODE(Path(text.path).stat().st_mode) == 0o644
+
+
+def test_an_interrupted_writes_staging_file_is_not_listed(artifact_dir):
+    from tools.artifacts import list_artifact_files
+
+    (artifact_dir / ".t.ecsv.abc123.part").write_text("partial")
+    (artifact_dir / "t.ecsv").write_text("x")
+
+    assert [m.file.path for m in list_artifact_files(artifact_dir)] == [str(artifact_dir / "t.ecsv")]
 
 
 def test_a_failed_table_write_leaves_nothing(artifact_dir, monkeypatch):
@@ -114,10 +153,10 @@ def test_a_failed_pulsar_plot_leaves_no_placeholder(pulsar_path, artifact_dir, m
 # --- finding 7: failed writers leave no 0-byte files ------------------------------
 
 
-def test_a_failed_isochrone_fit_leaves_no_placeholders(tmp_path, monkeypatch):
+def test_a_failed_isochrone_fit_leaves_no_placeholders(artifact_dir, monkeypatch):
     from tools import hr_diagram
 
-    monkeypatch.setattr(hr_diagram, "ARTIFACT_DIR", tmp_path)
+    tmp_path = artifact_dir
 
     def no_grid(*args, **kwargs):
         raise RuntimeError("no isochrone grid configured")
@@ -240,3 +279,13 @@ def test_casda_download_without_a_stored_password_is_refused_not_prompted(artifa
 
     assert result.status == "partial"
     assert "keyring" in result.errors[0].message
+
+
+def test_hr_artifacts_land_in_an_active_session_scope(artifact_dir):
+    """Third review: the HR writers ignored scoped_artifacts."""
+    from tools import hr_diagram
+
+    with artifacts.scoped_artifacts("sessions/abc"):
+        path = hr_diagram._output_path("hr_ngc", ".png")
+
+    assert path == artifact_dir / "sessions" / "abc" / "hrdiagram" / "hr_ngc.png"

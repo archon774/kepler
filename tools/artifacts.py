@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import re
+import stat
 import tempfile
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -128,10 +129,12 @@ def list_artifact_files(directory: str | Path | None = None) -> list[ArtifactMet
         return []
     if not root.is_dir():
         raise NotADirectoryError(str(root))
+    # Hidden entries are not artifacts: a write interrupted by a crash leaves
+    # its ``.<name>.part`` staging file behind (write_table).
     return [
         describe_artifact_file(path)
         for path in sorted(root.iterdir())
-        if path.is_file()
+        if path.is_file() and not path.name.startswith(".")
     ]
 
 
@@ -293,6 +296,13 @@ def write_table(
         prefix=f".{path.name}.", suffix=".part", dir=directory
     )
     os.close(handle)
+    # mkstemp creates the file 0600, and os.replace keeps that mode: a table
+    # would be unreadable to anyone else sharing the artifact directory, where
+    # every other artifact is 0644 less the umask. Give it the placeholder's.
+    try:
+        os.chmod(staging, stat.S_IMODE(path.stat().st_mode))
+    except OSError:
+        pass
     try:
         if fmt == "csv":
             table.write(staging, format="ascii.csv", overwrite=True)
