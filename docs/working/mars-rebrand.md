@@ -143,7 +143,7 @@ default suite green on Python 3.13, with and without `[mcp]`.
 
 ### R1 — Identity: the distribution, commands, server and skill
 
-- `pyproject.toml`: `name = "skynet-mars"`, version **`0.1.0rc2`** (§6.4).
+- `pyproject.toml`: `name = "skynet-mars"`, version **`0.1.0rc3`** (§6.4).
   Scripts `mars`, `mars-mcp` and `mars-bench`, with `kepler`, `kepler-mcp`
   and `kepler-bench` kept as deprecated aliases (§6.3). `uv lock`.
 - MCP server name `mars`; resources `mars://skill/...`; skill `mars-tools`
@@ -247,10 +247,12 @@ All decided by the maintainer on 2026-09-25.
    - a leftover `~/.local/share/kepler` with no MARS home is pointed out once
      and never moved.
 
-   All of it is removed in the release after `0.1.0rc2`. Only the
+   All of it is removed in the release after `0.1.0rc3`. Only the
    compatibility shims are allowlisted by R3's guard, and each carries its
    removal version.
-4. **The first MARS version is `0.1.0rc2`**, continuing the series: the next
+4. **The first MARS version is `0.1.0rc3`**, continuing the series: the next
    candidate of the same software, under its new name. Testers compare it
-   directly with `0.1.0rc1`. On PyPI, `skynet-mars` and `kepler` are different
+   directly with `0.1.0rc2`. *(Corrected 2026-09-26: this said `0.1.0rc2`,
+   which the MCP track took when it landed on `dev` after three review
+   rounds, still as Kepler.)* On PyPI, `skynet-mars` and `kepler` are different
    projects, so nothing clashes.
