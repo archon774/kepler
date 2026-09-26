@@ -219,8 +219,13 @@ def test_an_unknown_bundle_names_the_known_ones(tmp_path, published):
         fetch_bundle("frames", bundles_dir=tmp_path, manifest={"optical": published[1]})
 
 
-def test_fetch_data_is_a_kepler_mcp_subcommand(capsys):
+def test_fetch_data_is_a_kepler_mcp_subcommand(capsys, tmp_path, monkeypatch):
+    import tools.dotenv
     from tools.mcp.__main__ import main
+
+    # main() loads .env into os.environ for every subcommand; in-process, the
+    # checkout's real .env would leak into every later test.
+    monkeypatch.setattr(tools.dotenv, "DOTENV_PATH", tmp_path / "absent.env")
 
     assert main(["fetch-data", "--list"]) == 0
     listed = capsys.readouterr().out
