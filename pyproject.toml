@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kepler"
-version = "0.1.0rc1"
+version = "0.1.0rc2"
 description = "Early-stage astronomy tool collection and extracted algorithm modules."
 readme = "README.md"
 requires-python = ">=3.12"
