@@ -61,14 +61,40 @@ paths = [
   '''tests/test_bench_tasks\.py''',
   '''benchmarks/fixtures/search_ads\.yaml''',
   '''benchmarks/fixtures/get_paper_abstract\.yaml''',
-  '''benchmarks/suites/core/calibration\.md''',
   '''docs/benchmarking/harness\.md''',
   # The console's backend selection: the .env reader that puts the key into the
-  # environment, the choice table that names the variable each provider reads,
-  # and their tests. Added with the TUI's /backend command. Exact files, as
-  # every entry here is.
-  '''tools/config\.py''',
+  # environment (moved from tools/config.py to tools/dotenv.py so an entry
+  # point can load it before any setting is read), the choice table that names
+  # the variable each provider reads, and their tests. Added with the TUI's
+  # /backend command. Exact files, as every entry here is.
+  '''tools/dotenv\.py''',
   '''tools/tui/backends\.py''',
   '''tests/test_tui_backends\.py''',
   '''tests/test_tui_app\.py''',
+  # The other model adapters, the agent's system prompt, and the recorded
+  # schema translations: each names the variable its provider reads, or tells
+  # the model a key is the user's own. Listed when a second review of the MCP
+  # track found them missing; each has named one since the model port.
+  '''tools/agent/prompt\.py''',
+  '''tools/llm/anthropic_backend\.py''',
+  '''tools/llm/ollama_backend\.py''',
+  '''tests/test_llm_anthropic_backend\.py''',
+  '''tests/test_llm_ollama_backend\.py''',
+  '''tests/fixtures/llm/schemas/anthropic\.json''',
+  '''tests/fixtures/llm/schemas/gemini\.json''',
+  '''tests/fixtures/llm/schemas/openai\.json''',
+  '''tests/fixtures/llm/schemas/openai_strict\.json''',
+  # The MCP server: the install facts say whether ADS_DEV_KEY is set (never
+  # its value), the skill's database and checkout references tell a model and
+  # a user which variable the ADS tools read, in its one source and its
+  # rendered copy, and the install and architecture docs say the same.
+  '''tools/mcp/install\.py''',
+  '''tests/test_mcp_surface\.py''',
+  '''tools/skill/source/references/checkout\.md''',
+  '''tools/skill/source/references/databases\.md''',
+  '''skills/kepler-tools/references/checkout\.md''',
+  '''skills/kepler-tools/references/databases\.md''',
+  '''docs/installing\.md''',
+  '''docs/tool-architecture\.md''',
+  '''docs/archive/mcp-tool-surface\.md''',
 ]

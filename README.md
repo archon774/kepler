@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/archon774/kepler/actions/workflows/ci.yml"><img src="https://github.com/archon774/kepler/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/archon774/skynet-mars/actions/workflows/ci.yml"><img src="https://github.com/archon774/skynet-mars/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+">
 </p>
 
@@ -24,6 +24,7 @@ systems.
 - [Repository Shape](#repository-shape)
 - [Getting Started](#getting-started)
   - [Running the Console](#running-the-console)
+  - [Using Kepler from Your Own Coding Agent](#using-kepler-from-your-own-coding-agent)
 - [Testing & Validation](#testing--validation)
 - [Configuration](#configuration)
 - [Architecture & Further Reading](#architecture--further-reading)
@@ -225,6 +226,8 @@ Kepler/
     tool-architecture.md         # master package architecture
     repository-folders.md        # per-folder guide
     pulsar-tool-pipeline.md      # the four-stage pulsar tool chain
+    installing.md                # installing with no checkout; the MCP server
+    releasing.md                 # release policy and the data bundles
     analysis/                    # point-in-time algorithm/design reviews
     benchmarking/                # the model benchmark: design, results, figures
     archive/                     # completed track documents, kept as records
@@ -233,6 +236,10 @@ Kepler/
     assets/                      # the README banner
   tools/                         # public Python tool wrappers and shared models
     agent/ llm/ tui/ bench/      #   the loop, the model port, the console, the benchmark
+    mcp/                         #   the MCP server (kepler-mcp) and data bundles
+    skill/                       #   the agent skill's one source and renderer
+    _data -> ../data             #   bundled data: a symlink here, core data in a wheel
+  skills/kepler-tools/           # the rendered agent skill (generated; see tools/skill)
   algorithms/
     wcs/                         # Python WCS extraction from Skynet
     photometry/                  # Python photometry extraction from Skynet
@@ -288,6 +295,42 @@ dependencies needed by the split database tools and extracted algorithm modules.
 Some extracted runtime paths also require non-Python solver data called out in
 `docs/extraction.md`, including astrometry.net index files and local
 UCAC4/UCAC5 catalogs.
+
+### Using Kepler from Your Own Coding Agent
+
+Kepler's tools are also served over **MCP**, so Claude Code, Codex, Cursor or
+any other MCP host can call them from a machine that has **no checkout** of
+this repository. Install a release — Python 3.13 is the target — and register
+its server:
+
+```bash
+python3.13 -m venv kepler-env
+kepler-env/bin/pip install "kepler[mcp] @ https://github.com/archon774/skynet-mars/releases/download/v0.1.0rc1/kepler-0.1.0rc1-py3-none-any.whl"
+kepler-env/bin/kepler-mcp self-test          # launches the server as a host would, runs a pulsar detection
+```
+
+```json
+{"mcpServers": {"kepler": {"command": "/path/to/kepler-env/bin/kepler-mcp"}}}
+```
+
+- **Data.** The wheel carries the core data (the pulsar scans and the
+  zero-point references). The optical frame library and the isochrone grid are
+  optional bundles: `kepler-mcp fetch-data optical` (or `isochrones`, or
+  `all`). Each is checksum-verified against the install and resumes if
+  interrupted.
+- **Scope.** `kepler-mcp --tools databases,timeseries` serves only some of the
+  five tool groups: `databases`, `optical`, `timeseries`, `hr`, `radio`.
+- **The skill.** The server brings its own usage guidance — stage orders,
+  identifier forms, period provenance — as its instructions and as
+  `kepler://skill/...` resources. In a checkout, the same skill is
+  `skills/kepler-tools/`.
+- **Where files go.** Artifacts and downloads go under a per-user Kepler home
+  (`~/.local/share/kepler`, or `KEPLER_HOME`), never into the install.
+- **A C compiler may be needed.** On Python 3.14 or on Linux ARM, two
+  dependencies compile from source.
+
+[`docs/installing.md`](docs/installing.md) covers all of this, and
+[`docs/releasing.md`](docs/releasing.md) how releases are cut.
 
 ### Running the Console
 

@@ -17,6 +17,7 @@ entries:
       status: not_found
       count: 0
       warnings:
-        - >-
-          No recorded response. The HR-diagram chain is out of scope for the
-          core suite; this entry exists so a call does not derail a run.
+        - code: no_recorded_response
+          message: >-
+            No recorded response. The HR-diagram chain is out of scope for the
+            core suite; this entry exists so a call does not derail a run.

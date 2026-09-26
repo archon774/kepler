@@ -1,0 +1,29 @@
+{
+  "_about": [
+    "The optional data bundles this Kepler accepts. Ships inside the wheel: an",
+    "installed Kepler fetches exactly these bytes and rejects anything else, so a",
+    "wheel cannot pair itself with a bundle built for another release.",
+    "Each archive is content-addressed and published as an asset of this",
+    "repository's standing 'data' GitHub release (phase C8 of",
+    "docs/archive/mcp-tool-surface.md). Rebuild an entry with",
+    "`python -m tools.mcp.bundles NAME SOURCE OUT`; builds are deterministic."
+  ],
+  "bundles": {
+    "optical": {
+      "archive": "kepler-optical-0472c67e2f46.tar",
+      "size": 268789760,
+      "sha256": "0472c67e2f467be394371a8626e17642f8de7938da07f5a9f35bfe0a0acd6f83",
+      "files": 42,
+      "url": "https://github.com/archon774/skynet-mars/releases/download/data/kepler-optical-0472c67e2f46.tar",
+      "description": "The bundled optical frame library (data/optical/): photometry targets, frame listings, the NGC 5128 end-to-end calibration."
+    },
+    "isochrones": {
+      "archive": "kepler-isochrones-12f8359efc78.tar",
+      "size": 282214400,
+      "sha256": "12f8359efc78669abbb5006cb25a98ede05115699312fbc7922c90240cec3ec3",
+      "files": 4307,
+      "url": "https://github.com/archon774/skynet-mars/releases/download/data/kepler-isochrones-12f8359efc78.tar",
+      "description": "The Girardi isochrone grid the HR-diagram isochrone fit reads (KEPLER_ISOCHRONE_DIR)."
+    }
+  }
+}

@@ -115,16 +115,16 @@ def test_a_missing_optional_property_is_fine():
     assert _fault("search_vizier", {"target": "M31"}) is None
 
 
-def test_an_empty_properties_schema_does_not_police_extra_arguments_without_a_func():
+def test_an_absent_properties_schema_does_not_police_extra_arguments_without_a_func():
     index = validation.index_schemas(
-        [{"name": "fake_lookup", "input_schema": {"type": "object", "properties": {}}}]
+        [{"name": "fake_lookup", "input_schema": {"type": "object"}}]
     )
     assert validation.validate_tool_call("fake_lookup", {"target": "M31"}, index) is None
 
 
-def test_an_empty_properties_schema_falls_back_to_the_function_signature():
+def test_an_absent_properties_schema_falls_back_to_the_function_signature():
     index = validation.index_schemas(
-        [{"name": "no_args", "input_schema": {"type": "object", "properties": {}}}]
+        [{"name": "no_args", "input_schema": {"type": "object"}}]
     )
 
     def no_args(directory=None):
@@ -139,6 +139,34 @@ def test_an_empty_properties_schema_falls_back_to_the_function_signature():
         "no_args", {"bogus": 1}, index, func=no_args
     )
     assert fault is not None and fault.type == "schema_violation"
+
+
+def test_a_declared_empty_properties_schema_takes_no_arguments():
+    """Second review: the signature fallback let a model reach `directory` on
+    list_pulsar_scans and four other listers, which declare no properties."""
+    index = validation.index_schemas(
+        [{"name": "no_args", "input_schema": {"type": "object", "properties": {}}}]
+    )
+
+    def no_args(directory=None):
+        return None
+
+    fault = validation.validate_tool_call(
+        "no_args", {"directory": "/tmp"}, index, func=no_args
+    )
+    assert fault is not None and fault.type == "schema_violation"
+    assert validation.validate_tool_call("no_args", {}, index, func=no_args) is None
+
+
+def test_no_registered_lister_accepts_an_undeclared_directory():
+    from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
+
+    index = validation.index_schemas(TOOL_SCHEMAS)
+    for name in ("list_pulsar_scans", "list_zeropoint_references", "list_variable_star_fixtures"):
+        fault = validation.validate_tool_call(
+            name, {"directory": "/"}, index, func=TOOL_FUNCTIONS[name]
+        )
+        assert fault is not None and fault.type == "schema_violation", name
 
 
 def test_a_schema_with_no_registered_function_is_an_unknown_tool_fault():

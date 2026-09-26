@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tools.artifacts import describe_file
+from tools.artifacts import describe_file, discard_placeholder, reserve_path_in
 from tools.photometry_pipeline import (
     compute_photometry,
     list_bundled_targets,
@@ -133,10 +133,14 @@ def list_photometry_targets() -> PhotometryTargetLibrary:
     guessing or hitting a bare "not found" for a target that was never
     bundled.
     """
+    from tools.optical import optical_bundle_warning
+
     categories = list_bundled_targets()
+    absent = optical_bundle_warning()
     return PhotometryTargetLibrary(
         categories=categories,
         total_count=sum(len(stems) for stems in categories.values()),
+        warnings=[absent] if absent is not None else [],
     )
 
 
@@ -235,8 +239,12 @@ def run_photometry_on_target(
     artifact_dir = artifact_directory(output_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    plot_path = artifact_dir / f"{fits_path.stem}_photometry.png"
-    plot_photometry(data, results, plot_path, magnitude_label=magnitude_label)
+    plot_path = reserve_path_in(artifact_dir, f"{fits_path.stem}_photometry", "png")
+    try:
+        plot_photometry(data, results, plot_path, magnitude_label=magnitude_label)
+    except BaseException:
+        discard_placeholder(plot_path)
+        raise
     artifacts = [ArtifactRef(path=str(plot_path), format="png")]
 
     zero_point_model: ZeropointSolution | None = None
@@ -249,13 +257,29 @@ def run_photometry_on_target(
             rej_percent=diagnostics.get("rejection_percent"),
             source_count=diagnostics.get("num_calibration_stars", 0),
         )
-        zp_plot_path = artifact_dir / f"{fits_path.stem}_photometry_zeropoint.png"
-        if plot_zero_point_solution(zero_point, zp_plot_path) is not None:
+        zp_plot_path = reserve_path_in(
+            artifact_dir, f"{fits_path.stem}_photometry_zeropoint", "png"
+        )
+        try:
+            drawn = plot_zero_point_solution(zero_point, zp_plot_path)
+        finally:
+            # No plot drawn (or drawing failed): the reservation stays empty,
+            # and an empty file would read as a result in list_artifacts.
+            discard_placeholder(zp_plot_path)
+        if drawn is not None:
             artifacts.append(ArtifactRef(path=str(zp_plot_path), format="png"))
 
     if write_source_table and results:
-        table_path = artifact_dir / f"{fits_path.stem}_photometry_sources.csv"
-        _write_source_table(results, table_path)
+        # Reserved like the plots: a fixed name let a repeated run replace the
+        # table an earlier result still names.
+        table_path = reserve_path_in(
+            artifact_dir, f"{fits_path.stem}_photometry_sources", "csv"
+        )
+        try:
+            _write_source_table(results, table_path)
+        except BaseException:
+            discard_placeholder(table_path)
+            raise
         artifacts.append(ArtifactRef(path=str(table_path), format="csv", row_count=len(results)))
 
     valid_results = [r for r in results if r.mag is not None]

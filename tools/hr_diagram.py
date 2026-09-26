@@ -63,7 +63,7 @@ from astropy.table import Table
 
 from algorithms.hrdiagram_py import isochrones, literature, matching, membership, observations
 from tools import artifacts, config
-from tools.config import ARTIFACT_DIR, PREVIEW_ROWS
+from tools.config import PREVIEW_ROWS
 from tools.models import ArtifactRef, ToolResult
 from tools.vizier import search_vizier
 
@@ -94,9 +94,34 @@ def _safe_stem(label: str) -> str:
 
 
 def _output_path(stem: str, suffix: str) -> Path:
-    directory = ARTIFACT_DIR / _SUBDIR
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{_safe_stem(stem)}{suffix}"
+    # Reserved, not fixed: a fixed name let a repeated run replace the plot an
+    # earlier result still names.
+    # Through reserve_artifact_path, so an active scoped_artifacts session
+    # holds these files too, as it does every other tool's.
+    return artifacts.reserve_artifact_path(stem, subdir=_SUBDIR, ext=suffix)
+
+
+def _fit_and_compare(members, params, cluster_name: str, stem: str, **kwargs) -> dict:
+    """``isochrones.fit_and_compare`` into two freshly reserved paths.
+
+    A reservation is an empty file, and a fit that raises (no grid, no
+    members) never fills it; without the cleanup every failed call left a
+    0-byte CSV and PNG that ``list_artifacts`` reported as results.
+    """
+    members_csv_path = _output_path(f"{stem}_members", ".csv")
+    try:
+        out_png = _output_path(f"hr_{stem}", ".png")
+    except BaseException:
+        artifacts.discard_placeholder(members_csv_path)
+        raise
+    try:
+        return isochrones.fit_and_compare(
+            members, params, cluster_name,
+            members_csv_path=members_csv_path, out_png=out_png, **kwargs,
+        )
+    finally:
+        artifacts.discard_placeholder(members_csv_path)
+        artifacts.discard_placeholder(out_png)
 
 
 def _read_table_artifact(path: str) -> pd.DataFrame:
@@ -177,10 +202,10 @@ def _fetch_gaia_for_position(ra_deg: float, dec_deg: float, radius_arcmin: float
 
 
 def _fetch_literature_params(cluster_name: str) -> dict[str, Any]:
-    # search_vizier's target= path calls astroquery's query_object(), which has
-    # no radius_arcmin parameter of its own -- passing one here would be a
-    # silent no-op, so it's omitted. The cone radius is VizieR's own
-    # query_object default.
+    # radius_arcmin is left at search_vizier's default, 2', which is also
+    # VizieR's own query_object default -- the cone this lookup has always
+    # used. (search_vizier once ignored radius_arcmin on its target= path; it
+    # no longer does, so a radius passed here would now take effect.)
     result = search_vizier(
         target=cluster_name,
         catalog=literature.CLUSTER_CATALOG,
@@ -387,10 +412,8 @@ def fit_and_compare_hr_diagram(
     stem = _safe_stem(cluster_name)
     try:
         params = _fetch_literature_params(cluster_name)
-        report = isochrones.fit_and_compare(
-            members, params, cluster_name,
-            members_csv_path=_output_path(f"{stem}_members", ".csv"),
-            out_png=_output_path(f"hr_{stem}", ".png"),
+        report = _fit_and_compare(
+            members, params, cluster_name, stem,
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
         )
     except _NotFound as exc:
@@ -441,11 +464,7 @@ def run_full_hr_pipeline(
             matched, params, plx_sigma=plx_sigma, pm_sigma=pm_sigma,
             pm_dispersion_km_s=pm_dispersion_km_s,
         )
-        report = isochrones.fit_and_compare(
-            members, params, cluster_name,
-            members_csv_path=_output_path(f"{stem}_members", ".csv"),
-            out_png=_output_path(f"hr_{stem}", ".png"),
-        )
+        report = _fit_and_compare(members, params, cluster_name, stem)
     except _NotFound as exc:
         return ToolResult(status="not_found", errors=[{"code": "invalid_input", "message": str(exc)}])
     except (ValueError, RuntimeError) as exc:
@@ -503,10 +522,8 @@ def run_full_hr_pipeline_from_catalog(
             gaia, params, plx_sigma=plx_sigma, pm_sigma=pm_sigma,
             pm_dispersion_km_s=pm_dispersion_km_s,
         )
-        report = isochrones.fit_and_compare(
-            members, params, cluster_name,
-            members_csv_path=_output_path(f"{stem}_members", ".csv"),
-            out_png=_output_path(f"hr_{stem}", ".png"),
+        report = _fit_and_compare(
+            members, params, cluster_name, stem,
             mh=mh, max_error=max_error, logage_half_width=logage_half_width,
         )
     except _NotFound as exc:

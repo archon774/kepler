@@ -169,10 +169,14 @@ and calibrated benchmark track. Its strongest guarantees are local execution
 boundaries, extraction provenance, recorded scientific baselines, and
 deterministic default validation.
 
-The MCP tool-surface track is currently a proposal, not a delivered
-capability: it would let coding agents reach Kepler from a console where this
-repository is not installed. No implementation phase has started; see
-[working/mcp-tool-surface.md](working/mcp-tool-surface.md).
+The MCP tool-surface track has landed. `kepler-mcp` serves all 55 tools over
+stdio to a coding agent's own console on a machine with no checkout, with the
+agent skill as its instructions and resources. A wheel carries the core data,
+and `kepler-mcp fetch-data` installs checksum-pinned optional bundles.
+`v0.1.0rc1` is published as a pre-release. See
+[tool-architecture.md](tool-architecture.md) section 10.3,
+[installing.md](installing.md), and the track record in
+[archive/mcp-tool-surface.md](archive/mcp-tool-surface.md).
 
 It does not claim that every remote provider workflow is continuously tested,
 that preserved upstream behavior is scientifically correct, or that the

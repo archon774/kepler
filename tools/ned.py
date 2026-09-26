@@ -40,7 +40,7 @@ from astroquery.ipac.ned import Ned
 from algorithms.catalogs.ned import NED_TABLES
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
-from tools.models import ToolResult
+from tools.models import ToolResult, ToolWarning
 
 __all__ = ["search_ned"]
 
@@ -131,12 +131,15 @@ def search_ned(
     if result is None or len(result) == 0:
         return ToolResult(status="not_found", count=0)
 
-    warnings: list[str] = []
+    warnings: list[ToolWarning] = []
     if min_frequency_hz is not None or max_frequency_hz is not None:
         if table != "photometry" or "Frequency" not in result.colnames:
             warnings.append(
-                "min_frequency_hz/max_frequency_hz only apply to table="
-                "'photometry'; ignored here"
+                ToolWarning(
+                    code="frequency_filter_ignored",
+                    message="min_frequency_hz/max_frequency_hz only apply to "
+                    "table='photometry'; ignored here",
+                )
             )
         else:
             before = len(result)
@@ -145,8 +148,11 @@ def search_ned(
             if max_frequency_hz is not None:
                 result = result[result["Frequency"] <= max_frequency_hz]
             warnings.append(
-                f"frequency-filtered {before} rows to {len(result)} "
-                f"(min={min_frequency_hz}, max={max_frequency_hz})"
+                ToolWarning(
+                    code="frequency_filtered",
+                    message=f"frequency-filtered {before} rows to {len(result)} "
+                    f"(min={min_frequency_hz}, max={max_frequency_hz})",
+                )
             )
             if len(result) == 0:
                 return ToolResult(status="not_found", count=0, warnings=warnings)

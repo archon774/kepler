@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kepler"
-version = "0.1.0"
+version = "0.1.0rc2"
 description = "Early-stage astronomy tool collection and extracted algorithm modules."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -85,8 +85,15 @@ dependencies = [
 ]
 
 [project.scripts]
-kepler = "tools.tui.__main__:main"
+kepler = "tools.tui:launch"
 kepler-bench = "tools.bench.cli:main"
+kepler-mcp = "tools.mcp.__main__:main"
+
+[project.optional-dependencies]
+mcp = [
+    "jsonschema==4.26.0",
+    "mcp==2.2.0",
+]
 
 [tool.setuptools]
 include-package-data = true
@@ -96,6 +103,21 @@ include = ["tools*", "algorithms*"]
 
 [tool.setuptools.package-data]
 "algorithms.skylib_lite.astrometry.anet" = ["ngc2000.dat"]
+"tools.skill" = ["source/*.md", "source/references/*.md"]
+"tools.mcp" = ["bundles.json"]
+# The core data (docs/archive/mcp-tool-surface.md §3.5). tools/_data is a
+# symlink to data/ in a checkout; these globs ship its core subtrees -- never
+# data/optical/, which is the fetched optical bundle -- inside the wheel.
+"tools" = [
+    "_data/README.md",
+    "_data/frame_provenance.json",
+    "_data/pulsar/*",
+    "_data/fieldcal/*.json",
+    "_data/fieldcal/zp_solutions/*/*",
+    "_data/afterglow/*",
+    "_data/afterglow/*/*",
+    "_data/variable_star/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

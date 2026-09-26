@@ -395,7 +395,9 @@ Runtime behavior should be bounded:
 Serving is optional. A Python caller must be able to import and call every tool
 without running a server. If a serving surface is added later, generate it from
 the same tool functions and models rather than designing the package around a
-server.
+server. `tools/mcp/` is that surface (section 10.3): generated from the registry,
+behind an optional dependency group, on no import path a plain Python caller
+touches.
 
 ---
 
@@ -659,3 +661,117 @@ only the frames it draws: sampling a decoded file instead cost 0.75 s and
 Textual's headless pilot drives keypresses and asserts widget state, the
 capability probe runs against faked environments, and the half-block renderer
 is pinned byte-for-byte against a committed 4×4 PNG.
+
+### 10.3 The MCP Server and the Agent Skill
+
+`tools/mcp/` serves the registry to a coding agent's own console — Claude
+Code, Codex, Cursor — over MCP on stdio, from a machine where **this
+repository is not checked out**. It is the serving surface section 7 allows:
+generated from `TOOL_SCHEMAS` and `TOOL_FUNCTIONS`, never the reverse. It is a
+fourth consumer of the registry, beside the loop (10), the harness (10.1) and
+the console (10.2), and it retires none of them. The console and harness
+measure and drive models through Kepler's own loop. A third-party host's
+session is not graded by anything, because MCP gives the loop to the host.
+
+**Shape.** One entry point, `kepler-mcp`. A launch-time filter,
+`--tools databases,optical,timeseries,hr,radio` (or `KEPLER_MCP_TOOLS`),
+serves a subset. The groups are declared by tool module in
+`tools/mcp/groups.py`, a test asserts they partition the registry, and the
+filter narrows what is callable as well as what is listed. One server, not
+five: a dispatcher with a `database` enum would discard the per-database
+argument validation that makes the schemas worth having.
+
+| Module | Owns |
+| --- | --- |
+| `roots` | Pins `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
+| `surface` | What is served, with no SDK import: the tool list, the stringified-`"None"` pre-check, the result shape, inline media. A plain `uv run pytest` tests it. |
+| `server` | The serving SDK import (`mcp`, the optional `[mcp]` group). It validates arguments before dispatch against a copy of the registry schema that refuses **undeclared** arguments and floats for integers, matching the agent loop's validator. Several tools take keywords their schema omits on purpose (`subdir`, `output_dir`). Calls run one at a time in a worker thread. |
+| `groups` | The five groups, and the annotations: `openWorldHint` from `tools/bench/plane.py`'s `TOOL_CLASSES`; `readOnlyHint`/`destructiveHint` from a schema's `download`/`write_header` arguments. Derived, never restated. |
+| `install` | The facts about this install that the instructions carry: artifact root, which data bundles are present, whether plate solving is configured, and whether `ADS_DEV_KEY` is set (never its value). |
+| `bundles` | Builds and fetches the optional data bundles (below). |
+| `selftest` | `kepler-mcp self-test`: launches the installed server over stdio and detects B0329+54 from a measured period through the protocol. |
+
+**Results.** Every result is `structuredContent` plus the same JSON as text,
+serialised so NaN becomes `null`. `isError` follows the loop's
+`status == "error"`. A failed validation (`invalid_input`), an unknown tool
+(`unknown_tool`) or a raising tool (`tool_exception`) is that call's error
+result, never a dead session. The artifact path contract stands unchanged,
+because the caller shares the filesystem. On top of it, a PNG or WAV artifact
+also comes back **inline** as an image or audio block (5 MB and 16 MB limits, measured base64-encoded),
+read only from inside the pinned artifact root. No `outputSchema` is declared:
+clients validate against one, and a NaN-as-`null` in a `number` field would
+then fail on a user's machine.
+
+Two registry descriptions are extended at serve time rather than edited.
+`list_artifacts`/`describe_artifact` name the pinned root, and say that
+`list_artifacts` lists direct children while tools write into per-tool
+subdirectories. `sonify_pulsar`'s "the audio is never inlined" is replaced,
+and a test pins the registry original.
+
+**Where things go.** Artifacts default to a **per-user directory**, not the
+host's launch directory: a host launches the server wherever it likes, and a
+launch-directory default would drop an untracked `artifacts/` into the user's
+repository. Everything Kepler writes is under the per-user **Kepler home**
+(`tools/paths.py`: `~/.local/share/kepler`, macOS Application Support,
+`%LOCALAPPDATA%`, or `KEPLER_HOME`), and the server logs every root at
+startup.
+
+**The skill.** `SYSTEM_PROMPT` is delivered by nothing when the host owns the
+loop, so the server carries its guidance. **Claude Code delivers only about
+the first 2,000 characters of a server's instructions** (measured), so the
+served skill has two tiers:
+
+- The instructions are `tools/skill/source/BRIEF.md` — the six rules that
+  must survive truncation — plus the install facts. They are held under 1,900
+  characters, worst case, by a test.
+- `SKILL.md` and the per-domain references are MCP resources,
+  `kepler://skill/...`, read on demand.
+
+`tools/skill/source/` is the one source. It renders the served text, and also
+`skills/kepler-tools/`, the repository copy that `.claude/skills/` links for
+a coding agent in a checkout. `tests/test_skill_invariants.py` pins the
+load-bearing rules as phrases in both `SYSTEM_PROMPT` and the skill, so a
+correction to one that misses the other fails a test. The pulsar tools' own
+descriptions carry measure-first as well, so that rule depends on neither
+tier.
+
+**Packaging.** A wheel carries the code (about 4 MB) and the **core data**
+(about 7 MB: pulsar scans, zero-point references, Afterglow fixtures) at
+`tools/_data`. In a checkout that path is a committed symlink to `data/`.
+`config.BUNDLED_DATA_DIR` is how every tool reads bundled data, so a checkout
+and a wheel find the same files the same way.
+
+Two larger **optional bundles** are fetched with `kepler-mcp fetch-data`: the
+optical frame library (269 MB) and the Girardi isochrone grid (282 MB).
+
+- Each is a deterministic, content-addressed plain `.tar` on the repository's
+  standing `data` GitHub release.
+- `tools/mcp/bundles.json` ships in the wheel and pins each archive's size and
+  SHA-256, so a wheel accepts only its own bundles.
+- Downloads resume by HTTP Range, and extraction goes through tarfile's `data`
+  filter.
+- Absent, a tool says so (`bundle_not_installed`). An empty listing is never
+  presented as the answer.
+
+The fixture-write guard, the download root and `tools.optical`'s recursion
+boundary are **re-anchored** for an installed layout, never weakened. Nothing
+is written into the installed package.
+
+**Releases.** `.github/workflows/release.yml` publishes a `v<version>` tag,
+with `docs/releasing.md` as the policy. It:
+
+- checks the tag against the version;
+- rebuilds `data/optical/` against the pinned manifest;
+- installs the wheel on clean runners with no checkout, on Python 3.12 and
+  3.13, and runs `kepler-mcp self-test`;
+- checks the `data` release by GitHub's asset digests;
+- then publishes — the only job with write permission.
+
+Python 3.13 is the target because it is the newest Python every dependency
+ships wheels for. `sep` has none for 3.14, and `photutils` none for Linux
+aarch64. Installing and registering is `docs/installing.md`.
+
+**Dependency direction.** `tools/mcp → tools/registry`, plus
+`tools/mcp/groups → tools/bench/plane` (import-light by design). `tools/mcp`
+imports **nothing** from `tools/agent/` or `tools/llm/`, and nothing under
+`algorithms/` imports `tools/mcp`. A test asserts both.

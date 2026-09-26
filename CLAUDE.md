@@ -20,6 +20,10 @@ The top-level `tools/` and `algorithms/` folders are intentionally separate.
 code that tool wrappers may call. `README.md`, `docs/repository-folders.md`, and
 `docs/tool-architecture.md` describe the current architecture.
 
+Using the tools, as opposed to working on this repository, is taught by the agent
+skill in `skills/kepler-tools/`, rendered from its one source in `tools/skill/source/`:
+edit the source, then run `uv run python -m tools.skill`.
+
 ## The extraction contract (most important thing to know)
 
 The extraction folders came from Skynet (`/home/claude/skynet`). The Python port
@@ -67,11 +71,14 @@ python3 -m compileall tools algorithms   # local package syntax smoke
 git diff --check                         # whitespace check
 ```
 
-CI (`.github/workflows/ci.yml`) runs on **Python 3.14**; `pyproject.toml` keeps
+CI (`.github/workflows/ci.yml`) runs on **Python 3.13** -- the newest Python
+every dependency ships wheels for (`sep` has none for 3.14; see
+`docs/installing.md`); `pyproject.toml` keeps
 3.12 as the floor, so code still has to work there (`Path.resolve()` raises
 `RuntimeError` rather than `OSError` on a symlink loop under 3.12 — use
 `tools.config.within`/`safe_resolve`). It gates three jobs: `compileall` over
-`tools algorithms tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
+`tools algorithms tests`, `uv run --locked --extra mcp pytest` (after the MCP
+tests alone without the extra), and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
 `tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
 exist.
@@ -267,9 +274,67 @@ the `kepler-bench` CLI. Its rules:
 - Zero new dependencies; nothing here opens a socket under a plain
   `uv run pytest`, and that is a test (B2), not a convention.
 
+`tools/mcp/` owns the MCP server (`kepler-mcp`) and nothing else: a fourth
+consumer of the registry, served over stdio to a coding agent's console on a
+machine with no checkout. Its rules:
+
+- **The dependency runs `tools/mcp → tools/registry`**, plus `tools/mcp/groups
+  → tools/bench/plane` (import-light by design, for `TOOL_CLASSES`).
+  **`tools/mcp/` imports nothing from `tools/agent/` or `tools/llm/`**, and
+  nothing under `algorithms/` imports it. `tests/test_mcp_surface.py` asserts
+  both.
+- **The `mcp` SDK is optional** (`uv sync --extra mcp`). Only
+  `tools/mcp/server.py` imports it to serve, and `tools/mcp/selftest.py` to
+  act as a client of that server; nothing else under `tools/mcp/` may. CI
+  runs the MCP tests **first without it**, then the whole suite with it
+  (`--extra mcp`), so every test that drives the SDK must call
+  `pytest.importorskip("mcp")` *before* any SDK import, or CI fails.
+- **The registry is read, never edited, to serve it.** What only the server
+  knows (the pinned artifact root, a sentence the server makes false) is
+  added or replaced at serve time in `tools/mcp/surface.py`, and a test pins
+  each registry original.
+- **Undeclared arguments never reach a tool.** The server validates each call
+  against a copy of the registry schema with `additionalProperties: false`,
+  and with `integer` excluding floats, matching the agent loop's validator.
+  Several tools take keywords their schema omits on purpose (`subdir`,
+  `output_dir`, …), and a model must not reach them. The agent loop agrees:
+  a schema whose `properties` is declared empty takes no arguments, whatever
+  the function's signature accepts.
+- **`.env` is loaded first.** `tools/dotenv.py` resolves nothing at import;
+  `kepler-mcp` (every subcommand, `fetch-data` and `self-test` included)
+  loads `.env` before pinning roots or importing `tools.config`,
+  whose settings are fixed at import, and so does the `kepler` console
+  (`tools.tui:launch`). `tools.config` re-exports the loader.
+- **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
+  worst case, tested). Claude Code truncates a server's instructions at
+  about 2,000. Everything longer is a `kepler://skill/...` resource.
+- **The skill has one source**, `tools/skill/source/`. Edit it and run
+  `uv run python -m tools.skill`; `skills/kepler-tools/` is generated.
+
+**Bundled data and the Kepler home.** Tools read bundled fixtures only through
+`config.BUNDLED_DATA_DIR`, which is `tools/_data`: a committed symlink to
+`data/` in a checkout (or, in a clone made without symlink support, where the
+link arrives as a text file, the checkout's `data/` directly), and in a wheel
+the core data (`pulsar/`, `fieldcal/`, `afterglow/`, `variable_star/`) that
+package-data ships. Never add a path of the form
+`Path(__file__).parents[1] / "data"`: under a wheel it names a directory that
+does not exist. An installed Kepler writes only under the per-user Kepler
+home (`tools/paths.py`; `KEPLER_HOME`):
+
+- `artifacts/`, the default for the MCP server and an installed console;
+- `fits_downloads/`;
+- `numba-cache/`, numba's compiled-function cache (`NUMBA_CACHE_DIR`,
+  set by both entry points on an install);
+- `bundles/<name>/`, the optional `optical` and `isochrones` bundles that
+  `kepler-mcp fetch-data` installs, pinned by size and SHA-256 in
+  `tools/mcp/bundles.json`.
+
+A changed bundle is a new, content-addressed asset on the standing `data`
+release, never a replaced one (`docs/releasing.md`).
+
 `docs/archive/model-backends.md` is the port's full design and
 `docs/benchmarking/harness.md` the harness's; `docs/tool-architecture.md`
-sections 10 and 10.1 are the summaries.
+sections 10 and 10.1 are the summaries, and 10.3 is the MCP server's.
 
 ### Vendored `skylib` is consolidated
 
@@ -325,11 +390,14 @@ Upstream Dynaconf/ORM/S3 plumbing was replaced with duck-typed stand-ins:
 
   `tools/wcs.py` refuses to write a solved header back into a bundled fixture.
   That guard names the four tracked fixture subtrees (`afterglow/`,
-  `fieldcal/`, `optical/`, `pulsar/`) — pinned to this repository, reading no
+  `fieldcal/`, `optical/`, `pulsar/`) — pinned to the package's own bundled
+  data (`tools/_data`, a symlink to `data/` in a checkout), reading no
   setting — so a downloaded product under `data/fits_downloads/` stays
-  writable and no environment variable can switch the guard off. A new
-  fixture subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the
-  tuple matches the directories present.
+  writable and no environment variable can switch the guard off. It also
+  covers fetched data bundles (`<kepler home>/bundles/`). A new fixture
+  subtree has to be added to `_FIXTURE_SUBTREES`; a test asserts the tuple
+  matches the directories present. An installed wheel re-anchors the data
+  and download roots; see `docs/installing.md`.
 
 ### Runtime dependencies that are not optional
 

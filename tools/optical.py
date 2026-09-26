@@ -33,11 +33,13 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 
 from algorithms.wcs.source_extraction import build_wcs_from_header
 from tools.models import OpticalFrame, OpticalFrameList, ToolError, ToolWarning
+from tools.paths import is_checkout
 
 __all__ = [
     "OPTICAL_DATA_DIR_ENV",
     "bundled_frame_paths",
     "list_optical_frames",
+    "optical_bundle_warning",
     "primary_optical_data_dir",
     "resolve_optical_frame",
 ]
@@ -56,17 +58,46 @@ def primary_optical_data_dir() -> Path:
     able to say so -- ``list_photometry_targets`` advertises exactly that, and
     would otherwise start offering archive downloads as bundled targets.
 
-    Defaults under the repository's own ``data/`` rather than under
-    ``config.DATA_DIR``. Out of the box those are the same directory; they part
+    Defaults under the bundled data (``config.BUNDLED_DATA_DIR``) rather than
+    under ``config.DATA_DIR``. Out of the box those are the same directory; they part
     company only when an operator sets ``KEPLER_DATA_DIR``, and that override
     is about where downloads land and how far a recursive search may walk --
     not about relocating the bundled frame library. Relocating the library is
     what ``KEPLER_OPTICAL_DATA_DIR`` is for.
-    """
-    from tools.config import env_path
 
-    default = _REPO_ROOT / "data" / "optical"
+    An installed wheel ships no frames: there the default is the fetched
+    optical bundle (``kepler-mcp fetch-data optical``) once it has verified,
+    and the empty bundled location until then.
+    """
+    from tools.config import BUNDLED_DATA_DIR, env_path, fetched_bundle
+
+    default = BUNDLED_DATA_DIR / "optical"
+    if not default.is_dir():
+        default = fetched_bundle("optical") or default
     return env_path(OPTICAL_DATA_DIR_ENV, default) or default
+
+
+def optical_bundle_warning() -> ToolWarning | None:
+    """Say so when the frame library is an optional bundle that is not here.
+
+    Only for the default location: with ``KEPLER_OPTICAL_DATA_DIR`` set, a
+    missing directory is that setting's problem and ``directory_not_found``
+    already names it. An installed wheel ships no frames, so without this an
+    empty listing would read like a real answer (C7, §3.5).
+    """
+    from tools.config import env_value
+
+    if env_value(OPTICAL_DATA_DIR_ENV) or primary_optical_data_dir().is_dir():
+        return None
+    return ToolWarning(
+        code="bundle_not_installed",
+        message=(
+            "The optical frame library is an optional data bundle and is not "
+            "installed here, so only archive downloads can be listed. Fetch it "
+            "with `kepler-mcp fetch-data optical`, or set "
+            f"{OPTICAL_DATA_DIR_ENV} to a directory of FITS frames."
+        ),
+    )
 
 
 def bundled_frame_paths() -> list[Path]:
@@ -108,6 +139,14 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     refusing keeps a flat download root working, which is what CASDA's
     ``download_files`` produces.
 
+    Re-anchored in C7 for an installed wheel, not relaxed. There the data
+    directory is the shipped core inside ``site-packages`` and the download
+    root defaults to ``<kepler home>/fits_downloads``, outside it -- so under
+    the old rule every installed Kepler searched its own downloads flat and
+    never saw a MAST product. The one directory added is that Kepler-owned
+    download tree, ``config.KEPLER_HOME / "fits_downloads"``: a download root
+    pointed anywhere else outside the data directory is still searched flat.
+
     ``tools.config`` values are read through the module rather than bound at
     import so a caller that reassigns them is honoured, matching how
     ``tools.artifacts.ARTIFACT_DIR`` is already overridden.
@@ -115,12 +154,24 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     from tools import config
 
     warnings: list[ToolWarning] = []
+    absent = optical_bundle_warning()
+    if absent is not None:
+        warnings.append(absent)
     roots: list[tuple[Path, bool]] = [(primary_optical_data_dir(), False)]
     download_dir = config.FITS_DOWNLOAD_DIR
     if download_dir is not None:
         download_root = Path(download_dir).expanduser()
         data_dir = Path(config.DATA_DIR).expanduser()
-        recursive = config.within(download_root, data_dir)
+        # The second bound is the Kepler home's own download tree, taken
+        # literally: `within` resolves both sides, so a bound resolved in its
+        # last component let a symlinked root (<home>/fits_downloads -> /)
+        # resolve to itself and earn a walk of whatever it points at. Not the
+        # whole home either: that admitted a download root of the home itself,
+        # whose walk reads the artifacts and every fetched bundle.
+        home_downloads = config.KEPLER_HOME / "fits_downloads"
+        recursive = config.within(download_root, data_dir) or config.safe_resolve(
+            download_root
+        ).is_relative_to(home_downloads)
         # Only a root that exists earns the warning: an absent download root is
         # skipped by the lister without comment, and telling a caller that a
         # directory which is not searched at all "is searched flat" is wrong.
@@ -133,9 +184,17 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
                         f"{data_dir}, so it is searched flat rather than "
                         "walked. Products nested under "
                         "mastDownload/<mission>/<obs_id>/ will not be listed; "
-                        f"point {config.FITS_DOWNLOAD_DIR_ENV} inside the data "
-                        f"directory, or set {config.DATA_DIR_ENV} to a root "
-                        "that covers it."
+                        + (
+                            f"point {config.FITS_DOWNLOAD_DIR_ENV} inside the "
+                            f"data directory, or set {config.DATA_DIR_ENV} to a "
+                            "root that covers it."
+                            if is_checkout()
+                            # Installed: the data directory is the package, which
+                            # the next upgrade replaces. Point at the Kepler home.
+                            else f"point {config.FITS_DOWNLOAD_DIR_ENV} inside "
+                            f"{config.KEPLER_HOME}, or unset it to use "
+                            f"{config.KEPLER_HOME / 'fits_downloads'}."
+                        )
                     ),
                 )
             )

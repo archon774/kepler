@@ -20,9 +20,10 @@ entries:
       preview:
         - {obs_id: "hst_10286_01", instrument: "ACS/WFC", filters: "F625W", t_exptime: 2400.0}
       warnings:
-        - >-
-          max_observations capped this listing at 25 of 121515 matched products.
-          Pass a higher cap or narrow the query.
+        - code: observations_capped
+          message: >-
+            max_observations capped this listing at 25 of 121515 matched
+            products. Pass a higher cap or narrow the query.
       artifact: {format: ecsv, row_count: 25, columns: [obs_id, instrument, filters, t_exptime]}
   - id: default
     match: {}

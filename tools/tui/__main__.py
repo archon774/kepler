@@ -6,6 +6,13 @@ import argparse
 import os
 import sys
 
+if __name__ == "__main__":
+    # `python -m tools.tui`: load .env before the imports below read
+    # tools.config, as the `kepler` script does (tools.tui.launch).
+    from tools.dotenv import load_dotenv as _load_dotenv_first
+
+    _load_dotenv_first()
+
 from tools.config import load_dotenv
 from tools.llm.base import BackendUnavailableError
 from tools.tui.app import DEFAULT_THINKING_BUDGET, KeplerApp

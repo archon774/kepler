@@ -39,8 +39,10 @@ whole selection offline and :func:`replay_catalog_sources` can hand either
 the selected rows or the full response to a from-pixels solve.
 
 Only ``KEPLER_FIELDCAL_DATA_DIR`` relocates the ``zp_solutions/`` search;
-the bundled-frame and Afterglow web-table lookups always read the repo's own
-``data/`` because they only make sense against the shipped fixtures.
+the bundled-frame and Afterglow web-table lookups always read the bundled data
+(``config.BUNDLED_DATA_DIR``: the repository's ``data/``, or in an installed
+wheel the checksum-verified optical bundle), because they only make sense
+against the shipped fixtures. ``KEPLER_OPTICAL_DATA_DIR`` does not move them.
 """
 
 from __future__ import annotations
@@ -158,9 +160,9 @@ def _fieldcal_data_dir(directory: str | Path | None = None) -> Path:
     if directory is not None:
         return Path(directory).expanduser()
 
-    from tools.config import env_path
+    from tools.config import BUNDLED_DATA_DIR, env_path
 
-    default = _REPO_ROOT / "data" / "fieldcal"
+    default = BUNDLED_DATA_DIR / "fieldcal"
     return env_path(FIELDCAL_DATA_DIR_ENV, default) or default
 
 
@@ -229,7 +231,9 @@ def _catalog_name(summary: dict) -> str | None:
 
 def _web_table_zero_point(frame_filename: str) -> float | None:
     """Afterglow's published web-table zero point for a bundled frame, if recorded."""
-    path = _REPO_ROOT / "data" / "afterglow" / "afterglow_web_values_master.csv"
+    from tools.config import BUNDLED_DATA_DIR
+
+    path = BUNDLED_DATA_DIR / "afterglow" / "afterglow_web_values_master.csv"
     if not path.is_file():
         return None
     with path.open(newline="") as handle:
@@ -259,7 +263,17 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
             )
         ]
 
-    candidate = _REPO_ROOT / "data" / "optical" / bundled
+    # Pinned to the frames the references were recorded against: the bundled
+    # library in a checkout, or -- in an installed wheel, which ships none --
+    # the checksum-verified optical bundle. Never KEPLER_OPTICAL_DATA_DIR: that
+    # override names an operator's own archive, and a same-named file there is
+    # not the frame this ground truth describes.
+    from tools.config import BUNDLED_DATA_DIR, fetched_bundle
+
+    library = BUNDLED_DATA_DIR / "optical"
+    if not library.is_dir():
+        library = fetched_bundle("optical") or library
+    candidate = library / bundled
     if candidate.is_file():
         if is_lfs_pointer(candidate):
             return None, [
@@ -271,10 +285,25 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
                 )
             ]
         return str(candidate), []
+    if not library.is_dir():
+        # Its own advice, not the frame listing's: these frames come only from
+        # the bundled library, so KEPLER_OPTICAL_DATA_DIR -- which the listing
+        # offers as an alternative, and which silences its warning when set --
+        # is no remedy here.
+        return None, [
+            ToolWarning(
+                code="bundle_not_installed",
+                message=f"The frame {field!r} was recorded against ({bundled}) is "
+                "in the optional optical data bundle, which is not installed, so "
+                "the solve is checked at the calc_solution level only. Fetch it "
+                "with `kepler-mcp fetch-data optical`; KEPLER_OPTICAL_DATA_DIR "
+                "does not supply these frames.",
+            )
+        ]
     return None, [
         ToolWarning(
             code="frame_not_bundled",
-            message=f"{bundled} is not present in data/optical/.",
+            message=f"{bundled} is not present in {library}.",
         )
     ]
 
@@ -300,7 +329,11 @@ def _load_reference(field: str, field_dir: Path) -> ZeropointReference:
     rows, row_warnings = _calibration_rows(field_dir)
     warnings = warnings + row_warnings
 
-    web_zp = _web_table_zero_point(Path(frame_path).name) if frame_path else None
+    # Keyed by the recorded frame's name, not by whether that frame is on disk:
+    # the web table ships in the core data, and an install without the
+    # optional optical bundle used to lose a ground-truth value it had.
+    recorded_frame = _BUNDLED_FRAME_BY_FIELD.get(field)
+    web_zp = _web_table_zero_point(recorded_frame) if recorded_frame else None
 
     return ZeropointReference(
         field=field,
@@ -412,7 +445,9 @@ def load_ocl_reference(frame_stem: str) -> dict:
     Reads the bundled fixtures directly; ``KEPLER_FIELDCAL_DATA_DIR`` does not
     relocate them.
     """
-    data_root = _REPO_ROOT / "data"
+    from tools.config import BUNDLED_DATA_DIR
+
+    data_root = BUNDLED_DATA_DIR
     provenance_path = data_root / "frame_provenance.json"
     report_path = data_root / "fieldcal" / "ocl_filter_report.json"
 

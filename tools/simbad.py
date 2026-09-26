@@ -33,7 +33,7 @@ from astroquery.simbad import Simbad
 
 from tools import artifacts
 from tools.config import PREVIEW_ROWS
-from tools.models import ToolResult
+from tools.models import ToolResult, ToolWarning
 
 __all__ = [
     "MEASUREMENT_TABLES",
@@ -231,7 +231,12 @@ def get_paper_abstract(bibcode: str) -> ToolResult:
         return ToolResult(
             status="not_found",
             count=0,
-            warnings=["bibcode found but no abstract text is on file for it"],
+            warnings=[
+                ToolWarning(
+                    code="no_abstract",
+                    message="bibcode found but no abstract text is on file for it",
+                )
+            ],
         )
 
     return ToolResult(

@@ -904,10 +904,15 @@ def sonify_pulsar(
     # "..._prefolded_light_curve.wav", which says the opposite of what it is.
     # Both upstream titles stay available in the artifact metadata.
     label = output_name or f"{_label(lc, file, None)}_sonification_{rendering}"
-    output_path = artifacts.reserve_artifact_path(label, subdir=subdir, ext="wav")
+    output_path = None
     try:
+        # Reserved inside the try: an artifact root the server cannot write
+        # fails the reservation too, and that is a write_failed result, not
+        # an exception out of the tool.
+        output_path = artifacts.reserve_artifact_path(label, subdir=subdir, ext="wav")
         written = sonification.write_wav(output_path, rendered)
     except OSError as exc:
+        artifacts.discard_placeholder(output_path)
         return PulsarSonification(
             file=file,
             errors=[ToolError(code="write_failed", message=str(exc))],
@@ -943,15 +948,11 @@ def sonify_pulsar(
 #: does not have to move files into the repo.
 PULSAR_DATA_DIR_ENV = "KEPLER_PULSAR_DATA_DIR"
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
 def _pulsar_data_dir() -> Path:
-    from tools.config import env_path
+    from tools.config import BUNDLED_DATA_DIR, env_path
 
-    return env_path(PULSAR_DATA_DIR_ENV, _REPO_ROOT / "data" / "pulsar") or (
-        _REPO_ROOT / "data" / "pulsar"
-    )
+    default = BUNDLED_DATA_DIR / "pulsar"
+    return env_path(PULSAR_DATA_DIR_ENV, default) or default
 
 
 #: The curated literature periods, read from beside the scans they describe.
@@ -1329,9 +1330,11 @@ def plot_pulsar(
     label = output_name or (
         f"{table.meta.get('source_name') or Path(file.path).stem}_{resolved_kind}_plot"
     )
-    output_path = artifacts.reserve_artifact_path(label, subdir=subdir, ext="png")
-
+    output_path = None
     try:
+        # Reserved inside the try, as sonify_pulsar's WAV is: an unwritable
+        # root is a reported failure, not an exception out of the tool.
+        output_path = artifacts.reserve_artifact_path(label, subdir=subdir, ext="png")
         drawn = _render_plot(
             table,
             resolved_kind,
@@ -1345,7 +1348,13 @@ def plot_pulsar(
             figsize=figsize,
             warnings=warnings,
         )
+    except OSError as exc:
+        artifacts.discard_placeholder(output_path)
+        return PulsarPlot(
+            file=file, errors=[ToolError(code="write_failed", message=str(exc))]
+        )
     except Exception as exc:  # noqa: BLE001 - reported, not raised
+        artifacts.discard_placeholder(output_path)
         return PulsarPlot(
             file=file, errors=[ToolError(code="plot_failed", message=str(exc))]
         )

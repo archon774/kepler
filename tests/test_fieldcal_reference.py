@@ -730,3 +730,42 @@ def test_the_bundled_ocl_frames_join_back_to_the_recorded_sweep():
         t["pipeline"]["wcs"]["failure_reason"] == "no WCS solution found in FITS header"
         for t in openf["trials"]
     )
+
+
+def test_the_replay_ignores_an_operator_frame_library(tmp_path, monkeypatch):
+    """Code review, finding 9: KEPLER_OPTICAL_DATA_DIR made the ground-truth
+    replay look for its recorded frame in an operator's archive."""
+    from tools import fieldcal_reference
+
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path))
+    (tmp_path / "ngc5128_galaxy_b_001.fits").write_bytes(b"not the recorded frame")
+
+    path, warnings = fieldcal_reference._frame_path("ngc5128_b_002")
+
+    assert path is not None and not path.startswith(str(tmp_path))
+    assert warnings == [] or all(w.code == "frame_not_checked_out" for w in warnings)
+
+
+def test_the_web_table_zero_point_does_not_need_the_optical_library(tmp_path, monkeypatch):
+    """Second review, finding 9: an install without the optional optical
+    bundle lost the web-table value, which ships in the core data."""
+    from tools import config
+
+    core = tmp_path / "_data"
+    core.mkdir()
+    for name in ("afterglow", "fieldcal"):
+        (core / name).symlink_to(config.BUNDLED_DATA_DIR / name)
+    monkeypatch.setattr(config, "BUNDLED_DATA_DIR", core)
+    monkeypatch.setattr(config, "fetched_bundle", lambda name, **kwargs: None)
+    # Set, and irrelevant: the replay's frames never come from this override,
+    # so the fetch advice must not be withheld because of it.
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path / "my-archive"))
+
+    reference = load_zeropoint_reference("ngc5128_b_002")
+
+    assert reference.frame_path is None
+    assert reference.web_table_zero_point is not None
+    (absent,) = [w for w in reference.warnings if w.code == "bundle_not_installed"]
+    # Third review: it offered KEPLER_OPTICAL_DATA_DIR, which never helps here.
+    assert "fetch-data optical" in absent.message
+    assert "does not supply these frames" in absent.message

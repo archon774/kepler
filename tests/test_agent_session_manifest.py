@@ -120,7 +120,7 @@ def test_a_session_persists_its_manifest_and_reuses_a_cached_tool_call(
         {
             "name": "fake_lookup",
             "description": "Fake lookup.",
-            "input_schema": {"type": "object", "properties": {}},
+            "input_schema": {"type": "object", "properties": {"target": {"type": "string"}}},
         }
     ]
     session = AgentSession(

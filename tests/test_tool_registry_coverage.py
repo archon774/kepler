@@ -12,6 +12,9 @@ from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
 #: Modules that are infrastructure, not a public tool surface.
 NOT_TOOL_MODULES = {
     "tools.artifacts",
+    # The declared ToolError/ToolWarning code vocabulary. Two dicts and a
+    # docstring; tests/test_tool_codes.py is what keeps it honest.
+    "tools.codes",
     "tools.config",
     "tools.models",
     "tools.registry",
@@ -31,6 +34,17 @@ NOT_TOOL_MODULES = {
     # run_session's tool_functions mapping; it owns no tool and adds nothing
     # to the tool surface. pkgutil.iter_modules yields it as a package.
     "tools.bench",
+    # The agent skill's single source and its renderer: Markdown plus the code
+    # that renders skills/kepler-tools/ from it. Guidance, not a tool.
+    "tools.skill",
+    # The MCP server: a fourth consumer of the registry, serving it over stdio.
+    # It reads TOOL_SCHEMAS/TOOL_FUNCTIONS and owns no tool of its own.
+    "tools.mcp",
+    # Where bundled data and the per-user Kepler home are. Paths, no tool.
+    "tools.paths",
+    # The .env loader, kept apart from tools.config so an entry point can load
+    # .env before any setting is fixed at import. Re-exported by tools.config.
+    "tools.dotenv",
 }
 
 

@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          python-version: "3.13"
 
       - name: Compile Python files
         run: python -m compileall -q tools algorithms tests
@@ -45,15 +45,27 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          python-version: "3.13"
 
       - name: Install uv
         run: python -m pip install uv
 
+      # Without the optional [mcp] extra first: every test that drives the SDK
+      # must skip itself cleanly when it is absent, as it is for a user who
+      # never installs it. Only the MCP, skill and registry-coverage tests, so
+      # this stays cheap.
+      - name: Run the MCP tests without the [mcp] extra
+        env:
+          MPLBACKEND: Agg
+        run: uv run --locked pytest tests/test_mcp_surface.py tests/test_mcp_bundles.py tests/test_skill_invariants.py tests/test_tool_registry_coverage.py
+
+      # Then everything with it. Without the extra, every test of the server's
+      # own validation -- the check that keeps undeclared arguments from a
+      # tool -- skipped in CI and was never run by it.
       - name: Run pytest
         env:
           MPLBACKEND: Agg
-        run: uv run --locked pytest
+        run: uv run --locked --extra mcp pytest
 
   repository-shape:
     name: repository shape

@@ -30,10 +30,32 @@ from astroquery.casda import Casda
 from tools import artifacts
 from tools import config
 from tools.config import CASDA_OPAL_USERNAME, PREVIEW_ROWS
-from tools.models import ToolResult
+from tools.models import ToolResult, ToolWarning
 from tools.resolve import resolve_target_coords
 
 __all__ = ["search_casda"]
+
+
+#: The keyring service astroquery's CASDA login stores the OPAL password under.
+_CASDA_KEYRING_SERVICE = "astroquery:casda.csiro.au"
+
+
+def _opal_password_stored(username: str) -> bool:
+    """Whether ``casda.login`` will find a password without prompting.
+
+    astroquery prompts with ``getpass`` when the keyring has no password.
+    Under ``kepler-mcp`` there is no terminal -- stdin is the protocol
+    stream -- so the prompt either fails or blocks the server, holding the
+    lock every other call waits on. The username check alone did not prevent
+    that. A keyring that cannot be read counts as holding nothing.
+    """
+
+    try:
+        import keyring
+
+        return keyring.get_password(_CASDA_KEYRING_SERVICE, username) is not None
+    except Exception:  # noqa: BLE001 -- any keyring failure means "would prompt"
+        return False
 
 
 def search_casda(
@@ -100,7 +122,7 @@ def search_casda(
     artifact = artifacts.write_table(
         table, f"casda_{target or f'{ra_deg}_{dec_deg}'}", subdir="casda"
     )
-    warnings: list[str] = []
+    warnings: list[ToolWarning] = []
 
     if download:
         if not CASDA_OPAL_USERNAME:
@@ -119,6 +141,26 @@ def search_casda(
                     }
                 ],
             )
+        if not _opal_password_stored(CASDA_OPAL_USERNAME):
+            return ToolResult(
+                status="partial",
+                count=len(table),
+                preview=artifacts.preview_rows(table, PREVIEW_ROWS),
+                columns=[str(c) for c in table.colnames],
+                artifact=artifact,
+                errors=[
+                    {
+                        "code": "provider_unavailable",
+                        "message": "download=True needs the OPAL password for "
+                        f"{CASDA_OPAL_USERNAME} stored in the system keyring, and "
+                        "none is. Store it once, outside this tool, with "
+                        "`python -c \"from astroquery.casda import Casda; "
+                        f"Casda.login(username='{CASDA_OPAL_USERNAME}', "
+                        "store_password=True)\"`; this tool will not prompt "
+                        "interactively for a password",
+                    }
+                ],
+            )
         casda.login(username=CASDA_OPAL_USERNAME)
         url_list = casda.stage_data(table)
         # The literal "fits_downloads" this used to pass ignored
@@ -130,10 +172,13 @@ def search_casda(
         download_dir.mkdir(parents=True, exist_ok=True)
         casda.download_files(url_list, savedir=str(download_dir))
         warnings.append(
-            f"staged and downloaded {len(url_list)} file(s) to {download_dir}; "
-            "they now resolve through the local frame registry -- call "
-            "list_optical_frames or resolve_optical_frame to pick one up, "
-            "then the image tools take it by path"
+            ToolWarning(
+                code="products_downloaded",
+                message=f"staged and downloaded {len(url_list)} file(s) to "
+                f"{download_dir}; they now resolve through the local frame "
+                "registry -- call list_optical_frames or resolve_optical_frame "
+                "to pick one up, then the image tools take it by path",
+            )
         )
 
     return ToolResult(

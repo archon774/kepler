@@ -4,9 +4,11 @@
 
 Kepler is a staging area for extracted astronomy algorithms. Public Python tools live in `tools/`, including one thin tool per astronomy database/archive (SIMBAD, NED, VizieR, ATNF, ADS, MAST, MPC, CASDA) plus local pipelines (photometry, pulsar, variable-star, HR-diagram, radio sources). Extracted/ported Python algorithms live in `algorithms/wcs/`, `algorithms/photometry/`, `algorithms/fieldcal/`, `algorithms/catalogs/`, `algorithms/query/`, `algorithms/skylib_lite/` (a shared vendored Skylib subset), `algorithms/pulsar/`, `algorithms/variable_star/`, `algorithms/hrdiagram_py/`, and `algorithms/radio/` (new first-party capability, no upstream equivalent). The Astromancer light-curve, periodogram, and HR-diagram algorithms run through the Python ports; their retired TypeScript extraction history remains documented in `docs/extraction.md`. Provenance, dependencies, and parity notes are consolidated there rather than in per-folder `EXTRACTION.md` files, which no longer exist. Documentation is organized under `docs/`: reference documents at the top level, point-in-time reviews in `docs/analysis/`, the model benchmark in `docs/benchmarking/`, completed track documents in `docs/archive/`, and active plans in `docs/working/`; `docs/README.md` is the map. Root files include `pyproject.toml`, `uv.lock`, `README.md`, and `CONTRIBUTING.md`.
 
+Using the tools, as opposed to working on this repository, is taught by the agent skill in `skills/kepler-tools/`, rendered from its one source in `tools/skill/source/`: edit the source, then run `uv run python -m tools.skill`.
+
 ## Build, Test, and Development Commands
 
-- `uv sync`: create/update the Python environment (3.14 in CI; 3.12 is the floor in `pyproject.toml`) from `pyproject.toml` and `uv.lock`.
+- `uv sync`: create/update the Python environment (3.13 in CI, the newest Python every dependency ships wheels for; 3.12 is the floor in `pyproject.toml`) from `pyproject.toml` and `uv.lock`.
 - `uv run pytest`: the test suite (see Testing Guidelines below) — no network access by default.
 - `uv run kepler`: open the console, the optional agentic loop over the `tools` schemas. It needs a model backend — a key for the provider it opens on, or a local Ollama daemon, which needs none. `KEPLER_MODEL_BACKEND=provider/model` picks which one it starts on; `/backend` changes it inside the session.
 - `python3 -m compileall tools algorithms`: syntax smoke test.

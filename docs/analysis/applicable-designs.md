@@ -104,6 +104,19 @@ verifying it) fails on.
 
 This is the highest-leverage, lowest-risk item in this document: it costs a few hours, touches no algorithm code, and is the direct precondition for §4 below.
 
+> **Correction, 2026-09-23 (phase C2 of `docs/archive/mcp-tool-surface.md`).** The
+> two counts above are wrong as of `dev`, and recommendation 1 was not taken as
+> written. An AST scan of `tools/` and `algorithms/` finds **41** distinct
+> `ToolError` codes, not three: the three named here are the ones built as
+> `{"code": ..., "message": ...}` dict literals in the class-R database tools,
+> and the other 38 are constructed through `ToolError(code=...)` — including six
+> sites that pass a code held in a variable, which no `Literal` could satisfy.
+> `ToolResult.warnings` likewise had fifteen call sites across seven modules, not
+> one. Recommendations 2 and 3 shipped as written; recommendation 1 shipped as a
+> **declared, test-enforced vocabulary** (`tools/codes.py`,
+> `tests/test_tool_codes.py`) rather than a `Literal`, for the reasons recorded
+> in that module's docstring. The dated analysis above is left intact.
+
 ---
 
 ## 4. Applicable Change: Link Preserved-Defect Findings to Runtime Warnings
