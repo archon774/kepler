@@ -41,6 +41,17 @@ def _missing_sdk_message() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+
+    # First, for every subcommand. fetch-data and self-test import
+    # tools.config too, and a checkout's .env can move the Kepler home or name
+    # a bundle mirror: loaded only for the server, the fetch installed into
+    # one home and the server read another. The real environment still wins
+    # over the file.
+    from tools.dotenv import DOTENV_PATH, load_dotenv
+
+    loaded = load_dotenv()
+    pin_numba_cache()
+
     if argv[:1] == ["fetch-data"]:
         # Installs optional data bundles; serves nothing, needs no SDK.
         from tools.mcp.bundles import fetch_main
@@ -77,13 +88,6 @@ def main(argv: list[str] | None = None) -> int:
         stream=sys.stderr, level=logging.INFO, format="kepler-mcp: %(message)s"
     )
 
-    # Before the roots are pinned and before anything reads tools.config, so
-    # that every setting the file carries takes effect. The real environment
-    # still wins over the file.
-    from tools.dotenv import DOTENV_PATH, load_dotenv
-
-    loaded = load_dotenv()
-    pin_numba_cache()
     # Every tool call runs on a worker thread, and on macOS matplotlib's
     # automatic backend refuses to create a figure off the main thread. The
     # server draws only to files, so it never needs a GUI backend. A user's own

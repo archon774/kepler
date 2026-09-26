@@ -430,19 +430,25 @@ def _progress_printer(label: str) -> Callable[[int, int], None]:
     return show
 
 
-#: What a checkout does with a fetched bundle: nothing, unless told. A checkout
-#: reads its own data/ and treats the isochrone grid as an operator setting
-#: (tools.config.ISOCHRONE_DIR), so a fetch there that said only "installed"
-#: left a developer believing the HR fit would now work.
-_CHECKOUT_NOTES = {
-    "isochrones": (
-        "This is a checkout, which never reads fetched bundles on its own: set "
-        "KEPLER_ISOCHRONE_DIR={target} to fit against this grid."
-    ),
-    "default": (
-        "This is a checkout: it reads its own data/, not this fetched copy."
-    ),
-}
+def _checkout_note(name: str, target: Path) -> str:
+    """What a checkout does with a fetched bundle, which is not always nothing.
+
+    A fetch that said only "installed" left a developer believing the HR fit
+    would now work. The isochrone grid is an operator setting in a checkout
+    (tools.config.ISOCHRONE_DIR), so a fetched one is never read unasked.
+    The optical frames are read from the checkout's own data/optical, and
+    from this fetched copy only while that directory is missing (a sparse
+    or partial clone).
+    """
+
+    if name == "isochrones":
+        return (
+            "This is a checkout, which never reads a fetched grid on its own: set "
+            f"KEPLER_ISOCHRONE_DIR={target} to fit against this one."
+        )
+    if (config.BUNDLED_DATA_DIR / name).is_dir():
+        return f"This is a checkout: it reads its own data/{name}, not this fetched copy."
+    return f"This is a checkout without data/{name}, so it reads this fetched copy."
 
 
 def fetch_main(argv: Iterable[str] | None = None) -> int:
@@ -497,7 +503,7 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
             continue
         print(f"{name}: {'installed' if fetched else 'already installed'} at {target}")
         if is_checkout():
-            print(f"  {_CHECKOUT_NOTES.get(name, _CHECKOUT_NOTES['default']).format(target=target)}")
+            print(f"  {_checkout_note(name, target)}")
     if status == 0:
         print(
             "Restart any running kepler-mcp to use newly fetched bundles: the "

@@ -979,3 +979,13 @@ def test_a_very_long_artifact_root_still_fits_the_instructions(tmp_path, monkeyp
     text = surface.served_instructions(root)
     assert len(text) <= BRIEF_LIMIT
     assert "the artifact directory list_artifacts names" in text
+
+
+def test_an_empty_ads_key_is_a_missing_token_even_with_a_token_file(tmp_path, monkeypatch):
+    """astroquery uses a set-but-empty ADS_DEV_KEY and never reads the file."""
+    from tools.mcp.install import install_facts
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".ads").mkdir()
+    (tmp_path / ".ads" / "dev_key").write_text("file-token\n", encoding="utf-8")
+    assert "ADS token is not set" in install_facts(tmp_path, {"ADS_DEV_KEY": ""})

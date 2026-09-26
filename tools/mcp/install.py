@@ -69,8 +69,10 @@ def _ads_token_available(environ: Mapping[str, str], home: Path | None = None) -
     work.
     """
 
-    if environ.get("ADS_DEV_KEY"):
-        return True
+    if "ADS_DEV_KEY" in environ:
+        # Set, even to "": astroquery then uses it and never reads the file,
+        # so an empty value is a missing token, whatever the file holds.
+        return bool(environ["ADS_DEV_KEY"].strip())
     try:
         token_file = (Path.home() if home is None else home) / ".ads" / "dev_key"
         return token_file.is_file() and bool(token_file.read_text(encoding="utf-8").strip())

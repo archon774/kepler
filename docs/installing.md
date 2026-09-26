@@ -86,7 +86,7 @@ each name is claimed atomically, and a repeated call writes a new file with a
 numeric suffix. So the directory grows; clear it yourself when you want to.
 `list_artifacts` over MCP returns the newest 100 entries of a directory, and
 says how many there are; a relative `directory` (`pulsar`, `vizier`) is taken
-inside the artifact directory.
+inside the artifact directory, and one that climbs out of it (`..`) is refused.
 
 After `kepler-mcp fetch-data`, restart any running `kepler-mcp`: the server
 reads its data locations when it starts.

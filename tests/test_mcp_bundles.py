@@ -570,3 +570,45 @@ def test_numba_caches_into_the_kepler_home_only_on_an_install(tmp_path, monkeypa
     mine = {"KEPLER_HOME": str(tmp_path), "NUMBA_CACHE_DIR": "/cache"}
     paths.pin_numba_cache(mine)
     assert mine["NUMBA_CACHE_DIR"] == "/cache"
+
+
+# --- the third review -----------------------------------------------------------------
+
+
+def test_fetch_data_reads_dotenv_before_it_reads_the_kepler_home(tmp_path):
+    """A checkout's .env could move the home for the server but not for
+    fetch-data, which dispatched before .env was loaded."""
+    import os
+    import subprocess
+    import sys
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"KEPLER_HOME={tmp_path / 'from-dotenv'}\n")
+    probe = (
+        "import sys, pathlib\n"
+        "import tools.dotenv as d\n"
+        "d.DOTENV_PATH = pathlib.Path(sys.argv[1])\n"
+        "from tools.mcp.__main__ import main\n"
+        "assert main(['fetch-data', '--list']) == 0\n"
+        "from tools import config\n"
+        "print('HOME', config.KEPLER_HOME)\n"
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("KEPLER_")}
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(env_file)], cwd=_REPO_ROOT, env=env,
+        capture_output=True, text=True, check=True,
+    )
+    assert f"HOME {(tmp_path / 'from-dotenv').resolve()}" in result.stdout
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_the_optical_checkout_note_says_which_copy_is_read(tmp_path, monkeypatch, present):
+    data = tmp_path / "data"
+    if present:
+        (data / "optical").mkdir(parents=True)
+    monkeypatch.setattr(config, "BUNDLED_DATA_DIR", data)
+
+    note = bundles._checkout_note("optical", tmp_path / "bundles" / "optical")
+
+    assert ("not this fetched copy" in note) is present
+    assert ("reads this fetched copy" in note) is not present

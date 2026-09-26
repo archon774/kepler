@@ -77,23 +77,17 @@ def primary_optical_data_dir() -> Path:
     return env_path(OPTICAL_DATA_DIR_ENV, default) or default
 
 
-def optical_bundle_warning(*, ignore_override: bool = False) -> ToolWarning | None:
+def optical_bundle_warning() -> ToolWarning | None:
     """Say so when the frame library is an optional bundle that is not here.
 
     Only for the default location: with ``KEPLER_OPTICAL_DATA_DIR`` set, a
     missing directory is that setting's problem and ``directory_not_found``
     already names it. An installed wheel ships no frames, so without this an
     empty listing would read like a real answer (C7, §3.5).
-
-    ``ignore_override`` is for a caller that needs the bundled frames
-    themselves, which the override never supplies: it always gets the
-    warning, and must only ask once it has found the library absent.
     """
     from tools.config import env_value
 
-    if not ignore_override and (
-        env_value(OPTICAL_DATA_DIR_ENV) or primary_optical_data_dir().is_dir()
-    ):
+    if env_value(OPTICAL_DATA_DIR_ENV) or primary_optical_data_dir().is_dir():
         return None
     return ToolWarning(
         code="bundle_not_installed",

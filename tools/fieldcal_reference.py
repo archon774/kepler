@@ -269,7 +269,6 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
     # override names an operator's own archive, and a same-named file there is
     # not the frame this ground truth describes.
     from tools.config import BUNDLED_DATA_DIR, fetched_bundle
-    from tools.optical import optical_bundle_warning
 
     library = BUNDLED_DATA_DIR / "optical"
     if not library.is_dir():
@@ -287,11 +286,20 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
             ]
         return str(candidate), []
     if not library.is_dir():
-        # Always the fetch advice here, even with KEPLER_OPTICAL_DATA_DIR set:
-        # these frames come only from the bundled library, never from that
-        # override, so the listing's "the setting names it" reasoning does
-        # not apply to them.
-        return None, [optical_bundle_warning(ignore_override=True)]
+        # Its own advice, not the frame listing's: these frames come only from
+        # the bundled library, so KEPLER_OPTICAL_DATA_DIR -- which the listing
+        # offers as an alternative, and which silences its warning when set --
+        # is no remedy here.
+        return None, [
+            ToolWarning(
+                code="bundle_not_installed",
+                message=f"The frame {field!r} was recorded against ({bundled}) is "
+                "in the optional optical data bundle, which is not installed, so "
+                "the solve is checked at the calc_solution level only. Fetch it "
+                "with `kepler-mcp fetch-data optical`; KEPLER_OPTICAL_DATA_DIR "
+                "does not supply these frames.",
+            )
+        ]
     return None, [
         ToolWarning(
             code="frame_not_bundled",

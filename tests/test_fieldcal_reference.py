@@ -765,4 +765,7 @@ def test_the_web_table_zero_point_does_not_need_the_optical_library(tmp_path, mo
 
     assert reference.frame_path is None
     assert reference.web_table_zero_point is not None
-    assert "bundle_not_installed" in [w.code for w in reference.warnings]
+    (absent,) = [w for w in reference.warnings if w.code == "bundle_not_installed"]
+    # Third review: it offered KEPLER_OPTICAL_DATA_DIR, which never helps here.
+    assert "fetch-data optical" in absent.message
+    assert "does not supply these frames" in absent.message

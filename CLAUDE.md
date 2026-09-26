@@ -317,7 +317,8 @@ machine with no checkout. Its rules:
   a schema whose `properties` is declared empty takes no arguments, whatever
   the function's signature accepts.
 - **`.env` is loaded first.** `tools/dotenv.py` resolves nothing at import;
-  `kepler-mcp` loads `.env` before pinning roots or importing `tools.config`,
+  `kepler-mcp` (every subcommand, `fetch-data` and `self-test` included)
+  loads `.env` before pinning roots or importing `tools.config`,
   whose settings are fixed at import, and so does the `kepler` console
   (`tools.tui:launch`). `tools.config` re-exports the loader.
 - **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
