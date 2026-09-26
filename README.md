@@ -50,13 +50,16 @@ The algorithms come out of two production systems built around the
 University of North Carolina at Chapel Hill: Skynet itself, and
 [Astromancer](https://astromancer.skynet.unc.edu/home), its companion web
 application for light-curve, periodogram, and star-cluster (HR-diagram)
-analysis. The Python folders here were extracted from Skynet; the TypeScript
-folders from Astromancer.
+analysis. The Skynet algorithms were extracted directly into Python; the
+Astromancer light-curve, periodogram, pulsar, and HR-diagram algorithms were
+ported from TypeScript into Python.
 
-These were **extractions, not rewrites**: algorithms, constants, comments, and
-known bugs are byte-preserved from their source systems rather than
-reimplemented. See [Highlights](#highlights) below and
-`docs/extraction.md` for what that means in practice.
+The Skynet packages are **extractions, not rewrites**: algorithms, constants,
+comments, and known bugs are byte-preserved from their source systems. The
+Astromancer ports preserve their documented numerical behavior while replacing
+browser and UI seams with headless Python interfaces. See
+[Highlights](#highlights) below and `docs/extraction.md` for the provenance and
+named divergences.
 
 ## The Agent
 
@@ -163,10 +166,10 @@ identical function any other caller would import and run.
   `KEPLER_MODEL_BACKEND` before it starts.
   The registered `tools.photometry` wrapper runs the local FITS photometry
   pipeline without a separate model client. See [The Agent](#the-agent).
-- **Byte-preserved extraction contract.** Every severed upstream dependency is
-  marked inline with `# EXTRACTED: was <symbol>` (Python) or
-  `// EXTRACTED: was …` (TypeScript) — an index of exactly what was cut and
-  why. Documented parity quirks and known upstream bugs are deliberately kept
+- **Explicit extraction and port contracts.** Severed dependencies in the
+  byte-preserved Python extractions are marked with
+  `# EXTRACTED: was <symbol>`; language translations use `# PORTED:` markers.
+  Documented parity quirks and known upstream bugs are deliberately kept
   rather than "fixed" in transit.
 - **Bit-exact parity test suite.** `tests/` backs the Python algorithms with
   42 real PROMPT/Skynet FITS frames and four complete recorded Skynet
@@ -200,10 +203,7 @@ identical function any other caller would import and run.
 | `algorithms/hrdiagram_py/` | Python parity port + new capability | Star-cluster CMD/HR-diagram fitting: CM↔HR transform, extinction, isochrone loading, a distance/E(B-V)/age optimizer Astromancer's own tool never had, field-star removal, and geometric catalog matching. Not a byte-preserving extraction — see `docs/extraction.md`, "HR Diagram (Python)". |
 | `algorithms/radio/` | New Python capability | Radio spectral-index/log-parabola flux-vs-frequency fitting and generic RA/Dec-column-guessing catalog cross-matching. No upstream Skynet/Astromancer equivalent. |
 | `algorithms/pulsar/` | Ported Python algorithm | The four-stage pulsar chain: file ingest and background subtraction, Lomb-Scargle periodogram, phase folding and binning, and light-curve sonification. A **port** of the Astromancer TypeScript, not an extraction — see `docs/pulsar-tool-pipeline.md`. |
-| `algorithms/lightcurve/` | Extracted TypeScript algorithm | Astromancer pulsar and variable-star light-curve ingestion, transformation, period-folding, and sonification logic with Angular/RxJS/Highcharts removed. |
-| `algorithms/periodogram/` | Extracted TypeScript algorithm | Astromancer Lomb-Scargle periodogram logic, peak/confidence helpers, pulsar range defaults, and periodogram-to-folding coupling. |
-| `algorithms/hrdiagram/` | Extracted TypeScript algorithm | Astromancer cluster/HR-diagram logic: field-star removal, isochrone matching, extinction offsets, cluster summaries, and result projections. |
-| `package.json` / `tsconfig.json` | TypeScript tooling | Private npm metadata and compiler configuration for the extracted TypeScript algorithm modules. |
+| `algorithms/variable_star/` | Ported Python algorithm | Exact-parity Astromancer variable-star ingestion, differential light curves, weighted Lomb-Scargle periodograms, and period folding. |
 | `tests/` | Python test suite | Algorithm-preservation and tool-smoke tests: bit-exact parity against recorded Skynet output, real FITS fixtures, and no-network coverage of the public `tools/` surface. See `tests/README.md`. |
 | `docs/` | Documentation | Reference documents at the top level, `docs/analysis/` for point-in-time reviews, `docs/benchmarking/` for the model benchmark, `docs/archive/` for completed track documents, `docs/working/` for in-progress plans, and one committed sample output in `docs/examples/`. `docs/README.md` is the map; [Architecture & Further Reading](#architecture--further-reading) lists what each one covers. |
 
@@ -217,8 +217,6 @@ verification already performed for every extracted algorithm package.
 Kepler/
   pyproject.toml                 # Python package metadata and dependencies
   uv.lock                        # uv lockfile for reproducible installs
-  package.json                   # TypeScript toolchain metadata
-  tsconfig.json                  # TypeScript compiler smoke-check config
   CONTRIBUTING.md                # contribution guidelines
   AGENTS.md                      # repository guidelines for agentic contributors
   docs/
@@ -243,11 +241,9 @@ Kepler/
     catalogs/                    # Python catalog declarations (no network code)
     query/                       # Python remote catalog access (VizieR/SDSS/SIMBAD)
     pulsar/                      # Python port of the Astromancer pulsar chain
+    variable_star/               # Python port of Astromancer variable-star algorithms
     hrdiagram_py/                # Python HR-diagram port plus a new optimizer
     radio/                       # new Python radio SED capability
-    lightcurve/                  # TypeScript light-curve extraction
-    periodogram/                 # TypeScript periodogram extraction
-    hrdiagram/                   # TypeScript HR-diagram extraction
   benchmarks/                    # model benchmark corpus and fixtures
   tests/                         # pytest suite (algorithm-preservation + tool smoke)
   data/                          # the data root: fixture frames, recorded
@@ -495,21 +491,11 @@ uv run pytest
 git diff --check
 ```
 
-`algorithms/lightcurve/`, `algorithms/periodogram/` and `algorithms/hrdiagram/`
-are framework-free TypeScript extracted from Astromancer, with a compiler-only
-setup and no runtime npm dependencies — nothing executes them, and where Kepler
-needs that behaviour at runtime it goes through a Python port
-(`algorithms/pulsar/`, `algorithms/hrdiagram_py/`). They get a type gate rather
-than a test suite, and **it is not a CI job**, so a `.ts` change means running
-it by hand. `node_modules/` is absent from a fresh checkout, so `npm install`
-comes first; the compiler targets ES2022 and includes the DOM library because
-the preserved light-curve ingest path still uses browser globals such as
-`FileReader`:
-
-```bash
-npm install        # once
-npm run typecheck
-```
+Astromancer-derived behavior runs through the Python ports in
+`algorithms/pulsar/`, `algorithms/variable_star/`, and
+`algorithms/hrdiagram_py/`. Their parity tests pin the numerical behavior that
+Kepler uses; `docs/extraction.md` retains the retired TypeScript extraction
+record and the upstream source locations.
 
 The extraction notes record broader one-off checks such as compile/import smoke
 tests, source diffs, and selected behavior checks. Full end-to-end WCS,

@@ -1,11 +1,11 @@
 """Python star-cluster CMD/HR-diagram pipeline.
 
-``hrfit`` is a deliberate parity *port* of parts of the TypeScript
-``algorithms.hrdiagram`` extraction, plus new capability Astromancer never had
-(a distance/E(B-V)/age optimizer; Astromancer's own tool is manual, by-eye
-only). See ``algorithms.hrdiagram_py.hrfit`` for the exact TypeScript
-cross-references and the two named, permanent parity deviations, and
-``docs/extraction.md``, "HR Diagram (Python)" for the full record.
+``hrfit`` is a deliberate parity *port* of Astromancer's TypeScript, plus a
+distance/E(B-V)/age optimizer Astromancer never had; its own tool is manual and
+by-eye only. See ``algorithms.hrdiagram_py.hrfit`` for the exact upstream
+cross-references, retired intermediate extraction, and two named permanent
+parity deviations. See ``docs/extraction.md``, "HR Diagram (Python)", for the
+full record.
 
 The other modules here (``observations``, ``matching``, ``literature``,
 ``membership``, ``isochrones`` and ``local_grid``) are original orchestration, not extracted or

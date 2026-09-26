@@ -1,7 +1,7 @@
 """Chart specifications for the pulsar plots — what Astromancer draws.
 
-PORTED from ``algorithms/lightcurve/pulsar/pulsar-charts.spec.ts``, itself
-extracted from Astromancer's three Highcharts components and the
+PORTED from ``git-history:algorithms/lightcurve/pulsar/pulsar-charts.spec.ts``,
+itself extracted from Astromancer's three Highcharts components and the
 ``PulsarChartInfo`` / ``PulsarPeriodogram`` / ``PulsarPeriodFolding`` defaults.
 
 This module is **specification, not rendering**: series identity, axis

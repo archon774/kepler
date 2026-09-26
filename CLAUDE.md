@@ -11,8 +11,8 @@ package. It holds four things:
    optional agent loop and the `kepler` console over it, and shared
    tool-facing models.
 2. `algorithms/` — extracted algorithm folders (`wcs/`, `photometry/`,
-   `fieldcal/`, `catalogs/`, `query/`, `lightcurve/`, `periodogram/`,
-   `hrdiagram/`) plus the shared `skylib_lite/` subset.
+   `fieldcal/`, `catalogs/`, `query/`) plus the shared `skylib_lite/` subset
+   and the Python ports in `pulsar/`, `variable_star/`, and `hrdiagram_py/`.
 3. `docs/tool-architecture.md` — the master architecture for the tool collection.
 
 The top-level `tools/` and `algorithms/` folders are intentionally separate.
@@ -22,20 +22,20 @@ code that tool wrappers may call. `README.md`, `docs/repository-folders.md`, and
 
 ## The extraction contract (most important thing to know)
 
-The Python folders were extracted from Skynet (`/home/claude/skynet`) and the TypeScript
-folders from Astromancer (`/home/claude/astromancer`). Both were **extractions, not
-rewrites**: algorithms, constants, comments, and known bugs are byte-preserved. Two rules
-follow from this:
+The extraction folders came from Skynet (`/home/claude/skynet`). The Python port
+folders came from Astromancer (`/home/claude/astromancer`) TypeScript. Extracted
+algorithms, constants, comments, and known bugs are preserved; ports document their
+intentional runtime and language differences. Two rules follow from this:
 
-- **Every severed upstream dependency is marked inline** with `# EXTRACTED: was <symbol>`
-  (Python) or `// EXTRACTED: was …` (TypeScript). These markers are the index of what was
-  cut and why. Preserve them; add one whenever you cut another dependency.
+- **Every severed upstream dependency is marked inline** with `# EXTRACTED: was <symbol>`.
+  These markers are the index of what was cut and why. Preserve them; add one whenever
+  you cut another dependency.
 - **Documented parity quirks are deliberate.** Example: `algorithms/catalogs/`
   ships two registries that disagree on purpose — `CATALOGS` (11 catalogs) and
   `CATALOG_OPTIONS` (APASS + PanSTARRS, read only by reference-magnitude
   resolution). Merging them silently changes which reference band a narrowband
   or unfiltered image calibrates against (`docs/extraction.md`, Catalogs §4).
-  `algorithms/hrdiagram/` preserves several flagged upstream bugs. Do not "fix"
+  `algorithms/hrdiagram_py/legacy.py` preserves several flagged upstream bugs. Do not "fix"
   these unless the task is explicitly to diverge from Skynet/Astromancer.
 
   The quirk that used to head this list is gone rather than preserved:
@@ -52,11 +52,11 @@ verification was actually performed. It consolidates what used to be a per-folde
 **Read the relevant section before touching a domain folder** — it is the only place the
 upstream mapping is recorded.
 
-One folder is an exception to the contract above. `algorithms/pulsar/` is a **port** of
-Astromancer TypeScript into Python, not an extraction, because the upstream sonifier is
-welded to browser APIs and cannot run headless. It is marked `# PORTED:` rather than
-`# EXTRACTED:` so the extraction-marker index stays meaningful, and its divergences are
-enumerated in `docs/extraction.md` (Pulsar Sonification §6).
+Three folders are **ports** of Astromancer TypeScript into Python rather than
+extractions: `algorithms/pulsar/`, `algorithms/variable_star/`, and
+`algorithms/hrdiagram_py/`. They are marked `# PORTED:` rather than `# EXTRACTED:` so
+the extraction-marker index stays meaningful. Their provenance and intentional
+differences are recorded in `docs/extraction.md`.
 
 ## Commands
 
@@ -64,15 +64,8 @@ enumerated in `docs/extraction.md` (Pulsar Sonification §6).
 uv sync                                  # create .venv and install pinned deps
 uv run pytest                            # the test suite (no network by default)
 python3 -m compileall tools algorithms   # local package syntax smoke
-npm install                              # once; node_modules/ is not in a fresh checkout
-npm run typecheck                        # tsc --noEmit over the TypeScript folders
 git diff --check                         # whitespace check
 ```
-
-`npm run typecheck` needs `npm install` first — `node_modules/` is absent from
-a fresh checkout and `tsc` is not on `PATH` without it. Nothing installs it for
-you: the typecheck is not a CI job, so this is the only thing that runs it
-(BL-12).
 
 CI (`.github/workflows/ci.yml`) runs on **Python 3.14**; `pyproject.toml` keeps
 3.12 as the floor, so code still has to work there (`Path.resolve()` raises
@@ -81,8 +74,7 @@ CI (`.github/workflows/ci.yml`) runs on **Python 3.14**; `pyproject.toml` keeps
 `tools algorithms tests`, `uv run --locked pytest`, and a `repository-shape` job asserting that
 `README.md`, `pyproject.toml`, `uv.lock`, `tools/registry.py`,
 `tools/agent/engine.py`, `tools/tui/app.py`, and `docs/tool-architecture.md`
-exist. **The TypeScript typecheck is not a CI job** — run it
-by hand when touching a `.ts` file.
+exist.
 
 The suite is algorithm-preservation testing, not correctness testing: it pins bit-exact
 parity against recorded Skynet output and pins known bugs rather than fixing them. See
@@ -100,14 +92,6 @@ disables secret detection for the whole file, so keep each one specific.
 
 `pyproject.toml` pins every dependency with `==`. Adding one means editing the pin and
 re-running `uv lock`.
-
-The TypeScript folders have a root `package.json` and `tsconfig.json` carrying a
-`typecheck` script (`tsc --noEmit`, `lib: ["ES2022", "DOM"]`) but **no build, bundle, or
-test step**, and no runtime — nothing executes the TypeScript. They are source modules
-plus a syntax and type gate. A tool that needs TypeScript behaviour at runtime today has
-to go through a Python port; `algorithms/pulsar/` is the one instance, and
-`docs/extraction.md` (Pulsar Sonification §5) records why that was allowed there and why
-it is not a general licence.
 
 ## Python domain boundaries
 
@@ -374,21 +358,21 @@ stays the extracted all-sky search. The
 `solver_data`-marked tests gate this path. The ATLAS backend has not been
 validated (P9). Both backends still degrade to "unavailable" when unconfigured.
 
-## TypeScript domain boundaries
+## Astromancer port boundaries
 
-Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser export handlers
-were removed. Ownership is likewise strict and cross-cutting:
+The executable Astromancer algorithms are maintained as Python ports:
 
-- `algorithms/periodogram/core/` is the shared Lomb-Scargle heart. `pulsar/` and `variable/` import
-  *upward* into `core/`; nothing in `core/` imports from either.
-- Period **folding** belongs to `algorithms/lightcurve/`, not
-  `algorithms/periodogram/` —
-  `algorithms/periodogram/pulsar/pulsar-periodogram-folding-link.ts` is only the coupling between them.
-- `algorithms/lightcurve/pulsar/` and `algorithms/lightcurve/variable/` share nothing but `shared/`; no file mixes
-  the two tools.
-- `algorithms/hrdiagram/` pipeline: ingest -> field-star removal (`fsr/`) -> isochrone matching -> result
-  summaries. The load-bearing function is
-  `isochrone-matching/isochrone-plot.util.ts::computePlotDelta`.
+- `algorithms/pulsar/` owns pulsar light-curve ingest, Lomb-Scargle periodograms,
+  period folding, chart payloads, and sonification.
+- `algorithms/variable_star/` owns variable-star light-curve ingest, weighted
+  Lomb-Scargle periodograms, and period folding.
+- `algorithms/hrdiagram_py/` owns H-R diagram parsing, membership filtering,
+  isochrone fitting, and summaries. The `_py` suffix is retained to avoid import churn.
+
+Browser UI, local-storage state, audio-device playback, and client-side download
+handlers were intentionally outside the Python port boundary. The retired TypeScript
+implementations remain available in git history, and `docs/extraction.md` records their
+provenance and parity details.
 
 ## Conventions
 

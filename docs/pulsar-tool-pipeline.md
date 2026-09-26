@@ -88,22 +88,21 @@ reporting obligation attached, not a shortcut.
 
 ## 2. Stage → algorithm → upstream
 
-Every stage calls a Python module under `algorithms/pulsar/`, which is a port
-of a TypeScript extraction under `algorithms/lightcurve/` or
-`algorithms/periodogram/`, which was extracted from Astromancer. Full
-provenance and the preserved-quirk list live in `docs/extraction.md`
-(Pulsar Sonification; Light Curve; Periodogram).
+Every stage calls a Python module under `algorithms/pulsar/`, ported from
+Astromancer. Full provenance, the retired intermediate TypeScript extraction,
+and the preserved-quirk list live in `docs/extraction.md` (Pulsar
+Sonification; Light Curve; Periodogram) and repository history.
 
-| Stage | Tool | Python algorithm | Extracted TypeScript | Astromancer origin |
-| --- | --- | --- | --- | --- |
-| 1 | `load_pulsar_lightcurve` | `algorithms/pulsar/ingest.py` | `lightcurve/pulsar/pulsar-lightcurve.ingest.ts`, `…algorithms.ts` | `pulsar-light-curve.component.ts::uploadHandler`; `pulsar.service.ts::median`, `backgroundSubtraction` |
-| 2 | `compute_pulsar_periodogram` | `algorithms/pulsar/periodogram.py` | `periodogram/core/lomb-scargle.ts`, `periodogram/core/peak-detection.ts`, `periodogram/pulsar/pulsar-periodogram-range.ts` | `shared/data/utils.ts::lombScargle`; `pulsar-periodogram-highcharts.component.ts::findLocalMax`, `addConfidenceLines` |
-| 3 | `fold_pulsar_lightcurve` | `algorithms/pulsar/folding.py` | `lightcurve/pulsar/pulsar-period-folding.algorithms.ts`, `…lightcurve.algorithms.ts`, `lightcurve/shared/numeric-utils.ts` | `pulsar.service.ts::getPeriodFoldingChartData`, `binData`; `pulsar-period-folding-highchart.component.ts::foldAndBin` |
-| 4 | `sonify_pulsar` | `algorithms/pulsar/sonification.py` | `lightcurve/pulsar/pulsar-sonification.algorithms.ts` | `pulsar.service.ts::sonification`; `pulsar-period-folding-form.component.ts`, `pulsar-light-curve-sonifier.component.ts` |
+| Stage | Tool | Python algorithm | Astromancer origin |
+| --- | --- | --- | --- |
+| 1 | `load_pulsar_lightcurve` | `algorithms/pulsar/ingest.py` | `pulsar-light-curve.component.ts::uploadHandler`; `pulsar.service.ts::median`, `backgroundSubtraction` |
+| 2 | `compute_pulsar_periodogram` | `algorithms/pulsar/periodogram.py` | `shared/data/utils.ts::lombScargle`; `pulsar-periodogram-highcharts.component.ts::findLocalMax`, `addConfidenceLines` |
+| 3 | `fold_pulsar_lightcurve` | `algorithms/pulsar/folding.py` | `pulsar.service.ts::getPeriodFoldingChartData`, `binData`; `pulsar-period-folding-highchart.component.ts::foldAndBin` |
+| 4 | `sonify_pulsar` | `algorithms/pulsar/sonification.py` | `pulsar.service.ts::sonification`; `pulsar-period-folding-form.component.ts`, `pulsar-light-curve-sonifier.component.ts` |
 
-`algorithms/pulsar/` is the one **port** rather than extraction under
-`algorithms/`, marked `# PORTED:`. The TypeScript is kept and typechecked
-(`npm run typecheck`) as the provenance record the port is diffed against.
+`algorithms/pulsar/` is a **port** rather than an extraction under
+`algorithms/`, marked `# PORTED:`. Parity is pinned by Python tests; the
+intermediate TypeScript extraction remains available in repository history.
 
 ---
 
@@ -244,13 +243,11 @@ downstream consumes a plot.
 | Folded | Time (s) / Intensity, linear | Polarization XX, Polarization YY, and Difference + Sum **hidden by default** |
 
 All of that — labels, series names, the log axis, the hidden series, the
-folded x extent — is Astromancer's own chart configuration, extracted into
-`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts` and ported to
+folded x extent — is Astromancer's own chart configuration, ported to
 `algorithms/pulsar/charts.py`. It is not styling chosen here. The
 `docs/extraction.md` entry that listed the Highcharts components as "left
 behind as UI" is superseded for the parts that decide *what* is drawn; the
-widget plumbing (boost thresholds, tooltips, export buttons) is still left
-behind.
+widget plumbing (boost thresholds, tooltips, export buttons) was not ported.
 
 **The periodogram plot is the diagnostic worth reaching for.** §4 explains that
 four of five bundled scans return a confident artifact rather than the pulsar;
@@ -337,7 +334,8 @@ can report them and continue.
   with `curated_period_s` null, and its period has to be measured or fetched
   from ATNF.
 - **`sonificationBrowser` is not ported** — it drives an `AudioContext`, which
-  a file-writing tool has no use for. It remains extracted in TypeScript.
+  a file-writing tool has no use for. Its retired extraction remains in git
+  history.
 
 ---
 

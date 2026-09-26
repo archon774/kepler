@@ -1,6 +1,6 @@
 # Kepler's Layers: Tools, Turn-Taking, and the Harness
 
-Date: 2026-09-18
+Date: 2026-09-25
 Status: current-state reference
 
 Three separable things in this repository get called by the same words. This
@@ -10,8 +10,8 @@ change to how a run is governed are three different PRs touching three
 different layers.
 
 [tool-architecture.md](tool-architecture.md) is the master architecture; this
-is the layer map over it. Line counts are `wc -l` over tracked sources at
-`dev` @ `aa93c87`, tests excluded.
+is the layer map over it. Line counts are `wc -l` over tracked sources in the
+2026-09-25 working tree, tests excluded.
 
 | Layer | Path | Lines | Model-aware? |
 | --- | --- | ---: | --- |
@@ -19,8 +19,8 @@ is the layer map over it. Line counts are `wc -l` over tracked sources at
 | Turn-taking | `tools/agent/` | 1,206 | yes |
 | Model port | `tools/llm/` | 2,568 | yes |
 | Tool surface | `tools/registry.py` + `tools/*.py` | 12,229 | schema-shaped; calls none |
-| Algorithms | `algorithms/` | 26,891 | no |
-| **Non-test total** | | **53,221** | 26.5% of it |
+| Algorithms | `algorithms/` | 20,578 | no |
+| **Non-test total** | | **46,908** | 30.1% of it |
 
 Plus 27,821 lines of tests, which are algorithm-preservation tests — they pin
 bit-exact parity against recorded Skynet output rather than assert correctness

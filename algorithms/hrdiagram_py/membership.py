@@ -21,7 +21,7 @@ _KM_S_PER_AU_YR = 4.74
 
 
 # PORTED: was the elliptical branch of `updateClusterFieldSources`
-# (algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120,
+# (git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120,
 # Astromancer TypeScript). Faithful translation of the acceptance-test
 # formula; `select_cluster_members` below is what supplies its per-source
 # semi-axes, which is original code, not part of this port.
@@ -35,7 +35,7 @@ def _elliptical_pm_mask(
 ) -> np.ndarray:
     """The elliptical proper-motion acceptance test from Astromancer's
     ``updateClusterFieldSources``
-    (``algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120``).
+    (``git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120``).
 
     A star is a member if ``(pmra, pmdec)`` falls inside the ellipse centred
     on ``(center_pmra, center_pmdec)`` with semi-axes ``a`` (pm_ra) and ``b``

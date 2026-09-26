@@ -1,6 +1,6 @@
 """Pulsar light-curve sonification: amplitude-modulated noise to 16-bit PCM.
 
-PORTED from ``algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts``
+PORTED from ``git-history:algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts``
 -- itself extracted from astromancer's ``PulsarService.sonification``
 (``pulsar.service.ts`` 889-1054). This module targets the **saved-WAV path**;
 the live-playback twin (``sonificationBrowser``) differs in three documented
