@@ -101,7 +101,7 @@ def _mark(present: bool | None, missing: str) -> str:
 
 
 def install_facts(
-    artifact_root: Path | None = None, environ: Mapping[str, str] | None = None
+    artifact_root: Path | str | None = None, environ: Mapping[str, str] | None = None
 ) -> str:
     """A few lines describing this install, for the end of the instructions.
 

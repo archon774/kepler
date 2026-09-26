@@ -923,3 +923,59 @@ def test_self_test_without_the_sdk_gives_the_servers_advice(monkeypatch, capsys)
     assert selftest.main([]) == 2
     err = capsys.readouterr().err
     assert "uv sync --extra mcp" in err and "-m pip install" in err
+
+
+# --- the third review -----------------------------------------------------------------
+
+
+def test_an_empty_or_climbing_artifact_path_never_leaves_the_artifact_root(tmp_path, monkeypatch):
+    """`directory=""` listed the server's launch directory -- the user's project."""
+    from tools.workspace import describe_artifact, list_artifacts
+
+    root = tmp_path / "artifacts"
+    root.mkdir()
+    (root / "table.ecsv").write_text("x")
+    launch = tmp_path / "project"
+    launch.mkdir()
+    (launch / "secret_notes.txt").write_text("private")
+    monkeypatch.setattr(config, "ARTIFACT_DIR", root)
+    monkeypatch.chdir(launch)
+    functions = {"list_artifacts": list_artifacts, "describe_artifact": describe_artifact}
+
+    listing = surface.call_tool("list_artifacts", {"directory": ""}, functions)
+    assert [r["file"]["path"] for r in listing["results"]] == [str(root / "table.ecsv")]
+
+    for name, key in (("list_artifacts", "directory"), ("describe_artifact", "path")):
+        refused = surface.call_tool(name, {key: "../project"}, functions)
+        assert refused["status"] == "error"
+        assert refused["errors"][0]["code"] == "invalid_input"
+        assert "secret_notes" not in json.dumps(refused)
+
+
+def test_a_substituted_list_artifacts_is_called_not_bypassed():
+    called = []
+
+    def substitute(directory=None):
+        called.append(directory)
+        return []
+
+    payload = surface.call_tool("list_artifacts", {}, {"list_artifacts": substitute})
+    assert called == [None] and payload["count"] == 0
+
+
+def test_a_very_long_artifact_root_still_fits_the_instructions(tmp_path, monkeypatch):
+    """Third review: past ~410 characters of path the facts overflowed."""
+    from tools.mcp import install
+    from tools.skill import BRIEF_LIMIT
+
+    def failed(*_args):
+        raise OSError("unreadable")
+
+    for check in ("_pulsar_scans_present", "_references_present", "_frames_present",
+                  "_isochrones_present", "_plate_solving_available", "_ads_token_available"):
+        monkeypatch.setattr(install, check, failed)
+    root = tmp_path.joinpath(*(["d" * 60] * 12))
+
+    text = surface.served_instructions(root)
+    assert len(text) <= BRIEF_LIMIT
+    assert "the artifact directory list_artifacts names" in text

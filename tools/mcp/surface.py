@@ -142,7 +142,13 @@ def served_instructions(artifact_root: Path | None = None) -> str:
     everything else.
     """
 
-    return skill.served_brief() + "\n\n" + install_facts(artifact_root)
+    brief = skill.served_brief()
+    text = brief + "\n\n" + install_facts(artifact_root)
+    if len(text) > skill.BRIEF_LIMIT:
+        # Only the artifact path varies without bound; past the budget a host
+        # would cut the facts short, so the path gives way to where to find it.
+        text = brief + "\n\n" + install_facts("the artifact directory list_artifacts names")
+    return text
 
 
 def served_resources() -> list[dict[str, str]]:
@@ -406,15 +412,37 @@ def _served_artifact_listing(directory: str | None = None) -> dict[str, Any]:
 _ARTIFACT_PATH_ARGUMENTS = {"list_artifacts": "directory", "describe_artifact": "path"}
 
 
+class _OutsideArtifactRoot(ValueError):
+    pass
+
+
 def _anchor_artifact_path(name: str, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Take a relative path argument inside the artifact root, and keep it there.
+
+    An empty one is the root itself; it used to reach the tool as ``""``,
+    which resolved to the server's working directory -- usually the user's
+    own project -- and listed it. A relative path that climbs out (``..``)
+    is refused rather than followed. An absolute path is left as given: tool
+    results name absolute paths outside the root (a download, a bundle
+    frame), and describing one of those is what the tool is for.
+    """
+
     key = _ARTIFACT_PATH_ARGUMENTS.get(name)
     value = arguments.get(key) if key else None
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str):
         return arguments
     path = Path(value).expanduser()
     if path.is_absolute():
         return arguments
-    return {**arguments, key: str(Path(config.ARTIFACT_DIR) / path)}
+    root = Path(config.ARTIFACT_DIR)
+    anchored = root / path
+    if not within(anchored, root):
+        raise _OutsideArtifactRoot(
+            f"{value!r} leads outside the artifact directory {root}. Pass a "
+            "path inside it -- relative paths are taken from there -- or an "
+            "absolute path a tool result named."
+        )
+    return {**arguments, key: str(anchored)}
 
 
 def call_tool(
@@ -436,7 +464,13 @@ def call_tool(
         )
     try:
         arguments = _anchor_artifact_path(name, arguments)
-        if name == "list_artifacts":
+    except _OutsideArtifactRoot as exc:
+        return error_payload(ToolError(code="invalid_input", message=str(exc)))
+    try:
+        # The served listing only stands in for the registry's own tool; a
+        # caller that substituted list_artifacts (a test, the bench plane)
+        # gets its substitute.
+        if name == "list_artifacts" and function is TOOL_FUNCTIONS.get(name):
             return _served_artifact_listing(**arguments)
         return normalize_result(name, function(**arguments))
     except Exception as exc:  # noqa: BLE001 -- reported to the caller, not swallowed
