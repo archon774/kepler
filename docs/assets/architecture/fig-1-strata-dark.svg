@@ -89,7 +89,7 @@
   <line class="d-line" x1="680" y1="396" x2="680" y2="426" marker-end="url(#a)"/>
   <rect class="d-box" x="530" y="428" width="300" height="62"/>
   <text class="t" x="546" y="452">algorithms/ &#8212; the science</text>
-  <text class="ts" x="546" y="472">26,891 lines &#183; 20,578 Python + 6,313 TypeScript</text>
+  <text class="ts" x="546" y="472">20,578 lines &#183; Python</text>
 
   <text class="tla mid" x="682" y="506">NO MODEL &#183; NO KEY &#183; NO SOCKET</text>
 </svg>

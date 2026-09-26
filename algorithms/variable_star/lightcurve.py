@@ -1,6 +1,6 @@
 """Variable-star source merging and differential-light-curve primitives.
 
-# PORTED: algorithms/lightcurve/variable/variable-lightcurve.ingest.ts
+# PORTED: git-history:algorithms/lightcurve/variable/variable-lightcurve.ingest.ts
 """
 
 from __future__ import annotations

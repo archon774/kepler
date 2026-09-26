@@ -4,7 +4,7 @@ No network access -- everything here is synthetic. Two things are checked:
 
 1. ``_elliptical_pm_mask`` in isolation: the ported ellipse formula from
    Astromancer's ``updateClusterFieldSources``
-   (``algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120``),
+   (``git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts:101-120``),
    including its documented "correct by accident" NaN behaviour for a point
    outside the semi-major axis (``docs/extraction.md``, HR Diagram TypeScript
    defect #8).

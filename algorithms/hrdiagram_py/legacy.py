@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping, Sequence
 
-# PORTED: algorithms/hrdiagram/fsr/cmd-fsr.util.ts::getCmdData
+# PORTED: git-history:algorithms/hrdiagram/fsr/cmd-fsr.util.ts::getCmdData
 def get_cmd_data(sources: Sequence[Mapping[str, Any]], filters: Sequence[str]) -> dict[str, Any]:
     pairs: list[tuple[str, str]] = []
     for pair in (("BP", "RP"), ("W1", "W2"), ("gprime", "iprime"), ("J", "H")):
@@ -29,7 +29,7 @@ def get_cmd_data(sources: Sequence[Mapping[str, Any]], filters: Sequence[str]) -
     return {"data": results[winner], "blue_filter": pairs[winner][0], "red_filter": pairs[winner][1]}
 
 
-# PORTED: algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getDefaultBin
+# PORTED: git-history:algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getDefaultBin
 def get_default_bin(plot_data: Sequence[float]) -> int | float:
     if not plot_data:
         return 10
@@ -44,7 +44,7 @@ def get_default_bin(plot_data: Sequence[float]) -> int | float:
     return math.ceil(numerator / denominator)
 
 
-# PORTED: algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getHistogramExtremes
+# PORTED: git-history:algorithms/hrdiagram/fsr/fsr-histogram.util.ts::getHistogramExtremes
 def get_histogram_extremes(data: Sequence[float], selected_data: Sequence[float]) -> dict[str, float]:
     if not selected_data:
         return {"min": -999, "max": 999}
@@ -55,7 +55,7 @@ def get_histogram_extremes(data: Sequence[float], selected_data: Sequence[float]
     }
 
 
-# PORTED: algorithms/hrdiagram/cluster.util.ts::getExtinction
+# PORTED: git-history:algorithms/hrdiagram/cluster.util.ts::getExtinction
 def _legacy_extinction(filter_name: str, reddening: float, rv: float = 3.1) -> float:
     x = _FILTER_WAVELENGTH[filter_name] ** -1
     y = x - 1.82
@@ -69,7 +69,7 @@ def _legacy_extinction(filter_name: str, reddening: float, rv: float = 3.1) -> f
     return 3.1 * reddening * (a + b / rv)
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::computePlotDelta
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::computePlotDelta
 def compute_plot_delta(filters: Mapping[str, str], params: Mapping[str, float]) -> dict[str, float]:
     blue = _legacy_extinction(filters["blue"], params["reddening"])
     red = _legacy_extinction(filters["red"], params["reddening"])
@@ -77,7 +77,7 @@ def compute_plot_delta(filters: Mapping[str, str], params: Mapping[str, float]) 
     return {"x": red - blue, "y": -lum - 5 * math.log10(params["distance"] * 1000) + 5}
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::getPlotData
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::getPlotData
 def get_plot_data(raw_data: Sequence[Mapping[str, Any]], plot_type: str, filters: Mapping[str, str], params: Mapping[str, float], max_mag_error: float) -> tuple[list[list[float]], list[str]]:
     kept = [point for point in raw_data if point["max_mag_error"] < max_mag_error]
     if plot_type == "CM":
@@ -88,7 +88,7 @@ def get_plot_data(raw_data: Sequence[Mapping[str, Any]], plot_type: str, filters
     return [], []
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::applyIsochroneTransform
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::applyIsochroneTransform
 def apply_isochrone_transform(response: Mapping[str, Any], plot_type: str, filters: Mapping[str, str], params: Mapping[str, float]) -> list[list[float | None]]:
     data = [list(point) for point in response["data"]]
     if plot_type == "CM":
@@ -100,7 +100,7 @@ def apply_isochrone_transform(response: Mapping[str, Any], plot_type: str, filte
     return data
 
 
-# PORTED: algorithms/hrdiagram/result/mwsc-distributions.ts::*Distribution
+# PORTED: git-history:algorithms/hrdiagram/result/mwsc-distributions.ts::*Distribution
 def get_mwsc_age_distribution(clusters: Sequence[Mapping[str, Any]]) -> list[float]:
     return sorted(10 ** cluster["age"] / 1_000_000 for cluster in clusters if cluster.get("age") is not None and 0 < 10 ** cluster["age"] / 1_000_000 < 13.8)
 
@@ -122,7 +122,7 @@ def get_mwsc_star_count_distribution(clusters: Sequence[Mapping[str, Any]]) -> l
     return counts[math.floor(0.0015 * len(counts)):math.ceil(0.99985 * len(counts))]
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.util.ts::sourceSerialization
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts::sourceSerialization
 def source_serialization(sources: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     result: list[dict[str, Any]] = []
     filters: list[str] = []
@@ -136,7 +136,7 @@ def source_serialization(sources: Sequence[Mapping[str, Any]]) -> dict[str, Any]
     return {"sources": result, "filters": filters}
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.util.ts::updateClusterFieldSources
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts::updateClusterFieldSources
 def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fsr: Mapping[str, Any]) -> dict[str, list[Mapping[str, Any]]]:
     if sources is None:
         return {"fsr": [], "not_fsr": []}
@@ -162,19 +162,19 @@ def update_cluster_field_sources(sources: Sequence[Mapping[str, Any]] | None, fs
     return {"fsr": selected, "not_fsr": rejected}
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::isValidFilterSelection
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::isValidFilterSelection
 def is_valid_filter_selection(filters: Mapping[str, str]) -> bool:
     return filters["blue"] != filters["red"]
 
 
-# PORTED: algorithms/hrdiagram/result/galaxy-projection.ts::galaxyFaceOnOffset
+# PORTED: git-history:algorithms/hrdiagram/result/galaxy-projection.ts::galaxyFaceOnOffset
 def galaxy_face_on_offset(galactic_longitude: float, galactic_latitude: float, distance: float) -> dict[str, float]:
     longitude = math.radians(galactic_longitude)
     in_plane = distance * math.cos(math.radians(galactic_latitude)) * 32
     return {"delta_x": in_plane * math.sin(longitude), "delta_y": -in_plane * math.cos(longitude)}
 
 
-# PORTED: algorithms/hrdiagram/result/galaxy-projection.ts::galaxyEdgeOnOffset
+# PORTED: git-history:algorithms/hrdiagram/result/galaxy-projection.ts::galaxyEdgeOnOffset
 def galaxy_edge_on_offset(galactic_longitude: float, galactic_latitude: float, distance: float) -> dict[str, float]:
     longitude = math.radians(galactic_longitude)
     latitude = math.radians(galactic_latitude)
@@ -182,7 +182,7 @@ def galaxy_edge_on_offset(galactic_longitude: float, galactic_latitude: float, d
     return {"delta_x": -in_plane * math.cos(longitude) * 32, "delta_y": max(-500, min(500, distance * math.sin(latitude) * 16))}
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::generateRawData
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::generateRawData
 def generate_raw_data(sources: Sequence[Mapping[str, Any]], filters: Mapping[str, str]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for source in sources:
@@ -198,7 +198,7 @@ def generate_raw_data(sources: Sequence[Mapping[str, Any]], filters: Mapping[str
     return result
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::getDataRange
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::getDataRange
 def get_data_range(data: Sequence[Sequence[float]]) -> dict[str, dict[str, float]]:
     if not data:
         return {"x": {"min": 0, "max": 0}, "y": {"min": 0, "max": 0}}
@@ -213,7 +213,7 @@ def get_data_range(data: Sequence[Sequence[float]]) -> dict[str, dict[str, float
     return {"x": {"min": min_x, "max": max_x}, "y": {"min": min_y, "max": max_y}}
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.util.ts::appendFSRResults
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts::appendFSRResults
 def append_fsr_results(sources: list[dict[str, Any]], fsr: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     ordered_fsr = sorted(fsr, key=lambda entry: float(entry["id"]))
     i = j = 0
@@ -235,7 +235,7 @@ def append_fsr_results(sources: list[dict[str, Any]], fsr: list[Mapping[str, Any
     return sources
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.util.ts::getStarCountsByFilter
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts::getStarCountsByFilter
 def get_star_counts_by_filter(
     cluster_sources: Sequence[Mapping[str, Any]],
     field_sources: Sequence[Mapping[str, Any]],
@@ -263,17 +263,17 @@ def get_star_counts_by_filter(
     }
 
 
-# PORTED: algorithms/hrdiagram/shared/angle.util.ts::rad
+# PORTED: git-history:algorithms/hrdiagram/shared/angle.util.ts::rad
 def rad(degree: float) -> float:
     return degree / 180 * math.pi
 
 
-# PORTED: algorithms/hrdiagram/shared/angle.util.ts::deg
+# PORTED: git-history:algorithms/hrdiagram/shared/angle.util.ts::deg
 def deg(radians: float) -> float:
     return radians / math.pi * 180
 
 
-# PORTED: algorithms/hrdiagram/shared/angle.util.ts::d2HMS
+# PORTED: git-history:algorithms/hrdiagram/shared/angle.util.ts::d2HMS
 def d2_hms(degrees: float) -> list[float]:
     hours = math.floor(degrees / 15)
     minutes = math.floor((degrees - hours * 15) * 4)
@@ -281,7 +281,7 @@ def d2_hms(degrees: float) -> list[float]:
     return [hours, minutes, seconds]
 
 
-# PORTED: algorithms/hrdiagram/shared/angle.util.ts::d2DMS
+# PORTED: git-history:algorithms/hrdiagram/shared/angle.util.ts::d2DMS
 def d2_dms(degrees: float) -> list[float]:
     degrees = abs(degrees)
     whole_degrees = math.floor(degrees)
@@ -290,7 +290,7 @@ def d2_dms(degrees: float) -> list[float]:
     return [whole_degrees, minutes, seconds]
 
 
-# PORTED: algorithms/hrdiagram/cluster.util.ts::haversine
+# PORTED: git-history:algorithms/hrdiagram/cluster.util.ts::haversine
 def haversine(dec1: float, dec2: float, ra1: float, ra2: float) -> float:
     dec1_rad, dec2_rad, ra1_rad, ra2_rad = map(rad, (dec1, dec2, ra1, ra2))
     theta = 2 * math.asin(
@@ -300,7 +300,7 @@ def haversine(dec1: float, dec2: float, ra1: float, ra2: float) -> float:
     return deg(theta)
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::getHalfLightRadius
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getHalfLightRadius
 def get_half_light_radius(sources: Sequence[Mapping[str, Any]], center_ra: float, center_dec: float) -> float:
     distances = sorted(
         haversine(center_dec, source["astrometry"]["dec"], center_ra, source["astrometry"]["ra"])
@@ -309,22 +309,22 @@ def get_half_light_radius(sources: Sequence[Mapping[str, Any]], center_ra: float
     return distances[math.floor(len(distances) / 2)]
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::getPhysicalRadius
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getPhysicalRadius
 def get_physical_radius(distance: float, angular_radius: float) -> float:
     return 2 * distance * math.tan(rad(angular_radius) / 2) * 3261.56
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::getPmra
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getPmra
 def get_pmra(pmras: Sequence[float]) -> float:
     return pmras[math.floor(len(pmras) / 2)]
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::getPmdec
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getPmdec
 def get_pmdec(pmdecs: Sequence[float]) -> float:
     return pmdecs[math.floor(len(pmdecs) / 2)]
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::getVelocityDispersion
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getVelocityDispersion
 def get_velocity_dispersion(sources: Sequence[Mapping[str, Any]], pmra: float, pmdec: float) -> float:
     dispersion = sorted(
         math.sqrt((source["fsr"]["pm_ra"] - pmra) ** 2 + (source["fsr"]["pm_dec"] - pmdec) ** 2)
@@ -339,7 +339,7 @@ def get_velocity_dispersion(sources: Sequence[Mapping[str, Any]], pmra: float, p
     return sum(selected) / len(selected)
 
 
-# PORTED: algorithms/hrdiagram/result/cluster-summary.ts::logAgeToMyr
+# PORTED: git-history:algorithms/hrdiagram/result/cluster-summary.ts::logAgeToMyr
 def log_age_to_myr(log_age: float) -> float:
     return 10 ** log_age / 1_000_000
 
@@ -368,7 +368,7 @@ _FILTER_FRAMING = {
 }
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::getStandardViewRange
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/isochrone-plot.util.ts::getStandardViewRange
 def get_standard_view_range(filters: Mapping[str, str]) -> dict[str, dict[str, float]]:
     blue, red, lum = (_FILTER_FRAMING[filters[name]] for name in ("blue", "red", "lum"))
     color_red = blue["red"] - red["red"]
@@ -384,7 +384,7 @@ def get_standard_view_range(filters: Mapping[str, str]) -> dict[str, dict[str, f
     }
 
 
-# PORTED: algorithms/hrdiagram/isochrone-matching/cluster-isochrone.service.ts::resetDistance
+# PORTED: git-history:algorithms/hrdiagram/isochrone-matching/cluster-isochrone.service.ts::resetDistance
 def reset_distance(fsr_params: Mapping[str, Any]) -> float:
     distance = fsr_params["distance"]
     if distance:
@@ -392,7 +392,7 @@ def reset_distance(fsr_params: Mapping[str, Any]) -> float:
     return 0.1
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::equatorial2Galactic
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::equatorial2Galactic
 def equatorial_to_galactic(ra: float, dec: float) -> dict[str, float]:
     ra_ngp = rad(192.8595)
     dec_ngp = rad(27.1284)
@@ -414,7 +414,7 @@ def equatorial_to_galactic(ra: float, dec: float) -> dict[str, float]:
     return {"l": deg(longitude), "b": deg(b)}
 
 
-# PORTED: algorithms/hrdiagram/result/result.utils.ts::getMass
+# PORTED: git-history:algorithms/hrdiagram/result/result.utils.ts::getMass
 def get_mass(velocity_dispersion: float, distance: float, physical_radius: float) -> float:
     sigma = 3.086 * 10 ** 13 * distance * rad(velocity_dispersion) / (
         3600 * 365.25 * 24 * 3600
@@ -423,7 +423,7 @@ def get_mass(velocity_dispersion: float, distance: float, physical_radius: float
     return 10 * sigma * sigma * radius_pc / 0.004302
 
 
-# PORTED: algorithms/hrdiagram/result/cluster-summary.ts::computeClusterSummary
+# PORTED: git-history:algorithms/hrdiagram/result/cluster-summary.ts::computeClusterSummary
 def compute_cluster_summary(
     sources: Sequence[Mapping[str, Any]],
     cluster_ra: float,
@@ -470,7 +470,7 @@ _FILTER_WAVELENGTH = {
 }
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.ts::setSources/generateFilterList
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.ts::setSources/generateFilterList
 def normalize_sources(sources: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
     normalized: list[dict[str, Any]] = []
     for source in sources:
@@ -493,7 +493,7 @@ def normalize_sources(sources: Sequence[Mapping[str, Any]]) -> tuple[list[dict[s
     return normalized, filters
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.ts::getDistance/getPmra/getPmdec
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.ts::getDistance/getPmra/getPmdec
 def get_fsr_values(sources: Sequence[Mapping[str, Any]], field: str) -> list[float]:
     return sorted(
         float(f"{source['fsr'][field]:.2f}")
@@ -502,7 +502,7 @@ def get_fsr_values(sources: Sequence[Mapping[str, Any]], field: str) -> list[flo
     )
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.ts::getRa/getDec
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.ts::getRa/getDec
 def get_astrometry_values(sources: Sequence[Mapping[str, Any]], field: str) -> list[float]:
     return sorted(
         float(f"{source['astrometry'][field]:.2f}")
@@ -511,13 +511,13 @@ def get_astrometry_values(sources: Sequence[Mapping[str, Any]], field: str) -> l
     )
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.ts::getClusterRa/getClusterDec
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.ts::getClusterRa/getClusterDec
 def get_cluster_coordinate(sources: Sequence[Mapping[str, Any]], field: str) -> float | None:
     values = get_astrometry_values(sources, field)
     return None if not values else values[math.floor(len(values) / 2)]
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.ts::get2DpmChartData
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.ts::get2DpmChartData
 def get_2d_pm_chart_data(
     cluster_sources: Sequence[Mapping[str, Any]] | None,
     field_sources: Sequence[Mapping[str, Any]] | None,
@@ -537,7 +537,7 @@ def get_2d_pm_chart_data(
     return {"cluster": values(cluster_sources), "field": values(field_sources)}
 
 
-# PORTED: algorithms/hrdiagram/photometry/cluster-data.service.ts::getInterfaceStarCounts
+# PORTED: git-history:algorithms/hrdiagram/photometry/cluster-data.service.ts::getInterfaceStarCounts
 def get_interface_star_counts(
     cluster_sources: Sequence[Mapping[str, Any]],
     field_sources: Sequence[Mapping[str, Any]],

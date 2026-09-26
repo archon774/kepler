@@ -1,13 +1,13 @@
 """Lomb-Scargle periodogram for pulsar light curves — stage 2 of the pipeline.
 
-PORTED from the Kepler TypeScript extraction:
+PORTED from Kepler's retired TypeScript extraction:
 
-* ``algorithms/periodogram/core/lomb-scargle.ts`` — ``lombScargle`` and the
+* ``git-history:algorithms/periodogram/core/lomb-scargle.ts`` — ``lombScargle`` and the
   ``ArrMath`` helpers it computes through (astromancer
   ``shared/data/utils.ts``).
-* ``algorithms/periodogram/core/peak-detection.ts`` — ``findLocalMax``,
+* ``git-history:algorithms/periodogram/core/peak-detection.ts`` — ``findLocalMax``,
   ``confidenceThreshold``, ``CONFIDENCE_LEVELS``.
-* ``algorithms/periodogram/pulsar/pulsar-periodogram-range.ts`` —
+* ``git-history:algorithms/periodogram/pulsar/pulsar-periodogram-range.ts`` —
   ``nyquistPeriodogramRange``.
 
 The pulsar tool uses the **unweighted** ``lombScargle``; pulsar rows carry no

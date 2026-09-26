@@ -1536,10 +1536,16 @@ and SIMBAD responses remain unverified.
 
 _Former source: `algorithms/hrdiagram/EXTRACTION.md`._
 
+> **Retired 2026-09-25:** this section records the former TypeScript
+> extraction. Its computational surface now lives in
+> `algorithms/hrdiagram_py/`; the deleted files remain available in git
+> history.
+
 ### HR Diagram / Isochrone Matching — extraction record
 
 Algorithmic TypeScript lifted out of the **Astromancer** "cluster" tool
-(`/home/claude/astromancer`, Angular 16) into `algorithms/hrdiagram/`.
+(`/home/claude/astromancer`, Angular 16) into the now-retired
+`algorithms/hrdiagram/` extraction.
 
 This is an **extraction, not a port**. Function bodies, comments, constants and
 the author's quirks (including several bugs, flagged below) are preserved as
@@ -1687,7 +1693,7 @@ pop-ups), `archive-feetching/*` (fetch dialogs).
 |---|---|---|
 | `drawStar(ctx, …)` | `result/result.utils.ts` | Canvas2D star-polygon rasteriser. Pure rendering. |
 | `downloadCsv(cols, data, name)` | `result/result.utils.ts` | `Blob` + `<a download>` browser file save. Pure IO. |
-| `lombScargle`, `lombScargleWithError`, `ArrMath`, `floatMod`, `UpdateSource` | `shared/data/utils.ts` | Periodogram / light-curve math, unreachable from the cluster tool. Already extracted under `algorithms/periodogram/core/` and `algorithms/lightcurve/shared/`. |
+| `lombScargle`, `lombScargleWithError`, `ArrMath`, `floatMod`, `UpdateSource` | `shared/data/utils.ts` | Periodogram / light-curve math, unreachable from the cluster tool. Historically extracted under `algorithms/periodogram/core/` and `algorithms/lightcurve/shared/`; the live ports are Python. |
 | `fetchCatalog`, `fetchFieldStarRemoval`, `getCatalogResults`, `getFSRResults`, `initValues`, `downloadSources` | `cluster-data.service.ts` | HTTP job submission/polling, response callbacks, localStorage job replay, CSV download. See §5 for the response contracts. |
 | `setHighChart` / `getHighCharts` / `highCharts[]` | `cluster-isochrone.service.ts` | A registry of live chart handles used only for PNG export. |
 | `downloadSummary`, `downloadData`, `downloadPlots`, `downloadFsrPlots`, `downloadPlotData`, `submitData` | `result-summary.component.ts` | Export handlers and an Astronomicon `POST`. `downloadPlotData` in particular reads points back out of the Highcharts series — it is a chart reader, not a producer. |
@@ -1786,8 +1792,8 @@ requested filter triple** — i.e. the server does the grid interpolation and th
 synthetic photometry. `iSkip` marks an index where the evolutionary track is
 discontinuous and the polyline must be broken.
 
-**Consequence:** `hrdiagram/` reproduces the client-side transform faithfully,
-but a standalone system needs its own isochrone source (e.g. PARSEC / MIST
+**Consequence:** the former `hrdiagram/` extraction reproduced the client-side
+transform faithfully, but a standalone system needs its own isochrone source (e.g. PARSEC / MIST
 grids) plus the interpolation and bolometric-correction step that the
 astromancer backend performs. That backend is not in this repository.
 
@@ -1899,29 +1905,27 @@ Faithfulness was chosen over correctness. Each is flagged inline at its site.
 - **The cluster centre is an element-wise median** of member RA and Dec
   independently — not a spherical mean. Fine for compact clusters, wrong near
   the poles or across the RA=0 wrap.
-- **No compiler was available in this environment** (`node`/`tsc` absent), so
-  the extracted files have been reviewed by hand but not type-checked. Imports
-  and paths were verified manually.
+- **No compiler was available in the original extraction environment**
+  (`node`/`tsc` absent), so the initial files were reviewed by hand. A later
+  root toolchain typechecked them successfully before the extraction retired.
 
 ## HR Diagram (Python)
 
 ### A parity port + new capability, not a byte-preserving extraction
 
-`algorithms/hrdiagram_py/` is a **separate package from `algorithms/hrdiagram`**
-(the TypeScript extraction above) -- deliberately named with the `_py` suffix
-rather than reusing `hrdiagram/`, because that name is already owned by the
-TypeScript extraction under this repo's Python/TypeScript domain-boundary
-rules (`CLAUDE.md`, "TypeScript domain boundaries"). It is not governed by the
-byte-preservation contract the rest of this document records: it is a
-deliberate Python *port* of Astromancer's CM/HR transform, plus real new
-capability Astromancer never had.
+`algorithms/hrdiagram_py/` began as a **separate package from the former
+`algorithms/hrdiagram` TypeScript extraction**. It retains the `_py` suffix to
+avoid disruptive import churn after that extraction retired. It is not
+governed by the byte-preservation contract the rest of this document records:
+it is a deliberate Python *port* of Astromancer's CM/HR transform, plus real
+new capability Astromancer never had.
 
 `hrfit.py` carries the parity-sensitive core, ported from
 `isochrone-matching/isochrone-plot.util.ts::computePlotDelta` and
 `cluster.util.ts::getExtinction`. Two differences from Astromancer are
 permanent, deliberate deviations rather than defects reproduced for parity
-(contrast with `algorithms/hrdiagram`'s catalogued defects above, all of which
-*are* reproduced):
+(contrast with the retired extraction's catalogued defects above, which the
+legacy parity surface reproduces):
 
 - `get_extinction` uses the caller's `rv` throughout, rather than Astromancer's
   hard-coded leading factor of 3.1 (that extraction's defect #1).
@@ -1950,7 +1954,7 @@ system. `membership.py` is mostly the same -- except for one function,
 `_elliptical_pm_mask`, marked `# PORTED:` inline: a faithful translation of
 Astromancer's real field-star-removal acceptance test,
 `updateClusterFieldSources`
-(`algorithms/hrdiagram/photometry/cluster-data.service.util.ts:87-128`,
+(`git-history:algorithms/hrdiagram/photometry/cluster-data.service.util.ts:87-128`,
 elliptical in (pm_ra, pm_dec)), including its documented "correct by
 accident" NaN behaviour for a star outside the semi-major axis (defect #8
 above). `select_cluster_members` sizes that ellipse's semi-axes per source --
@@ -2124,13 +2128,18 @@ cannot resolve is reported in `warnings` as skipped, not as a tool error.
 
 _Former source: `algorithms/lightcurve/EXTRACTION.md`._
 
+> **Retired 2026-09-25:** this section records the former TypeScript
+> extraction. Its pulsar and variable-star computations now live in
+> `algorithms/pulsar/` and `algorithms/variable_star/`; the deleted files remain
+> available in git history.
+
 ### Light Curve extraction from Astromancer
 
 Algorithmic TypeScript for the **light curve** and **period folding** stages of
 Astromancer's two light-curve tools, extracted into Kepler.
 
 - **Source repo:** `/home/claude/astromancer` (Angular 16 / TypeScript). Read-only for this task; nothing there was modified.
-- **Destination:** `/home/claude/Kepler/algorithms/lightcurve/`
+- **Historical destination:** `/home/claude/Kepler/algorithms/lightcurve/`
 - **Nature of the work:** extraction, not a port. Algorithms and comments are
   preserved verbatim. Angular decorators, DI, RxJS, `localStorage` and Highcharts
   handles were cut; every cut is marked in-file with an `// EXTRACTED:` comment.
@@ -2582,12 +2591,9 @@ class extracted here.
   comments are unchanged.
 - The only signature changes are the closure-capture → parameter conversions
   listed in §4, each marked in-file.
-- **Not type-checked.** No Node, npm or `tsc` is available in this environment
-  (`/home/claude/astromancer/node_modules` has no `.bin/tsc`, and `node` is not
-  on `PATH`). The files are self-consistent by inspection and the import graph is
-  closed within `lightcurve/`, but they have not been fed to a compiler. Running
-  `tsc --noEmit` over `lightcurve/` is the obvious next step once a toolchain is
-  available.
+- **At extraction time, not typechecked.** No Node, npm or `tsc` was available
+  in that environment. A later root toolchain typechecked the closed import
+  graph successfully before the extraction retired.
 - No test files were extracted; the 16 Astromancer spec files are TestBed stubs
   that assert only `expect(component).toBeTruthy()`.
 
@@ -2601,7 +2607,7 @@ Renders a pulsar light curve as audio. This is the backing algorithm for
 
 - **Source repo:** `/home/claude/astromancer` (read-only; untouched)
 - **Extracted:** 2026-08-11
-- **Extracted to:** `algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts`
+- **Historical extraction:** `algorithms/lightcurve/pulsar/pulsar-sonification.algorithms.ts`
 - **Ported to:** `algorithms/pulsar/` (Python) — see §5
 
 ### 1. Why this arrived late
@@ -2672,19 +2678,19 @@ than looped on a sample index.
 
 ### 5. The Python port — `algorithms/pulsar/`
 
-Every other Python folder under `algorithms/` is a byte-preserving extraction
-from Skynet. **`algorithms/pulsar/` is not**: it is a language port of the
-TypeScript above, and it is marked `# PORTED:` rather than `# EXTRACTED:` so
-the extraction-marker index stays meaningful.
+`algorithms/pulsar/` is a language port of the Astromancer TypeScript above,
+alongside the `algorithms/variable_star/` and `algorithms/hrdiagram_py/` ports.
+It is marked `# PORTED:` rather than `# EXTRACTED:` so the extraction-marker
+index stays meaningful.
 
 The port exists because the upstream sonifier cannot be executed headless — it
 is welded to `Blob`, `document` and `AudioContext` — and Kepler's tool surface
 is Python. Note this is a **narrower** case than the one
-`docs/tool-architecture.md` rejected when it said "TypeScript stays
-TypeScript": that rejection was about `lomb-scargle.ts`, which is byte-identical
-to upstream and where a port would make future divergence undetectable. Here
-the TypeScript is extracted *and* kept under `tsc --noEmit`, so the two can be
-diffed against each other.
+`docs/tool-architecture.md` once rejected when it said "TypeScript stays
+TypeScript": that rejection was about `lomb-scargle.ts`, which was
+byte-identical to upstream. The intermediate extraction was kept and
+typechecked while the port was established; it retired after Python parity
+tests covered the live surface and remains available in git history.
 
 | Python | Ported from |
 | --- | --- |
@@ -2769,8 +2775,8 @@ The four tools that sit on these are documented in
 
 ### 8. Verification performed
 
-- `npx tsc -p tsconfig.json --noEmit` — clean, with the new file in the
-  include set (confirmed via `--listFiles`).
+- Before retirement, `npx tsc -p tsconfig.json --noEmit` was clean, with the
+  new file in the include set (confirmed via `--listFiles`).
 - `tests/test_pulsar_sonification.py` — 47 tests, all local and deterministic.
   Arithmetic identity with the TypeScript is checked where the TypeScript is
   short enough to work out by hand (`interpolateLinear` weights and length,
@@ -2793,9 +2799,9 @@ The four tools that sit on these are documented in
 
 The three Highcharts components were originally left behind as UI. That held
 while nothing rendered; `tools.pulsar.plot_pulsar` now does, so the parts that
-decide **what** is drawn are extracted into
-`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts` and ported to
-`algorithms/pulsar/charts.py`.
+decide **what** is drawn were extracted, ported to
+`algorithms/pulsar/charts.py`, and pinned by Python tests. The intermediate
+TypeScript file remains in git history.
 
 | Upstream | Lines | Extracted |
 | --- | --- | --- |
@@ -2822,9 +2828,9 @@ Both entry points are extracted and both are ported; the pipeline in
 narrower:
 
 - **`sonificationBrowser` is not ported.** It exists to drive an
-  `AudioContext`, which a file-writing tool has no use for. It remains
-  extracted in TypeScript, including its three documented divergences from the
-  saved-WAV path (§7.6).
+  `AudioContext`, which a file-writing tool has no use for. Its retired
+  TypeScript extraction remains available in git history, including its three
+  documented divergences from the saved-WAV path (§7.6).
 - **No period uncertainty.** `compute_pulsar_periodogram` reports a grid peak,
   not a fitted period with an error bar. Upstream has none either. Refine by
   re-running with narrow bounds and more steps.
@@ -2842,6 +2848,11 @@ on the B0329+54 fixture) rather than exactly 1.0.
 ## Periodogram
 
 _Former source: `algorithms/periodogram/EXTRACTION.md`._
+
+> **Retired 2026-09-25:** this section records the former TypeScript
+> extraction. Its live computations now reside in `algorithms/pulsar/` and
+> `algorithms/variable_star/`; the deleted files remain available in git
+> history.
 
 ### Periodogram extraction
 
@@ -3143,11 +3154,10 @@ Target language level: the code uses `**`, optional chaining, and
 
 #### Known limitations of this extraction
 
-- **Not compiled or type-checked.** No Node/npm/tsc is available in this
-  environment (`node`, `npm`, `npx`, `tsc` all absent; astromancer has no
-  `node_modules`). The verbatim core was verified by `diff`; the
-  parameter-threaded driver functions have been reviewed by eye but not
-  compiled. Worth a `tsc --noEmit` pass on a machine with a toolchain.
+- **At extraction time, not compiled or typechecked.** No Node/npm/tsc was
+  available in that environment. The verbatim core was verified by `diff`, and
+  a later root toolchain typechecked the extraction successfully before it
+  retired.
 - **No tests.** The astromancer `*.spec.ts` files are Angular TestBed
   scaffolding with no algorithmic assertions, so there was nothing to bring.
 - The `AgentVault` shared memory at `/srv/agent-vault` referenced in the

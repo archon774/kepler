@@ -10,7 +10,7 @@ assert. They check the two things that are assertable and that matter:
 2. **The renderer honours the spec** and writes a real PNG.
 
 The spec constants are the port's contract with
-`algorithms/lightcurve/pulsar/pulsar-charts.spec.ts`; the line numbers behind
+`git-history:algorithms/lightcurve/pulsar/pulsar-charts.spec.ts`; the line numbers behind
 each value are in that file's comments.
 """
 

@@ -65,10 +65,7 @@ algorithms/
 
   pulsar/               # Python pulsar pipeline: ingest, periodogram, folding,
                         #   sonification (a PORT, not an extraction)
-
-  lightcurve/           # TypeScript light-curve algorithms
-  periodogram/          # TypeScript periodogram algorithms
-  hrdiagram/            # TypeScript HR-diagram algorithms
+  variable_star/        # Python variable-star light curve, periodogram, folding
 docs/
 ```
 
@@ -237,10 +234,6 @@ Next Python tools should follow the same pattern before adding new layers:
 `calibrate_zeropoint` and `solve_astrometry` were on this list and have since
 landed; both are above.
 
-TypeScript-backed tools should come after the TypeScript package/runtime story
-is explicit. Their first wrapper should be simple: JSON in, existing algorithm
-execution, compact JSON/artifact summary out.
-
 ---
 
 ## 3. Algorithm Packages
@@ -260,12 +253,10 @@ Current algorithm ownership:
 | `algorithms.fieldcal` | Catalog-source matching, reference-magnitude resolution, zero-point solving | Uses dependency seams for photometry/WCS and defaults catalog queries to `algorithms.query`. |
 | `algorithms.catalogs` | Catalog/provider declarations, band tables, filter mappings, SIMBAD vocabulary, ADS field metadata, NED table names, ATNF parameter vocabulary | Declaration only; importing it should not perform network work. |
 | `algorithms.query` | VizieR, SDSS, SIMBAD, cache policy, WCS-footprint query orchestration | Owns remote catalog calls; live calls stay out of default checks. |
-| `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of `algorithms.hrdiagram` (TypeScript) plus a new optimizer, not a byte-preserving extraction -- deliberately not named `hrdiagram` since that folder is TypeScript-owned. Performs no *catalog* network I/O -- Gaia/VizieR catalog fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`. Its `isochrones.py` still calls the PARSEC isochrone service (stev.oapd.inaf.it) directly; no existing tool wraps it. |
+| `algorithms.hrdiagram_py` | Star-cluster CMD/HR-diagram fitting: CM<->HR transform, extinction, isochrone loading, distance/E(B-V)/age optimizer, field-star removal, geometric matching | A parity **port** of Astromancer's TypeScript plus a new optimizer, not a byte-preserving extraction. The historical `_py` suffix avoids a disruptive package rename after the TypeScript extraction was retired. Performs no *catalog* network I/O -- Gaia/VizieR catalog fetching lives in `tools.hr_diagram` via `tools.vizier.search_vizier`. Its `isochrones.py` still calls the PARSEC isochrone service (stev.oapd.inaf.it) directly; no existing tool wraps it. |
 | `algorithms.radio` | Radio spectral-index/log-parabola fitting (`spectral_fitting.py`) and generic RA/Dec-column-guessing catalog cross-match (`matching.py`) | New first-party capability, no upstream Skynet/Astromancer equivalent. Performs no network I/O -- VizieR/NED fetching lives in `tools.radio_sources`. |
-| `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | The one **port** rather than extraction under `algorithms/`; marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
-| `algorithms.lightcurve` | Framework-free TypeScript light-curve ingestion, transforms, period folding, and pulsar sonification | Typechecked by the root `tsconfig.json`. |
-| `algorithms.periodogram` | Framework-free TypeScript Lomb-Scargle periodogram and period helpers | No runtime wrapper yet. |
-| `algorithms.hrdiagram` | Framework-free TypeScript cluster/HR-diagram transforms | No runtime wrapper yet. |
+| `algorithms.pulsar` | Pulsar file ingest, background subtraction, Lomb-Scargle periodogram, phase folding/binning, and audio synthesis | An Astromancer Python **port**, marked `# PORTED:`. Stage order is a dependency chain — see `docs/pulsar-tool-pipeline.md`. |
+| `algorithms.variable_star` | Variable-star source ingestion, differential light curves, error-weighted Lomb-Scargle periodograms, and phase folding | Exact-parity Python port of the Astromancer algorithms. |
 
 ---
 
@@ -421,9 +412,6 @@ requires FITS data, solver binaries, local catalog data, and native astronomy
 dependencies. Those checks should be targeted to the PR that changes the
 behavior and should not become a broad architecture gate.
 
-TypeScript algorithms currently have no build manifest. Add `package.json` and
-`tsconfig.json` only when the TypeScript package/runtime shape is being defined.
-
 ---
 
 ## 9. Non-Goals
@@ -433,7 +421,6 @@ TypeScript algorithms currently have no build manifest. Add `package.json` and
 - No broad numerical remediation in architecture PRs.
 - No remote-provider live tests in default checks.
 - No large model tree before public tools need it.
-- No TypeScript runtime redesign before TypeScript-backed tools are in scope.
 
 ---
 
