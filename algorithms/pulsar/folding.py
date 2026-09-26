@@ -1,14 +1,14 @@
 """Period folding and phase binning — stage 3 of the pipeline.
 
-PORTED from the Kepler TypeScript extraction:
+PORTED from Kepler's retired TypeScript extraction:
 
-* ``algorithms/lightcurve/pulsar/pulsar-lightcurve.algorithms.ts`` —
+* ``git-history:algorithms/lightcurve/pulsar/pulsar-lightcurve.algorithms.ts`` —
   ``getPeriodFoldingChartData`` (astromancer ``pulsar.service.ts`` 273-314)
   and ``binData`` (850-886).
-* ``algorithms/lightcurve/pulsar/pulsar-period-folding.algorithms.ts`` —
+* ``git-history:algorithms/lightcurve/pulsar/pulsar-period-folding.algorithms.ts`` —
   ``foldAndBin``, ``duplicateIfNeeded``, ``differenceAndSum``,
   ``applyCalibration``.
-* ``algorithms/lightcurve/shared/numeric-utils.ts`` — ``floatMod``.
+* ``git-history:algorithms/lightcurve/shared/numeric-utils.ts`` — ``floatMod``.
 
 The ordering upstream chose is load-bearing and is preserved: the light curve
 is folded into phase, then **binned**, then phase-shifted, then optionally

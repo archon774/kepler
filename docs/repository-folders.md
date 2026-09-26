@@ -160,8 +160,8 @@ Important files and subfolders:
   packages.
 - `algorithms/skylib_lite/`: consolidated local subset of Skynet's `skylib` used
   by the extracted Python algorithms.
-- `algorithms/lightcurve/`, `algorithms/periodogram/`, `algorithms/hrdiagram/`:
-  extracted TypeScript algorithm packages.
+- `algorithms/pulsar/`, `algorithms/variable_star/`,
+  `algorithms/hrdiagram_py/`: Python ports of Astromancer algorithms.
 
 ## `algorithms/catalogs/`
 
@@ -255,45 +255,12 @@ Current caveats:
   rows, and optional detected sources explicitly. Tools perform catalog queries.
 - `numba` and `scipy` are required for real numeric execution.
 
-## `algorithms/hrdiagram/`
-
-Extracted TypeScript algorithms from Astromancer's cluster/HR-diagram tool.
-
-Primary responsibilities:
-
-- Represent cluster sources, photometry, filters, and isochrone parameters.
-- Split cluster members from field stars with field-star-removal parameters.
-- Generate color-magnitude and HR-diagram data.
-- Apply extinction and distance offsets to observed stars or model isochrones.
-- Compute cluster result summaries such as half-light radius, physical radius,
-  galactic coordinates, velocity dispersion, and virial mass.
-
-Important files and subfolders:
-
-- `cluster.util.ts`: shared cluster domain types, filter tables, and extinction
-  logic.
-- `fsr/`: field-star-removal utilities and histogram/CMD helpers.
-- `photometry/`: in-memory cluster source handling and source partitioning.
-- `isochrone-matching/`: fitted-parameter state and plot transforms.
-- `result/`: cluster-summary and projection calculations.
-- `shared/`: angle conversion helpers.
-- `storage/`: storage-shape interfaces retained from Astromancer.
-- [extraction.md](extraction.md), HR Diagram / Isochrone Matching: extraction
-  boundaries, framework seams, and dropped UI code.
-
-Current caveats:
-
-- There is no TypeScript package manifest or build config in this repository.
-- Angular, RxJS, HTTP job polling, Highcharts, canvas rendering, and browser
-  export handlers were removed.
-
 ## `algorithms/hrdiagram_py/`
 
-A Python parity **port** of the CM/HR transform above, plus a real optimizer
-Astromancer never had -- not a byte-preserving extraction, and deliberately
-named with the `_py` suffix so it doesn't collide with `algorithms/hrdiagram/`
-(TypeScript) under this repo's Python/TypeScript domain-boundary rules. See
-[extraction.md](extraction.md), "HR Diagram (Python)".
+A Python parity **port** of Astromancer's cluster/HR-diagram computations, plus
+a real optimizer Astromancer never had. It retains the historical `_py` suffix
+to avoid a disruptive package rename after the TypeScript extraction was
+retired. See [extraction.md](extraction.md), "HR Diagram (Python)".
 
 Important files:
 
@@ -315,7 +282,7 @@ Important files:
   -> age/distance/E(B-V). Open clusters only.
 - `membership.py`: field-star removal -- a per-source error-scaled parallax
   window, and Astromancer's own elliptical proper-motion acceptance region
-  (ported from `algorithms/hrdiagram/photometry/cluster-data.service.util.ts::updateClusterFieldSources`,
+  (ported from `cluster-data.service.util.ts::updateClusterFieldSources`,
   with each source's own ellipse semi-axes sized from its proper-motion error
   and a distance-aware velocity-dispersion floor -- the ellipse's *shape*
   alone doesn't help without that, since a circle and a fixed-radius ellipse
@@ -354,48 +321,12 @@ Important files:
 `algorithms/radio/` never imports `tools.*`; VizieR/NED network I/O lives one
 layer up in `tools/radio_sources.py`.
 
-## `algorithms/lightcurve/`
-
-Extracted TypeScript algorithms from Astromancer's pulsar and variable-star
-light-curve tools.
-
-Primary responsibilities:
-
-- Parse and transform pulsar light-curve data.
-- Merge variable-star source rows by MJD.
-- Maintain pulsar and variable light-curve data models.
-- Perform pulsar background subtraction, binning, calibration transforms, and
-  folding-related computations.
-- Perform variable-star differential photometry and period-folding transforms.
-
-Important files and subfolders:
-
-- `pulsar/`: pulsar data types, ingest logic, light-curve algorithms,
-  period-folding functions, and sonification.
-- `variable/`: variable-star data types, ingest logic, light-curve algorithms,
-  and period-folding functions.
-- `shared/`: small shared helpers such as `floatMod` and the common data
-  interface.
-- [extraction.md](extraction.md), Light Curve: source provenance and
-  Angular/RxJS/Highcharts seams.
-
-Current caveats:
-
-- Typechecked by the root `tsconfig.json` (`npm run typecheck`), but there is
-  no build, bundle, or runtime — nothing executes this TypeScript.
-- Browser/UI concerns were removed except where browser APIs carried the
-  original ingest algorithm.
-- Periodogram logic lives separately in `algorithms/periodogram/`.
-- The runnable sonification is the Python port in `algorithms/pulsar/`; the
-  TypeScript here is the provenance record it was ported from.
-
 ## `algorithms/pulsar/`
 
-Python pulsar time-series ingest and sonification. **The one folder under
-`algorithms/` that is a port rather than an extraction** — it carries the
-Astromancer TypeScript sonifier into Python because that code is welded to
-`Blob`, `document` and `AudioContext` and cannot run headless. Seams are marked
-`# PORTED:`, not `# EXTRACTED:`.
+Python pulsar time-series ingest and sonification. One of the Astromancer
+Python ports under `algorithms/`, it carries the TypeScript sonifier into
+Python because that code is welded to `Blob`, `document` and `AudioContext`
+and cannot run headless. Seams are marked `# PORTED:`, not `# EXTRACTED:`.
 
 One module per pipeline stage, in the order they must run.
 
@@ -441,35 +372,18 @@ Current caveats:
 - No dedispersion, no barycentric correction, no period uncertainty. Upstream
   has none of these either.
 
-## `algorithms/periodogram/`
+## `algorithms/variable_star/`
 
-Extracted TypeScript periodogram algorithms from Astromancer.
+Exact-parity Python ports of Astromancer's variable-star computations.
 
-Primary responsibilities:
+Important files:
 
-- Compute Lomb-Scargle periodograms.
-- Preserve the pulsar and variable-star periodogram differences.
-- Detect local maxima and compute confidence thresholds for pulsar periodograms.
-- Derive pulsar Nyquist-based search ranges and folding-range links.
-
-Important files and subfolders:
-
-- `core/lomb-scargle.ts`: shared Lomb-Scargle implementation and numeric
-  helpers.
-- `core/peak-detection.ts`: local maxima and confidence-threshold helpers.
-- `pulsar/`: pulsar periodogram models, compute wrapper, range defaults, and
-  folding link.
-- `variable/`: variable-star periodogram model and compute wrapper.
-- [extraction.md](extraction.md), Periodogram: source provenance, algorithm
-  notes, and recent bug-fix context.
-
-Current caveats:
-
-- Typechecked by the root `tsconfig.json` (`npm run typecheck`), but there is
-  no build, bundle, or runtime — nothing executes this TypeScript.
-- Highcharts rendering fixes and UI storage paths are documented but not
-  extracted.
-- Period folding itself is owned by `algorithms/lightcurve/`.
+- `lightcurve.py`: source-row merging, differential magnitudes, and propagated
+  errors.
+- `periodogram.py`: the error-weighted Lomb-Scargle calculation and fixed grid.
+- `folding.py`: phase folding, display duplication, and error-bar alignment.
+- [extraction.md](extraction.md), Light Curve and Periodogram: upstream source
+  provenance, preserved quirks, and the retired TypeScript extraction record.
 
 ## `algorithms/skylib_lite/`
 

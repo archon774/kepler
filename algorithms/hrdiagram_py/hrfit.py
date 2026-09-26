@@ -3,13 +3,13 @@ algorithms.hrdiagram_py.hrfit - an Astromancer-faithful toolkit for turning a
 photometry CSV into a well-fitted colour-magnitude / HR diagram of a star
 cluster.
 
-This is a deliberate parity *port*, not the byte-preserving extraction
-``algorithms/hrdiagram`` (TypeScript) is -- the module lives in a separate
-``hrdiagram_py`` package specifically so it does not collide with that
-extraction's ownership of ``algorithms/hrdiagram``. The CM<->HR transform, the
-extinction model, and the sign conventions here are lifted from the
-Astromancer "cluster" tool (isochrone-plot.util.ts::computePlotDelta and
-cluster.util.ts::getExtinction). Differences from Astromancer are noted in
+This is a deliberate parity *port*, not a byte-preserving extraction. It
+retains the historical ``hrdiagram_py`` package name after the intermediate
+TypeScript extraction at ``git-history:algorithms/hrdiagram`` retired. The
+CM<->HR transform, extinction model, and sign conventions are lifted from the
+Astromancer "cluster" tool
+(``isochrone-plot.util.ts::computePlotDelta`` and
+``cluster.util.ts::getExtinction``). Differences from Astromancer are noted in
 comments so you can trace parity; two are permanent, deliberate deviations
 rather than upstream defects reproduced for parity:
 

@@ -1,7 +1,7 @@
 """Error-weighted variable-star Lomb--Scargle computation.
 
-# PORTED: algorithms/periodogram/core/lomb-scargle.ts::lombScargleWithError
-# PORTED: algorithms/periodogram/variable/variable-periodogram.compute.ts
+# PORTED: git-history:algorithms/periodogram/core/lomb-scargle.ts::lombScargleWithError
+# PORTED: git-history:algorithms/periodogram/variable/variable-periodogram.compute.ts
 """
 
 from __future__ import annotations

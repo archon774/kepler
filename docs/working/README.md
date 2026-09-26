@@ -12,11 +12,19 @@ writes the code.
 
 ## Index
 
-No track is in flight. Add a plan here when one starts.
+| Track | Document | Status |
+| --- | --- | --- |
+| MARS rebrand | [mars-rebrand.md](mars-rebrand.md) | Proposal, 2026-09-25. All decisions made; the distribution and repository are `skynet-mars`. Parked until `mcp-support` merges; R4 waits for the logo files. |
+
+**Renaming Kepler to MARS** (MCP Astronomy Research Suite): the distribution
+becomes `skynet-mars`, the commands `mars`, `mars-mcp` and `mars-bench`, and
+the environment variables `MARS_*`. It covers the logo, the repository rename
+and what it means for the published `v0.1.0rc1`. Recorded evidence — the
+archive, the benchmark report — is deliberately left as it was written.
 
 ## Landed
 
-Every plan this folder has carried has landed. The MCP tool surface's
+Every earlier plan this folder has carried has landed. The MCP tool surface's
 completion audit (2026-09-25) is in its own `Archived` block. For the others,
 a completion audit on 2026-09-18 re-verified each one against `dev`: the default suite is green
 (2575 passed, 44 skipped), and the asset-gated evidence — the NGC 5286 B

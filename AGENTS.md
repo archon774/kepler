@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Kepler is a staging area for extracted astronomy algorithms. Public Python tools live in `tools/`, including one thin tool per astronomy database/archive (SIMBAD, NED, VizieR, ATNF, ADS, MAST, MPC, CASDA) plus local pipelines (photometry, pulsar, HR-diagram, radio sources). Extracted/ported Python algorithms live in `algorithms/wcs/`, `algorithms/photometry/`, `algorithms/fieldcal/`, `algorithms/catalogs/`, `algorithms/query/`, `algorithms/skylib_lite/` (a shared vendored Skylib subset), `algorithms/pulsar/` (a TypeScript port), `algorithms/hrdiagram_py/` (a TypeScript port plus a new optimizer), and `algorithms/radio/` (new first-party capability, no upstream equivalent). Framework-free TypeScript algorithms live in `algorithms/lightcurve/`, `algorithms/periodogram/`, and `algorithms/hrdiagram/`; these have a root `package.json`/`tsconfig.json` for `tsc --noEmit` typechecking only — no build, bundle, test step, or runtime. Provenance, dependencies, and parity notes are consolidated in `docs/extraction.md` (one section per domain) rather than per-folder `EXTRACTION.md` files, which no longer exist. Documentation is organized under `docs/`: reference documents at the top level, point-in-time reviews in `docs/analysis/`, the model benchmark in `docs/benchmarking/`, completed track documents in `docs/archive/`, and active plans in `docs/working/`; `docs/README.md` is the map. Root files include `pyproject.toml`, `uv.lock`, `README.md`, and `CONTRIBUTING.md`.
+Kepler is a staging area for extracted astronomy algorithms. Public Python tools live in `tools/`, including one thin tool per astronomy database/archive (SIMBAD, NED, VizieR, ATNF, ADS, MAST, MPC, CASDA) plus local pipelines (photometry, pulsar, variable-star, HR-diagram, radio sources). Extracted/ported Python algorithms live in `algorithms/wcs/`, `algorithms/photometry/`, `algorithms/fieldcal/`, `algorithms/catalogs/`, `algorithms/query/`, `algorithms/skylib_lite/` (a shared vendored Skylib subset), `algorithms/pulsar/`, `algorithms/variable_star/`, `algorithms/hrdiagram_py/`, and `algorithms/radio/` (new first-party capability, no upstream equivalent). The Astromancer light-curve, periodogram, and HR-diagram algorithms run through the Python ports; their retired TypeScript extraction history remains documented in `docs/extraction.md`. Provenance, dependencies, and parity notes are consolidated there rather than in per-folder `EXTRACTION.md` files, which no longer exist. Documentation is organized under `docs/`: reference documents at the top level, point-in-time reviews in `docs/analysis/`, the model benchmark in `docs/benchmarking/`, completed track documents in `docs/archive/`, and active plans in `docs/working/`; `docs/README.md` is the map. Root files include `pyproject.toml`, `uv.lock`, `README.md`, and `CONTRIBUTING.md`.
 
 Using the tools, as opposed to working on this repository, is taught by the agent skill in `skills/kepler-tools/`, rendered from its one source in `tools/skill/source/`: edit the source, then run `uv run python -m tools.skill`.
 
@@ -12,7 +12,6 @@ Using the tools, as opposed to working on this repository, is taught by the agen
 - `uv run pytest`: the test suite (see Testing Guidelines below) — no network access by default.
 - `uv run kepler`: open the console, the optional agentic loop over the `tools` schemas. It needs a model backend — a key for the provider it opens on, or a local Ollama daemon, which needs none. `KEPLER_MODEL_BACKEND=provider/model` picks which one it starts on; `/backend` changes it inside the session.
 - `python3 -m compileall tools algorithms`: syntax smoke test.
-- `npm run typecheck`: `tsc --noEmit` over the TypeScript algorithm folders (not a CI job; run by hand when touching a `.ts` file).
 - `git diff --check`: catch trailing whitespace and patch formatting issues before review.
 
 CI (`.github/workflows/ci.yml`) gates `compileall`, `uv run --locked pytest`, and a `repository-shape` check. `secret-scan.yml` and `workflow-safety.yml` run separately.
@@ -21,7 +20,7 @@ End-to-end WCS, photometry, and field calibration runs require external FITS dat
 
 ## Coding Style & Naming Conventions
 
-Use 4-space indentation for Python and keep public interfaces typed where practical. Preserve existing Pydantic model patterns in `schemas.py` files and keep extracted legacy behavior unless a change intentionally diverges. Use 2-space indentation in TypeScript and keep modules framework-free; avoid reintroducing Angular, RxJS, Highcharts, or browser-only code unless the target package requires it. Prefer clear snake_case for Python files/functions and kebab-case or domain-qualified names already used by TypeScript files, such as `variable-lightcurve.algorithms.ts`.
+Use 4-space indentation for Python and keep public interfaces typed where practical. Preserve existing Pydantic model patterns in `schemas.py` files and keep extracted or ported legacy behavior unless a change intentionally diverges. Prefer clear snake_case for Python files and functions.
 
 ## Testing Guidelines
 

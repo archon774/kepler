@@ -1,12 +1,12 @@
 """Green Bank / Skynet pulsar time-series ingest.
 
-PORTED from astromancer via the Kepler TypeScript extraction:
+PORTED from Astromancer via Kepler's retired TypeScript extraction:
 
-* ``algorithms/lightcurve/pulsar/pulsar-lightcurve.ingest.ts``
+* ``git-history:algorithms/lightcurve/pulsar/pulsar-lightcurve.ingest.ts``
   -- ``PulsarLightCurveIngest.uploadHandler`` (file-flavour discrimination,
   ``#`` header parsing, the cal-block row filter, the fixed column map, the
   UTC time rebase).
-* ``algorithms/lightcurve/pulsar/pulsar-lightcurve.algorithms.ts``
+* ``git-history:algorithms/lightcurve/pulsar/pulsar-lightcurve.algorithms.ts``
   -- ``PulsarLightCurveAlgorithms.median`` and ``.backgroundSubtraction``
   (astromancer ``pulsar.service.ts`` 715-720 and 722-739).
 

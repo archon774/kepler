@@ -51,12 +51,6 @@ dist/
 coverage.xml
 htmlcov/
 
-# JavaScript / TypeScript build output
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
 # Notebook checkpoints
 .ipynb_checkpoints/
 

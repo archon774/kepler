@@ -1,7 +1,7 @@
 """Variable-star period folding with upstream row and display semantics.
 
-# PORTED: algorithms/lightcurve/variable/variable-lightcurve.algorithms.ts
-# PORTED: algorithms/lightcurve/variable/variable-period-folding.algorithms.ts
+# PORTED: git-history:algorithms/lightcurve/variable/variable-lightcurve.algorithms.ts
+# PORTED: git-history:algorithms/lightcurve/variable/variable-period-folding.algorithms.ts
 """
 
 from __future__ import annotations

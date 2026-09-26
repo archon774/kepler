@@ -62,18 +62,19 @@ For the detailed ownership and dependency rules, see
 
 ### Preserved algorithm foundation
 
-Kepler has extracted the relevant Python algorithms from Skynet and the
-framework-free TypeScript algorithms from Astromancer. Extraction is a
-preservation task rather than a rewrite: upstream constants, calculations,
-comments, and known behavior are retained, and severed framework dependencies
-are marked in the source. The shared `algorithms/skylib_lite/` package
-consolidates the local Skylib subset used by the optical code.
+Kepler has extracted the relevant Python algorithms from Skynet and ported the
+Astromancer light-curve, periodogram, pulsar, and HR-diagram computations to
+Python. Extraction is a preservation task rather than a rewrite: upstream
+constants, calculations, comments, and known behavior are retained, and
+severed framework dependencies are marked in the source. The shared
+`algorithms/skylib_lite/` package consolidates the local Skylib subset used by
+the optical code.
 
 The repository also includes clearly labelled intentional departures from that
-model: a Python pulsar port, a Python HR-diagram port plus optimizer, and new
-radio-source fitting/matching capability. Provenance, extraction boundaries,
-and deliberately preserved quirks are recorded domain by domain in
-[extraction.md](extraction.md).
+model: Python ports for pulsar and variable-star analysis, a Python HR-diagram
+port plus optimizer, and new radio-source fitting/matching capability.
+Provenance, extraction boundaries, and deliberately preserved quirks are
+recorded domain by domain in [extraction.md](extraction.md).
 
 ### Optical analysis and calibration
 
@@ -149,8 +150,8 @@ safe to run locally:
   zero-point solves. Preservation tests compare selected behavior bit-for-bit,
   including documented upstream defects rather than silently changing them.
 - CI compiles Python, runs `uv run --locked pytest`, and checks the required
-  repository shape. TypeScript packages are framework-free and receive a
-  manual `npm run typecheck` check; they have no runtime test harness.
+  repository shape. The Python ports have targeted parity coverage for their
+  Astromancer-derived behavior.
 - External astrometry indexes, a UCAC catalog tree, and the Girardi isochrone
   grid are intentionally operator-provided rather than vendored. Tools report
   structured limitations when those optional assets are absent.

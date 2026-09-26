@@ -21,7 +21,6 @@ Run the smallest relevant checks before opening a PR:
 uv sync
 uv run pytest
 python3 -m compileall tools algorithms
-npm run typecheck
 git diff --check
 ```
 
