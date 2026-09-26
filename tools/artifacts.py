@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -24,6 +26,7 @@ __all__ = [
     "write_table",
     "write_text",
     "reserve_artifact_path",
+    "reserve_path_in",
     "describe_artifact",
     "list_artifacts",
     "preview_rows",
@@ -169,15 +172,37 @@ def _safe_stem(label: str) -> str:
 
 
 def _reserve_path(directory: Path, stem: str, suffix: str) -> Path:
-    """Return a path under ``directory`` that does not already exist."""
+    """Claim a path under ``directory`` that no other writer holds, and return it.
+
+    The name is claimed by creating the file exclusively (``O_CREAT | O_EXCL``),
+    not by checking that it does not exist. A check-then-write let two
+    processes sharing one artifact root -- two MCP servers on the per-user
+    root, one per host window -- receive the same path and overwrite each
+    other's result. The placeholder is an empty file; every writer overwrites
+    it.
+    """
 
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{stem}{suffix}"
-    counter = 1
-    while path.exists():
-        path = directory / f"{stem}_{counter}{suffix}"
-        counter += 1
-    return path
+    counter = 0
+    while True:
+        name = f"{stem}{suffix}" if counter == 0 else f"{stem}_{counter}{suffix}"
+        path = directory / name
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+        except FileExistsError:
+            counter += 1
+            continue
+        return path
+
+
+def reserve_path_in(directory: str | Path, name: str, ext: str) -> Path:
+    """Claim a non-colliding ``<name>.<ext>`` in an explicit ``directory``.
+
+    For writers that choose their own directory (a caller-supplied
+    ``output_dir``) rather than an artifact subdirectory; same guarantee as
+    :func:`reserve_artifact_path`.
+    """
+    return _reserve_path(Path(directory), _safe_stem(name), f".{ext.lstrip('.')}")
 
 
 def _write_directory(subdir: Optional[str]) -> Path:

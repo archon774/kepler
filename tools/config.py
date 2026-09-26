@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
-from tools.paths import BUNDLED_DATA_LINK, is_checkout, kepler_home
+from tools.paths import bundled_data_dir, is_checkout, kepler_home
 
 ARTIFACT_DIR_ENV = "KEPLER_ARTIFACT_DIR"
 DATA_DIR_ENV = "KEPLER_DATA_DIR"
@@ -15,89 +16,15 @@ MAX_FRAMES_ENV = "KEPLER_MAX_FRAMES"
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: The repository-local credential file. Untracked and gitignored; it holds a
-#: developer's own provider keys and never ships.
-DOTENV_PATH = _REPO_ROOT / ".env"
-
-#: Bare-line fallback for :func:`load_dotenv`. A ``.env`` written by hand often
-#: holds nothing but the key itself, with no variable name in front of it; a
-#: prefix long enough to identify one provider unambiguously tells us which
-#: variable it was meant to be. Only prefixes that are provider-issued and
-#: self-identifying belong here -- an OpenAI ``sk-`` is not, because several
-#: services mint keys with it.
-_BARE_KEY_PREFIXES: tuple[tuple[str, str], ...] = (
-    ("sk-ant-", "ANTHROPIC_API_KEY"),
+# The .env loader lives in tools.dotenv, which resolves nothing at import, so
+# an entry point can load .env *before* this module fixes its settings. It is
+# re-exported here for the callers that always imported it from tools.config.
+from tools.dotenv import (  # noqa: E402
+    _BARE_KEY_PREFIXES,
+    DOTENV_PATH,
+    _parse_dotenv_line,
+    load_dotenv,
 )
-
-
-def load_dotenv(
-    path: str | Path | None = None, *, environ: dict[str, str] | None = None
-) -> tuple[str, ...]:
-    """Merge ``KEY=value`` lines from a ``.env`` file into the environment.
-
-    Returns the variable names this call set, in file order, so a caller can
-    report what it picked up without ever handling the values.
-
-    **The real environment always wins.** A variable already set is left
-    alone, so ``ANTHROPIC_API_KEY=... uv run kepler`` still overrides the file
-    and a test's ``monkeypatch.setenv`` is not silently undone. A missing or
-    unreadable file is not an error -- the file is optional by construction.
-
-    Accepted syntax is the intersection every ``.env`` writer agrees on:
-    blank lines and ``#`` comments are skipped, a leading ``export`` is
-    dropped, names are stripped, and a value wrapped in matching single or
-    double quotes is unwrapped. Nothing is interpolated: ``$HOME`` stays four
-    characters, because a credential is not a shell word.
-
-    A line carrying no ``=`` is read through :data:`_BARE_KEY_PREFIXES` and
-    assigned to the variable its prefix names. Anything else on such a line is
-    ignored rather than guessed at.
-    """
-
-    target = os.environ if environ is None else environ
-    source = Path(path) if path is not None else DOTENV_PATH
-    try:
-        text = source.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return ()
-
-    loaded: list[str] = []
-    for line in text.splitlines():
-        name, value = _parse_dotenv_line(line)
-        if name is None or value is None:
-            continue
-        # The environment beats the file; an empty existing value does not
-        # count as set, matching env_value's own notion of "unset".
-        if target.get(name):
-            continue
-        target[name] = value
-        loaded.append(name)
-    return tuple(loaded)
-
-
-def _parse_dotenv_line(line: str) -> tuple[str | None, str | None]:
-    """One ``.env`` line as a ``(name, value)`` pair, or ``(None, None)``."""
-
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return None, None
-    if stripped.startswith("export "):
-        stripped = stripped[len("export ") :].strip()
-
-    if "=" not in stripped:
-        for prefix, name in _BARE_KEY_PREFIXES:
-            if stripped.startswith(prefix):
-                return name, stripped
-        return None, None
-
-    name, _, value = stripped.partition("=")
-    name = name.strip()
-    if not name:
-        return None, None
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-        value = value[1:-1]
-    return name, value
 
 
 def env_value(name: str, default: str | None = None) -> str | None:
@@ -204,7 +131,7 @@ def is_lfs_pointer(path: Path) -> bool:
 # symlink to it), the shipped core data -- pulsar/, fieldcal/, afterglow/ -- in
 # an installed wheel. Every tool reads bundled fixtures through this, never
 # through a path of its own relative to the source tree.
-BUNDLED_DATA_DIR = BUNDLED_DATA_LINK.resolve()
+BUNDLED_DATA_DIR = bundled_data_dir()
 
 # The per-user directory Kepler owns (tools.paths.kepler_home). Holds the MCP
 # server's default artifact root, an installed Kepler's archive downloads, and
@@ -215,12 +142,40 @@ BUNDLES_DIR = KEPLER_HOME / "bundles"
 #: Written into a fetched bundle's directory only after its archive verified.
 BUNDLE_MARKER = ".kepler-bundle.json"
 
+#: The manifest this install accepts bundles from. Read as a data file, not
+#: imported, so the base configuration module takes no dependency on tools.mcp.
+BUNDLE_MANIFEST = Path(__file__).resolve().parent / "mcp" / "bundles.json"
 
-def fetched_bundle(name: str) -> Path | None:
-    """``BUNDLES_DIR/<name>`` if a verified fetch completed there, else ``None``."""
 
-    directory = BUNDLES_DIR / name
-    return directory if (directory / BUNDLE_MARKER).is_file() else None
+def _pinned_sha256(name: str, manifest: Path) -> str | None:
+    try:
+        return json.loads(manifest.read_text(encoding="utf-8"))["bundles"][name]["sha256"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def fetched_bundle(
+    name: str, *, bundles_dir: Path | None = None, manifest: Path | None = None
+) -> Path | None:
+    """``BUNDLES_DIR/<name>`` if a verified fetch **of this install's bundle** is there.
+
+    The marker must record the SHA-256 this install's ``bundles.json`` pins.
+    A marker alone was not enough: after an upgrade that pins a rebuilt
+    bundle, the Kepler home still held the previous release's bytes, and every
+    reader used them and called them installed -- the wheel/bundle mismatch
+    the manifest exists to prevent. A stale bundle now reads as not installed,
+    and ``kepler-mcp fetch-data`` replaces it.
+    """
+
+    directory = (BUNDLES_DIR if bundles_dir is None else bundles_dir) / name
+    try:
+        marker = json.loads((directory / BUNDLE_MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    pinned = _pinned_sha256(name, BUNDLE_MANIFEST if manifest is None else manifest)
+    if pinned is None or not isinstance(marker, dict) or marker.get("sha256") != pinned:
+        return None
+    return directory
 
 
 # Resolved to an absolute path at import. Artifact paths are handed back to
@@ -261,19 +216,28 @@ DATA_DIR = env_path(DATA_DIR_ENV, BUNDLED_DATA_DIR).resolve()
 # must never write into -- it may be read-only, and it is replaced wholesale
 # by the next upgrade. An install downloads into the per-user Kepler home
 # instead. A checkout is unchanged.
+#
+# An explicit KEPLER_DATA_DIR still moves it on an install, as documented: that
+# is a directory the user chose, not the package.
 FITS_DOWNLOAD_DIR = env_path(
     FITS_DOWNLOAD_DIR_ENV,
-    DATA_DIR / "fits_downloads" if is_checkout() else KEPLER_HOME / "fits_downloads",
+    DATA_DIR / "fits_downloads"
+    if is_checkout() or env_value(DATA_DIR_ENV)
+    else KEPLER_HOME / "fits_downloads",
 ).resolve()
 # The legacy Girardi model is a substantial operator dependency, not Kepler
 # data.  Deliberately no default: silently looking in a repository-relative
 # directory would make a missing model look bundled and conceal setup errors.
 #
-# The one exception is a bundle the user fetched on purpose (``kepler-mcp
-# fetch-data isochrones``): it is used only once its completion marker, written
-# after the archive's checksum verified, is present. A partial or unverified
-# fetch is never mistaken for an installed grid.
-ISOCHRONE_DIR = env_path(ISOCHRONE_DIR_ENV) or fetched_bundle("isochrones")
+# The one exception is an installed wheel's fetched bundle (``kepler-mcp
+# fetch-data isochrones``), used only once it verified against this install's
+# manifest. Never in a checkout: there the grid stays the operator setting it
+# always was, so a developer's own ~/.local/share/kepler cannot change what a
+# checkout's HR fit or its tests see. Fixed at import, like every setting here;
+# a server started before a fetch sees the grid after a restart.
+ISOCHRONE_DIR = env_path(ISOCHRONE_DIR_ENV) or (
+    None if is_checkout() else fetched_bundle("isochrones")
+)
 PREVIEW_ROWS = int(env_value("KEPLER_PREVIEW_ROWS", "10") or "10")
 # How many frames one list_optical_frames call reads headers for and returns.
 # Not a tool parameter: the cap exists so a bulk archive download cannot make a

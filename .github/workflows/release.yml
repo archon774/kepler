@@ -22,6 +22,8 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       # lfs: true -- the manifest check below rebuilds data/optical/, and three
       # of its frames are Git LFS objects. The build refuses LFS pointers, so a
@@ -56,6 +58,27 @@ jobs:
         run: |
           uv build --out-dir dist
           cd dist && sha256sum -- *.whl *.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      # The core data reaches the wheel through the tools/_data symlink. A tree
+      # without that symlink (a clone made with core.symlinks=false) builds a
+      # wheel with no data at all, silently; refuse to publish one.
+      - name: Check the wheel carries its core data
+        run: |
+          wheel=$(ls dist/*.whl)
+          count=$(python -m zipfile -l "$wheel" | grep -c 'tools/_data/pulsar/.*\.cal\.txt' || true)
+          echo "pulsar scans in the wheel: $count"
+          if [ "$count" -lt 5 ]; then
+            echo "::error::the wheel is missing its core data (tools/_data); build from a checkout with symlinks"
+            exit 1
+          fi
+
+      # PEP 440 decides what a pre-release is, not a pattern: 0.1.0rc1, 1.0b2,
+      # 2.0.dev3 and their other spellings are all pre-releases.
+      - name: Classify the version
+        id: version
+        run: |
+          prerelease=$(uv run --locked python -c 'import tomllib; from packaging.version import Version; print(str(Version(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]).is_prerelease).lower())')
+          echo "prerelease=$prerelease" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v5
         with:
@@ -131,7 +154,7 @@ jobs:
   publish:
     name: publish
     if: github.event_name == 'push'
-    needs: [verify, data]
+    needs: [build, verify, data]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -146,10 +169,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
-          # A PEP 440 pre-release (a, b, rc, dev) is published as a GitHub
-          # pre-release; anything else is a release. docs/releasing.md.
-          if grep -Eq '(a|b|rc|\.dev)[0-9]+$' <<<"$TAG"; then flag=--prerelease; else flag=--latest; fi
+          # A PEP 440 pre-release is published as a GitHub pre-release; anything
+          # else is a release. The build job classified the version with
+          # packaging.version. docs/releasing.md.
+          if [ "$PRERELEASE" = "true" ]; then flag=--prerelease; else flag=--latest; fi
           gh release create "$TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
             --repo "$REPO" --verify-tag "$flag" --title "Kepler $TAG" \
             --notes "Install and register: docs/installing.md. Check the install: \`kepler-mcp self-test\`. Data bundles: \`kepler-mcp fetch-data\` (from the \`data\` release, pinned by this wheel)."

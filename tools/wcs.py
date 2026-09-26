@@ -54,7 +54,7 @@ from tools.models import ToolError, ToolWarning, WcsSearchSummary, WcsSummary
 #: matched nothing. A fetched data bundle (``config.BUNDLES_DIR``) is a copy of
 #: these fixtures and is guarded the same way; see :func:`_under_fixture_root`.
 _FIXTURE_ROOT = BUNDLED_DATA_DIR
-_FIXTURE_SUBTREES = ("afterglow", "fieldcal", "optical", "pulsar")
+_FIXTURE_SUBTREES = ("afterglow", "fieldcal", "optical", "pulsar", "variable_star")
 
 
 class _FileChangedError(RuntimeError):

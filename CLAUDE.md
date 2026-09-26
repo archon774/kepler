@@ -298,14 +298,23 @@ machine with no checkout. Its rules:
   **`tools/mcp/` imports nothing from `tools/agent/` or `tools/llm/`**, and
   nothing under `algorithms/` imports it. `tests/test_mcp_surface.py` asserts
   both.
-- **The `mcp` SDK is optional** (`uv sync --extra mcp`), and only
-  `tools/mcp/server.py` imports it. **CI does not install it**, so every test
+- **The `mcp` SDK is optional** (`uv sync --extra mcp`). Only
+  `tools/mcp/server.py` imports it to serve, and `tools/mcp/selftest.py` to
+  act as a client of that server; nothing else under `tools/mcp/` may. **CI does not install it**, so every test
   that drives the SDK must call `pytest.importorskip("mcp")` *before* any SDK
   import, or CI fails.
 - **The registry is read, never edited, to serve it.** What only the server
   knows (the pinned artifact root, a sentence the server makes false) is
   added or replaced at serve time in `tools/mcp/surface.py`, and a test pins
   each registry original.
+- **Undeclared arguments never reach a tool.** The server validates each call
+  against a copy of the registry schema with `additionalProperties: false`,
+  and with `integer` excluding floats, matching the agent loop's validator.
+  Several tools take keywords their schema omits on purpose (`subdir`,
+  `output_dir`, …), and a model must not reach them.
+- **`.env` is loaded first.** `tools/dotenv.py` resolves nothing at import;
+  `kepler-mcp` loads `.env` before pinning roots or importing `tools.config`,
+  whose settings are fixed at import. `tools.config` re-exports the loader.
 - **Instructions stay under `tools.skill.BRIEF_LIMIT`** (1,900 characters,
   worst case, tested). Claude Code truncates a server's instructions at
   about 2,000. Everything longer is a `kepler://skill/...` resource.
@@ -314,8 +323,10 @@ machine with no checkout. Its rules:
 
 **Bundled data and the Kepler home.** Tools read bundled fixtures only through
 `config.BUNDLED_DATA_DIR`, which is `tools/_data`: a committed symlink to
-`data/` in a checkout, and in a wheel the core data (`pulsar/`, `fieldcal/`,
-`afterglow/`) that package-data ships. Never add a path of the form
+`data/` in a checkout (or, in a clone made without symlink support, where the
+link arrives as a text file, the checkout's `data/` directly), and in a wheel
+the core data (`pulsar/`, `fieldcal/`, `afterglow/`, `variable_star/`) that
+package-data ships. Never add a path of the form
 `Path(__file__).parents[1] / "data"`: under a wheel it names a directory that
 does not exist. An installed Kepler writes only under the per-user Kepler
 home (`tools/paths.py`; `KEPLER_HOME`):

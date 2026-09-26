@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import math
 import subprocess
 import sys
@@ -195,7 +196,10 @@ def test_the_instructions_fit_the_budget_in_the_worst_case(tmp_path, monkeypatch
     from tools.mcp import install
     from tools.skill import BRIEF_LIMIT
 
-    monkeypatch.setattr(install, "_has_files", lambda directory, pattern: False)
+    for check in ("_pulsar_scans_present", "_references_present", "_frames_present",
+                  "_isochrones_present"):
+        monkeypatch.setattr(install, check, lambda: False)
+    monkeypatch.setattr(install, "_plate_solving_available", lambda environ: False)
     for name in ("ANET_INDEX_PATH", "ATLAS_CATALOG_ROOT", "ADS_DEV_KEY"):
         monkeypatch.delenv(name, raising=False)
     long_root = tmp_path / ("a" * 60) / ("b" * 60)
@@ -210,7 +214,22 @@ def test_install_facts_say_whether_a_key_is_set_never_what_it_is(tmp_path):
     assert "ADS_DEV_KEY is set." in with_key and "sekrit" not in with_key
     assert "ADS_DEV_KEY is not set" in without
     assert "plate solving not configured" in without
-    assert "plate solving configured" in install_facts(tmp_path, {"ANET_INDEX_PATH": "/x"})
+
+
+def test_install_facts_are_the_tools_own_answers(tmp_path, monkeypatch):
+    """Finding 8: the facts looked in their own places and disagreed with the tools.
+
+    With KEPLER_DATA_DIR moved (it moves only downloads), the tools still see
+    the scans and references; so must the facts. An index path holding no
+    index files is not "plate solving configured".
+    """
+    from tools.mcp.install import install_facts
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "elsewhere")
+    facts = install_facts(tmp_path, {"ANET_INDEX_PATH": str(tmp_path)})
+    assert "Pulsar scans present" in facts
+    assert "zero-point references present" in facts
+    assert "plate solving not configured" in facts
 
 
 def test_served_resources_are_the_skill_documents():
@@ -558,3 +577,196 @@ def test_the_server_sits_beside_the_agent_loop_not_on_it():
     for path in sorted((_REPO_ROOT / "algorithms").rglob("*.py")):
         bad = {m for m in _imported_modules(path) if m.startswith("tools.mcp")}
         assert bad == set(), f"{path} imports {sorted(bad)}"
+
+
+# --- review fixes: argument strictness ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments", "expected"),
+    [
+        # An undeclared keyword the tool function does accept: it wrote outside
+        # the artifact root. Refused before dispatch.
+        ("load_pulsar_lightcurve", {"path": "x", "subdir": "/tmp/elsewhere"}, "subdir"),
+        ("analyze_source_spectrum", {"name": "Cas A", "output_dir": "/tmp/x"}, "output_dir"),
+        # A misspelled keyword is an argument error, not a tool exception.
+        ("search_vizier", {"target": "M31", "radius": 1.0}, "radius"),
+        # JSON Schema's integer accepts 100.0; the loop's validator does not.
+        ("fold_pulsar_lightcurve", {"path": "x", "period_s": 0.7, "bins": 100.0}, "integer"),
+    ],
+)
+def test_undeclared_or_mistyped_arguments_are_refused_before_dispatch(name, arguments, expected, tmp_path):
+    pytest.importorskip("mcp")
+    import anyio
+    from mcp.client.client import Client
+
+    from tools.mcp.server import build_server
+
+    def must_not_run(**_):
+        raise AssertionError("dispatched")
+
+    functions = {s["name"]: must_not_run for s in TOOL_SCHEMAS}
+    server = build_server(TOOL_SCHEMAS, functions, artifact_root=tmp_path)
+
+    async def run():
+        async with Client(server) as client:
+            return await client.call_tool(name, arguments)
+
+    result = anyio.run(run)
+    assert result.is_error
+    error = result.structured_content["errors"][0]
+    assert error["code"] == "invalid_input" and expected in error["message"]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_reserved_artifact_names_are_claimed_atomically(tmp_path):
+    """Two writers asking for the same name get different files (finding 5)."""
+    from tools import artifacts
+
+    first = artifacts.reserve_path_in(tmp_path, "psr_b0329_54_lightcurve", "ecsv")
+    second = artifacts.reserve_path_in(tmp_path, "psr_b0329_54_lightcurve", "ecsv")
+    assert first != second
+    assert first.exists() and second.name == "psr_b0329_54_lightcurve_1.ecsv"
+
+
+def test_reservation_holds_across_processes(tmp_path):
+    """The check-then-write gave both processes one path in 4 of 4 trials."""
+    import concurrent.futures
+
+    code = (
+        "import sys; from pathlib import Path; from tools import artifacts; "
+        "print(artifacts.reserve_path_in(Path(sys.argv[1]), 'same', 'ecsv'))"
+    )
+
+    def claim(_):
+        return subprocess.run(
+            [sys.executable, "-c", code, str(tmp_path)],
+            cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    with concurrent.futures.ThreadPoolExecutor(8) as pool:
+        claimed = list(pool.map(claim, range(8)))
+    assert len(set(claimed)) == 8
+
+
+def test_a_preview_with_quantities_and_arrays_still_serialises():
+    """Every non-empty search_mpc failed over MCP on astropy Quantity cells (finding 2)."""
+    import astropy.units as u
+    import numpy as np
+
+    result = ToolResult(
+        status="ok",
+        count=1,
+        preview=[{"RA": 10.5 * u.deg, "mag": np.float32(17.25), "spectrum": np.array([1.0, np.nan])}],
+    )
+    payload = surface.normalize_result("search_mpc", result)
+    row = payload["preview"][0]
+    assert row["RA"] == "10.5 deg"
+    assert row["mag"] == 17.25
+    assert row["spectrum"][0] == 1.0
+    json.dumps(payload, allow_nan=True)
+    assert not surface.result_is_error(payload)
+
+
+# --- review fixes: startup ordering, backend, messages ---------------------------
+
+
+def test_the_entry_point_loads_dotenv_before_anything_reads_configuration(tmp_path):
+    """Finding 12: .env values were logged as read and never took effect."""
+    probe = (
+        "import sys, tools.mcp.__main__ as m\n"
+        "from tools import dotenv\n"
+        "dotenv.DOTENV_PATH = __import__('pathlib').Path(sys.argv[1])\n"
+        "import tools.dotenv as d; d.DOTENV_PATH = dotenv.DOTENV_PATH\n"
+        "print('tools.config' in sys.modules)\n"
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("KEPLER_MCP_TOOLS=hr\n")
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(env_file)], cwd=_REPO_ROOT,
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "False"
+    source = (_REPO_ROOT / "tools" / "mcp" / "__main__.py").read_text()
+    assert source.index("load_dotenv()") < source.index("pin_roots()")
+    assert source.index("pin_roots()") < source.index("from tools import config")
+
+
+def test_tools_dotenv_resolves_nothing_at_import():
+    result = subprocess.run(
+        [sys.executable, "-c", "import sys, tools.dotenv; print('tools.config' in sys.modules)"],
+        cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "False"
+
+
+def test_config_still_re_exports_the_dotenv_loader():
+    from tools import dotenv
+
+    assert config.load_dotenv is dotenv.load_dotenv
+    assert config.DOTENV_PATH == dotenv.DOTENV_PATH
+
+
+def test_the_server_never_uses_a_gui_matplotlib_backend():
+    """Finding 13: photometry failed on macOS off the main thread."""
+    source = (_REPO_ROOT / "tools" / "mcp" / "__main__.py").read_text()
+    assert 'os.environ.setdefault("MPLBACKEND", "Agg")' in source
+    assert source.index('setdefault("MPLBACKEND"') < source.index("from tools.mcp import groups")
+
+
+def test_the_missing_sdk_advice_never_names_the_pypi_project():
+    """Finding 15: `pip install 'kepler[mcp]'` installed an unrelated PyPI project."""
+    from tools.mcp.__main__ import _missing_sdk_message
+
+    message = _missing_sdk_message()
+    assert sys.executable in message and "kepler[mcp] @" in message
+    assert "not on PyPI" in message
+
+
+def test_a_group_list_naming_nothing_is_an_error():
+    with pytest.raises(ValueError, match="no tool group named"):
+        groups.parse_groups(" , ")
+
+
+def test_self_test_reports_failure_rather_than_a_traceback(capfd, monkeypatch):
+    """Finding 11: a failed check ended in an ExceptionGroup traceback."""
+    pytest.importorskip("mcp")
+    from tools.mcp import selftest
+
+    monkeypatch.setattr(selftest, "_DETECTION_SNR", 1e9)  # force a failure
+    assert selftest.main([]) == 1
+    out = capfd.readouterr().out
+    assert "FAIL" in out and out.rstrip().endswith("FAILED")
+
+
+def test_self_test_ignores_the_callers_tool_filter(monkeypatch):
+    from tools.mcp import selftest
+
+    monkeypatch.setenv("KEPLER_MCP_TOOLS", "databases")
+    monkeypatch.setenv("KEPLER_PULSAR_DATA_DIR", "/nowhere")
+    env = selftest._server_environment("/tmp/artifacts")
+    assert "KEPLER_MCP_TOOLS" not in env and "KEPLER_PULSAR_DATA_DIR" not in env
+    assert env["PYTHONPATH"].split(os.pathsep)[0] == str(_REPO_ROOT)
+
+
+def test_a_served_artifact_listing_is_bounded_and_newest_first(tmp_path):
+    """Finding 14: an unbounded listing passed hosts' output limits, oldest first."""
+    import os as _os
+    import time
+
+    from tools.workspace import list_artifacts
+
+    for i in range(surface.ARTIFACT_LISTING_CAP + 20):
+        path = tmp_path / f"vizier_{i}.ecsv"
+        path.write_text("x")
+        _os.utime(path, (time.time() - 10_000 + i, time.time() - 10_000 + i))
+
+    payload = surface.call_tool(
+        "list_artifacts", {"directory": str(tmp_path)}, {"list_artifacts": list_artifacts}
+    )
+
+    assert payload["count"] == surface.ARTIFACT_LISTING_CAP + 20
+    assert len(payload["results"]) == surface.ARTIFACT_LISTING_CAP
+    newest = payload["results"][0]["file"]["path"]
+    assert newest.endswith(f"vizier_{surface.ARTIFACT_LISTING_CAP + 19}.ecsv")
+    assert [w["code"] for w in payload["warnings"]] == ["listing_truncated"]

@@ -99,8 +99,9 @@ def _safe_stem(label: str) -> str:
 
 def _output_path(stem: str, suffix: str, output_dir: str | Path | None = None) -> Path:
     directory = Path(output_dir).expanduser().resolve() if output_dir else (ARTIFACT_DIR / _SUBDIR)
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{_safe_stem(stem)}{suffix}"
+    # Reserved, not fixed: two spectra with the same stem otherwise shared one
+    # file, and the first result's plot was replaced by the second's.
+    return artifacts.reserve_path_in(directory, stem, suffix)
 
 
 def _write_df_artifact(df: pd.DataFrame, stem: str) -> ArtifactRef:

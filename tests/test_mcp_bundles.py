@@ -285,3 +285,119 @@ def test_a_missing_frame_library_says_so(tmp_path, monkeypatch):
     assert [w.code for w in targets.warnings] == ["bundle_not_installed"]
     assert "kepler-mcp fetch-data optical" in targets.warnings[0].message
     assert "bundle_not_installed" in [w.code for w in frames.warnings]
+
+
+# --- review fixes: a clone without symlinks -------------------------------------
+
+
+def _fake_tree(tmp_path, link_kind):
+    """A fake repository: tools/_data as a symlink, a text file, or a real dir."""
+    from pathlib import Path
+
+    root = tmp_path / "repo"
+    (root / "tools").mkdir(parents=True)
+    (root / "data" / "pulsar").mkdir(parents=True)
+    link = root / "tools" / "_data"
+    if link_kind == "symlink":
+        link.symlink_to(Path("..") / "data")
+    elif link_kind == "text":
+        link.write_text("../data")  # what core.symlinks=false writes
+    else:
+        (link / "pulsar").mkdir(parents=True)
+    return root, link
+
+
+@pytest.mark.parametrize(
+    ("kind", "checkout", "expected"),
+    [("symlink", True, "data"), ("text", True, "data"), ("wheel", False, "tools/_data")],
+)
+def test_bundled_data_is_found_with_or_without_symlinks(tmp_path, kind, checkout, expected):
+    from tools.paths import bundled_data_dir, is_checkout
+
+    root, link = _fake_tree(tmp_path, kind)
+    assert is_checkout(link) is checkout
+    assert bundled_data_dir(link) == (root / expected).resolve()
+
+
+def test_the_fixture_guard_holds_in_a_clone_without_symlinks(tmp_path, monkeypatch):
+    """Finding 4: solve_astrometry(write_header=True) rewrote a committed fixture."""
+    from tools import wcs
+    from tools.paths import bundled_data_dir
+
+    root, link = _fake_tree(tmp_path, "text")
+    monkeypatch.setattr(wcs, "_FIXTURE_ROOT", bundled_data_dir(link))
+    assert wcs._under_fixture_root(root / "data" / "pulsar" / "scan.fits")
+
+
+def test_a_bundle_from_another_release_does_not_count_as_installed(tmp_path):
+    """Finding 6: a marker from a previous release's bytes read as installed."""
+    manifest = tmp_path / "bundles.json"
+    manifest.write_text(json.dumps({"bundles": {"optical": {"sha256": "a" * 64}}}))
+    bundle = tmp_path / "bundles" / "optical"
+    bundle.mkdir(parents=True)
+
+    def marker(sha):
+        (bundle / config.BUNDLE_MARKER).write_text(json.dumps({"sha256": sha}))
+
+    kwargs = dict(bundles_dir=tmp_path / "bundles", manifest=manifest)
+    marker("a" * 64)
+    assert config.fetched_bundle("optical", **kwargs) == bundle
+    marker("b" * 64)
+    assert config.fetched_bundle("optical", **kwargs) is None
+    (bundle / config.BUNDLE_MARKER).write_text("{not json")
+    assert config.fetched_bundle("optical", **kwargs) is None
+    assert config.fetched_bundle("isochrones", **kwargs) is None
+
+
+def test_fetch_replaces_a_stale_bundle(tmp_path, published):
+    """fetch_bundle re-fetches when the marker records other bytes."""
+    release, spec = published
+    home = tmp_path / "home"
+    (home / "optical").mkdir(parents=True)
+    (home / "optical" / "old.fits").write_text("previous release")
+    (home / "optical" / config.BUNDLE_MARKER).write_text(json.dumps({"sha256": "b" * 64}))
+    target, fetched = fetch_bundle("optical", source=str(release), bundles_dir=home,
+                                   manifest={"optical": spec})
+    assert fetched and not (target / "old.fits").exists()
+
+
+def test_a_symlinked_kepler_download_root_is_not_walked(tmp_path, monkeypatch):
+    """Finding 7: fits_downloads -> / resolved to itself and was walked recursively."""
+    from tools.optical import _optical_data_roots
+
+    home = tmp_path / "kepler"
+    home.mkdir()
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    download = home / "fits_downloads"
+    download.symlink_to(outside)
+    monkeypatch.setattr(config, "KEPLER_HOME", home)
+    monkeypatch.setattr(config, "FITS_DOWNLOAD_DIR", download)
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "site-packages" / "tools" / "_data")
+
+    roots, warnings = _optical_data_roots()
+
+    assert (download, False) in roots
+    assert "download_root_outside_data_dir" in [w.code for w in warnings]
+
+
+def test_a_checkout_never_defaults_to_a_fetched_isochrone_grid(tmp_path):
+    """Finding 10: a fetched grid in ~/.local/share/kepler leaked into checkouts."""
+    home = tmp_path / "home"
+    code = (
+        "import json, os, pathlib\n"
+        "home = pathlib.Path(os.environ['KEPLER_HOME'])\n"
+        "from tools import config\n"
+        "print(config.ISOCHRONE_DIR)\n"
+    )
+    bundle = home / "bundles" / "isochrones"
+    bundle.mkdir(parents=True)
+    sha = json.loads(config.BUNDLE_MANIFEST.read_text())["bundles"]["isochrones"]["sha256"]
+    (bundle / config.BUNDLE_MARKER).write_text(json.dumps({"sha256": sha}))
+    env = {k: v for k, v in __import__("os").environ.items() if k != "KEPLER_ISOCHRONE_DIR"}
+    env["KEPLER_HOME"] = str(home)
+    result = __import__("subprocess").run(
+        [__import__("sys").executable, "-c", code], cwd=_REPO_ROOT, env=env,
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "None"

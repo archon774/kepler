@@ -730,3 +730,17 @@ def test_the_bundled_ocl_frames_join_back_to_the_recorded_sweep():
         t["pipeline"]["wcs"]["failure_reason"] == "no WCS solution found in FITS header"
         for t in openf["trials"]
     )
+
+
+def test_the_replay_ignores_an_operator_frame_library(tmp_path, monkeypatch):
+    """Code review, finding 9: KEPLER_OPTICAL_DATA_DIR made the ground-truth
+    replay look for its recorded frame in an operator's archive."""
+    from tools import fieldcal_reference
+
+    monkeypatch.setenv("KEPLER_OPTICAL_DATA_DIR", str(tmp_path))
+    (tmp_path / "ngc5128_galaxy_b_001.fits").write_bytes(b"not the recorded frame")
+
+    path, warnings = fieldcal_reference._frame_path("ngc5128_b_002")
+
+    assert path is not None and not path.startswith(str(tmp_path))
+    assert warnings == [] or all(w.code == "frame_not_checked_out" for w in warnings)

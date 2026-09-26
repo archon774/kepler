@@ -23,7 +23,7 @@ from tools.bench.plane import TOOL_CLASSES
 from tools.config import within
 from tools.mcp.groups import annotations_for
 from tools.mcp.install import install_facts
-from tools.models import ToolError, ToolResult
+from tools.models import ToolError, ToolResult, ToolWarning
 from tools.registry import TOOL_FUNCTIONS, TOOL_SCHEMAS
 
 __all__ = [
@@ -178,6 +178,24 @@ def stringified_nulls(
     return found
 
 
+def _jsonable(value: Any) -> Any:
+    """What a preview cell pydantic cannot serialise becomes.
+
+    ``ToolResult.preview`` rows can carry values ``artifacts._to_native``
+    passes through: an astropy ``Quantity`` (every ``search_mpc`` row has
+    several) or a fixed-size array cell. Without a fallback, the whole
+    successful result became a ``tool_exception``. A quantity keeps its unit
+    as text, the way the agent loop's ``json.dumps(default=str)`` renders it;
+    an array or numpy scalar becomes plain JSON; anything else, its ``str``.
+    """
+
+    if hasattr(value, "unit") and hasattr(value, "value"):
+        return str(value)
+    if callable(getattr(value, "tolist", None)):
+        return value.tolist()
+    return str(value)
+
+
 def normalize_result(name: str, value: Any) -> dict[str, Any]:
     """Serialize one tool's return value into a JSON object.
 
@@ -191,10 +209,10 @@ def normalize_result(name: str, value: Any) -> dict[str, Any]:
     """
 
     if isinstance(value, (list, tuple)):
-        items = json.loads(pydantic_core.to_json(list(value)))
+        items = json.loads(pydantic_core.to_json(list(value), fallback=_jsonable))
         return {"status": "ok", "count": len(items), "results": items}
     if callable(getattr(value, "model_dump", None)):
-        return json.loads(pydantic_core.to_json(value))
+        return json.loads(pydantic_core.to_json(value, fallback=_jsonable))
     raise TypeError(
         f"tool {name!r} returned {type(value).__name__}; a registered tool must "
         "return a Kepler model or a list of them"
@@ -288,6 +306,40 @@ def to_json_text(payload: Mapping[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+#: The most artifact entries one served `list_artifacts` returns. The per-user
+#: root is shared by every session and never cleaned, and each entry is
+#: returned twice (text and structured content): a few hundred files passed
+#: a host's tool-output limit, and a truncating host dropped the newest entries
+#: first, because the tool sorts by name ("_10" before "_2").
+ARTIFACT_LISTING_CAP = 100
+
+
+def _bound_artifact_listing(payload: dict[str, Any]) -> dict[str, Any]:
+    """Newest first, at most :data:`ARTIFACT_LISTING_CAP`, and say so when cut."""
+
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return payload
+    results = sorted(
+        results,
+        key=lambda item: ((item.get("file") or {}).get("modified_time") or ""),
+        reverse=True,
+    )
+    total = len(results)
+    bounded = {**payload, "count": total, "results": results[:ARTIFACT_LISTING_CAP]}
+    if total > ARTIFACT_LISTING_CAP:
+        warning = ToolWarning(
+            code="listing_truncated",
+            message=(
+                f"{total} artifacts are here; the {ARTIFACT_LISTING_CAP} newest are "
+                "listed, newest first. Pass a narrower directory, or open a path a "
+                "tool result named directly."
+            ),
+        )
+        bounded["warnings"] = [warning.model_dump()]
+    return bounded
+
+
 def call_tool(
     name: str,
     arguments: Mapping[str, Any],
@@ -306,7 +358,10 @@ def call_tool(
             ToolError(code="unknown_tool", message=f"No tool named {name!r} is served.")
         )
     try:
-        return normalize_result(name, function(**arguments))
+        payload = normalize_result(name, function(**arguments))
+        if name == "list_artifacts":
+            payload = _bound_artifact_listing(payload)
+        return payload
     except Exception as exc:  # noqa: BLE001 -- reported to the caller, not swallowed
         return error_payload(
             ToolError(code="tool_exception", message=f"{type(exc).__name__}: {exc}")

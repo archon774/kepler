@@ -40,6 +40,20 @@
 > Earlier phases already corrected §3.4's "in full" (C5), and §3.5's and
 > §3.6's field-calibration replay (C7), in place. Everything else is left as
 > written.
+>
+> **Correction, 2026-09-25 — code review of the landing PR (#85).** A
+> maximum-level review before merging to `dev` confirmed 15 defects that no
+> gate above caught. Each needed an installed wheel, a specific environment
+> variable, a second server, a clone without symlinks, or macOS. The most
+> serious:
+> - the server let arguments a schema omits (`subdir`, `output_dir`) reach
+>   tools, and so write outside the artifact root;
+> - two of C7's "re-anchored, not weakened" guards were weakened after all
+>   (marked inline under C7);
+> - the variable-star fixtures never reached the wheel.
+>
+> All were fixed on `mcp/review-fixes`, each with a test for the case CI
+> missed. `CLAUDE.md`'s `tools/mcp/` rules record the lessons.
 
 **Status:** Complete; see the block above. *(Superseded at archive. It read:
 "In progress. C0–C8 complete (§5); `v0.1.0rc1` published. C9 is next.")*
@@ -1081,6 +1095,12 @@ The phase the hosting decision created. §3.5 is its specification.
       a user-writable directory rather than the install tree. State in the PR
       that this re-anchored rather than weakened them, and extend the existing
       tests to an installed layout. **Re-anchored, not weakened:**
+      *(Correction, 2026-09-25, code review of #85: two of these were
+      weakened. The fixture guard, rooted at a git symlink, stopped protecting
+      `data/` in a clone made without symlink support. And the recursion
+      boundary was anchored at the download root itself, so a symlinked root
+      earned a walk of wherever it pointed. Both are fixed: the data root falls
+      back to the checkout's `data/`, and the boundary is the Kepler home.)*
       - the fixture guard's root is `BUNDLED_DATA_DIR` (the same directory in a
         checkout; the shipped core in a wheel, where `parents[1] / "data"`
         matched nothing), and it now also covers fetched bundles, which are

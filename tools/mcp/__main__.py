@@ -1,24 +1,40 @@
 """``kepler-mcp``: serve Kepler's tools to a host over stdio.
 
-The order in :func:`main` is the point of this module. The roots are pinned
-into the environment first; only then is anything imported that reads
-``tools.config``. Logging goes to stderr, because stdout is the protocol.
+The order in :func:`main` is the point of this module. A checkout's ``.env``
+is loaded first, then the roots are pinned into the environment, and only then
+is anything imported that reads ``tools.config`` -- whose settings are fixed at
+import, so a ``.env`` loaded any later is read and ignored. Logging goes to
+stderr, because stdout is the protocol.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from tools.mcp.roots import pin_roots
 
 log = logging.getLogger("kepler-mcp")
 
-_MISSING_SDK = (
-    "kepler-mcp needs the optional MCP dependencies. From a checkout run "
-    "`uv sync --extra mcp`; from an install, `pip install 'kepler[mcp]'`."
-)
+def _missing_sdk_message() -> str:
+    """How to add the SDK -- never by package name alone.
+
+    Kepler is not on PyPI, and the PyPI project called ``kepler`` is
+    unrelated: ``pip install 'kepler[mcp]'`` installs it (and, with ``-U``,
+    replaces this install with it) instead of the SDK. So the advice names this
+    interpreter's own pip and the wheel the user installed from.
+    """
+
+    return (
+        "kepler-mcp needs its optional [mcp] dependencies. From a checkout, run "
+        "`uv sync --extra mcp`. From an install, reinstall the same wheel with the "
+        f"extra, using this environment's pip: `{sys.executable} -m pip install "
+        "\"kepler[mcp] @ <the wheel's URL or path>\"` (see docs/installing.md). "
+        "Do not run `pip install kepler[mcp]`: Kepler is not on PyPI, and the "
+        "PyPI project named kepler is a different one."
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,6 +75,18 @@ def main(argv: list[str] | None = None) -> int:
         stream=sys.stderr, level=logging.INFO, format="kepler-mcp: %(message)s"
     )
 
+    # Before the roots are pinned and before anything reads tools.config, so
+    # that every setting the file carries takes effect. The real environment
+    # still wins over the file.
+    from tools.dotenv import DOTENV_PATH, load_dotenv
+
+    loaded = load_dotenv()
+    # Every tool call runs on a worker thread, and on macOS matplotlib's
+    # automatic backend refuses to create a figure off the main thread. The
+    # server draws only to files, so it never needs a GUI backend. A user's own
+    # MPLBACKEND still wins.
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
     if "tools.config" in sys.modules:
         raise RuntimeError("tools.config was imported before the roots were pinned")
     roots = pin_roots()
@@ -83,14 +111,13 @@ def main(argv: list[str] | None = None) -> int:
         from tools.mcp.server import build_server, serve_stdio
     except ImportError as exc:
         if exc.name in {"mcp", "mcp_types", "jsonschema"}:
-            print(_MISSING_SDK, file=sys.stderr)
+            print(_missing_sdk_message(), file=sys.stderr)
             return 2
         raise
 
     from tools import config
     from tools.mcp import surface
 
-    loaded = config.load_dotenv()
     log.info("artifact root: %s (%s)", config.ARTIFACT_DIR, roots.artifact_source)
     log.info("data root: %s (%s)", config.DATA_DIR, roots.data_source)
     log.info("download root: %s", config.FITS_DOWNLOAD_DIR)
@@ -99,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         config.ISOCHRONE_DIR or "not set (KEPLER_ISOCHRONE_DIR); the isochrone fit is unavailable",
     )
     if loaded:
-        log.info("read from %s: %s", config.DOTENV_PATH, ", ".join(loaded))
+        log.info("read from %s: %s", DOTENV_PATH, ", ".join(loaded))
     for group in groups.GROUPS:
         if selected is None or group.name in selected:
             log.info("group %s: %s", group.name, group.description)

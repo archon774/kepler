@@ -20,6 +20,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    from tools.paths import is_checkout
+
+    if not is_checkout():
+        print(
+            "python -m tools.skill renders the repository copy, skills/kepler-tools/, "
+            "and only runs in a checkout: this is an installed package, and writing "
+            "there would put files into site-packages.",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.check:
         drift = check_repository_copy()
         for name in drift:

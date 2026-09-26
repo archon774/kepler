@@ -42,6 +42,9 @@ NOT_TOOL_MODULES = {
     "tools.mcp",
     # Where bundled data and the per-user Kepler home are. Paths, no tool.
     "tools.paths",
+    # The .env loader, kept apart from tools.config so an entry point can load
+    # .env before any setting is fixed at import. Re-exported by tools.config.
+    "tools.dotenv",
 }
 
 

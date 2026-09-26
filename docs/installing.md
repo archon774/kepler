@@ -77,11 +77,17 @@ package.
 | Directory | What | Override |
 | --- | --- | --- |
 | `<home>/artifacts/` | every tool's output files, in per-tool subdirectories | `KEPLER_ARTIFACT_DIR` |
-| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `KEPLER_FITS_DOWNLOAD_DIR` |
+| `<home>/fits_downloads/` | `search_mast(download=true)` and `search_casda(download=true)` products | `KEPLER_FITS_DOWNLOAD_DIR`, or `KEPLER_DATA_DIR` (downloads then go to its `fits_downloads/`) |
 | `<home>/bundles/optical/`, `<home>/bundles/isochrones/` | fetched data bundles | `KEPLER_OPTICAL_DATA_DIR`, `KEPLER_ISOCHRONE_DIR` |
 
-Artifacts are never overwritten: a repeated call writes a new file with a
-numeric suffix, so the directory grows. Clear it yourself when you want to.
+Artifacts are never overwritten, even by two servers sharing the directory:
+each name is claimed atomically, and a repeated call writes a new file with a
+numeric suffix. So the directory grows; clear it yourself when you want to.
+`list_artifacts` over MCP returns the newest 100 entries of a directory, and
+says how many there are.
+
+After `kepler-mcp fetch-data`, restart any running `kepler-mcp`: the server
+reads its data locations when it starts.
 
 ## The optional data bundles
 

@@ -104,7 +104,7 @@ TOOL_WARNING_CODES: dict[str, str] = {
     "frequency_filter_ignored": "A frequency filter was given for a table it does not apply to.",
     "frequency_filtered": "Rows were dropped by the requested frequency bounds; the count reflects that.",
     "legacy_download_root_present": "A non-empty legacy download directory exists that this search does not cover.",
-    "listing_truncated": "More frames were found than the per-root cap returns; the total is named.",
+    "listing_truncated": "More entries were found than the listing returns (frames per root, or served artifacts); the total is named.",
     "max_results_capped": "max_results was capped at a Kepler-side safety limit, not a service limit.",
     "missing_fit_data": "The recorded solve carries no fit_data.csv, so detections are unavailable.",
     "missing_image_shape": "The FITS header carries no usable NAXIS1/NAXIS2.",

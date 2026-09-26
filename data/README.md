@@ -6,7 +6,9 @@ below, and the *untracked* archive download root `fits_downloads/` that
 `search_mast`/`search_casda` write into.
 
 Everything committed here is **real data copied verbatim** from the Skynet
-pipeline data repository at `/home/claude/skynet-data/pipeline_data`. Nothing
+pipeline data repository at `/home/claude/skynet-data/pipeline_data`, with one
+labelled exception: `variable_star/`, a 253-byte synthetic parity fixture
+(below). Nothing
 was synthesised, resampled, trimmed, or re-headered. That is the point:
 Kepler's Python folders are byte-preserving extractions from Skynet (see
 `CLAUDE.md`, "The extraction contract"), so the tests that guard them have to
@@ -54,6 +56,9 @@ data/
   pulsar/                      5 Green Bank 20 m pulsar scans (5.7 MB)
     Curated pulsars.docx       the curation: periods + difficulty ratings
     curated_periods.json       that curation, machine-readable, for the tools
+  variable_star/               one synthetic paired-source parity fixture
+                               (not a download; moved from test_data/ so an
+                               installed wheel ships it)
 ```
 
 ## `optical/` — 42 science frames

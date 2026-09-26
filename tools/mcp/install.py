@@ -20,15 +20,45 @@ from pathlib import Path
 from typing import Mapping
 
 from tools import config
-from tools.optical import primary_optical_data_dir
 
 __all__ = ["install_facts"]
 
 
-def _has_files(directory: Path | None, pattern: str) -> bool:
-    if directory is None or not directory.is_dir():
-        return False
-    return next(directory.rglob(pattern), None) is not None
+def _pulsar_scans_present() -> bool:
+    from tools.pulsar import list_pulsar_scans
+
+    listing = list_pulsar_scans()
+    return bool(listing.scans) and not listing.errors
+
+
+def _references_present() -> bool:
+    from tools.fieldcal_reference import list_zeropoint_references
+
+    return bool(list_zeropoint_references())
+
+
+def _frames_present() -> bool:
+    from tools.optical import bundled_frame_paths
+
+    return bool(bundled_frame_paths())
+
+
+def _isochrones_present() -> bool:
+    grid = config.ISOCHRONE_DIR
+    return grid is not None and grid.is_dir() and next(grid.glob("*.npy"), None) is not None
+
+
+def _plate_solving_available(environ: Mapping[str, str]) -> bool:
+    from algorithms.wcs.config import SolverSettings
+    from tools.wcs import _configured_backend_warnings
+
+    settings = SolverSettings(
+        anet_index_path=environ.get("ANET_INDEX_PATH") or None,
+        atlas_catalog_root=environ.get("ATLAS_CATALOG_ROOT") or None,
+        atlas_catalog=environ.get("ATLAS_CATALOG") or None,
+    )
+    available, _warnings = _configured_backend_warnings(settings)
+    return bool(available)
 
 
 def _mark(present: bool, missing: str) -> str:
@@ -38,27 +68,29 @@ def _mark(present: bool, missing: str) -> str:
 def install_facts(
     artifact_root: Path | None = None, environ: Mapping[str, str] | None = None
 ) -> str:
-    """A few lines describing this install, for the end of the instructions."""
+    """A few lines describing this install, for the end of the instructions.
+
+    Every fact is the answer the tools themselves give -- the same listing,
+    the same data directory, the same backend check -- never a second guess
+    at it. An earlier version looked in its own places (``DATA_DIR``, a
+    recursive glob, "is the variable set") and could tell a model the scans
+    were missing while ``list_pulsar_scans`` returned five of them, or that
+    plate solving was configured when the index directory held no index files.
+    """
 
     environ = os.environ if environ is None else environ
     root = config.ARTIFACT_DIR if artifact_root is None else artifact_root
-    data = config.DATA_DIR
-
-    pulsar = _has_files(data / "pulsar", "*.txt")
-    references = _has_files(data / "fieldcal", "*.json")
-    optical = _has_files(primary_optical_data_dir(), "*.fits")
-    isochrones = _has_files(config.ISOCHRONE_DIR, "*.npy")
-    solver = bool(environ.get("ANET_INDEX_PATH") or environ.get("ATLAS_CATALOG_ROOT"))
     ads = bool(environ.get("ADS_DEV_KEY"))
+    solver = _plate_solving_available(environ)
 
     return "\n".join(
         [
             "This install:",
             f"- Artifacts are local files under {root}; read them directly.",
-            f"- Pulsar scans {_mark(pulsar, 'MISSING')}; zero-point references "
-            f"{_mark(references, 'MISSING')}; optical frame library "
-            f"{_mark(optical, 'absent (kepler-mcp fetch-data optical)')}; isochrone grid "
-            f"{_mark(isochrones, 'absent (HR fit unavailable; fetch-data isochrones)')}; plate "
+            f"- Pulsar scans {_mark(_pulsar_scans_present(), 'MISSING')}; zero-point "
+            f"references {_mark(_references_present(), 'MISSING')}; optical frame library "
+            f"{_mark(_frames_present(), 'absent (kepler-mcp fetch-data optical)')}; isochrone grid "
+            f"{_mark(_isochrones_present(), 'absent (HR fit unavailable; fetch-data isochrones)')}; plate "
             f"solving {'configured' if solver else 'not configured (solve_astrometry reports unavailable)'}.",
             "- Keys are the user's own, from this server's environment. ADS_DEV_KEY "
             + ("is set." if ads else "is not set: the ADS tools will report it missing."),

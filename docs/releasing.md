@@ -18,6 +18,11 @@ bundles are published and matched to it. The workflow is
   `uv lock` (the lockfile records the project's own version), merge that
   change, and push the tag at the merged commit.
 
+**Build from a checkout with symlinks.** The core data reaches the wheel
+through the committed `tools/_data` symlink. A clone made with
+`core.symlinks=false` (Git for Windows' default) builds a wheel with no data,
+and the workflow refuses to publish one.
+
 ## What the workflow does
 
 On a `v*` tag push (or `workflow_dispatch`, which runs everything except
@@ -26,7 +31,10 @@ On a `v*` tag push (or `workflow_dispatch`, which runs everything except
 1. **build**:
    - checks the tag against the version;
    - rebuilds `data/optical/` and fails unless it matches `tools/mcp/bundles.json`;
-   - builds the wheel and the sdist, and writes `SHA256SUMS`.
+   - builds the wheel and the sdist, and writes `SHA256SUMS`;
+   - fails unless the wheel carries its core data (all five pulsar scans);
+   - classifies the version with `packaging.version`, so every PEP 440
+     pre-release spelling publishes as a pre-release.
 2. **verify** runs on a clean runner **with no checkout**, on Python 3.12 (the
    floor) and 3.13, the newest Python every dependency ships wheels for. It
    installs the wheel with `[mcp]` and runs

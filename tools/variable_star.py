@@ -41,7 +41,12 @@ _MAX_FOLD_OPERATIONS = 10_000_000
 
 
 def _fixture_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "test_data" / "variable_star"
+    # Through the bundled data root, like every other bundled fixture, so an
+    # installed wheel finds it: the old ``parents[1] / "test_data"`` path was in
+    # no distribution, and an install listed nothing.
+    from tools.config import BUNDLED_DATA_DIR
+
+    return BUNDLED_DATA_DIR / "variable_star"
 
 
 def _describe(path: str | Path) -> FileMetadata:

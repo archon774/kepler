@@ -376,11 +376,19 @@ def fetch_main(argv: Iterable[str] | None = None) -> int:
             target, fetched = fetch_bundle(
                 name, source=args.source, progress=_progress_printer(name)
             )
-        except BundleError as exc:
+        except (BundleError, OSError, ValueError) as exc:
+            # A full disk, a permission error or a corrupt marker is reported
+            # for this bundle like a verification failure -- not a traceback
+            # that skips the bundles after it.
             print(f"{name}: {exc}", file=sys.stderr)
             status = 1
             continue
         print(f"{name}: {'installed' if fetched else 'already installed'} at {target}")
+    if status == 0:
+        print(
+            "Restart any running kepler-mcp to use newly fetched bundles: the "
+            "server reads its data locations when it starts."
+        )
     return status
 
 
@@ -414,8 +422,16 @@ def build_main(argv: Iterable[str] | None = None) -> int:
     # changes, and two builds of the same tree name the same file.
     archive = building.with_name(f"kepler-{args.name}-{digest[:12]}.tar")
     building.replace(archive)
-    print(json.dumps({args.name: {"archive": archive.name, "size": size, "sha256": digest,
-                                  "files": files}}, indent=2))
+    entry = {
+        "archive": archive.name,
+        "size": size,
+        "sha256": digest,
+        "files": files,
+        "url": f"https://github.com/archon774/skynet-mars/releases/download/data/{archive.name}",
+        "description": "TODO: one line on what this bundle is for.",
+    }
+    # Complete, so pasting it into bundles.json loads; replace the description.
+    print(json.dumps({args.name: entry}, indent=2))
     if args.check:
         spec = load_manifest().get(args.name)
         built = (archive.name, size, digest, files)

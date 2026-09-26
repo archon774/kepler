@@ -29,6 +29,7 @@ from typing import Mapping
 __all__ = [
     "BUNDLED_DATA_LINK",
     "KEPLER_HOME_ENV",
+    "bundled_data_dir",
     "is_checkout",
     "kepler_home",
 ]
@@ -40,14 +41,36 @@ KEPLER_HOME_ENV = "KEPLER_HOME"
 BUNDLED_DATA_LINK = Path(__file__).parent / "_data"
 
 
-def is_checkout() -> bool:
+def is_checkout(link: Path = BUNDLED_DATA_LINK) -> bool:
     """Whether this is a development checkout rather than an installed wheel.
 
-    A checkout carries ``tools/_data`` as a symlink into its ``data/``; a wheel
-    carries a real directory. An editable install is a checkout.
+    A wheel carries ``tools/_data`` as a **real directory**; anything else is a
+    checkout. Usually that is a symlink into ``data/``, but a clone made
+    without symlink support (Git for Windows' default ``core.symlinks=false``,
+    or an archive that drops links) writes the link as a small text file, and
+    that is a checkout too. An editable install is a checkout.
     """
 
-    return BUNDLED_DATA_LINK.is_symlink()
+    return not (link.is_dir() and not link.is_symlink())
+
+
+def bundled_data_dir(link: Path = BUNDLED_DATA_LINK) -> Path:
+    """The bundled data root, resolved: ``tools/_data`` or the checkout's ``data/``.
+
+    ``tools/_data`` when it is a directory -- the shipped core data in a
+    wheel, or the symlink into ``data/`` in a checkout. When it is not (the
+    link written as a text file by a clone without symlinks), the
+    repository's own ``data/`` beside ``tools/``. Without this fallback such a
+    clone found no bundled data, and the fixture-write guard, rooted here,
+    stopped protecting ``data/`` at all.
+    """
+
+    if link.is_dir():
+        return link.resolve()
+    repository_data = link.parent.parent / "data"
+    if repository_data.is_dir():
+        return repository_data.resolve()
+    return link.resolve()
 
 
 def kepler_home(
@@ -69,7 +92,17 @@ def kepler_home(
         return Path(explicit).expanduser()
 
     platform = sys.platform if platform is None else platform
-    home = Path.home() if home is None else home
+    if home is None:
+        try:
+            home = Path.home()
+        except (RuntimeError, KeyError, OSError):
+            # No resolvable home (a service account, a stripped container).
+            # tools.config calls this at import, so failing here would make
+            # every tool unimportable; a per-user temporary directory keeps
+            # them working, and KEPLER_HOME is the way to choose a real one.
+            import tempfile
+
+            return Path(tempfile.gettempdir()) / f"kepler-{os.getuid() if hasattr(os, 'getuid') else 'user'}"
     if platform == "darwin":
         base = home / "Library" / "Application Support"
     elif platform == "win32":

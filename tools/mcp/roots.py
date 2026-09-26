@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import MutableMapping
 
-from tools.paths import BUNDLED_DATA_LINK, kepler_home
+from tools.paths import bundled_data_dir, kepler_home
 
 __all__ = [
     "ARTIFACT_DIR_ENV",
@@ -79,7 +79,7 @@ def default_data_dir() -> Path:
     installed wheel (:data:`tools.paths.BUNDLED_DATA_LINK`).
     """
 
-    return BUNDLED_DATA_LINK.resolve()
+    return bundled_data_dir()
 
 
 def _from_environment(environ: MutableMapping[str, str], name: str) -> Path | None:

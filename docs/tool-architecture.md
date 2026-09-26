@@ -698,7 +698,7 @@ argument validation that makes the schemas worth having.
 | --- | --- |
 | `roots` | Pins `KEPLER_ARTIFACT_DIR` and `KEPLER_DATA_DIR` into the environment **before** `tools.config` is imported. Several modules copy `ARTIFACT_DIR` at import, so reassigning it later moves nothing. |
 | `surface` | What is served, with no SDK import: the tool list, the stringified-`"None"` pre-check, the result shape, inline media. A plain `uv run pytest` tests it. |
-| `server` | The only SDK import (`mcp`, the optional `[mcp]` group). It validates arguments against the registry schema before dispatch, and runs calls one at a time in a worker thread. |
+| `server` | The serving SDK import (`mcp`, the optional `[mcp]` group). It validates arguments before dispatch against a copy of the registry schema that refuses **undeclared** arguments and floats for integers, matching the agent loop's validator. Several tools take keywords their schema omits on purpose (`subdir`, `output_dir`). Calls run one at a time in a worker thread. |
 | `groups` | The five groups, and the annotations: `openWorldHint` from `tools/bench/plane.py`'s `TOOL_CLASSES`; `readOnlyHint`/`destructiveHint` from a schema's `download`/`write_header` arguments. Derived, never restated. |
 | `install` | The facts about this install that the instructions carry: artifact root, which data bundles are present, whether plate solving is configured, and whether `ADS_DEV_KEY` is set (never its value). |
 | `bundles` | Builds and fetches the optional data bundles (below). |

@@ -144,6 +144,11 @@ def parse_groups(value: str | None) -> tuple[str, ...] | None:
     if value is None or not value.strip():
         return None
     names = tuple(dict.fromkeys(part.strip() for part in value.split(",") if part.strip()))
+    if not names:
+        # "," or " , " named no group; serving nothing would pass for success.
+        raise ValueError(
+            f"no tool group named in {value!r}; choose from {', '.join(_BY_NAME)}"
+        )
     unknown = [name for name in names if name not in _BY_NAME]
     if unknown:
         raise ValueError(

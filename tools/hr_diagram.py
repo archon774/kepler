@@ -94,9 +94,9 @@ def _safe_stem(label: str) -> str:
 
 
 def _output_path(stem: str, suffix: str) -> Path:
-    directory = ARTIFACT_DIR / _SUBDIR
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{_safe_stem(stem)}{suffix}"
+    # Reserved, not fixed: a fixed name let a repeated run replace the plot an
+    # earlier result still names.
+    return artifacts.reserve_path_in(ARTIFACT_DIR / _SUBDIR, stem, suffix)
 
 
 def _read_table_artifact(path: str) -> pd.DataFrame:

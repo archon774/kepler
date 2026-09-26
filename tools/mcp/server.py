@@ -80,6 +80,33 @@ def _invalid(message: str) -> types.CallToolResult:
     return _result(surface.error_payload(ToolError(code="invalid_input", message=message)))
 
 
+def _is_integer(checker: Any, instance: Any) -> bool:
+    return isinstance(instance, int) and not isinstance(instance, bool)
+
+
+#: JSON Schema's own `integer` accepts 100.0. The agent loop's validator does
+#: not -- a float where an integer is declared is the model getting the type
+#: wrong -- and the served surface must refuse what the loop refuses.
+_StrictValidator = jsonschema.validators.extend(
+    jsonschema.Draft202012Validator,
+    type_checker=jsonschema.Draft202012Validator.TYPE_CHECKER.redefine("integer", _is_integer),
+)
+
+
+def _strict_validator(input_schema: Mapping[str, Any]) -> Any:
+    """A validator that also refuses any argument the schema does not declare.
+
+    Registry schemas omit `additionalProperties`, so plain JSON Schema lets an
+    undeclared keyword through -- and several tools take keywords the schema
+    deliberately leaves out (`subdir`, `output_dir`, `sample_rate`,
+    `catalog_sources`, ...). Passed on to `function(**arguments)`, `subdir` or
+    `output_dir` wrote outside the pinned artifact root from a tool advertised
+    read-only. The schema is copied, never edited: the registry is read-only
+    to this surface.
+    """
+    return _StrictValidator({**input_schema, "additionalProperties": False})
+
+
 def build_server(
     schemas: Sequence[Mapping[str, Any]] = TOOL_SCHEMAS,
     functions: Mapping[str, Callable[..., Any]] = TOOL_FUNCTIONS,
@@ -128,10 +155,7 @@ def build_server(
     ]
     # Only what is listed can be called: a group filter (C6) narrows both.
     functions = {tool["name"]: functions[tool["name"]] for tool in served if tool["name"] in functions}
-    validators = {
-        tool["name"]: jsonschema.Draft202012Validator(tool["input_schema"])
-        for tool in served
-    }
+    validators = {tool["name"]: _strict_validator(tool["input_schema"]) for tool in served}
     lock = anyio.Lock()
 
     async def on_list_tools(ctx: Any, params: Any) -> types.ListToolsResult:

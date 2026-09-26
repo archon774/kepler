@@ -33,6 +33,7 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 
 from algorithms.wcs.source_extraction import build_wcs_from_header
 from tools.models import OpticalFrame, OpticalFrameList, ToolError, ToolWarning
+from tools.paths import is_checkout
 
 __all__ = [
     "OPTICAL_DATA_DIR_ENV",
@@ -161,8 +162,12 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
     if download_dir is not None:
         download_root = Path(download_dir).expanduser()
         data_dir = Path(config.DATA_DIR).expanduser()
+        # The second bound is the Kepler home, never the download root itself:
+        # `within` resolves both sides, so bounding the root by its own path
+        # let a symlinked root (~/.local/share/kepler/fits_downloads -> /)
+        # resolve to itself and earn a walk of whatever it points at.
         recursive = config.within(download_root, data_dir) or config.within(
-            download_root, config.KEPLER_HOME / "fits_downloads"
+            download_root, config.KEPLER_HOME
         )
         # Only a root that exists earns the warning: an absent download root is
         # skipped by the lister without comment, and telling a caller that a
@@ -176,9 +181,17 @@ def _optical_data_roots() -> tuple[list[tuple[Path, bool]], list[ToolWarning]]:
                         f"{data_dir}, so it is searched flat rather than "
                         "walked. Products nested under "
                         "mastDownload/<mission>/<obs_id>/ will not be listed; "
-                        f"point {config.FITS_DOWNLOAD_DIR_ENV} inside the data "
-                        f"directory, or set {config.DATA_DIR_ENV} to a root "
-                        "that covers it."
+                        + (
+                            f"point {config.FITS_DOWNLOAD_DIR_ENV} inside the "
+                            f"data directory, or set {config.DATA_DIR_ENV} to a "
+                            "root that covers it."
+                            if is_checkout()
+                            # Installed: the data directory is the package, which
+                            # the next upgrade replaces. Point at the Kepler home.
+                            else f"point {config.FITS_DOWNLOAD_DIR_ENV} inside "
+                            f"{config.KEPLER_HOME}, or unset it to use "
+                            f"{config.KEPLER_HOME / 'fits_downloads'}."
+                        )
                     ),
                 )
             )

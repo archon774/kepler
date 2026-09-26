@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any
 
 __all__ = ["main"]
@@ -44,7 +45,7 @@ def _check(ok: bool, message: str) -> None:
 
 async def _run(env: dict[str, str]) -> None:
     from mcp.client.client import Client
-    from mcp.client.stdio import StdioServerParameters
+    from mcp.client.stdio import StdioServerParameters, stdio_client
 
     from tools.registry import TOOL_SCHEMAS
     from tools.skill import served_documents
@@ -52,7 +53,10 @@ async def _run(env: dict[str, str]) -> None:
     params = StdioServerParameters(
         command=sys.executable, args=["-m", "tools.mcp"], env=env, cwd=env["KEPLER_ARTIFACT_DIR"]
     )
-    async with Client(params) as client:
+    # The transport is built here rather than by `Client(params)`, which uses
+    # stdio_client's default `errlog` -- `sys.stderr` as it was when the SDK was
+    # imported, a stream that may since have been replaced and closed.
+    async with Client(stdio_client(params, errlog=sys.stderr)) as client:
         tools = (await client.list_tools()).tools
         _check(len(tools) == len(TOOL_SCHEMAS), f"{len(tools)} tools served")
         resources = (await client.list_resources()).resources
@@ -88,6 +92,31 @@ async def _run(env: dict[str, str]) -> None:
         )
 
 
+#: Settings that would test the caller's configuration rather than the install:
+#: a group filter hides tools the check counts, and a relocated scan directory
+#: replaces the five bundled scans the check expects.
+_NOT_INHERITED = ("KEPLER_MCP_TOOLS", "KEPLER_PULSAR_DATA_DIR")
+
+
+def _server_environment(artifacts: str) -> dict[str, str]:
+    """The child server's environment: the caller's, minus what skews the check.
+
+    The package's own root goes first on ``PYTHONPATH``, so the child imports
+    this same Kepler even when it was never installed (a checkout run by
+    pytest), and even though the child starts in the temporary directory.
+    """
+
+    import tools
+
+    env = {k: v for k, v in os.environ.items() if k not in _NOT_INHERITED}
+    package_root = str(Path(tools.__file__).resolve().parent.parent)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [package_root, *filter(None, [env.get("PYTHONPATH")])]
+    )
+    env["KEPLER_ARTIFACT_DIR"] = artifacts
+    return env
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv:
         print("usage: kepler-mcp self-test", file=sys.stderr)
@@ -105,10 +134,14 @@ def main(argv: list[str] | None = None) -> int:
     print("kepler-mcp self-test", flush=True)
     status = 0
     with tempfile.TemporaryDirectory(prefix="kepler-self-test-") as artifacts:
-        env = {**os.environ, "KEPLER_ARTIFACT_DIR": artifacts}
         try:
-            anyio.run(_run, env)
-        except _Failed:
+            anyio.run(_run, _server_environment(artifacts))
+        except* _Failed:
+            # The SDK client runs each check inside anyio task groups, which
+            # re-raise a failure wrapped in an ExceptionGroup; a plain
+            # `except _Failed` never matched, and a failing check ended in a
+            # traceback with no FAILED summary. The failing line was already
+            # printed by `_check`.
             status = 1
     for name in load_manifest():
         where = config.fetched_bundle(name)

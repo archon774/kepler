@@ -39,8 +39,10 @@ whole selection offline and :func:`replay_catalog_sources` can hand either
 the selected rows or the full response to a from-pixels solve.
 
 Only ``KEPLER_FIELDCAL_DATA_DIR`` relocates the ``zp_solutions/`` search;
-the bundled-frame and Afterglow web-table lookups always read the repo's own
-``data/`` because they only make sense against the shipped fixtures.
+the bundled-frame and Afterglow web-table lookups always read the bundled data
+(``config.BUNDLED_DATA_DIR``: the repository's ``data/``, or in an installed
+wheel the checksum-verified optical bundle), because they only make sense
+against the shipped fixtures. ``KEPLER_OPTICAL_DATA_DIR`` does not move them.
 """
 
 from __future__ import annotations
@@ -261,11 +263,18 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
             )
         ]
 
-    # The frame library, not a fixed path: in an installed wheel the frames
-    # arrive only with the fetched optical bundle.
-    from tools.optical import optical_bundle_warning, primary_optical_data_dir
+    # Pinned to the frames the references were recorded against: the bundled
+    # library in a checkout, or -- in an installed wheel, which ships none --
+    # the checksum-verified optical bundle. Never KEPLER_OPTICAL_DATA_DIR: that
+    # override names an operator's own archive, and a same-named file there is
+    # not the frame this ground truth describes.
+    from tools.config import BUNDLED_DATA_DIR, fetched_bundle
+    from tools.optical import optical_bundle_warning
 
-    candidate = primary_optical_data_dir() / bundled
+    library = BUNDLED_DATA_DIR / "optical"
+    if not library.is_dir():
+        library = fetched_bundle("optical") or library
+    candidate = library / bundled
     if candidate.is_file():
         if is_lfs_pointer(candidate):
             return None, [
@@ -277,13 +286,14 @@ def _frame_path(field: str) -> tuple[str | None, list[ToolWarning]]:
                 )
             ]
         return str(candidate), []
-    absent = optical_bundle_warning()
-    if absent is not None:
-        return None, [absent]
+    if not library.is_dir():
+        absent = optical_bundle_warning()
+        if absent is not None:
+            return None, [absent]
     return None, [
         ToolWarning(
             code="frame_not_bundled",
-            message=f"{bundled} is not present in {primary_optical_data_dir()}.",
+            message=f"{bundled} is not present in {library}.",
         )
     ]
 
